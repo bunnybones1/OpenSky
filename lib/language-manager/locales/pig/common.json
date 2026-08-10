@@ -1,0 +1,79 @@
+{
+  "options": {
+    "back": "ACKBAY",
+    "cancel": "ANCELCAY",
+    "concede": "ONCEDECAY",
+    "confirm": "ONFIRMCAY",
+    "continue": "ONTINUECAY",
+    "disabled": "Isabledday",
+    "done": "ONEDAY",
+    "enabled": "Enableday",
+    "exitReplay": "EXITAY EPLAYRAY",
+    "exitTutorial": "EXITAY UTORIALTAY",
+    "game": "AMEGAY OPTIONSAY",
+    "gameOptions": {
+      "catchUpSpeed": "Atchcay-upay Eedspay",
+      "heroEmotes": "Erohay Emotesay",
+      "showCauseAndEffectLines": "Owshay Ausecay Anday Effectay Ineslay",
+      "showPing": "Owshay Ingpay",
+      "showSpectatorCount": "Owshay Ectatorspay Ountcay",
+      "spacebarEndsTurn": "Acebarspay Endsay Urntay",
+      "twitchIntegration": "Itchtway Integrationay"
+    },
+    "graphics": "APHICSGRAY OPTIONSAY",
+    "graphicsOptions": {
+      "antialiasing": "Antialiasingay",
+      "batterySaver": "Atterybay Aversay",
+      "forceWebGL1": "Orcefay Ebglway 1",
+      "particleEffects": "Articlepay Effectsay",
+      "reduceMotion": "Educeray Otionmay",
+      "renderResolution": "Enderray Esolutionray",
+      "showFoilEffects": "Owshay Oilfay Effectsay",
+      "targetFPS": "Argettay SFPAY",
+      "vSync": "YNCVSAY"
+    },
+    "ok": "OKAY",
+    "options": "OPTIONSAY",
+    "prompt": {
+      "codeReset": "Odecay esetray.",
+      "concede": "Areyay ouyay uresay ouyay antway otay oncedecay?",
+      "exitReplay": "Areyay ouyay uresay ouyay antway otay exitay isthay eplayray?",
+      "exitTutorial": "Areyay ouyay uresay ouyay antway otay exitay ethay utorialtay?",
+      "failedReset": "Ailedfay otay esetray odecay.",
+      "resetSpectate": "Esetray ouryay ectatespay odecay?",
+      "restart": "Estartray isthay amegay?",
+      "spectateCodeInvalidateWarning": "Isthay illway invalidateyay ouryay olday odecay.",
+      "stopSpectating": "Areyay ouyay uresay ouyay antway otay opstay ectatingspay?",
+      "watchReplay": "Atchway eplayray?"
+    },
+    "report": "EPORTRAY",
+    "reported": "EPORTEDRAY",
+    "settings": "ETTINGSSAY",
+    "sound": "OUNDSAY OPTIONSAY",
+    "soundOptions": {
+      "musicVolume": "Usicmay Olumevay",
+      "muteAllSounds": "Utemay Allay Oundssay",
+      "sfxVolume": "XSFAY Olumevay"
+    },
+    "spectate": {
+      "copyPrivateLink": "Opycay Ivatepray Inklay",
+      "copyPublicLink": "Opycay Ublicpay Inklay",
+      "resetSpectateLink": "Esetray Ectatespay Inklay",
+      "spectateLink": "ECTATESPAY INKLAY"
+    },
+    "stopSpectating": "OPSTAY ECTATINGSPAY",
+    "suffix": {
+      "willApplyNextGame": " (illway applyay extnay amegay)",
+      "willRefresh": " (illway efreshray)"
+    },
+    "ui": "UIYAY OPTIONSAY",
+    "uiOptions": {
+      "showRelatedCardsOnHover": "Owshay Elatedray Ardscay Onay Overhay",
+      "showTooltipsOnHover": "Owshay Ooltipstay Onay Overhay",
+      "uiScale": "UIYAY Alescay",
+      "useCombinedDeckAndGraveSidebars": "Useyay Ombinedcay Eckday & Avegray Idebarssay",
+      "useScrollingCardSelection": "Useyay Rollingscay Ardcay Electionsay"
+    },
+    "watchReplay": "ATCHWAY EPLAYRAY"
+  }
+}

@@ -1,0 +1,11 @@
+diff --git a/dist/declarations/src/index.d.ts b/dist/declarations/src/index.d.ts
+index 26ec59864cee75af2d5f7cd39cf9ce02da1052ea..f59b72e7e7c4c1e52d91b95fb8bc8f5a2de2616d 100644
+--- a/dist/declarations/src/index.d.ts
++++ b/dist/declarations/src/index.d.ts
+@@ -1,5 +1,6 @@
+ import { CSSProperties, StyleRule } from '@vanilla-extract/css';
+ import { SprinklesFn } from './createSprinkles';
++export { SprinklesFn } from './createSprinkles';
+ import { SprinklesProperties, ResponsiveArrayConfig } from './types';
+ export { createNormalizeValueFn, createMapValueFn } from './createUtils';
+ export type { ConditionalValue, RequiredConditionalValue } from './createUtils';

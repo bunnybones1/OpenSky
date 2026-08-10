@@ -1,0 +1,11 @@
+name: skyweaver-fuzzer
+version: 0.0.0
+author: Sequence Platforms Inc.
+about: skyweaver fuzzer
+
+args:
+  - seed:
+      short: s
+      long: seed
+      takes_value: true
+      help: random number generator seed

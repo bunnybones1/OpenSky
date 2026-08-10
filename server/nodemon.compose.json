@@ -1,0 +1,10 @@
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "ignore": ["tests/**", "src/**/*.test.ts"],
+  "delay": "500",
+  "exec": "tsx ./src/index.ts --config ./config/game-server.compose.json",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

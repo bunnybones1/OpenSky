@@ -1,0 +1,16 @@
+[package]
+name = "bindings"
+version = "0.1.0"
+authors = ["William Hua <william@attente.ca>", "Ari Lotter <me@arilotter.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+skyweaver-rs = { path = "../state", features = ["bindings"] }
+
+[package.metadata.wasm-pack.profile.release]
+# running wasm-pack's wasm-opt followed by binaryen's yields a ~2 kB reduction in size
+# we go from 5319707 bytes down to 5317976, a reduction of 1731 bytes, by allowing wasm-pack's wasm-opt to run
+wasm-opt = ["-Oz", "--enable-mutable-globals"]

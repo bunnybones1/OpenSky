@@ -1,0 +1,79 @@
+{
+  "options": {
+    "back": "VOLTAR",
+    "cancel": "CANCELAR",
+    "concede": "CONCEDER",
+    "confirm": "CONFIRMAR",
+    "continue": "CONTINUAR",
+    "disabled": "Inativo",
+    "done": "FEITO",
+    "enabled": "Ativado",
+    "exitReplay": "SAIR DO REPLAY",
+    "exitTutorial": "SAIR DO TUTORIAL",
+    "game": "OPÇÕES DE JOGO",
+    "gameOptions": {
+      "catchUpSpeed": "Velocidade de sincronia",
+      "heroEmotes": "Emotes do Herói",
+      "showCauseAndEffectLines": "Mostrar Linhas de Causa e Efeito",
+      "showPing": "Exibir Ping",
+      "showSpectatorCount": "Mostrar Número de\nEspectadores",
+      "spacebarEndsTurn": "A Barra de Espaço Finaliza Turno",
+      "twitchIntegration": "Integração com Twitch"
+    },
+    "graphics": "OPÇÕES GRÁFICAS",
+    "graphicsOptions": {
+      "antialiasing": "Antisserrilhamento",
+      "batterySaver": "Economia de Bateria",
+      "forceWebGL1": "Forçar WebGL 1",
+      "particleEffects": "Efeitos de Partículas",
+      "reduceMotion": "Reduzir Movimentos",
+      "renderResolution": "Resolução de Renderização",
+      "showFoilEffects": "Mostrar Efeitos Reluzentes",
+      "targetFPS": "Seleção de FPS",
+      "vSync": "VSync"
+    },
+    "ok": "OK",
+    "options": "OPÇÕES",
+    "prompt": {
+      "codeReset": "Redefinir código.",
+      "concede": "Tem certeza que deseja conceder?",
+      "exitReplay": "Tem certeza que deseja sair do Replay?",
+      "exitTutorial": "Você tem certeza que deseja sair do tutorial?",
+      "failedReset": "Erro ao redefinir código.",
+      "resetSpectate": "Redefinir código de Espectador?",
+      "restart": "Reiniciar o jogo?",
+      "spectateCodeInvalidateWarning": "Isso invalidará seu código antigo.",
+      "stopSpectating": "Tem certeza de que deseja parar de assistir?",
+      "watchReplay": "Assistir ao Replay?"
+    },
+    "report": "REPORTAR",
+    "reported": "REPORTADO",
+    "settings": "OPÇÕES",
+    "sound": "OPÇÕES DE SOM",
+    "soundOptions": {
+      "musicVolume": "Volume de Música",
+      "muteAllSounds": "Silenciar Todos Sons",
+      "sfxVolume": "Volume dos Efeitos"
+    },
+    "spectate": {
+      "copyPrivateLink": "Copiar Link Privado",
+      "copyPublicLink": "Copiar Link Público",
+      "resetSpectateLink": "Redefinir Link de Espectador",
+      "spectateLink": "LINK DE ESPECTADOR"
+    },
+    "stopSpectating": "PARAR DE ASSISTIR",
+    "suffix": {
+      "willApplyNextGame": " (será válido na próxima partida)",
+      "willRefresh": " (recarregará)"
+    },
+    "ui": "OPÇÕES DE IU",
+    "uiOptions": {
+      "showRelatedCardsOnHover": "Mostrar Cartas Relevantes ao Passar Cursor",
+      "showTooltipsOnHover": "Mostrar Dicas ao Passar o Cursor",
+      "uiScale": "Escala da IU",
+      "useCombinedDeckAndGraveSidebars": "Usar Barras Laterais Combinadas de Baralho e Cemitério",
+      "useScrollingCardSelection": "Usar a Seleção de Rolagem para Cartas"
+    },
+    "watchReplay": "VER REPLAY"
+  }
+}

@@ -1,0 +1,5 @@
+export enum HERO_FEATURE_CAROUSEL_Z_INDEXES {
+  CAROUSEL = 2,
+  TEXT = 3,
+  CONTROLS = 4
+}

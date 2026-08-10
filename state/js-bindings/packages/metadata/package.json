@@ -1,0 +1,17 @@
+{
+  "name": "@skyweaver/state-metadata",
+  "version": "1.0.0",
+  "description": "skyweaver metadata",
+  "private": true,
+  "scripts": {},
+  "dependencies": {
+    "@opensky/design-data": "workspace:*",
+    "@skyweaver/state-metadata-sys": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts"
+}

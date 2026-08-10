@@ -1,0 +1,2 @@
+export const MAX_FRAMERATE = 240
+export const BATTERY_SAVER_FRAMERATE = 30

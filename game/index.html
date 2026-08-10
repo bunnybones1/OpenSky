@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenSky</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+
+    <!-- favicon info -->
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/src/public/images/favicon/apple-touch-icon.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/src/public/images/favicon/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="/src/public/images/favicon/favicon-16x16.png"
+    />
+    <link
+      rel="mask-icon"
+      href="/src/public/images/favicon/safari-pinned-tab.svg"
+      color="#40306b"
+    />
+    <meta name="msapplication-TileColor" content="#da532c" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="" />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="arcadeum-device-orientation" content="landscape" />
+    <!-- Manifest -->
+    <link
+      rel="manifest"
+      href="/manifest.webmanifest?v=GITCOMMIT"
+      crossorigin="use-credentials"
+    />
+    <style>
+      html,
+      body {
+        font-family: 'Helvetica';
+        padding: 0;
+        margin: 0;
+        position: fixed;
+        overflow: hidden;
+        width: 0;
+        height: 0;
+        width: 100%;
+        height: 100%;
+        height: calc(100% + env(safe-area-inset-top));
+        touch-action: none;
+        background-color: black;
+      }
+
+      canvas {
+        position: relative;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+      }
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+      }
+
+      ::-webkit-scrollbar {
+        width: 0px;
+        background: transparent;
+        /* make scrollbar transparent */
+      }
+
+      @keyframes loading {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.95);
+          opacity: 0.3;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      #loading {
+        text-align: center;
+        opacity: 0.2;
+        position: absolute;
+        top: 50%;
+        width: 100%;
+      }
+
+      #loading svg {
+        animation: 3s loading ease-in-out infinite;
+        margin-top: -50px;
+      }
+
+      #error {
+        text-align: center;
+        background: #530f0f;
+        color: white;
+        font-weight: bold;
+        border: 2px solid white;
+        position: absolute;
+        padding: 16px;
+        top: 50%;
+        left: 25%;
+        width: 50%;
+      }
+
+      #error a {
+        color: white;
+        border: 2px solid white;
+        text-decoration: none;
+        padding: 4px 8px;
+      }
+      #error a:hover {
+        color: #530f0f;
+        background: white;
+      }
+    </style>
+
+    <script>
+      window.APP_CONFIG = /*APP_CONFIG>>*/ {} /*<<APP_CONFIG*/
+
+      if (navigator.userAgent.toLowerCase().includes("with-asset-cache-proxy")) {
+        window.APP_CONFIG.ASSETS_URL = "https://swa-001.skyweaver.network:41214/_proxy/" + window.APP_CONFIG.ASSETS_URL
+      }
+    </script>
+    <script type="module">
+      import { Buffer } from 'buffer'
+      globalThis.Buffer = Buffer
+    </script>
+  </head>
+
+  <body>
+    <div id="loading">
+      <svg
+        height="100px"
+        viewBox="0 0 36 62"
+        version="1.1"
+        xmlns="http://www.w3.org/2000/svg"
+        xmlnsXlink="http://www.w3.org/1999/xlink"
+      >
+        <g
+          id="Symbols"
+          stroke="none"
+          strokeWidth="1"
+          fill="none"
+          fillRule="evenodd"
+        >
+          <g
+            id="logo_path"
+            transform="translate(-14.000000, -1.000000)"
+            fill="#FFFFFF"
+          >
+            <path
+              d="M32,1 L20.8572507,12.1941602 L18.2854987,14.7777778 L14,19.0841862 L14,44.9158138 L32,63 L43.1427493,51.8058398 L45.7156333,49.2210851 L50,44.9158138 L50,19.0841862 L32,1 Z M34.5728839,38.0280621 L38.0003773,34.5836176 L40.5721293,32 L32,23.3883203 L23.2818513,14.6288104 L32,5.87043762 L46.5725066,20.5101794 L46.5725066,43.4898206 L43.2899006,46.7864348 L34.5728839,38.0280621 Z M17.4286253,43.4898206 L17.4286253,20.5101794 L20.7100994,17.2135652 L29.428248,25.9719379 L25.9996227,29.4163824 L23.4290026,32 L32,40.6116797 L40.7192806,49.3711896 L32,58.1295624 L17.4286253,43.4898206 Z"
+              id="Fill-1"
+              transform="translate(32.000000, 32.000000) scale(-1, 1) translate(-32.000000, -32.000000) "
+            />
+          </g>
+        </g>
+      </svg>
+    </div>
+    <script src="/src/index.ts" type="module"></script>
+  </body>
+</html>

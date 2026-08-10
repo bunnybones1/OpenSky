@@ -1,0 +1,5 @@
+# app_branch|assets_branch|status|note
+master|v2-alpha|supported|Current open-source local-play pairing. The app repo includes compatibility fixes for the public assets branch.
+v2-alpha|v2-alpha|supported|Aligned branch family for newer asset and client work.
+master|master|warning|Not validated for the current public asset repo. Expect asset-shape mismatches unless you verify the branch pair manually.
+*|*|warning|This branch pair is not in the checked-in compatibility matrix. Local play may still work, but asset mismatches are likely.

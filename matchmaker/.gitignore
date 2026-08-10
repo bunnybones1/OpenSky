@@ -1,0 +1,4 @@
+cover.out
+bin/
+vendor/
+etc/matchmaker.conf

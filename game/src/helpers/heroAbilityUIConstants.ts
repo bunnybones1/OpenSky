@@ -1,0 +1,1 @@
+export const HERO_ABILITY_UI_OFFSET_X = 100

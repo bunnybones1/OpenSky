@@ -1,0 +1,74 @@
+ID,Rerollable,Epic,Chain,Art,Art ID,Name,Description,Difficulty,Column,StartProgress,EndProgress,RQ Hero,RQ Card,RQ Min Lv,RQ Max Lv,XP Amount,Chars,Ready
+DailyDelivery,FALSE,dd_test,1,,2107,Daily Delivery,Complete 5 daily quests,hard,right,,5,,,,,800,37,FALSE
+DailyDeliveryII,FALSE,dd_test,2,,2107,Daily Delivery II,Complete 10 daily quests,hard,mid,,10,,,,,800,41,FALSE
+DailyDeliveryIII,FALSE,dd_test,3,,2107,Daily Delivery III,Complete 15 daily quests,hard,mid,,15,,,,,800,42,FALSE
+DailyDeliveryIIII,FALSE,dd_test,4,,2107,Daily Delivery IIII,Complete 20 daily quests,hard,right,,20,,,,,800,43,FALSE
+Viral,TRUE,,,,1112,Viral,Invite a Friend to Play OpenSky,hard,right,,1,,,,,1600,38,FALSE
+FriendlyContest,TRUE,,,,102,Friendly Contest,Challenge a friend to a Private game,med,mid,,2,,,,,600,52,FALSE
+Navigator,TRUE,nav_test,1,,4025,Navigator,Play a game with a custom deck,easy,left,,1,,,,,400,39,FALSE
+NavigatorII,TRUE,nav_test,2,,4025,Navigator II,Win a game with a custom dual Hero deck,easy,left,,1,,,,,400,51,FALSE
+EarthBattlerPLUS,TRUE,,,,86,Earth Battler +,Play 30 Earth cards,easy,left,,30,,,6,,400,34,TRUE
+MetalBattlerPLUS,TRUE,,,,60,Metal Battler +,Play 30 Metal cards,easy,left,,30,,,6,,400,34,TRUE
+AirBattlerPLUS,TRUE,,,,1072,Air Battler +,Play 30 Air cards,easy,left,,30,,,6,,400,30,TRUE
+FireBattlerPLUS,TRUE, ,,,1081,Fire Battler +,Play 30 Fire cards,easy,left,,30,,,6,,400,32,TRUE
+DarkBattlerPLUS,TRUE,,,,3061,Dark Battler +,Play 30 Dark cards,easy,left,,30,,,6,,400,32,TRUE
+LightBattlerPLUS,TRUE,,,,3035,Light Battler +,Play 30 Light cards,easy,left,,30,,,6,,400,34,TRUE
+WaterBattlerPLUS,TRUE,,,,4031,Water Battler +,Play 30 Water cards,easy,left,,30,,,6,,400,34,TRUE
+MindBattlerPLUS,TRUE,,,,2087,Mind Battler +,Play 30 Mind cards,easy,left,,30,,,6,,400,32,TRUE
+Megashroom,TRUE,,,,3107,Megashroom,Trigger Mechshroom's death effect 10+ times in one game,hard,right,,1,,3107,6,,800,65,TRUE
+RainbowRestriction,TRUE,,,,2104,Rainbow Restriction ,Win a game with a deck that has at least 3 cards of each Element,med,mid,,1,,,6,,600,84,TRUE
+Unitless,TRUE,,,,4037,Unitless,Win a game using a deck that contains no Unit cards ,hard,right,,1,,,6,,800,60,TRUE
+AllTogether,TRUE,,,,4010,All Together,Have a card from each Prism in your grave at the same time,hard,right,,1,,,6,,800,70,TRUE
+Spelless,TRUE,,,,22,Spelless,Win a game using a deck that contains no Spells or Attached Spells,hard,right,,1,,,6,,800,74,TRUE
+Empowered,TRUE,,,,102,Empowered,Use Ada's Hero Ability 150 times,easy,left,,150,,,6,,400,41,TRUE
+SpeedofLight,TRUE,,,,1101,Speed of Light,Use Samya's Hero Ability 75 times ,easy,left,,75,,,6,,400,48,TRUE
+Ritualistic,TRUE,,,,3101,Ritualistic,Use Bouran's Hero Ability 75 times ,easy,left,,75,,,6,,400,46,TRUE
+MatterReshaper,TRUE,,,,4101,Matter Reshaper,Use Ari's Hero Ability 75 times ,easy,left,,75,,,6,,400,47,TRUE
+Om,TRUE,,,,2101,Om,Use Lotus' Hero Ability 50 times ,easy,left,,50,,,6,,400,35,TRUE
+KaZam,TRUE,,,,4018,Ka-Zam!,Do 20+ damage with Zam in one turn,med,mid,,1,,4018,900,,600,41,TRUE
+SpeedDemon,TRUE,,,,1045,Speed Demon,Win a Ranked game before the end of your 8th turn,hard,right,,1,,,6,,800,60,TRUE
+PatientStudent,TRUE,,,,2128,Patient Student,Win a Ranked game after your 10th turn,hard,right,,1,,,6,,800,53,TRUE
+ThreesCompany,TRUE,,,,3063,Three's Company,Win a game where you only play 3 cost cards,med,mid,,1,,,6,,600,58,TRUE
+Pacifist,TRUE,,,,2077,Pacifist ,Win a game while not attacking with your Hero on at least five different turns,hard,right,,1,Lotus,,50,,800,87,TRUE
+BigHitter,TRUE,,,,6,Big Hitter,Do 15+ damage to the enemy Hero with a single attack,easy,left,,1,,,6,,400,62,TRUE
+Champion,TRUE,,,,1044,Champion,Win 10 Games,med,mid,,10,,,6,,600,20,TRUE
+Determinator,TRUE,,,,2126,Determinator,Play 20 Games,med,mid,,20,,,6,,600,25,TRUE
+MirrorMatched,TRUE,,,,4114,Mirror Matched,Play three games where you and your opponent have the same Hero,med,mid,,3,,,6,,600,77,TRUE
+FirstBlood,TRUE,,,,48,First Blood,"Be the first player to destroy a Unit in a game, 20 times",easy,left,,20,,,6,,400,68,TRUE
+ZombieSlayer,TRUE,,,,1119,Zombie Slayer,Destroy 20 enemy Zomboid,med,mid,,20,,,60,,600,37,TRUE
+Demilitarize,TRUE,,,,3131,Demilitarize,Destroy 10 enemy Armis Guard,med,mid,,10,,,60,,600,40,TRUE
+RegeneratorPLUSPLUS,TRUE,,,,2048,Regenerator +,Give 200 Health to allies,hard,right,,200,Lotus,,6,,800,38,TRUE
+LastStand,TRUE,,,,97,Last Stand,Win a game while at exactly 1 health,med,mid,,1,,,6,,600,46,TRUE
+HandtoHand,TRUE,,,,1088,Hand to Hand,Do 20+ damage to the enemy Hero using your Hero in a single turn,med,mid,,1,,,6,,600,76,TRUE
+FullyEquipped,TRUE,,,,95,Fully Equipped,"Attack while your Hero has Banner, Wither, Lifesteal and Armor",hard,right,,1,,"1023, 1114",6,,800,76,TRUE
+MeteorShower,TRUE,,,,20018,Meteor Shower,Play 10 Fireball,med,mid,,10,,3003,6,,600,29,TRUE
+FromtheJawsofDefeat,TRUE,,,,3105,From the Jaws of Defeat,Defeat the enemy Hero while your Hero has 5 or less health remaining,easy,left,,1,,,6,,400,91,TRUE
+AcrosstheRainbow,TRUE,,,,2011,Across the Rainbow,"Play a card of each different element, in a single turn",med,mid,,1,,,6,,600,73,TRUE
+ThousandCuts,TRUE,,,,20014,Thousand Cuts,"Do 1 damage to the enemy Hero five or more times in one turn, and win that turn",med,mid,,1,,,6,,600,92,TRUE
+OversoldCemetery,TRUE,,,,3022,Oversold Cemetery,Have 40+ cards in your grave at once,easy,left,,1,,,6,,400,53,TRUE
+GrandLarceny,TRUE,,,,1126,Grand Larceny,Play Battery and Yoink! while you have Gerry the goon in play,easy,left,,1,,3122,6,,400,74,TRUE
+RestinPeace,TRUE,,,,2062,Rest in Peace,,easy,left,,10,,,6,,400,13,TRUE
+PowerUp,TRUE,,,,49,Power Up!,Boost the stats of 40 Units using spells,med,mid,,40,,,6,,600,49,TRUE
+LongLivetheKing,TRUE,,,,3128,Long Live the King,Revive a copy of Pharonis with his own Sunset effect,med,mid,,1,,4045,6,,600,70,TRUE
+Gottagofast2,TRUE,,,,1076,Gotta go Fast!,Win a game where every Unit you play has Dash,med,mid,,1,,,6,,600,59,TRUE
+Smoosh,TRUE,,,,4055,Smoosh!,Destroy three or more Units with a single use of It's a Trap!,med,mid,,1,,4055,6,,600,68,TRUE
+HeavyHitter,TRUE,,,,2034,Heavy Hitter,Win a game using a deck containing no cards under 4 mana,med,mid,,1,,,6,,600,68,TRUE
+LowtotheGround,TRUE,,,,4049,Low to the Ground,Win a game using a deck containing no cards over 3 mana,hard,right,,1,,,50,,800,72,TRUE
+EvenlyOdd,TRUE,,,,20038,Evenly Odd,Win a game using a deck containing only even-cost cards,med,mid,,1,,,50,,600,65,TRUE
+OddlyEven,TRUE,,,,20017,Oddly Even,Win a game using a deck containing only odd-cost cards,med,mid,,1,,,50,,600,64,TRUE
+Improvisation,TRUE,,,,2105,Improvisation,Play 30 cards that were Conjured,easy,left,,30,,,6,,400,45,TRUE
+StingOperation,TRUE,,,,1032,Sting Operation,Play 4+ Yellowjacks in one turn,med,mid,,1,,1104,6,,600,46,TRUE
+DOOMED,TRUE,,,,2036,DOOMED!,Destroy 8+ Units with one Seal of Doom,med,mid,,1,,2036,6,,600,45,TRUE
+HowOriginal2,TRUE,,,,20022,How Original,Play three of the same Unit or spell in one turn,easy,left,,1,,,6,,400,60,TRUE
+Calamaritastrophe,TRUE,,,,4127,Calamari-tastrophe,Defeat the opponent using a Tentacle,med,mid,,1,,4127,6,,600,54,TRUE
+BurnedOut,TRUE,,,,1007,Burned Out,Win a game while you have no cards left in your deck,hard,right,,1,,,50,,800,62,TRUE
+Surveillance,TRUE,,,,4095,Surveillance,Reveal 15 cards in enemy hands,med,mid,,15,,,300,,600,42,TRUE
+BackforMore,TRUE,,,,3113,Back for More,Summon 50+ Units from your graveyard,easy,left,,50,Bouran,,6,,400,61,TRUE
+Showoff,TRUE,,,,3029,Showoff,Win the game without attacking with your Hero even once,hard,right,,1,,,6,,800,62,TRUE
+LightthePath,TRUE,,,,3133,Light the Path,Attach Shield to units using Dawndelver 30 times,easy,left,,1,,,6,,400,62,TRUE
+BringhometheBacon,TRUE,,,,2107,Bring home the Bacon,"Defeat the enemy Hero by attacking them with Pokey, Mailpig",med,mid,,1,,2107,6,,600,79,TRUE
+PhyrricVictory,TRUE,,,,3016,Phyrric Victory,Win a game with an empty deck and empty hand,hard,right,,1,,,7,,800,59,TRUE
+BackfromtheBrink,TRUE,,,,3028,Back from the Brink,Fall below 10 health and then win the game while above 32 health,hard,right,,1,,,50,,800,83,TRUE
+IllbeBack,TRUE,,,,3022,I'll be Back,Have a single Rags the Returned return from the grave twice in one turn,hard,right,,1,,3132,7,,800,83,TRUE
+OTK,TRUE,,,,3025,OTK,Do 32+ damage to the enemy Hero in one turn,hard,right,,1,,,40,,800,46,TRUE
+Enchantress,TRUE,,,,3024,Enchantress,Control three+ Units with at least three different enchants,med,mid,,1,,,40,,600,70,TRUE

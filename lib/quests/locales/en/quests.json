@@ -1,0 +1,894 @@
+{
+  "ABiiiigStick": {
+    "name": "A Biiiig Stick",
+    "text": "Have an Elderwood with 8 power or more in play"
+  },
+  "AcrosstheRainbow": {
+    "name": "Across the Rainbow",
+    "text": "Play a card of each different element, in a single turn"
+  },
+  "AdasResolve": {
+    "name": "Ada's Resolve",
+    "text": "Play a game as Ada"
+  },
+  "AdasResolvePlus": {
+    "name": "Ada's Resolve +",
+    "text": "Win 2 games as Ada"
+  },
+  "AFriendAppears": {
+    "name": "A Friend Appears",
+    "text": "Boost the stats of 10 Units"
+  },
+  "Agilityweaver": {
+    "name": "Agilityweaver",
+    "text": "Win 2 games with an Agility Hero"
+  },
+  "AirBattler": {
+    "name": "Air Battler",
+    "text": "Play 10 Air cards"
+  },
+  "AirBattlerPLUS": {
+    "name": "Air Battler +",
+    "text": "Play 30 Air cards"
+  },
+  "AirBattlerPLUSPLUS": {
+    "name": "Air Battler ++",
+    "text": "Play 500 Air cards"
+  },
+  "AllTogether": {
+    "name": "All Together",
+    "text": "Have a card from each Prism in your grave at the same time"
+  },
+  "AnArmyisBuilt": {
+    "name": "An Army is Built",
+    "text": "Summon 10 Treefolk Sapling"
+  },
+  "AnEnemyApproaches": {
+    "name": "An Enemy Approaches",
+    "text": "Destroy 10 enemy Units"
+  },
+  "Annihilation": {
+    "name": "Annihilation",
+    "text": "Destroy 4+ enemy Units in one turn"
+  },
+  "ArcaneOverflow": {
+    "name": "Arcane Overflow",
+    "text": "Do 40 damage to enemy Heroes using spells"
+  },
+  "ArisInsight": {
+    "name": "Ari's Insight",
+    "text": "Play a game as Ari"
+  },
+  "ArisInsightII": {
+    "name": "Ari's Insight +",
+    "text": "Win 2 games as Ari"
+  },
+  "ArmisEnvoy": {
+    "name": "Armis Envoy",
+    "text": "Attack with an Armis Guard 10 times"
+  },
+  "Armoured": {
+    "name": "Armoured",
+    "text": "Play 10 Units with Armor"
+  },
+  "ASmallSacrifice": {
+    "name": "A Small Sacrifice",
+    "text": "Destroy 5 of your own Units using spells that do not deal damage"
+  },
+  "AxelsVision": {
+    "name": "Axel's Vision",
+    "text": "Play a game as Axel"
+  },
+  "BackforMore": {
+    "name": "Back for More",
+    "text": "Summon 50+ Units from your graveyard"
+  },
+  "BackfromtheBrink": {
+    "name": "Back from the Brink",
+    "text": "Fall below 10 health and then win the game while above 32 health"
+  },
+  "BakersDozen": {
+    "name": "Baker's Dozen",
+    "text": "Attack with your Hero 13 times"
+  },
+  "BalancePatch": {
+    "name": "Balance Patch",
+    "text": "Play 5 cards with Banner that usually don't have Banner"
+  },
+  "BanjosMirth": {
+    "name": "Banjo's Mirth",
+    "text": "Play a game as Banjo"
+  },
+  "Beastmaster": {
+    "name": "Beastmaster",
+    "text": "Summon 20+ Units in one game"
+  },
+  "BigBird": {
+    "name": "Big Bird",
+    "text": "Attack with your Hero when they have 5 or more power"
+  },
+  "BigHitter": {
+    "name": "Big Hitter",
+    "text": "Do 15+ damage to the enemy Hero with a single attack"
+  },
+  "BigSpender": {
+    "name": "Big Spender",
+    "text": "Spend 20+ mana in one turn"
+  },
+  "Blighted": {
+    "name": "Blighted",
+    "text": "Add 20+ Blights to your opponent's decks"
+  },
+  "Boing": {
+    "name": "Boing!",
+    "text": "Return 5+ Units to hand in one game"
+  },
+  "BouransShadow": {
+    "name": "Bouran's Shadow",
+    "text": "Play a game as Bouran"
+  },
+  "BouransShadowII": {
+    "name": "Bouran's Shadow +",
+    "text": "Win 2 games as Bouran"
+  },
+  "BringhometheBacon": {
+    "name": "Bring home the Bacon",
+    "text": "Defeat the enemy Hero by attacking them with Pokey, Mailpig"
+  },
+  "Bubbly": {
+    "name": "Bubbly",
+    "text": "Have an ally Bubbles with 10 or more health"
+  },
+  "BurnBabyBurn": {
+    "name": "Burn Baby Burn!",
+    "text": "Destroy 5 Units using the Flames enchant"
+  },
+  "BurnedOut": {
+    "name": "Burned Out",
+    "text": "Win a game while you have no cards left in your deck"
+  },
+  "ByMyHand": {
+    "name": "By My Hand!",
+    "text": "Defeat the enemy Hero with an attack from your own Hero"
+  },
+  "Calamaritastrophe": {
+    "name": "Calamari-tastrophe",
+    "text": "Defeat the opponent using a Tentacle"
+  },
+  "Champion": {
+    "name": "Champion",
+    "text": "Win 10 Games"
+  },
+  "CloneArmy": {
+    "name": "Clone Army",
+    "text": "Play four or more of the same Unit in one game"
+  },
+  "Combotastic": {
+    "name": "Combotastic!",
+    "text": "Play 4+ Spells and/or Units in one turn"
+  },
+  "Competitor": {
+    "name": "Competitor",
+    "text": "Play 80 Games"
+  },
+  "ConcedingwithStyle": {
+    "name": "Conceding with Style",
+    "text": "Defeat your own Hero using a spell"
+  },
+  "ContagiousVictory": {
+    "name": "Contagious Victory",
+    "text": "Defeat an enemy Hero using a Zomboid Death Effect"
+  },
+  "CoupDeGrace": {
+    "name": "Coup De Grace",
+    "text": "Overkill the enemy Hero by 5 or more damage"
+  },
+  "CrystalGrowth": {
+    "name": "Crystal Growth",
+    "text": "Gain 5 or more max mana using spells and effects in one game"
+  },
+  "Curseslinger": {
+    "name": "Curse-slinger",
+    "text": "Place 20+ enchants onto enemy Units in one game"
+  },
+  "DarkBattler": {
+    "name": "Dark Battler",
+    "text": "Play 10 Dark cards"
+  },
+  "DarkBattlerPLUS": {
+    "name": "Dark Battler +",
+    "text": "Play 30 Dark cards"
+  },
+  "DarkBattlerPLUSPLUS": {
+    "name": "Dark Battler ++",
+    "text": "Play 500 Dark cards"
+  },
+  "Dashing": {
+    "name": "Dashing",
+    "text": "Play 10 Units with Dash"
+  },
+  "DeadonArrival": {
+    "name": "Dead on Arrival",
+    "text": "Play a Unit and have it die in the same turn"
+  },
+  "Deathcaller": {
+    "name": "Deathcaller",
+    "text": "Trigger the Death effect of an ally while it's on the board"
+  },
+  "Demilitarize": {
+    "name": "Demilitarize",
+    "text": "Destroy 10 enemy Armis Guard"
+  },
+  "DemonRush": {
+    "name": "Demon Rush",
+    "text": "Attack with your Hero 4+ times in one turn"
+  },
+  "Destroy": {
+    "name": "Destroy!",
+    "text": "Do 5000 damage to enemies"
+  },
+  "Determinator": {
+    "name": "Determinator",
+    "text": "Play 20 Games"
+  },
+  "DidntNeedIt": {
+    "name": "Didn't Need It",
+    "text": "Win a game with a Mana Crystal in your hand"
+  },
+  "DieAgainLater": {
+    "name": "Die Again Later",
+    "text": "Trigger 20+ ally Unit's death effects in one game"
+  },
+  "DinoDiscount": {
+    "name": "Dino Discount",
+    "text": "Play 10 cards that have had their cost reduced"
+  },
+  "DOOMED": {
+    "name": "DOOMED!",
+    "text": "Destroy 8+ Units with one Seal of Doom"
+  },
+  "DoubleRainbow": {
+    "name": "Double Rainbow",
+    "text": "Have 2+ cards of each element in your grave at once"
+  },
+  "DustDevil": {
+    "name": "Dust Devil",
+    "text": "Dust 10 cards in one game"
+  },
+  "EarthBattler": {
+    "name": "Earth Battler",
+    "text": "Play 10 Earth cards"
+  },
+  "EarthBattlerPLUS": {
+    "name": "Earth Battler +",
+    "text": "Play 30 Earth cards"
+  },
+  "EarthBattlerPLUSPLUS": {
+    "name": "Earth Battler ++",
+    "text": "Play 500 Earth cards"
+  },
+  "Empowered": {
+    "name": "Empowered",
+    "text": "Use Ada's Hero Ability 150 times"
+  },
+  "EmptyHanded": {
+    "name": "Empty-Handed",
+    "text": "Win a game while your hand is empty"
+  },
+  "Enchanting": {
+    "name": "Enchanting",
+    "text": "Attach 200 enchants"
+  },
+  "Enchantress": {
+    "name": "Enchantress",
+    "text": "Control three+ Units with at least three different enchants"
+  },
+  "Encore": {
+    "name": "Encore",
+    "text": "Summon 10+ Units from your graveyard in one game"
+  },
+  "EvenlyOdd": {
+    "name": "Evenly Odd",
+    "text": "Win a game using a deck containing only even-cost cards"
+  },
+  "FireBattler": {
+    "name": "Fire Battler",
+    "text": "Play 10 Fire cards"
+  },
+  "FireBattlerPLUS": {
+    "name": "Fire Battler +",
+    "text": "Play 30 Fire cards"
+  },
+  "FireBattlerPLUSPLUS": {
+    "name": "Fire Battler ++",
+    "text": "Play 500 Fire cards"
+  },
+  "Fireworks": {
+    "name": "Fireworks!",
+    "text": "Do 40 Damage using Festival Cannon's Death effect"
+  },
+  "FirstBlood": {
+    "name": "First Blood",
+    "text": "Be the first player to destroy a Unit in a game, 20 times"
+  },
+  "FoxsBravado": {
+    "name": "Fox's Bravado",
+    "text": "Play a game as Fox"
+  },
+  "FriendlyFire": {
+    "name": "Friendly Fire",
+    "text": "Destroy 10 of your own Units using your own spells and effects"
+  },
+  "FromtheJawsofDefeat": {
+    "name": "From the Jaws of Defeat",
+    "text": "Defeat the enemy Hero while your Hero has 5 or less health remaining"
+  },
+  "FullBoard": {
+    "name": "Full Board",
+    "text": "Both you and your opponent have six Units in play at the same time"
+  },
+  "FullyEquipped": {
+    "name": "Fully Equipped",
+    "text": "Attack while your Hero has Banner, Wither, Lifesteal and Armor"
+  },
+  "Gardener": {
+    "name": "Gardener",
+    "text": "Summon 10 Elderwood"
+  },
+  "Gifted": {
+    "name": "Gifted",
+    "text": "Force your opponent to draw 3 or more cards in one turn"
+  },
+  "GlizzyGobbler": {
+    "name": "Glizzy Gobbler",
+    "text": "Play 10+ Glizzies"
+  },
+  "Glorious": {
+    "name": "Glorious!",
+    "text": "Trigger 5+ Glory effects in one game"
+  },
+  "Gottagofast2": {
+    "name": "Gotta go Fast!",
+    "text": "Win a game where every Unit you play has Dash"
+  },
+  "GrandLarceny": {
+    "name": "Grand Larceny",
+    "text": "Play Battery and Yoink! while you have Gerry the goon in play"
+  },
+  "Gravekeeper": {
+    "name": "Gravekeeper",
+    "text": "Have 30 or more dead Units in your graveyard in one game"
+  },
+  "Guardbreaker": {
+    "name": "Guardbreaker",
+    "text": "Destroy 10 enemy Units that have Guard or Armor"
+  },
+  "Guarded": {
+    "name": "Guarded",
+    "text": "Play 10 Units with Guard"
+  },
+  "HallowedSwords": {
+    "name": "Hallowed Swords",
+    "text": "Attack with an Armis Guard that has Wither and Lifesteal"
+  },
+  "HandtoHand": {
+    "name": "Hand to Hand",
+    "text": "Do 20+ damage to the enemy Hero using your Hero in a single turn"
+  },
+  "Healer": {
+    "name": "Healer",
+    "text": "Recover 20+ health in one game"
+  },
+  "Heartweaver": {
+    "name": "Heartweaver",
+    "text": "Win 2 games with a Heart Hero"
+  },
+  "HeavyHitter": {
+    "name": "Heavy Hitter",
+    "text": "Win a game using a deck containing no cards under 4 mana"
+  },
+  "HerosJourney": {
+    "name": "Hero's Journey",
+    "text": "Play a game with Ada"
+  },
+  "HerosJourneyII": {
+    "name": "Hero's Journey II",
+    "text": "Play a game with Samya"
+  },
+  "HerosJourneyIII": {
+    "name": "Hero's Journey III",
+    "text": "Play a game with Bouran"
+  },
+  "HerosJourneyIV": {
+    "name": "Hero's Journey IV",
+    "text": "Play a game with Ari"
+  },
+  "HerosJourneyV": {
+    "name": "Hero's Journey V",
+    "text": "Play a game with Lotus"
+  },
+  "HexboundHorde": {
+    "name": "Hexbound Horde",
+    "text": "Control six Zomboid at once"
+  },
+  "HolyWords": {
+    "name": "Holy Words",
+    "text": "Summon 20 Armored Guard using Pontiff of Armis"
+  },
+  "HoriksBurden": {
+    "name": "Horik's Burden",
+    "text": "Play a game as Horik"
+  },
+  "HowOriginal2": {
+    "name": "How Original",
+    "text": "Play three of the same Unit or spell in one turn"
+  },
+  "IllbeBack": {
+    "name": "I'll be Back",
+    "text": "Have a single Rags the Returned return from the grave twice in one turn"
+  },
+  "Improvisation": {
+    "name": "Improvisation",
+    "text": "Play 30 cards that were Conjured"
+  },
+  "Intellectweaver": {
+    "name": "Intellectweaver",
+    "text": "Win 2 games with an Intellect Hero"
+  },
+  "IrisGrace": {
+    "name": "Iris' Grace",
+    "text": "Play a game as Iris"
+  },
+  "IronWill": {
+    "name": "Iron Will",
+    "text": "Boost the stats of 5 ally Units"
+  },
+  "KaZam": {
+    "name": "Ka-Zam!",
+    "text": "Do 20+ damage with Zam in one turn"
+  },
+  "LastStand": {
+    "name": "Last Stand",
+    "text": "Win a game while at exactly 1 health"
+  },
+  "LegionofArmis": {
+    "name": "Legion of Armis",
+    "text": "Control six Armis Guard at once"
+  },
+  "LightBattler": {
+    "name": "Light Battler",
+    "text": "Play 10 Light cards"
+  },
+  "LightBattlerPLUS": {
+    "name": "Light Battler +",
+    "text": "Play 30 Light cards"
+  },
+  "LightBattlerPLUSPLUS": {
+    "name": "Light Battler ++",
+    "text": "Play 500 Light cards"
+  },
+  "LightthePath": {
+    "name": "Light the Path",
+    "text": "Attach Shield to units using Dawndelver 30 times"
+  },
+  "Lively": {
+    "name": "Lively",
+    "text": "Play 10 Units with Lifesteal"
+  },
+  "LockedUp": {
+    "name": "Locked Up",
+    "text": "Attach Chains to 10 Units"
+  },
+  "LongLivetheKing": {
+    "name": "Long Live the King",
+    "text": "Revive a copy of Pharonis with his own Sunset effect"
+  },
+  "LotusPatience": {
+    "name": "Lotus' Patience",
+    "text": "Play a game as Lotus"
+  },
+  "LotusPatienceII": {
+    "name": "Lotus' Patience +",
+    "text": "Win 2 games as Lotus"
+  },
+  "LowtotheGround": {
+    "name": "Low to the Ground",
+    "text": "Win a game using a deck containing no cards over 3 mana"
+  },
+  "Magnificant": {
+    "name": "Magnificant",
+    "text": "Play 10 cards that have had their cost reduced"
+  },
+  "MaisBreakthrough": {
+    "name": "Mai's Breakthrough",
+    "text": "Play a game as Mai"
+  },
+  "MajorInvestment": {
+    "name": "Major Investment",
+    "text": "Spend 300+ Mana"
+  },
+  "ManaInvestment": {
+    "name": "Mana Investment",
+    "text": "Spend 100+ Mana"
+  },
+  "Manetastic": {
+    "name": "Manetastic",
+    "text": "Boost the stats of 10 or more Units with one use of Glorious Mane"
+  },
+  "MasterAnimist": {
+    "name": "Master Animist",
+    "text": "Trigger Anima on ally Units 10 times"
+  },
+  "MasterofDeath": {
+    "name": "Master of Death",
+    "text": "Trigger the Death effect of 10 ally Units"
+  },
+  "MatterReshaper": {
+    "name": "Matter Reshaper",
+    "text": "Use Ari's Hero Ability 75 times"
+  },
+  "Megashroom": {
+    "name": "Megashroom",
+    "text": "Trigger Mechshroom's death effect 10+ times in one game"
+  },
+  "MetalBattler": {
+    "name": "Metal Battler",
+    "text": "Play 10 Metal cards"
+  },
+  "MetalBattlerPLUS": {
+    "name": "Metal Battler +",
+    "text": "Play 30 Metal cards"
+  },
+  "MetalBattlerPLUSPLUS": {
+    "name": "Metal Battler ++",
+    "text": "Play 500 Metal cards"
+  },
+  "MeteorShower": {
+    "name": "Meteor Shower",
+    "text": "Play 10 Fireball"
+  },
+  "MicroManagement": {
+    "name": "Micro-Management",
+    "text": "Attack with a Micron Drone 10 times"
+  },
+  "MightofEarth": {
+    "name": "Might of Earth",
+    "text": "Increase the power or health of 10 Units"
+  },
+  "MightyStrike": {
+    "name": "Mighty Strike",
+    "text": "Attack with a Unit that has 15 Power or more"
+  },
+  "MightyThick": {
+    "name": "Mighty Thick",
+    "text": "Attack with a Unit that has 15 Health or more"
+  },
+  "MindBattler": {
+    "name": "Mind Battler",
+    "text": "Play 10 Mind cards"
+  },
+  "MindBattlerPLUS": {
+    "name": "Mind Battler +",
+    "text": "Play 30 Mind cards"
+  },
+  "MindBattlerPLUSPLUS": {
+    "name": "Mind Battler ++",
+    "text": "Play 500 Mind cards"
+  },
+  "MirasMettle": {
+    "name": "Mira's Mettle",
+    "text": "Play a game as Mira"
+  },
+  "MirrorMatched": {
+    "name": "Mirror Matched",
+    "text": "Play three games where you and your opponent have the same Hero"
+  },
+  "OddlyEven": {
+    "name": "Oddly Even",
+    "text": "Win a game using a deck containing only odd-cost cards"
+  },
+  "Om": {
+    "name": "Om",
+    "text": "Use Lotus' Hero Ability 50 times"
+  },
+  "Onezeroonezeroone": {
+    "name": "Onezeroonezeroone",
+    "text": "Defeat the enemy Hero using Unophobia (Created by Hax)"
+  },
+  "OntheRoadAgain": {
+    "name": "On the Road Again",
+    "text": "Play a game"
+  },
+  "OntheRoadAgainII": {
+    "name": "On the Road Again II",
+    "text": "Attack with 2 Units on one turn"
+  },
+  "OntheRoadAgainIII": {
+    "name": "On the Road Again III",
+    "text": "Play a Unit with 5 or more health"
+  },
+  "Oops": {
+    "name": "Oops!",
+    "text": "Attack an enemy Unit without dealing damage to it"
+  },
+  "OTK": {
+    "name": "OTK",
+    "text": "Do 32+ damage to the enemy Hero in one turn"
+  },
+  "Overkill": {
+    "name": "Overkill",
+    "text": "Defeat the enemy Hero while destroying one or more of their Units at the same time"
+  },
+  "OversoldCemetery": {
+    "name": "Oversold Cemetery",
+    "text": "Have 40+ cards in your grave at once"
+  },
+  "Pacifist": {
+    "name": "Pacifist",
+    "text": "Win a game while not attacking with your Hero on at least five different turns"
+  },
+  "PainandGain": {
+    "name": "Pain and Gain",
+    "text": "Play Soulpyre Titan for 0 mana"
+  },
+  "PatientStudent": {
+    "name": "Patient Student",
+    "text": "Win a Ranked game after your 10th turn"
+  },
+  "PhyrricVictory": {
+    "name": "Phyrric Victory",
+    "text": "Win a game with an empty deck and empty hand"
+  },
+  "PleaseNerf": {
+    "name": "Please Nerf!",
+    "text": "Trigger Broodwitch's effect in a game"
+  },
+  "PokeofDoom": {
+    "name": "Poke of Doom",
+    "text": "Defeat an enemy Hero at 1 health by doing exactly 1 damage"
+  },
+  "PowerUp": {
+    "name": "Power Up!",
+    "text": "Boost the stats of 40 Units using spells"
+  },
+  "PrismPowered": {
+    "name": "Prism Powered",
+    "text": "Use or trigger the effect of a Hero Ability 350 times"
+  },
+  "RageoftheDead": {
+    "name": "Rage of the Dead",
+    "text": "Trigger 15+ death effects with one use of Grave Roil"
+  },
+  "RainbowRestriction": {
+    "name": "Rainbow Restriction",
+    "text": "Win a game with a deck that has at least 3 cards of each Element"
+  },
+  "RainbowResurrection": {
+    "name": "Rainbow Resurrection",
+    "text": "Resurrect Sky Phoenix 3 times in one game"
+  },
+  "RainbowRider": {
+    "name": "Rainbow Rider",
+    "text": "Play two cards of each element in one game"
+  },
+  "RecklessRage": {
+    "name": "Reckless Rage",
+    "text": "Have your Hero take 10+ damage in a single one of your own turns"
+  },
+  "ReducedtoAtoms": {
+    "name": "Reduced to Atoms",
+    "text": "Dust 100 enemy Units"
+  },
+  "RegeneratorPLUS": {
+    "name": "Regenerator",
+    "text": "Give 15 health to allies"
+  },
+  "RegeneratorPLUSPLUS": {
+    "name": "Regenerator +",
+    "text": "Give 200 Health to allies"
+  },
+  "RestinPeace": {
+    "name": "Rest in Peace",
+    "text": "Dust 10 dead enemy cards"
+  },
+  "Ribbit": {
+    "name": "Ribbit!",
+    "text": "Turn 5 enemy Units into Hoplites"
+  },
+  "Ritualistic": {
+    "name": "Ritualistic",
+    "text": "Use Bouran's Hero Ability 75 times"
+  },
+  "SamyasSwiftness": {
+    "name": "Samya's Swiftness",
+    "text": "Play a game as Samya"
+  },
+  "SamyasSwiftnessII": {
+    "name": "Samya's Swiftness +",
+    "text": "Win 2 games as Samya"
+  },
+  "SeasonalChampion": {
+    "name": "Seasonal Champion",
+    "text": "Win 40 Games"
+  },
+  "Sequence": {
+    "name": "Sequence",
+    "text": "Play a 1 cost, 2 cost, 3 cost, and 4 cost cost card, in a row"
+  },
+  "Shatterer": {
+    "name": "Shatterer",
+    "text": "Destroy 5 Units that have the Frostbite enchant"
+  },
+  "Shhhhhhh": {
+    "name": "Shhhhhhh!",
+    "text": "Attach Silence to 10 Units"
+  },
+  "Showoff": {
+    "name": "Showoff",
+    "text": "Win the game without attacking with your Hero even once"
+  },
+  "SittisSpite": {
+    "name": "Sitti's Spite",
+    "text": "Play a game as Sitti"
+  },
+  "SkillwiththeQuill": {
+    "name": "Skill with the Quill",
+    "text": "Give a unit +8/+8 with Cygnan Secrets"
+  },
+  "Slayer": {
+    "name": "Slayer!",
+    "text": "Trigger the Slay effects of 5+ Units in one game"
+  },
+  "Smoosh": {
+    "name": "Smoosh!",
+    "text": "Destroy three or more Units with a single use of It's a Trap!"
+  },
+  "SpeedDemon": {
+    "name": "Speed Demon",
+    "text": "Win a Ranked game before the end of your 8th turn"
+  },
+  "SpeedofLight": {
+    "name": "Speed of Light",
+    "text": "Use Samya's Hero Ability 75 times"
+  },
+  "Spelless": {
+    "name": "Spelless",
+    "text": "Win a game using a deck that contains no Spells or Attached Spells"
+  },
+  "Spellslinger": {
+    "name": "Spellslinger",
+    "text": "Play 20+ Spells in one game"
+  },
+  "Stealthy": {
+    "name": "Stealthy",
+    "text": "Play 10 Units with Stealth"
+  },
+  "StingOperation": {
+    "name": "Sting Operation",
+    "text": "Play 4+ Yellowjacks in one turn"
+  },
+  "Stophittingyourself": {
+    "name": "Stop hitting yourself!",
+    "text": "Do damage to the enemy Hero with a Unit that started in their deck"
+  },
+  "Strengthweaver": {
+    "name": "Strengthweaver",
+    "text": "Win 2 games with a Strength Hero"
+  },
+  "Summoner": {
+    "name": "Summoner",
+    "text": "Trigger 10+ summon effects in one game"
+  },
+  "Surprise": {
+    "name": "Surprise!",
+    "text": "Destroy 20 Units with Reef diver on the turn he pops back up"
+  },
+  "Surveillance": {
+    "name": "Surveillance",
+    "text": "Reveal 15 cards in enemy hands"
+  },
+  "TheBattleisWon": {
+    "name": "The Battle is Won",
+    "text": "Do 30 damage to enemies"
+  },
+  "TheReturned": {
+    "name": "The Returned",
+    "text": "Summon the same Unit from your grave 3+ times in one game"
+  },
+  "TheReturnerer": {
+    "name": "The Returnerer",
+    "text": "Have Rags the Returned return from the grave 30 times"
+  },
+  "ThousandCuts": {
+    "name": "Thousand Cuts",
+    "text": "Do 1 damage to the enemy Hero five or more times in one turn, and win that turn"
+  },
+  "ThreesCompany": {
+    "name": "Three's Company",
+    "text": "Win a game where you only play 3 cost cards"
+  },
+  "Tidyup": {
+    "name": "Tidy up",
+    "text": "Replace or remove 5 or more attachments on Units/Heroes in one turn"
+  },
+  "TitusTune": {
+    "name": "Titus' Tune",
+    "text": "Play a game as Titus"
+  },
+  "UnfathomableWealth": {
+    "name": "Unfathomable Wealth",
+    "text": "Draw and/or Conjure 10 with spells"
+  },
+  "Unitless": {
+    "name": "Unitless",
+    "text": "Win a game using a deck that contains no Unit cards"
+  },
+  "UNKNOWN": {
+    "name": "unknown quest ID",
+    "text": "unknown quest ID!"
+  },
+  "Vampire": {
+    "name": "Vampire",
+    "text": "Steal 15 health from the enemy Hero using lifesteal cards"
+  },
+  "VaporMaster": {
+    "name": "Vapor Master",
+    "text": "Trigger Vapors on ally Units 10 times"
+  },
+  "WaterBattler": {
+    "name": "Water Battler",
+    "text": "Play 10 Water cards"
+  },
+  "WaterBattlerPLUS": {
+    "name": "Water Battler +",
+    "text": "Play 30 Water cards"
+  },
+  "WaterBattlerPLUSPLUS": {
+    "name": "Water Battler ++",
+    "text": "Play 500 Water cards"
+  },
+  "WelcomeOpenSky": {
+    "name": "Welcome OpenSky!",
+    "text": "Play your first game"
+  },
+  "WhatDoesntKillYou": {
+    "name": "What Doesn't Kill You...",
+    "text": "Win a game in which your Hero took 30 or more total damage"
+  },
+  "WhiteWhale": {
+    "name": "White Whale",
+    "text": "Destroy a Breacher, or use a Breacher to defeat your opponent"
+  },
+  "WildlandChampion": {
+    "name": "Wildland Champion",
+    "text": "Trigger the effect of Wildland Heir 50 times"
+  },
+  "Wisdomweaver": {
+    "name": "Wisdomweaver",
+    "text": "Win 2 games with a Wisdom Hero"
+  },
+  "Withered": {
+    "name": "Withered",
+    "text": "Play 10 Units with Wither"
+  },
+  "WRATH": {
+    "name": "WRATH!",
+    "text": "Destroy 4+ enemy Units with a single spell"
+  },
+  "ZoeysJustice": {
+    "name": "Zoey's Justice",
+    "text": "Play a game as Zoey"
+  },
+  "ZombieSlayer": {
+    "name": "Zombie Slayer",
+    "text": "Destroy 20 enemy Zomboid"
+  },
+  "ZomboidEnvoy": {
+    "name": "Zomboid Envoy",
+    "text": "Attack with a Zomboid 10 times"
+  },
+  "ZomboidWrangler": {
+    "name": "Zomboid Wrangler",
+    "text": "Summon Zomboid 5 times"
+  }
+}

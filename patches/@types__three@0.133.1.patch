@@ -1,0 +1,50 @@
+diff --git a/examples/jsm/loaders/GLTFLoader.d.ts b/examples/jsm/loaders/GLTFLoader.d.ts
+index f7d95c2..4390086 100755
+--- a/examples/jsm/loaders/GLTFLoader.d.ts
++++ b/examples/jsm/loaders/GLTFLoader.d.ts
+@@ -13,6 +13,7 @@ import {
+     Material,
+     SkinnedMesh,
+     Texture,
++    TextureLoader,
+ } from '../../../src/Three';
+ 
+ import { DRACOLoader } from './DRACOLoader';
+@@ -36,7 +37,7 @@ export interface GLTF {
+ }
+ 
+ export class GLTFLoader extends Loader {
+-    constructor(manager?: LoadingManager);
++    constructor(manager?: LoadingManager, textureLoader?: TextureLoader, urlResolver?:(url:string) => string);
+     dracoLoader: DRACOLoader | null;
+ 
+     load(
+diff --git a/src/materials/Material.d.ts b/src/materials/Material.d.ts
+index 675d6ae..d8356e6 100755
+--- a/src/materials/Material.d.ts
++++ b/src/materials/Material.d.ts
+@@ -60,6 +60,8 @@ export interface MaterialParameters {
+     stencilZFail?: StencilOp | undefined;
+     stencilZPass?: StencilOp | undefined;
+     userData?: any;
++    needsModelNormalMatrix?: boolean | undefined;
++    needsInverseModelMatrix?: boolean | undefined;
+ }
+ 
+ /**
+diff --git a/src/math/Matrix4.d.ts b/src/math/Matrix4.d.ts
+index 9e94dda..64e7e4c 100755
+--- a/src/math/Matrix4.d.ts
++++ b/src/math/Matrix4.d.ts
+@@ -204,11 +204,6 @@ export class Matrix4 implements Matrix {
+      */
+     makePerspective(left: number, right: number, bottom: number, top: number, near: number, far: number): Matrix4;
+ 
+-    /**
+-     * Creates a perspective projection matrix.
+-     */
+-    makePerspective(fov: number, aspect: number, near: number, far: number): Matrix4;
+-
+     /**
+      * Creates an orthographic projection matrix.
+      */

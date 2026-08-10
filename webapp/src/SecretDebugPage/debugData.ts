@@ -1,0 +1,8 @@
+import { proxy } from 'valtio'
+
+export const debugData = proxy({
+  message1: 'test',
+  message2: 'test',
+  message3: 'test',
+  message4: 'test'
+})

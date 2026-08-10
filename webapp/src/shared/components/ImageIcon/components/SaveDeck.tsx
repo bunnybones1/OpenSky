@@ -1,0 +1,29 @@
+import { memo } from 'react'
+
+import { ImageIconSVG } from '../shared/components/ImageIconSVG'
+import { ImageIconSVGProps } from '../shared/types/image-icon-svg-props'
+
+export const SaveDeck = memo(({ height }: ImageIconSVGProps) => (
+  <ImageIconSVG boxWidth={48} boxHeight={48} height={height}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M10.6176 5L21.4047 6.83381L30.0996 16.9195C27.8339 18.9754 26.3205 21.8456 26.0215 25.0681L23.2693 26.528L11.8658 23.5384L0.369812 7.86629L10.6176 5ZM14.0386 19.4856L22.1444 21.6892L27.5071 18.5918L19.9715 9.7001L13.5147 8.60598L7.35062 10.3319L14.0386 19.4856Z"
+      fill="#C5B4F5"
+    />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M0 11.873V16.8505L9.78545 32.384L23.0228 35.204L27.8295 32.839C27.1148 31.6786 26.5831 30.3935 26.2747 29.0238L23.5621 30.4423L11.2957 27.6376L0 11.873ZM29.5766 35.0697C30.6949 36.2077 32.0279 37.1342 33.5099 37.7835L23.8703 42.7705L7.81295 39.7347L0 27.1292V22.1363L8.62969 35.0346L23.7162 38.055L29.5766 35.0697Z"
+      fill="#8978C6"
+    />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M38.5574 35.6885C43.7724 35.6885 48 31.4609 48 26.2458C48 21.0308 43.7724 16.8032 38.5574 16.8032C33.3424 16.8032 29.1147 21.0308 29.1147 26.2458C29.1147 31.4609 33.3424 35.6885 38.5574 35.6885ZM37.141 28.2646L43.7508 21.2295L45.6393 22.8761L37.2984 31.5574L31.4754 26.9175L33.0492 24.9715L37.141 28.2646Z"
+      fill="#4AD578"
+    />
+  </ImageIconSVG>
+))
+
+SaveDeck.displayName = 'SaveDeck'

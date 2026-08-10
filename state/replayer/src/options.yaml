@@ -1,0 +1,20 @@
+name: skyweaver-replayer
+version: 0.0.0
+author: Sequence Platforms Inc.
+about: skyweaver replayer
+
+args:
+  - id:
+      long: id
+      required: true
+      takes_value: true
+      help: match ID
+  - replay-id:
+      long: replay-id
+      required: true
+      takes_value: true
+      help: replay secret ID
+  - api-url:
+      long: api-url
+      takes_value: true
+      default_value: "https://api.skyweaver.net"

@@ -1,0 +1,98 @@
+[
+  {
+    "contractName": "NiftyswapFactory",
+    "address": "0x41bB3b1C84cB903ebe5cC82b0A648aBb502923d2"
+  },
+  {
+    "contractName": "OpenSkyAssets",
+    "address": "0x54b1a9A7a5577E5aD78b77FA2bA7A01d41f09fB4"
+  },
+  {
+    "contractName": "ERC20Wrapper",
+    "address": "0x752D6072520841EB617554Fe9A5483A1108cC154"
+  },
+  {
+    "contractName": "LeaderboardRewardFactory",
+    "address": "0xE174504C08ed51d93922aeB2f35fFb4f7731982e"
+  },
+  {
+    "contractName": "LeaderboardTicketRewardFactory",
+    "address": "0x18F7D0127203b8c0F1B7d9a35492D4Fc2A814492"
+  },
+  {
+    "contractName": "FreeConquestEntriesFactory",
+    "address": "0x9225d8909d280b586CaCc01e4C37f20F794bA694"
+  },
+  {
+    "contractName": "SilverRewardFactory",
+    "address": "0xf29A7A29Eeab7054dC036c6B049137cce2E2132B"
+  },
+  {
+    "contractName": "GoldRewardFactory",
+    "address": "0xb189cde552f5Ea919977BfC25a4989C9f4eFb402"
+  },
+  {
+    "contractName": "ConquestEntriesFactory",
+    "address": "0x241C42c409C4Ba4f449eC9cF3b5b853a4A5E8D4C"
+  },
+  {
+    "contractName": "OldConquest",
+    "address": "0x864679163AE7e828E106Ec2f369e56247310E594"
+  },
+  {
+    "contractName": "Conquest",
+    "address": "0x325C59fB31a53229416E94F7Fa182B11c712a000"
+  },
+  {
+    "contractName": "CrystalFactory",
+    "address": "0xBEa51dA20eff80927dc2c83Acc2e84Fe27d11695"
+  },
+  {
+    "contractName": "LegacyHeroFactory",
+    "address": "0xA027E46F436fE9835615Bab077581494CC19043D"
+  },
+  {
+    "contractName": "NiftyswapExchange",
+    "address": "0x00A33f640F8B4EfD6A154270fcdBf288D17d4385"
+  },
+  {
+    "contractName": "StickersFactory",
+    "address": "0xc29a517410cd0e5eD09dF94A24B2228bD2693460"
+  },
+  {
+    "contractName": "LegacyHeroSale",
+    "address": "0x8e7ccED538F8597fa189b6502DAd1dEa21e64B67"
+  },
+  {
+    "contractName": "ConquestPayment",
+    "address": "0xd6Acf11303e14Bd8577932FE53ADb22FD4E6aa95"
+  },
+  {
+    "contractName": "CardbacksFactory",
+    "address": "0xE64efeA643E2ea3775e7cd598346635066f60402"
+  },
+  {
+    "contractName": "OpenSkyPaymentProxy",
+    "address": "0x12FAF77BEab96a21593fC32734be1178346F17e6"
+  },
+  {
+    "contractName": "ConquestTreasureSilverFactory",
+    "address": "0xeE4613E2b2dE1be3892B239dAedAA3d8319e7080"
+  },
+  {
+    "contractName": "SkypassStickersFactory",
+    "address": "0x3a315299E648280B791FD424dcAD6630c7D5cf0f"
+  },
+  {
+    "contractName": "SkypassConquestTicketsFactory",
+    "address": "0x03Cac70275052f48fe973796c6cC2b637BBbdFD4"
+  },
+  {
+    "contractName": "SkypassSilverRewardFactory",
+    "address": "0x71C110a40179Bc8bE2692fdD0Adf7Eef53136bc5"
+  },
+  {
+    "contractName": "USDC",
+    "address": "0xfCFdE38A1EeaE0ee7e130BbF66e94844Bc5D5B6B"
+  }
+]

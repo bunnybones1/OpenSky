@@ -1,0 +1,40 @@
+# See https://help.github.com/ignore-files/ for more about ignoring files.
+
+# dependencies
+node_modules/
+
+# production
+dist/
+target/
+
+# direnv
+.direnv/
+
+# misc
+.DS_Store
+.local/
+.vscode
+.idea/
+*.iml
+rust-analyzer/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+dump.rdb
+api/data/schema/schema.sql
+.pnpm-store/
+*.retry
+
+# configuration
+!webapp/dist/assets.json
+!game/dist/assets.json
+
+# proto
+!webapp/src/api/proto/*.js
+
+# coverage reports
+coverage
+
+lib/shared/lib
+rustup-init.exe

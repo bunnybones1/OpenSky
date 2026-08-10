@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenSky</title>
+    <meta
+      name="description"
+      content="OpenSky - a trading card game from another dimension."
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta property="og:title" content="OpenSky" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://play.skyweaver.net" />
+    <meta
+      property="og:image"
+      content="https://assets.skyweaver.net/4bEu3Xkl/webapp/backgrounds/newhome.jpg"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      property="og:description"
+      content="OpenSky - a trading card game from another dimension."
+    />
+    <meta property="og:site_name" content="OpenSky" />
+    <meta name="twitter:image:alt" content="OpenSky background" />
+
+    <!-- favicon info -->
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/images/favicon/favicon-32x32.png?v=GITCOMMIT"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="/images/favicon/favicon-16x16.png?v=GITCOMMIT"
+    />
+    <link
+      rel="mask-icon"
+      href="/images/favicon/safari-pinned-tab.svg?v=GITCOMMIT"
+      color="#40306b"
+    />
+    <meta name="msapplication-TileColor" content="#da532c" />
+    <link rel="icon" href="" />
+
+    <!-- Chrome, Firefox OS and Opera -->
+    <meta name="theme-color" content="#211455" />
+    <!-- Windows Phone -->
+    <meta name="msapplication-navbutton-color" content="#211455" />
+    <!-- iOS Safari -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <link
+      rel="apple-touch-icon"
+      href="/images/opensky-touch-icon.png?v=GITCOMMIT"
+    />
+    <link
+      rel="apple-touch-icon-precomposed"
+      href="/images/opensky-touch-icon.png?v=GITCOMMIT"
+    />
+
+    <script>
+      window.APP_CONFIG = /*APP_CONFIG>>*/ {} /*<<APP_CONFIG*/
+
+      if (navigator.userAgent.toLowerCase().includes("with-asset-cache-proxy")) {
+        window.APP_CONFIG.ASSETS_URL = "https://swa-001.skyweaver.network:41214/_proxy/" + window.APP_CONFIG.ASSETS_URL
+      }
+    </script>
+
+    <script type="module">
+      import { Buffer } from 'buffer'
+      globalThis.Buffer = Buffer
+    </script>
+
+    <style>
+      @keyframes index-slide-in {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.95);
+          opacity: 0.3;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      /* Barlow */
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow";
+        src: url("/fonts/Barlow-Regular.ttf") format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow";
+        src: url("/fonts/Barlow-Medium.ttf") format('truetype');
+        font-weight: 500;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow";
+        src: url("/fonts/Barlow-SemiBold.ttf") format('truetype');
+        font-weight: 600;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow";
+        src: url("/fonts/Barlow-Bold.ttf") format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+
+      /* BarlowCondensed */
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow Condensed";
+        src: url("/fonts/BarlowCondensed-Regular.ttf") format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow Condensed";
+        src: url("/fonts/BarlowCondensed-Medium.ttf") format('truetype');
+        font-weight: 500;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow Condensed";
+        src: url("/fonts/BarlowCondensed-SemiBold.ttf") format('truetype');
+        font-weight: 600;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Barlow Condensed";
+        src: url("/fonts/BarlowCondensed-Bold.ttf") format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+
+      /* Roboto */
+      @font-face {
+        font-display: swap;
+        font-family: "Roboto Mono";
+        src: url("/fonts/RobotoMono-Regular.ttf") format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Roboto Mono";
+        src: url("/fonts/RobotoMono-Medium.ttf") format('truetype');
+        font-weight: 500;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Roboto Mono";
+        src: url("/fonts/RobotoMono-SemiBold.ttf") format('truetype');
+        font-weight: 600;
+        font-style: normal;
+      }
+      @font-face {
+        font-display: swap;
+        font-family: "Roboto Mono";
+        src: url( "/fonts/RobotoMono-Bold.ttf") format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+    </style>
+  </head>
+
+  <body style="background-color: #0c061e">
+    <div
+      id="loader"
+      style="
+        background-color: #0c061e;
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        top: 0;
+        left: 0;
+        display: flex;
+        pointer-events: all;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      "
+    >
+      <svg
+        height="200px"
+        viewBox="0 0 36 62"
+        version="1.1"
+        xmlns="http://www.w3.org/2000/svg"
+        style="animation: 3s index-slide-in ease-in-out infinite"
+      >
+        <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
+          <g transform="translate(-14.000000, -1.000000)" fill="#FFFFFF">
+            <path
+              d="M32,1 L20.8572507,12.1941602 L18.2854987,14.7777778 L14,19.0841862 L14,44.9158138 L32,63 L43.1427493,51.8058398 L45.7156333,49.2210851 L50,44.9158138 L50,19.0841862 L32,1 Z M34.5728839,38.0280621 L38.0003773,34.5836176 L40.5721293,32 L32,23.3883203 L23.2818513,14.6288104 L32,5.87043762 L46.5725066,20.5101794 L46.5725066,43.4898206 L43.2899006,46.7864348 L34.5728839,38.0280621 Z M17.4286253,43.4898206 L17.4286253,20.5101794 L20.7100994,17.2135652 L29.428248,25.9719379 L25.9996227,29.4163824 L23.4290026,32 L32,40.6116797 L40.7192806,49.3711896 L32,58.1295624 L17.4286253,43.4898206 Z"
+              transform="translate(32.000000, 32.000000) scale(-1, 1) translate(-32.000000, -32.000000)"
+            />
+          </g>
+        </g>
+      </svg>
+    </div>
+    <div id="portal" style="width: auto; height: auto"></div>
+    <div id="app" style="width: 100%; will-change: transform"></div>
+    <div id="aux" style="display: none">
+      <div id="captcha2" data-size="invisible"></div>
+    </div>
+    <script>
+      if (typeof window !== 'undefined') {
+        window.global = window
+      }
+    </script>
+    <script src="/src/index.tsx" type="module"></script>
+  </body>
+</html>

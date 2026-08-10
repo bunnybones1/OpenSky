@@ -1,0 +1,1 @@
+export const CART_DIALOG_ID = 'CART_DIALOG_ID'

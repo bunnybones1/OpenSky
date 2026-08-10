@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <title>OpenSky Release</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    body,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-family: 'Barlow', sans-serif;
+    }
+    body,
+    html {
+      height: 100%;
+      color: #777;
+      line-height: 1.8;
+    }
+
+    .background {
+      background-size: cover;
+      background-position: center;
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      filter: blur(2px);
+    }
+
+    .overlay {
+      background: rgb(12 6 30 / 80%);
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+    }
+
+    .logo {
+      background-image: url(https://assets.skyweaver.net/TZK7bDqH/webapp/icons/logo.webp);
+      width: 264px;
+      height: 72px;
+      background-size: cover;
+    }
+
+    .content__container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 3;
+      position: relative;
+    }
+
+    .notice__text {
+      color: #c5b4f5;
+      font-style: normal;
+      font-weight: 600;
+      font-size: 26px;
+      line-height: 30px;
+      font-family: 'Barlow Condensed', sans-serif;
+      margin-top: 0px;
+      padding: 16px;
+    }
+    .notice__text2 {
+      color: #c5b4f5;
+      font-style: normal;
+      font-weight: 600;
+      font-size: 26px;
+      line-height: 30px;
+      font-family: 'Barlow Condensed', sans-serif;
+      margin-top: -15px;
+      margin-bottom: 15px;
+      padding: 0px;
+    }
+
+    .content {
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .buttons__container {
+      margin-top: 16px;
+    }
+
+    .button {
+      width: 210px;
+      height: 42px;
+      margin-right: 16px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: 500;
+      font-size: 18px;
+      line-height: 22px;
+      color: white;
+      font-family: 'Barlow Condensed', sans-serif;
+      clip-path: polygon(
+        0% 0%,
+        calc(100% - 6px) 0%,
+        100% 6px,
+        100% 100%,
+        6px 100%,
+        0% calc(100% - 6px)
+      );
+      inset: 1px;
+      background: linear-gradient(180deg, #4d3c7b 46.09%, #40306b 46.77%);
+      z-index: 2;
+    }
+
+    .button__outline {
+      width: 212px;
+      height: 44px;
+      background: #705bab;
+      position: absolute;
+      z-index: 1;
+      clip-path: polygon(
+        0% 0%,
+        calc(100% - 6px) 0%,
+        100% 6px,
+        100% 100%,
+        6px 100%,
+        0% calc(100% - 6px)
+      );
+    }
+
+    .button__outline--green {
+      background: #86fbb4;
+    }
+
+    .button--green {
+      background: linear-gradient(180deg, #3eb06b 46.09%, #309d5b 46.78%);
+    }
+
+    a {
+      text-decoration: none;
+      display: inline-block;
+      position: relative;
+    }
+    
+    #countdown {
+      color: white;
+    }
+    
+  </style>
+
+  <body>
+    <div class="background"></div>
+    <div class="overlay"></div>
+    <div class="content__container">
+      <div class="content">
+        <div class="logo"></div>
+        <div class="notice__text center-text">
+          The Hexbound are coming...
+        </div>
+         <div class="notice__text2">
+          The Invasion begins in <span id="countdown"></></span>
+        </div>
+      </div>
+    </div>
+	<script>
+      var est = new Date().getTimezoneOffset() / 60;
+      var countDownDate = new Date("Jan 16, 2023 13:00:00 EST").getTime();
+      var x = setInterval(function() {
+        var now = new Date().getTime();
+        var distance = countDownDate - now;
+        var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        document.getElementById("countdown").innerHTML = hours + "h " + minutes + "m " + seconds + "s ";
+        if (distance < 0) {
+          clearInterval(x);
+          document.getElementById("countdown").innerHTML = "EXPIRED";
+        }
+      }, 1000);
+    </script>
+  </body>
+</html>

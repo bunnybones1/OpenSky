@@ -1,0 +1,36 @@
+webrpc = v1
+
+name = opensky-analytics
+version = v0.0.1
+
+##
+## EventType -- source of truth for analytic events
+## for both server and client side tracking.
+##
+enum EventType: uint64
+  - INIT
+  - VIEW
+
+  - ACCOUNT_CREATED
+  - ACCOUNT_LEVELED_UP 
+  - ACCOUNT_STATUS_UPDATED
+  - CONQUEST_TICKET_MINTED
+  
+  - GOT_CONQUEST_POINTS
+  - GOT_TREASURE_REWARD 
+
+  - MATCH_ENDED
+  - MATCH_GOT_REWARD
+  - MATCH_STARTED
+
+  - QUEST_COMPLETED
+  - QUEST_COMPLETION_CLAIMED # TODO: sounds weird
+  - QUEST_REROLLED
+
+  - SKYPASS_PURCHASED 
+  - SKYPASS_REWARD_CLAIMED
+
+  - TUTORIAL_ENDED 
+  - TUTORIAL_STATUS_UPDATED
+
+  - CLIENT_ATTEMPTING_NEW_ACCOUNT

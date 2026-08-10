@@ -1,0 +1,90 @@
+{
+  "name": "@opensky/server",
+  "version": "0.5.0",
+  "description": "SKYWEAVER GAME SERVER",
+  "repository": "https://github.com/horizon-games/OpenSky",
+  "private": true,
+  "keywords": [
+    "opensky",
+    "arcadeum",
+    "dgame",
+    "ethereum",
+    "horizongames"
+  ],
+  "scripts": {
+    "start": "LOG=true nodemon",
+    "compose": "LOG=true nodemon --config nodemon.compose.json",
+    "build": "rm -rf ./build && tsc -b .",
+    "lint": "eslint ./src --ext .ts,.tsx --max-warnings=0",
+    "lint:fix": "eslint ./src --ext .ts,.tsx --fix",
+    "test:watch": "jest --watchAll false",
+    "test:watch:verbose": "jest --watchAll --verbose false",
+    "test": "jest --ci --runInBand --silent --detectOpenHandles --forceExit"
+  },
+  "dependencies": {
+    "@horizongames/node-logger": "^1.0.8",
+    "@opensky/bot": "workspace:*",
+    "@opensky/deck-string-codec": "workspace:*",
+    "@opensky/proto": "workspace:*",
+    "@opensky/quests": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*",
+    "@skyweaver/state-node-sys": "workspace:*",
+    "clear-module": "^4.1.1",
+    "commander": "^9.4.1",
+    "cors": "^2.8.4",
+    "ethers": "^5.5.1",
+    "express": "^4.17.19",
+    "express-jwt": "^7.7.5",
+    "ioredis": "^5.2.0",
+    "jsonwebtoken": "^8.5.1",
+    "lodash": "^4.17.15",
+    "nocache": "^3.0.4",
+    "prom-client": "^14.0.0",
+    "ws": "^8.10.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.12",
+    "@types/ioredis": "^4.28.10",
+    "@types/jest": "28.1.4",
+    "@types/lodash": "^4.14.149",
+    "@types/node": "^20.6.3",
+    "@types/ws": "^8.5.3",
+    "@types/express": "^4.17.13",
+    "@typescript-eslint/eslint-plugin": "^6.7.5",
+    "@typescript-eslint/parser": "^6.7.5",
+    "@vercel/ncc": "^0.34.0",
+    "eslint": "^8.46.0",
+    "eslint-config-prettier": "^8.9.0",
+    "eslint-define-config": "^1.15.0",
+    "eslint-plugin-deprecation": "^1.5.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "eslint-plugin-unused-imports": "^3.0.0",
+    "global": "^4.4.0",
+    "jest": "28.1.2",
+    "nodemon": "^2.0.19",
+    "prettier": "^3.0.0",
+    "ts-jest": "28.0.5",
+    "ts-node": "^10.9.1",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6"
+  },
+  "jest": {
+    "setupFiles": [],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "jsx",
+      "ts",
+      "tsx"
+    ],
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(tsx?)$",
+    "testPathIgnorePatterns": [
+      "/node_modules/"
+    ]
+  }
+}

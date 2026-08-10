@@ -1,0 +1,28 @@
+{
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.19.1",
+    "browserstack-local": "^1.5.1",
+    "chromedriver": "^108.0.0",
+    "eslint": "^8.29.0",
+    "eslint-config-semistandard": "^17.0.0",
+    "eslint-config-standard": "^17.0.0",
+    "geckodriver": "^3.2.0",
+    "mailparser": "^3.5.0",
+    "nightwatch": "^2.5.2",
+    "node-html-parser": "^6.1.4",
+    "semistandard": "^16.0.1",
+    "imap-simple": "^5.1.0"
+  },
+  "name": "opensky-e2e",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+  },
+  "scripts": {
+    "test": "eslint .",
+    "local": "node scripts/local.runner.js --test ./test/cards.js --env browserstack.local.chrome --verbose"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "description": ""
+}

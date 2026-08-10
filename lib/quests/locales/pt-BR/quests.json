@@ -1,0 +1,894 @@
+{
+  "ABiiiigStick": {
+    "name": "Um Tronco Graande",
+    "text": "Tenha um Ancião com 8 de Poder ou mais em jogo"
+  },
+  "AcrosstheRainbow": {
+    "name": "Através do Arco-íris",
+    "text": "Jogue uma carta de cada elemento, em um único turno"
+  },
+  "AdasResolve": {
+    "name": "Decisão de Ada",
+    "text": "Jogue uma partida com Ada"
+  },
+  "AdasResolvePlus": {
+    "name": "Decisão de Ada +",
+    "text": "Ganhe 2 partidas com Ada"
+  },
+  "AFriendAppears": {
+    "name": "Um Amigo Aparece",
+    "text": "Aumente os valores de 10 Unidades"
+  },
+  "Agilityweaver": {
+    "name": "OpenSky Ágil",
+    "text": "Ganhe 2 partidas com um Herói de Agilidade"
+  },
+  "AirBattler": {
+    "name": "Combate no Ar",
+    "text": "Jogue 10 cartas de Ar"
+  },
+  "AirBattlerPLUS": {
+    "name": "Combate no Ar +",
+    "text": "Jogue 20 cartas de Ar"
+  },
+  "AirBattlerPLUSPLUS": {
+    "name": "Combate no Ar ++",
+    "text": "Jogue 500 cartas de Ar"
+  },
+  "AllTogether": {
+    "name": "Tudo Junto",
+    "text": "Tenha uma carta de cada Prisma no seu Cemitério ao mesmo tempo"
+  },
+  "AnArmyisBuilt": {
+    "name": "Um Exército é Construído",
+    "text": "Invoque 10 Brotos Florestinos"
+  },
+  "AnEnemyApproaches": {
+    "name": "Um Inimigo se Aproxima",
+    "text": "Destrua 10 Unidades inimigas"
+  },
+  "Annihilation": {
+    "name": "Aniquilação",
+    "text": "Destrua 4 ou + Unidades inimigas em um turno"
+  },
+  "ArcaneOverflow": {
+    "name": "Inundação Arcana",
+    "text": "Dê 40 dano em Heróis inimigos usando Magias"
+  },
+  "ArisInsight": {
+    "name": "Sacada de Ari",
+    "text": "Jogue uma partida com Ari"
+  },
+  "ArisInsightII": {
+    "name": "Sacada de Ari +",
+    "text": "Ganhe 2 partidas com Ari"
+  },
+  "ArmisEnvoy": {
+    "name": "Emissário Armis",
+    "text": "Ataque com um Guarda Armis 10 vezes"
+  },
+  "Armoured": {
+    "name": "Encouraçado",
+    "text": "Jogue 10 Unidades com Couraça"
+  },
+  "ASmallSacrifice": {
+    "name": "Um Pequeno Sacrifício",
+    "text": "Destrua 5 de suas Unidades usando Magias que não causam dano"
+  },
+  "AxelsVision": {
+    "name": "Visão de Axel",
+    "text": "Jogue uma partida com Axel"
+  },
+  "BackforMore": {
+    "name": "Volte para Mais",
+    "text": "Invoque 50 ou + Unidades de seu Cemitério"
+  },
+  "BackfromtheBrink": {
+    "name": "De volta à Beira",
+    "text": "Caia abaixo de 10 Vida e depois vença o jogo acima de 32 Vida"
+  },
+  "BakersDozen": {
+    "name": "Dúzia do Padeiro",
+    "text": "Ataque 13 vezes com seu Herói"
+  },
+  "BalancePatch": {
+    "name": "Patch de Balanceamento",
+    "text": "Jogue 5 cartas com Emblema que geralmente não tem Emblema"
+  },
+  "BanjosMirth": {
+    "name": "Júbilo de Banjo",
+    "text": "Jogue uma partida com Banjo"
+  },
+  "Beastmaster": {
+    "name": "Mestre das Bestas",
+    "text": "Invoque 20 ou + Unidades em um jogo"
+  },
+  "BigBird": {
+    "name": "Ave Grande",
+    "text": "Ataque com seu Herói quando ele tem 5 ou mais de Poder"
+  },
+  "BigHitter": {
+    "name": "Grande Lutador",
+    "text": "Dê 15 ou + de dano no Herói inimigo em um único ataque"
+  },
+  "BigSpender": {
+    "name": "Perdulário",
+    "text": "Gaste 20 ou + de Mana em um turno"
+  },
+  "Blighted": {
+    "name": "Praguejado",
+    "text": "Coloque 20 ou + 'Praga' no Baralho do oponente"
+  },
+  "Boing": {
+    "name": "Poim!",
+    "text": "Retorne 5 ou + Unidades à mão em uma partida"
+  },
+  "BouransShadow": {
+    "name": "Sombra de Bouran",
+    "text": "Jogue uma partida com Bouran"
+  },
+  "BouransShadowII": {
+    "name": "Sombra de Bouran +",
+    "text": "Ganhe 2 partidas com Bouran"
+  },
+  "BringhometheBacon": {
+    "name": "Traga o Bacon para Casa",
+    "text": "Derrote o Herói inimigo atacando com 'Tropeço, Porco-Correio'"
+  },
+  "Bubbly": {
+    "name": "Bolhaaas",
+    "text": "Tenha um aliado 'Bolhas' com 10 ou + de Vida"
+  },
+  "BurnBabyBurn": {
+    "name": "Queime até as Cinzas!",
+    "text": "Destrua 5 Unidades usando o Encanto 'Chamas'"
+  },
+  "BurnedOut": {
+    "name": "Consumação",
+    "text": "Ganhe uma partida enquanto você não tem cartas no seu Baralho"
+  },
+  "ByMyHand": {
+    "name": "Faça Você Mesmo!",
+    "text": "Derrote o Herói Inimigo com um ataque de seu Herói"
+  },
+  "Calamaritastrophe": {
+    "name": "Calamida-tástrofe",
+    "text": "Derrote o oponente usando um 'Tentáculo'"
+  },
+  "Champion": {
+    "name": "Campeão",
+    "text": "Ganhe 10 Partida"
+  },
+  "CloneArmy": {
+    "name": "Tropas-Clone",
+    "text": "Jogue 4 ou + da mesma Unidade em um jogo"
+  },
+  "Combotastic": {
+    "name": "Combotástico!",
+    "text": "Jogue 4 ou + Magias e/ou Unidades em um turno"
+  },
+  "Competitor": {
+    "name": "Competidor",
+    "text": "Jogue 80 Partidas"
+  },
+  "ConcedingwithStyle": {
+    "name": "Perdendo com Estilo",
+    "text": "Derrote seu próprio Herói usando uma Magia"
+  },
+  "ContagiousVictory": {
+    "name": "Vitória Contagiante",
+    "text": "Derrote o Herói inimigo usando o efeito de Morte de um 'Zumbóide'"
+  },
+  "CoupDeGrace": {
+    "name": "Golpe de Misericórdia",
+    "text": "Exagere em 5 ou + de dano ao matar o Herói inimigo"
+  },
+  "CrystalGrowth": {
+    "name": "Crescimento de Cristal",
+    "text": "Ganhe 5 ou + de Max Mana usando Magias e efeitos em um jogo"
+  },
+  "Curseslinger": {
+    "name": "Lança Maldições",
+    "text": "Coloque 20 ou + Encantos em Unidade inimigas em um jogo"
+  },
+  "DarkBattler": {
+    "name": "Combate das Trevas",
+    "text": "Jogue 10 cartas das Trevas"
+  },
+  "DarkBattlerPLUS": {
+    "name": "Combate das Trevas +",
+    "text": "Jogue 30 cartas das Trevas"
+  },
+  "DarkBattlerPLUSPLUS": {
+    "name": "Combate das Trevas ++",
+    "text": "Jogue 500 cartas das Trevas"
+  },
+  "Dashing": {
+    "name": "Apressado",
+    "text": "Jogue 10 Unidades com Pressa"
+  },
+  "DeadonArrival": {
+    "name": "Morto ao Chegar",
+    "text": "Jogue uma Unidade e a faça morrer no mesmo turno"
+  },
+  "Deathcaller": {
+    "name": "Chamado da Morte",
+    "text": "Ative o efeito de Morte de um aliado enquanto ele está na arena"
+  },
+  "Demilitarize": {
+    "name": "Desmilitarizar",
+    "text": "Destrua 10 Guarda Armis inimigos"
+  },
+  "DemonRush": {
+    "name": "Corrida do Demônio",
+    "text": "Ataque com seu Herói 4 ou + vezes em um turno"
+  },
+  "Destroy": {
+    "name": "Destrua!",
+    "text": "Dê 5000 dano em inimigos"
+  },
+  "Determinator": {
+    "name": "Determinado",
+    "text": "Jogue 20 Partidas"
+  },
+  "DidntNeedIt": {
+    "name": "Não Precisava",
+    "text": "Ganhe uma partida com um 'Cristal de Mana' em mão"
+  },
+  "DieAgainLater": {
+    "name": "Morre Novamente mais Tarde",
+    "text": "Ative 20 ou + vezes o efeito de morte de Unidades aliadas em uma partida"
+  },
+  "DinoDiscount": {
+    "name": "Desconto do Dino",
+    "text": "Jogue 10 cartas que tiveram seu custo reduzido em 2 ou mais"
+  },
+  "DOOMED": {
+    "name": "CONDENADO!",
+    "text": "Destrua 8 ou + Unidades com Selo da Perdição"
+  },
+  "DoubleRainbow": {
+    "name": "Arco-íris Duplo",
+    "text": "Tenha 2 ou + cartas de cada elemento no seu Cemitério ao mesmo tempo"
+  },
+  "DustDevil": {
+    "name": "Demônio Exilado",
+    "text": "Exile 10 cartas em uma partida"
+  },
+  "EarthBattler": {
+    "name": "Combate na Terra",
+    "text": "Jogue 10 cartas de Terra"
+  },
+  "EarthBattlerPLUS": {
+    "name": "Combate na Terra +",
+    "text": "Jogue 30 cartas de Terra"
+  },
+  "EarthBattlerPLUSPLUS": {
+    "name": "Combate na Terra ++",
+    "text": "Jogue 500 cartas de Terra"
+  },
+  "Empowered": {
+    "name": "Empoderada",
+    "text": "Use o Talento de Ada 150 vezes"
+  },
+  "EmptyHanded": {
+    "name": "Mão-Vazia",
+    "text": "Ganhe uma partida enquanto sua mão esta vazia"
+  },
+  "Enchanting": {
+    "name": "Encantamento",
+    "text": "Anexe 200 Encantos"
+  },
+  "Enchantress": {
+    "name": "Feiticeira",
+    "text": "Controle 3 ou + Unidades com pelo menos três encantos diferentes"
+  },
+  "Encore": {
+    "name": "Outra Vez",
+    "text": "Invoque 10 ou + Unidades de seu Cemitério em uma partida"
+  },
+  "EvenlyOdd": {
+    "name": "Par ou Ímpar",
+    "text": "Ganhe uma partida usando um Baralho contendo apenas cartas com custo par"
+  },
+  "FireBattler": {
+    "name": "Combate em Fogo",
+    "text": "Jogue 10 cartas de Fogo"
+  },
+  "FireBattlerPLUS": {
+    "name": "Combate em Fogo +",
+    "text": "Jogue 30 cartas de Fogo"
+  },
+  "FireBattlerPLUSPLUS": {
+    "name": "Combate em Fogo ++",
+    "text": "Jogue 500 cartas de Fogo"
+  },
+  "Fireworks": {
+    "name": "Fogos de Artifício!",
+    "text": "Dê 40 Dano usando o efeito do 'Canhão do Festival'"
+  },
+  "FirstBlood": {
+    "name": "Primeira Morte",
+    "text": "Seja o primeiro jogador a destruir uma Unidade em jogo, 20 vezes"
+  },
+  "FoxsBravado": {
+    "name": "Desafio de Fox",
+    "text": "Jogue uma partida com Fox"
+  },
+  "FriendlyFire": {
+    "name": "Fogo Amigo",
+    "text": "Destrua 10 de suas Unidades usando suas Magias ou efeitos"
+  },
+  "FromtheJawsofDefeat": {
+    "name": "Quase Morrendo",
+    "text": "Derrote o Herói inimigo enquanto seu Herói tem 5 ou menos de Vida"
+  },
+  "FullBoard": {
+    "name": "Arena Cheia",
+    "text": "Tanto você quanto seu oponente tem 6 Unidades em jogo ao mesmo tempo"
+  },
+  "FullyEquipped": {
+    "name": "Completamente Equipado",
+    "text": "Ataque enquanto seu Herói tem Emblema, Aflição, Drenagem e Couraça"
+  },
+  "Gardener": {
+    "name": "Jardineiro",
+    "text": "Invoque 10 'Ancião'"
+  },
+  "Gifted": {
+    "name": "Talentoso",
+    "text": "Force seu oponente a comprar 3 ou + cartas em um turno"
+  },
+  "GlizzyGobbler": {
+    "name": "Adora Glizzy",
+    "text": "Jogue 10 ou + 'Glizzy'"
+  },
+  "Glorious": {
+    "name": "Glorioso!",
+    "text": "Ative o efeito de Glória 5 ou + vezes em uma partida"
+  },
+  "Gottagofast2": {
+    "name": "Vamos Rápido!",
+    "text": "Ganhe uma partida em que toda Unidade que você jogar tem Dash"
+  },
+  "GrandLarceny": {
+    "name": "Grande Furto",
+    "text": "Jogue 'Assalto' e 'Tóin!' enquanto você tem 'Gerry, o Bruto' em jogo"
+  },
+  "Gravekeeper": {
+    "name": "Coveiro",
+    "text": "Tenha 30 ou + Unidades mortas em seu Cemitério em uma partida"
+  },
+  "Guardbreaker": {
+    "name": "Quebra Couraça",
+    "text": "Destrua 10 Unidades inimigas com Defensor ou Couraça"
+  },
+  "Guarded": {
+    "name": "Cauteloso",
+    "text": "Jogue 10 Unidades com Defensor"
+  },
+  "HallowedSwords": {
+    "name": "Espadas Sagradas",
+    "text": "Ataque com 'Guarda Armis' que tenha Aflição e Drenagem"
+  },
+  "HandtoHand": {
+    "name": "Mão a Mão",
+    "text": "Dê 20 ou + Dano no Herói inimigo usando seu Herói em um turno"
+  },
+  "Healer": {
+    "name": "Curandeiro",
+    "text": "Recupere 20 ou + Vida em uma partida"
+  },
+  "Heartweaver": {
+    "name": "OpenSky de Coração",
+    "text": "Ganhe 2 partidas com um Herói de Coração"
+  },
+  "HeavyHitter": {
+    "name": "Batedor Pesado",
+    "text": "Ganhe uma partida usando um Baralho contendo nenhuma carta com menos de 4 de Mana"
+  },
+  "HerosJourney": {
+    "name": "Jornada do Herói",
+    "text": "Jogue uma partida com Ada"
+  },
+  "HerosJourneyII": {
+    "name": "Jornada do Herói II",
+    "text": "Jogue uma parta com Samya"
+  },
+  "HerosJourneyIII": {
+    "name": "Jornada do Herói III",
+    "text": "Jogue uma partida com Bouran"
+  },
+  "HerosJourneyIV": {
+    "name": "Jornada do Herói IV",
+    "text": "Jogue uma partida com Ari"
+  },
+  "HerosJourneyV": {
+    "name": "Jornada do Herói V",
+    "text": "Jogue uma partida com Lotus"
+  },
+  "HexboundHorde": {
+    "name": "Horda dos Condenados",
+    "text": "Controle 6 'Zumbóide' de uma vez"
+  },
+  "HolyWords": {
+    "name": "Palavras Sagradas",
+    "text": "Invoque 20 'Guarda Armis' usando 'Pontífice de Armis'"
+  },
+  "HoriksBurden": {
+    "name": "Fardo de Horik",
+    "text": "Jogue uma partida com Horik"
+  },
+  "HowOriginal2": {
+    "name": "Quão Original",
+    "text": "Jogue 3 da mesma Unidade ou Magia em um turno"
+  },
+  "IllbeBack": {
+    "name": "Eu Voltarei",
+    "text": "Tenha o mesmo 'Farrapo, o Retornado' retornar do Cemitério 2 vezes no mesmo turno"
+  },
+  "Improvisation": {
+    "name": "Improvisação",
+    "text": "Jogue 30 cartas que você Conjurou"
+  },
+  "Intellectweaver": {
+    "name": "OpenSky Intelectual",
+    "text": "Ganhe 2 partidas com um Herói de Intelecto"
+  },
+  "IrisGrace": {
+    "name": "Elegância de Iris",
+    "text": "Jogue uma partida com Iris"
+  },
+  "IronWill": {
+    "name": "Vontade Inabalada",
+    "text": "Melhore os valores de 5 Unidades aliadas"
+  },
+  "KaZam": {
+    "name": "Zap-Zam!",
+    "text": "Dê 20 Dano com Zam em um turno"
+  },
+  "LastStand": {
+    "name": "Último Em Pé",
+    "text": "Ganhe uma partida enquanto está com 1 Vida"
+  },
+  "LegionofArmis": {
+    "name": "Legião de Armis",
+    "text": "Controle 6 'Guarda Armis' de uma vez"
+  },
+  "LightBattler": {
+    "name": "Combate da Luz",
+    "text": "Jogue 10 cartas de Luz"
+  },
+  "LightBattlerPLUS": {
+    "name": "Combate da Luz +",
+    "text": "Jogue 30 cartas de Luz"
+  },
+  "LightBattlerPLUSPLUS": {
+    "name": "Combate da Luz ++",
+    "text": "Jogue 500 cartas de Luz"
+  },
+  "LightthePath": {
+    "name": "Ilumine o Caminho",
+    "text": "Anexe 'Escudo' em Unidades usando 'Luz Aurora' 30 vezes"
+  },
+  "Lively": {
+    "name": "Vivaz",
+    "text": "Jogue 10 Unidades com Drenagem"
+  },
+  "LockedUp": {
+    "name": "Encarcerado",
+    "text": "Anexe 'Correntes' em 10 Unidades"
+  },
+  "LongLivetheKing": {
+    "name": "Vida Longa ao Rei",
+    "text": "Reviva uma cópia de 'Faronis' com o próprio efeito Poente dele"
+  },
+  "LotusPatience": {
+    "name": "Paciência de Lotus",
+    "text": "Jogue uma partida com Lotus"
+  },
+  "LotusPatienceII": {
+    "name": "Paciência de Lotus +",
+    "text": "Ganhe 2 partidas com Lotus"
+  },
+  "LowtotheGround": {
+    "name": "Rente ao Solo",
+    "text": "Ganhe uma partida usando um Baralho contendo nenhuma carta com mais de 3 Mana"
+  },
+  "Magnificant": {
+    "name": "Magnífico",
+    "text": "Jogue 10 cartas que tenham tido seu custo reduzido"
+  },
+  "MaisBreakthrough": {
+    "name": "Descoberta de Mai",
+    "text": "Jogue uma partida com Mai"
+  },
+  "MajorInvestment": {
+    "name": "Grande Investimento",
+    "text": "Use 300+ Mana"
+  },
+  "ManaInvestment": {
+    "name": "Investimento de Mana",
+    "text": "Use 100+ Mana"
+  },
+  "Manetastic": {
+    "name": "Jubástico",
+    "text": "Melhore os valores de 10 ou mais Unidades em um uso de 'Juba Gloriosa'"
+  },
+  "MasterAnimist": {
+    "name": "Mestre Animista",
+    "text": "Ative 'Anima' de Unidades aliadas 10 vezes"
+  },
+  "MasterofDeath": {
+    "name": "Mestre da Morte",
+    "text": "Ative o efeito de Morte de 10 Unidades aliadas"
+  },
+  "MatterReshaper": {
+    "name": "Modificar Matéria",
+    "text": "Use o Talento de Ari 75 vezes"
+  },
+  "Megashroom": {
+    "name": "Coguzoide",
+    "text": "Ative o efeito de Morte do 'Mecagumelo' 10 ou + vezes em uma partida"
+  },
+  "MetalBattler": {
+    "name": "Combate de Metal",
+    "text": "Jogue 10 cartas de Metal"
+  },
+  "MetalBattlerPLUS": {
+    "name": "Combate de Metal +",
+    "text": "Jogue 30 cartas de Metal"
+  },
+  "MetalBattlerPLUSPLUS": {
+    "name": "Combate de Metal ++",
+    "text": "Jogue 500 cartas de Metal"
+  },
+  "MeteorShower": {
+    "name": "Chuva de Meteoros",
+    "text": "Jogue 10 'Bola de Fogo'"
+  },
+  "MicroManagement": {
+    "name": "Micro-Gerência",
+    "text": "Ataque com 'Drone Micron' 10 vezes"
+  },
+  "MightofEarth": {
+    "name": "Poder da Terra",
+    "text": "Aumente o Poder e Vida de 10 Unidades"
+  },
+  "MightyStrike": {
+    "name": "Golpe Poderoso",
+    "text": "Ataque com uma criatura que tem 15 Poder ou mais"
+  },
+  "MightyThick": {
+    "name": "Encorpado",
+    "text": "Ataque com uma criatura que tem 15 Vida ou mais"
+  },
+  "MindBattler": {
+    "name": "Combate da Mental",
+    "text": "Jogue 10 cartas de Mente"
+  },
+  "MindBattlerPLUS": {
+    "name": "Combate da Mental +",
+    "text": "Jogue 30 cartas de Mente"
+  },
+  "MindBattlerPLUSPLUS": {
+    "name": "Combate da Mental ++",
+    "text": "Jogue 500 cartas de Mente"
+  },
+  "MirasMettle": {
+    "name": "Vivacidade de Mira",
+    "text": "Jogue uma partida com Mira"
+  },
+  "MirrorMatched": {
+    "name": "Partida Espelhada",
+    "text": "Jogue 3 partidas em que você e seu oponente estejam com o mesmo Herói"
+  },
+  "OddlyEven": {
+    "name": "Ímpar ou Par",
+    "text": "Ganhe uma partida usando um Baralho contendo apenas cartas com custo ímpar"
+  },
+  "Om": {
+    "name": "Om",
+    "text": "Use o Talento de Lotus 50 vezes"
+  },
+  "Onezeroonezeroone": {
+    "name": "Umzeroumzeroum",
+    "text": "Derrote o Herói inimigo usando 'Unofobia' (Criado por 'Ráquer')"
+  },
+  "OntheRoadAgain": {
+    "name": "Na Estrada Novamente",
+    "text": "Jogue uma partida"
+  },
+  "OntheRoadAgainII": {
+    "name": "Na Estrada Novamente II",
+    "text": "Ataque com 2 Unidades no mesmo turno"
+  },
+  "OntheRoadAgainIII": {
+    "name": "Na Estrada Novamente III",
+    "text": "Jogue uma Unidade com 5 ou + de Vida"
+  },
+  "Oops": {
+    "name": "Oops!",
+    "text": "Ataque uma Unidade inimiga sem causar dano nela"
+  },
+  "OTK": {
+    "name": "OTK",
+    "text": "Cause 32 ou + de Dano no Herói inimigo em um turno"
+  },
+  "Overkill": {
+    "name": "Exagerado",
+    "text": "Derrote o Herói inimigo enquanto também destrói uma ou mais Unidades dele"
+  },
+  "OversoldCemetery": {
+    "name": "Cemitério Cheio",
+    "text": "Tenha 40 ou + cartas do seu Cemitério de uma vez"
+  },
+  "Pacifist": {
+    "name": "Pacifista",
+    "text": "Ganhe uma partida sem ter atacado com seu Herói em pelo menos cinco turnos diferentes"
+  },
+  "PainandGain": {
+    "name": "Dor e Ganho",
+    "text": "Jogue 'Titã Pira da Alma' com 0 Mana de custo"
+  },
+  "PatientStudent": {
+    "name": "Estudante Paciente",
+    "text": "Ganhe uma partida Ranqueada após o turno 10"
+  },
+  "PhyrricVictory": {
+    "name": "Vitória Pírrica",
+    "text": "Ganhe uma partida com seu Baralho e mão vazios"
+  },
+  "PleaseNerf": {
+    "name": "Nerf POR FAVOR!",
+    "text": "Ative o efeito da 'Bruxa Soturna' em uma partida"
+  },
+  "PokeofDoom": {
+    "name": "Provoque a Destruição",
+    "text": "Derrote o Herói inimigo com 1 Vida causado exatamente 1 Dano"
+  },
+  "PowerUp": {
+    "name": "Aumenta a potência!",
+    "text": "Melhore os valores de 40 Unidade usando Magias"
+  },
+  "PrismPowered": {
+    "name": "Prisma Capacitado",
+    "text": "Use ou ative o efeito dos Talentos de Herói 350 vezes"
+  },
+  "RageoftheDead": {
+    "name": "A Ira dos Mortos",
+    "text": "Ative o efeito de Morte 15 ou + vezes com um uso de 'Frenesi no Túmulo'"
+  },
+  "RainbowRestriction": {
+    "name": "Restrição do Arco-íris",
+    "text": "Ganhe uma partida com um Baralho que tenha pelo menos 3 cartas de cada Elemento"
+  },
+  "RainbowResurrection": {
+    "name": "Ressurreição do Arco-íris",
+    "text": "Ressuscite 'Fênix de Sky' 3 vezes na mesma partida"
+  },
+  "RainbowRider": {
+    "name": "Cavaleiro do Arco-Íris",
+    "text": "Jogue duas cartas de cada elemento durante uma partida"
+  },
+  "RecklessRage": {
+    "name": "Fúria Imprudente",
+    "text": "Faça seu Herói levar 10 ou + de Dano em apenas um de seus turnos"
+  },
+  "ReducedtoAtoms": {
+    "name": "Reduzido à Átomos",
+    "text": "Exile 100 Unidades inimigas"
+  },
+  "RegeneratorPLUS": {
+    "name": "Regenerador",
+    "text": "Dê 15 Vida para aliados"
+  },
+  "RegeneratorPLUSPLUS": {
+    "name": "Regenerador +",
+    "text": "Dê 200 Vida para aliados"
+  },
+  "RestinPeace": {
+    "name": "Descanse em Paz",
+    "text": "Exile 10 carta inimigas mortas"
+  },
+  "Ribbit": {
+    "name": "Croac-croac!",
+    "text": "Transforma 5 Unidades inimigas em 'Saplito'"
+  },
+  "Ritualistic": {
+    "name": "Ritualista",
+    "text": "Use o Talento de Bouran 75 vezes"
+  },
+  "SamyasSwiftness": {
+    "name": "Rapidez de Samya",
+    "text": "Jogue uma parta com Samya"
+  },
+  "SamyasSwiftnessII": {
+    "name": "Rapidez de Samya +",
+    "text": "Ganhe 2 partidas com Samya"
+  },
+  "SeasonalChampion": {
+    "name": "Campeão Sazonal",
+    "text": "Ganhe 40 Partidas"
+  },
+  "Sequence": {
+    "name": "Sequência",
+    "text": "Jogue em sequência uma carta de custo 1, depois 2, 3 e  4"
+  },
+  "Shatterer": {
+    "name": "Despedaçado",
+    "text": "Destrua 5 Unidades que tem o encanto Geada"
+  },
+  "Shhhhhhh": {
+    "name": "Shhhhhhh!",
+    "text": "Anexe 'Silêncio' em 10 Unidades"
+  },
+  "Showoff": {
+    "name": "Exibido",
+    "text": "Ganhe uma partida sem atacar com seu Herói uma única vez"
+  },
+  "SittisSpite": {
+    "name": "Despeito de Sitti",
+    "text": "Jogue uma partida com Sitti"
+  },
+  "SkillwiththeQuill": {
+    "name": "Habilidade com a Pena",
+    "text": "Dê +8/+8 a uma Unidade com 'Segredos Cygnia'"
+  },
+  "Slayer": {
+    "name": "Ceifado!",
+    "text": "Ative o efeito Ceifar de 5 ou + Unidades em uma partida"
+  },
+  "Smoosh": {
+    "name": "Ahhhhhhh!",
+    "text": "Destrua três ou mais Unidades em um único uso de 'É uma Cilada!'"
+  },
+  "SpeedDemon": {
+    "name": "Demônio Veloz",
+    "text": "Ganhe uma partida Ranqueada antes do final do turno 8"
+  },
+  "SpeedofLight": {
+    "name": "Velocidade da Luz",
+    "text": "Use o Talento de Samya 75 vezes"
+  },
+  "Spelless": {
+    "name": "Sem Magia",
+    "text": "Ganhe uma partida usando Baralho que não tenha Magia ou Anexos"
+  },
+  "Spellslinger": {
+    "name": "Lança Magias",
+    "text": "Jogue 20 ou + Magias em uma partida"
+  },
+  "Stealthy": {
+    "name": "Sorrateiro",
+    "text": "Jogue 10 Unidades com Oculto"
+  },
+  "StingOperation": {
+    "name": "Operação Ferrão",
+    "text": "Jogue 4 ou + 'Vespão' em um turno"
+  },
+  "Stophittingyourself": {
+    "name": "Pare de se Machucar!",
+    "text": "Cause dano no Herói inimigo com uma Unidade que começou no Baralho dele"
+  },
+  "Strengthweaver": {
+    "name": "OpenSky Forte",
+    "text": "Ganhe 2 partidas com um Herói de Força"
+  },
+  "Summoner": {
+    "name": "Invocador",
+    "text": "Ative o efeito Invocar 10 ou + vezes em um turno"
+  },
+  "Surprise": {
+    "name": "Surpresa!",
+    "text": "Destrua 20 ou + Unidades com 'Mergulha-Coral' em um turno que ele voltar"
+  },
+  "Surveillance": {
+    "name": "Vigilância",
+    "text": "Revele 15 cartas na mão inimiga"
+  },
+  "TheBattleisWon": {
+    "name": "Vitória Certa",
+    "text": "Cause 30 Dano nos inimigos"
+  },
+  "TheReturned": {
+    "name": "O Retornado",
+    "text": "Invoque a mesma Unidade do Cemitério 3 ou + vezes em uma partida"
+  },
+  "TheReturnerer": {
+    "name": "O Retornador",
+    "text": "Faça 'Farrapo, o Retornado' retornar do Cemitério 30 vezes"
+  },
+  "ThousandCuts": {
+    "name": "Mil Cortes",
+    "text": "Dê 1 Dano no Herói inimigo cinco ou mais vezes em um turno, e ganhe no mesmo turno"
+  },
+  "ThreesCompany": {
+    "name": "Companhia do Três",
+    "text": "Ganhe uma partida em que você apenas jogue carta de custo 3"
+  },
+  "Tidyup": {
+    "name": "Arrume-se",
+    "text": "Substituir e remova 5 ou + anexos de Unidades/Heróis em um turno"
+  },
+  "TitusTune": {
+    "name": "Sintonia de Titus",
+    "text": "Jogue uma partida com Titus"
+  },
+  "UnfathomableWealth": {
+    "name": "Riqueza Insondável",
+    "text": "Compre e/ou Conjure 10 com Magias anexadas"
+  },
+  "Unitless": {
+    "name": "Sem Unidades",
+    "text": "Ganhe uma partida usando um Baralho que não tem carta de Unidade"
+  },
+  "UNKNOWN": {
+    "name": "Missão sem ID",
+    "text": "Missão sem ID"
+  },
+  "Vampire": {
+    "name": "Vampiro",
+    "text": "Roube 15 Vida do Herói inimigo usando cartas com Drenagem"
+  },
+  "VaporMaster": {
+    "name": "Mestre dos Vapores",
+    "text": "Ative 'Vapores' de Unidades aliadas 10 vezes"
+  },
+  "WaterBattler": {
+    "name": "Combate na Água",
+    "text": "Jogue 10 cartas de Água"
+  },
+  "WaterBattlerPLUS": {
+    "name": "Combate na Água +",
+    "text": "Jogue 30 cartas de Água"
+  },
+  "WaterBattlerPLUSPLUS": {
+    "name": "Combate na Água ++",
+    "text": "Jogue 500 cartas de Água"
+  },
+  "WelcomeOpenSky": {
+    "name": "Bem-Vindo OpenSky!",
+    "text": "Jogue sua primeira partida"
+  },
+  "WhatDoesntKillYou": {
+    "name": "O Que Não Te Mata...",
+    "text": "Ganhe uma partida em que seu Herói leva 30 ou mais de dano total"
+  },
+  "WhiteWhale": {
+    "name": "Baleia Branca",
+    "text": "Destrua um Jubarte, ou derrote seu oponente usando um Jubarte"
+  },
+  "WildlandChampion": {
+    "name": "Campeão Agreste",
+    "text": "Ative o efeito da 'Herdeira Agreste' 50 vezes"
+  },
+  "Wisdomweaver": {
+    "name": "OpenSky Sábio",
+    "text": "Ganhe 2 partidas com um Herói de Sabedoria"
+  },
+  "Withered": {
+    "name": "Aflito",
+    "text": "Jogue 10 Unidades com Aflição"
+  },
+  "WRATH": {
+    "name": "CÓLERA!",
+    "text": "Destrua 4 ou + Unidades inimigas com uma única Magia"
+  },
+  "ZoeysJustice": {
+    "name": "Justiça de Zoey",
+    "text": "Jogue uma partida com Zoey"
+  },
+  "ZombieSlayer": {
+    "name": "Ceifador de Zumbis",
+    "text": "Destrua 20 'Zumbóide' inimigos"
+  },
+  "ZomboidEnvoy": {
+    "name": "Emissário Zumbóide",
+    "text": "Ataque com 'Zumbóide' 10 vezes"
+  },
+  "ZomboidWrangler": {
+    "name": "Domador Zumbóide",
+    "text": "Invoque 'Zumbóide' 5 vezes"
+  }
+}

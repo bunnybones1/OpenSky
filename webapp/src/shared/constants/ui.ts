@@ -1,0 +1,72 @@
+export const NAVBAR_HEIGHT = 54
+export const NAVBAR_WIDTH = 54
+export const DISCLAIMER_HEIGHT = 45
+export const DECK_BUILDER_WIDTH = [152, 200, 250, 300]
+export const DECK_BUILDER_HEADER_HEIGHT = 74
+export const SUBNAV_HEIGHT = 52
+export const MOBILE_SUBNAV_HEIGHT = 42
+export const NAV_BAR_Z_INDEX = 18
+
+export const CARD_LIBRARY_COLUMN_COUNTS = {
+  EXTRA_SMALL: 3,
+  SMALL: 4,
+  MEDIUM: 4,
+  LARGE: 5,
+  WIDE: 6,
+  ULTRA_WIDE: 8
+}
+
+export const LEADERBOARD_ROW_HEIGHTS = {
+  SWITCHER: 80,
+  PAGE_HEADER: 100,
+  CONTROLS: 52,
+  TABLE_HEADER: 64,
+  NORMAL_ROW: 64,
+  EMPTY_BOARD: 200
+}
+
+export const ITEM_LIST_PADDING_X = {
+  base: '12px',
+  mobile: '16px',
+  tablet: '16px',
+  desktop: '20px'
+} as const
+
+export const ITEM_LIST_PADDING_BOTTOM = {
+  base: '16px',
+  mobile: '20px'
+} as const
+
+export const DEFAULT_LIST = []
+
+export const MARKET_DECK_LIST_PADDING_BOTTOM = 60
+export const ITEM_LIST_COLUMN_GAP = 12
+export const BASE_COLUMN_GAP = 12 as const
+export const BASE_PADDING_BOTTOM = 12 as const
+export const MARKET_CARD_PADDING_BOTTOM = 120 as const
+
+export const CARD_RATIO = 434 / 282
+export const DECK_RATIO = 459 / 300
+export const HERO_SKIN_RATIO = 411 / 268
+export const QUEST_RATIO = 289 / 214
+export const STICKER_RATIO = 1 / 1
+export const BASE_TOOLTIP_DELAY = 500
+
+// Always-present element Ids
+export const NAVBAR_ID = 'SKYWEAVER_NAV_BAR'
+export const DECK_VIEWER_ID = 'DECK_VIEWER_ID'
+export const DECK_BUILDER_CARDS_LIST_ID = 'DECK_BUILDER_CARDS_LIST_ID'
+
+// Shared Dialog Ids
+export const CONFIRM_DELETE_DECK_DIALOG_ID = 'CONFIRM_DELETE_DECK_DIALOG_ID'
+export const CONFIRM_DELETE_DECKVIEWER_DECK_DIALOG_ID =
+  'CONFIRM_DELETE_DECKVIEWER_DECK_DIALOG_ID'
+export const DECK_VIEWER_SETTINGS_DIALOG_ID = 'DECK_VIEWER_SETTINGS_DIALOG_ID'
+export const DECK_SETTINGS_DIALOG_ID = 'DECK_SETTINGS_DIALOG_ID'
+export const MINT_HEROES_DIALOG_ID = 'MINT_HEROES_DIALOG_ID'
+export const SEQUENCE_CONFIRM_SIGNATURE_DIALOG_ID =
+  'SEQUENCE_CONFIRM_SIGNATURE_DIALOG_ID'
+export const COOKIE_SETTINGS_DIALOG_ID = 'COOKIE_SETTINGS_DIALOG_ID'
+export const STATE_CONFIRMATION_DIALOG_ID = 'STATE_CONFIRMATION_DIALOG_ID'
+export const CONVERT_TO_SEQUENCE_WALLET_DIALOG = 'CONVERT_TO_SEQUENCE_WALLET_DIALOG'
+export const RENAME_BURNER_ACCOUNT_ID = 'RENAME_BURNER_ACCOUNT_ID'

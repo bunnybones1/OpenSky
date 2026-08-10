@@ -1,0 +1,189 @@
+{
+  "buff": {
+    "dmg": "{{amount}} damage",
+    "hp": "{{amount}} health",
+    "pow": "{{amount}} power"
+  },
+  "effect": "EFFECT",
+  "effectTypes": {
+    "Continuous": "Continuous Effect",
+    "Death": "Death",
+    "Generic": "Unique Effect",
+    "Glory": "Glory",
+    "Inspire": "Inspire",
+    "Play": "Play Effect",
+    "Slay": "Slay",
+    "Summon": "Summon",
+    "Sunrise": "Sunrise",
+    "Sunset": "Sunset"
+  },
+  "triggers": {
+    "Play": "Play",
+    "Death": "Death",
+    "Glory": "Glory",
+    "Inspire": "Inspire",
+    "Slay": "Slay",
+    "Summon": "Summon",
+    "Sunrise": "Sunrise",
+    "Sunset": "Sunset"
+  },
+  "elements": {
+    "uppercase": {
+      "air": "AIR",
+      "dark": "DARK",
+      "earth": "EARTH",
+      "fire": "FIRE",
+      "light": "LIGHT",
+      "metal": "METAL",
+      "mind": "MIND",
+      "sky": "NO ELEMENT",
+      "water": "WATER"
+    },
+    "titleCase": {
+      "air": "Air",
+      "dark": "Dark",
+      "earth": "Earth",
+      "fire": "Fire",
+      "light": "Light",
+      "metal": "Metal",
+      "mind": "Mind",
+      "sky": "No Element",
+      "water": "Water"
+    }
+  },
+  "gameEffect": "GAME FX",
+  "keyword": {
+    "titleCase": {
+      "conjure": "Conjure",
+      "death": "Death",
+      "draw": "Draw",
+      "draws": "Draws",
+      "dust": "Dust",
+      "enchant": "Enchant",
+      "enchanted": "Enchanted",
+      "enchants": "Enchants",
+      "enemyconjure": "Conjure",
+      "enemydraw": "Draw",
+      "glory": "Glory",
+      "inspire": "Inspire",
+      "lowesthealth": "Lowest Health",
+      "mulligan": "Mulligan",
+      "play": "Play",
+      "random": "Random",
+      "ready": "Ready",
+      "rune": "Rune",
+      "sleep": "Sleep",
+      "sleeping": "Sleeping",
+      "summon": "Summon",
+      "summons": "Summons",
+      "sunrise": "Sunrise",
+      "sunset": "Sunset",
+      "trait": "Trait",
+      "traits": "Traits",
+      "shroom": "Shroom",
+      "wisp": "Wisp",
+      "scion": "Scion",
+      "arms": "Arms",
+      "blade": "Blade"
+    },
+    "lowerCase": {
+      "conjure": "conjure",
+      "death": "death",
+      "draw": "draw",
+      "draws": "draws",
+      "dust": "dust",
+      "enchant": "enchant",
+      "enchanted": "enchanted",
+      "enchants": "enchants",
+      "enemyconjure": "conjure",
+      "enemydraw": "draw",
+      "glory": "glory",
+      "inspire": "inspire",
+      "lowesthealth": "lowest health",
+      "mulligan": "mulligan",
+      "play": "play",
+      "random": "random",
+      "ready": "ready",
+      "rune": "rune",
+      "sleep": "sleep",
+      "sleeping": "sleeping",
+      "summon": "summon",
+      "summons": "summons",
+      "sunrise": "sunrise",
+      "sunset": "sunset",
+      "trait": "trait",
+      "traits": "traits",
+      "shroom": "shroom",
+      "wisp": "wisp",
+      "scion": "scion",
+      "arms": "arms",
+      "blade": "blade"
+    }
+  },
+  "mana": {
+    "c": "{{amount}} cost",
+    "m": "{{amount}} mana"
+  },
+  "prisms": {
+    "agy": "AGILITY",
+    "hrt": "HEART",
+    "int": "INTELLECT",
+    "str": "STRENGTH",
+    "tok": "TOKEN",
+    "tut": "TUTORIAL",
+    "wis": "WISDOM"
+  },
+  "rarity": {
+    "base": "Base",
+    "gold": "Gold",
+    "none": "Locked",
+    "silver": "Silver"
+  },
+  "trait": "TRAIT",
+  "traits": {
+    "uppercase": {
+      "armor": "ARMOR",
+      "banner": "BANNER",
+      "dash": "DASH",
+      "guard": "GUARD",
+      "lifesteal": "LIFESTEAL",
+      "stealth": "STEALTH",
+      "wither": "WITHER"
+    },
+    "titleCase": {
+      "armor": "Armor",
+      "banner": "Banner",
+      "dash": "Dash",
+      "guard": "Guard",
+      "lifesteal": "Lifesteal",
+      "stealth": "Stealth",
+      "wither": "Wither"
+    }
+  },
+  "type": {
+    "enchant": "ENCHANT",
+    "hero": "HERO",
+    "heroAbility": "HERO ABILITY",
+    "spell": "SPELL",
+    "unit": "UNIT"
+  },
+  "heroAbilityCardLabel": {
+    "GERRY": "GERRY'S ABILITY",
+    "UNKNOWN": "HERO ABILITY",
+    "ADA": "ADA'S ABILITY",
+    "LOTUS": "LOTUS' ABILITY",
+    "SAMYA": "SAMYA'S ABILITY",
+    "BOURAN": "BOURAN'S ABILITY",
+    "ARI": "ARI'S ABILITY",
+    "SITTI": "SITTI'S ABILITY",
+    "FOX": "FOX'S ABILITY",
+    "TITUS": "TITUS' ABILITY",
+    "HORIK": "HORIK'S ABILITY",
+    "IRIS": "IRIS'S ABILITY",
+    "ZOEY": "ZOEY'S ABILITY",
+    "AXEL": "AXEL'S ABILITY",
+    "MIRA": "MIRA'S ABILITY",
+    "MAI": "MAI'S ABILITY",
+    "BANJO": "BANJO'S ABILITY"
+  }
+}

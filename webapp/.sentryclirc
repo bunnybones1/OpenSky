@@ -1,0 +1,6 @@
+[defaults]
+org = 0xsequence
+project = opensky-webapp
+
+[auth]
+token = 4ec929cd883c44fc9e64a263b044a69a21c8d03a51ef4715a0def73fbfba69f0

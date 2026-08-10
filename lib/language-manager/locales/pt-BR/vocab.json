@@ -1,0 +1,182 @@
+{
+  "armor": {
+    "text": "Recebe 1 dano a menos de tudo.",
+    "title": "Couraça"
+  },
+  "banner-spell": {
+    "text": "Seu Herói ganha +1 Poder nesse turno.",
+    "title": "Emblema"
+  },
+  "banner-unit": {
+    "text": "Seu Herói ganha +1 Poder enquanto esta Unidade estiver em jogo.",
+    "title": "Emblema"
+  },
+  "conjure": {
+    "text": "Compre uma carta do(s) seu(s) Prisma(s), que não esteja no seu Baralho.",
+    "title": "Conjurar"
+  },
+  "dash": {
+    "text": "Esta Unidade pode atacar Unidades inimigas no turno em que é invocada, ou se estiver inerte e ganhar Pressa.",
+    "title": "Pressa"
+  },
+  "draw": {
+    "text": "Compre uma carta do seu Baralho, se possível. Caso contrário, perca 1 Vida e Conjure uma.",
+    "title": "Comprar"
+  },
+  "dust": {
+    "text": "Remova de jogo.",
+    "title": "Exilar"
+  },
+  "enchanted": {
+    "text": "O personagem que este Encanto está anexado. ",
+    "title": "Encantado"
+  },
+  "enemyconjure": {
+    "text": "Compre uma carta do(s) Prisma(s) do Inimigo, que não esteja no Baralho inimigo.",
+    "title": "Conjure Carta Inimiga"
+  },
+  "enemydraw": {
+    "text": "Compre uma carta do Baralho Inimigo, se possível. Caso contrário, perca 1 Vida e Conjure uma do(s) Prisma(s) inimigo.",
+    "title": "Comprar do Inimigo"
+  },
+  "guard": {
+    "text": "O Herói desta Unidade não pode ser atacado por dano físico.",
+    "title": "Defensor"
+  },
+  "inspire": {
+    "text": "Um efeito que ativa após você jogar uma certa carta.",
+    "title": "Inspirar"
+  },
+  "lifesteal": {
+    "text": "Ao causar dano no Herói inimigo, dê ao seu Herói a mesma quantia em Vida.",
+    "title": "Drenagem"
+  },
+  "lowesthealth": {
+    "text": "Escolhido aleatoriamente dos alvos de Vida mais baixa no caso de empate.",
+    "title": "Menor Vida"
+  },
+  "mulligan": {
+    "text": "Retorne carta(s) da mão para o Baralho, então compre a mesma quantidade de carta(s).",
+    "title": "Mulligan"
+  },
+  "play": {
+    "text": "Efeitos ativados quando uma Unidade é jogada da mão.",
+    "title": "Efeitos de Jogar"
+  },
+  "ready": {
+    "text": "Se a personagem está inerte ou já atacou neste turno, ela pode atacar novamente.",
+    "title": "Pronto"
+  },
+  "rune": {
+    "text": "Uma Magia de 1 Custo com Emblema que anexa um Encanto numa Unidade. Há uma para cada elemento.",
+    "title": "Runa"
+  },
+  "scion": {
+    "text": "Qualquer Unidade com Senciente no nome.",
+    "title": "Senciente"
+  },
+  "shroom": {
+    "text": "'Fungolino' e todas as Unidades da tribo 'Cogugente'.",
+    "title": "Cogugente"
+  },
+  "sleep": {
+    "text": "Um personagem inerte não pode atacar. As unidades estão inertes quando são invocadas.",
+    "title": "Inerte"
+  },
+  "stealth": {
+    "text": "Esta Unidade não pode ser atacada até que seu Herói sofra dano neste turno.",
+    "title": "Oculto"
+  },
+  "trait": {
+    "text": "Defensor, oculto, couraça, emblema, drenagem, aflição e pressa.",
+    "title": "Aspectos"
+  },
+  "trigger-death": {
+    "text": "Quando é colocado no Cemitério vindo da arena de combate.",
+    "title": "Morte"
+  },
+  "trigger-glory": {
+    "text": "Quando esta personagem ataca o Herói e causa dano.",
+    "title": "Glória"
+  },
+  "trigger-inspire-1c": {
+    "text": "Após você jogar uma carta de {1c}.",
+    "title": "Inspirar 1 Custo"
+  },
+  "trigger-inspire-air": {
+    "text": "Após você jogar uma carta de {Air}.",
+    "title": "Inspirar {Air}"
+  },
+  "trigger-inspire-any": {
+    "text": "Após você jogar qualquer carta.",
+    "title": "Inspirar Todos"
+  },
+  "trigger-inspire-banner": {
+    "text": "Após você jogar uma carta com {Banner}.",
+    "title": "Inspirar {Banner}"
+  },
+  "trigger-inspire-dark": {
+    "text": "Após você jogar uma carta de {Dark}.",
+    "title": "Inspirar {Dark}"
+  },
+  "trigger-inspire-earth": {
+    "text": "Após você jogar uma carta de {Earth}.",
+    "title": "Inspirar {Earth}"
+  },
+  "trigger-inspire-guard": {
+    "text": "Após você jogar uma carta com {Guard}.",
+    "title": "Inspirar {Guard}"
+  },
+  "trigger-inspire-light": {
+    "text": "Após você jogar uma carta de {Light}.",
+    "title": "Inspirar {Light}"
+  },
+  "trigger-inspire-metal": {
+    "text": "Após você jogar uma carta de {Metal}.",
+    "title": "Inspirar {Metal}"
+  },
+  "trigger-inspire-mind": {
+    "text": "Após você jogar uma carta de {Mind}.",
+    "title": "Inspirar {Mind}"
+  },
+  "trigger-inspire-spell": {
+    "text": "Após você jogar uma carta de Magia.",
+    "title": "Inspirar Magia"
+  },
+  "trigger-inspire-water": {
+    "text": "Após você jogar uma carta de {Water}.",
+    "title": "Inspirar {Water}"
+  },
+  "trigger-play": {
+    "text": "Quando esta Unidade é jogada da mão.",
+    "title": "Jogar"
+  },
+  "trigger-slay-spell": {
+    "text": "Quando esta Magia danifica e destrói uma Unidade durante seu turno.",
+    "title": "Ceifar"
+  },
+  "trigger-slay-unit": {
+    "text": "Quando esta Unidade danifica e destrói uma Unidade durante seu turno.",
+    "title": "Ceifar"
+  },
+  "trigger-summon": {
+    "text": "Quando esta Unidade entra em jogo.",
+    "title": "Invocar"
+  },
+  "trigger-sunrise": {
+    "text": "Quando iniciar o turno do jogador desta Unidade ou Encanto.",
+    "title": "Alvorada"
+  },
+  "trigger-sunset": {
+    "text": "Quando finalizar o turno do jogador desta Unidade ou Encanto.",
+    "title": "Poente"
+  },
+  "wisp": {
+    "text": "Qualquer Unidade com Cintila no nome.",
+    "title": "Cintila"
+  },
+  "wither": {
+    "text": "Quando causar dano a uma Unidade, a Unidade perde a mesma quantia em Poder.",
+    "title": "Aflição"
+  }
+}

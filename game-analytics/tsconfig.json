@@ -1,0 +1,34 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "es2018",
+
+    "sourceMap": false,
+    "pretty": false,
+
+    "allowSyntheticDefaultImports": true,
+    "downlevelIteration": true,
+    "importHelpers": true,
+    "removeComments": false,
+    "strictNullChecks": false,
+    "noImplicitAny": true,
+    "noImplicitReturns": false,
+    "noImplicitThis": true,
+    "noUnusedParameters": false,
+    "noUnusedLocals": false,
+
+    "experimentalDecorators": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "checkJs": false,
+
+    "baseUrl": "./src",
+    "outDir": "./dist",
+
+    "lib": ["dom", "es2019"],
+
+    "typeRoots": ["node_modules/@types"]
+  },
+
+  "exclude": ["build", "config", "dist", "node_modules", "tests/**/*.ts"]
+}

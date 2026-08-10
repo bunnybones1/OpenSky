@@ -1,0 +1,68 @@
+{
+  "emote": {
+    "ADA": {},
+    "ARI": {},
+    "AXEL": {},
+    "BANJO": {
+      "taunt": {}
+    },
+    "BOURAN": {},
+    "FOX": {},
+    "HORIK": {},
+    "IRIS": {},
+    "labels": {},
+    "LOTUS": {},
+    "MAI": {},
+    "MIRA": {},
+    "SAMYA": {},
+    "SITTI": {},
+    "timeout": {},
+    "TITUS": {},
+    "UNKNOWN": {},
+    "ZOEY": {}
+  },
+  "sidebarUI": {
+    "buttonLabel": {}
+  },
+  "ui": {
+    "actionError": {},
+    "botEndMessages": {},
+    "cardSelection": {},
+    "cheats": {
+      "modifiers": {
+        "giveAttachment": "Donner attachement",
+        "promptWhichCards": "Entrez les ID ou noms des cartes, séparés par des virgules (par exemple 45, Songbird, Buster, écuyer, elderwood)"
+      },
+      "puzzleLink": {},
+      "puzzleSave": {
+        "uploadInstructions": "Prenez votre fichier téléchargé, téléversez-le sur gist.github.com, puis cliquez sur le bouton 'créer un lien de puzzle'."
+      },
+      "titles": {}
+    },
+    "endTurnButton": {},
+    "endTypeMessages": {},
+    "error": {},
+    "gameModeSubtext": {},
+    "gameModeTitles": {},
+    "hordeEndMessages": {},
+    "playerRank": {},
+    "playRankedEndMessages": {},
+    "privateEndMessages": {},
+    "prompt": {},
+    "rewardCard": {
+      "multiCardUnlock": {},
+      "singleCardUnlock": {}
+    },
+    "rewardHero": {},
+    "rewardRank": {
+      "progress": {},
+      "xpReason": {}
+    },
+    "tutorial": {},
+    "vs": {},
+    "whoseTurn": {
+      "type": {}
+    }
+  },
+  "zone": {}
+}

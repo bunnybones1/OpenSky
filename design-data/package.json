@@ -1,0 +1,43 @@
+{
+  "name": "@opensky/design-data",
+  "version": "1.0.0",
+  "description": "A big bundle of joy <3",
+  "main": "data.json",
+  "scripts": {
+    "test": "tsc -p . && tsx scripts/validate.ts",
+    "prepare": "tsx scripts/fs-to-json.ts"
+  },
+  "author": "Ari Lotter <arilotter@gmail.com>",
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@opensky/parse-card-description": "workspace:*",
+    "@types/node": "^20.6.3",
+    "myzod": "1.10.2",
+    "parse-git-diff": "^0.0.13",
+    "simple-git": "^3.19.1",
+    "tsx": "^3.12.1",
+    "typescript": "^5.1.6"
+  },
+  "exports": {
+    ".": {
+      "import": "./data.json",
+      "require": "./data.json",
+      "types": "./data.json"
+    },
+    "./schema": {
+      "import": "./schema/index.ts",
+      "require": "./schema/index.ts",
+      "types": "./schema/index.ts"
+    },
+    "./schema/*": {
+      "import": "./schema/*.ts",
+      "require": "./schema/*.ts",
+      "types": "./schema/*.ts"
+    },
+    "./scripts/*": {
+      "import": "./scripts/*.ts",
+      "require": "./scripts/*.ts",
+      "types": "./scripts/*.ts"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+export type DeckCardGradeType =
+  | 'bbb'
+  | 'sss'
+  | 'ggg'
+  | 'sbb'
+  | 'gbb'
+  | 'gss'
+  | 'ssb'
+  | 'ggb'
+  | 'ggs'
+  | 'gsb'

@@ -1,0 +1,31 @@
+.labelled input,
+.labelled option,
+.labelled select,
+.labelled textarea {
+  border: 1px solid #705bab;
+  background: #0c061e;
+  color: #c5b4f5;
+  padding: 0.5em;
+  width: 100%;
+  font-size: 0.8em;
+}
+
+canvas {
+  position: relative;
+  top: initial !important;
+  left: initial !important;
+  width: initial !important;
+  height: initial !important;
+}
+body {
+  font-family: sans-serif;
+
+}
+
+* {
+  user-select: auto;
+}
+
+a, a:visited {
+  color: lightblue;
+}

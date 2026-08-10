@@ -1,0 +1,3067 @@
+webrpc = v1
+
+name = api
+version = v0.3.0
+
+import ../../lib/quests/sheet_imported/quests.ridl
+  - QuestType
+  - EpicType
+
+message Version
+  - webrpcVersion: string
+  - schemaVersion: string
+  - schemaHash: string
+  - appVersion: string
+
+message Authorization
+  - jwt: string
+    + go.field.name = JWT
+
+message WalletProof
+  - address: string
+  - message: string
+  - signature: string
+
+message SignInRequest
+  - proof: WalletProof
+  - account?: Account
+
+message SignInResponse
+  - account: Account
+  - authorization: Authorization
+
+
+message IPAddressHistory
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - ipAddress: string
+    + go.tag.db = ip_address
+    + go.field.type = pgtype.Inet
+    + go.field.name = IPAddress
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+
+message UserAgentHistory
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - userAgent: string
+    + go.tag.db = user_agent
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+
+enum AccountStatus: uint16
+  - ACTIVE
+  - SUSPENDED
+  - BANNED
+  - VIP
+  - FLAGGED
+  - TO_DELETE
+  - DELETED
+
+message Account
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+    + go.field.type = AccountID
+
+  - address: string
+    + go.tag.db = address,omitempty
+    + go.field.type = Hash
+
+  - name: string
+    + go.tag.db = name
+
+  - locale: string
+    + go.tag.db = locale
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+
+  - experience: uint64
+    + go.tag.db = -
+
+  - warmUps: uint8
+    + go.tag.db = warm_ups,omitempty
+
+  - level: uint16
+    + go.tag.db = level,omitempty
+
+  - seasonLevel: uint16
+    + go.tag.db = -
+
+  - levelUpXP: uint64
+    + go.tag.db = -
+
+  - stats?: AccountStats
+    + go.tag.db = -
+
+  - region?: string
+    + go.tag.db = region
+    + go.field.type = Region
+
+  - tagArtID?: string
+    + go.tag.db = tag_art_id
+
+  - crystalID?: uint64
+    + go.tag.db = -
+
+  - titleID?: uint64
+    + go.tag.db = -
+
+  - settings?: AccountSettings
+    + go.tag.db = -
+    + go.field.type = *AccountSettingsWrapper
+
+  - privateSettings?: AccountSettings
+    + go.tag.db = settings,omitempty
+    + go.field.type = *AccountSettingsWrapper
+    + json = -
+
+  - oldAddress?: string
+    + go.tag.db = old_address,omitempty
+    + go.field.type = Hash
+    + json = -
+
+  - admin: bool
+    + go.tag.db = admin
+    + json = -
+
+  - status: AccountStatus
+    + go.tag.db = status
+    + go.field.type = AccountStatus
+    + json = -
+
+  - isBot: bool
+    + go.tag.db = is_bot
+    + json = -
+
+  - lastIPAddress?: string
+    + go.tag.db = last_ip_address
+    + go.field.type = pgtype.Inet
+    + json = -
+
+  - lastUA?: string
+    + go.tag.db = last_ua
+    + json = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+  - invitedByID?: uint64
+    + go.tag.db = invited_by,omitempty
+    + go.field.type = AccountID
+    + json = -
+
+  - invitedBy?: string
+    + go.field.type = Hash
+
+  - isBurnerWallet?: bool
+
+message AccountRegistration
+  - address: string
+    + go.field.type = Hash
+
+  - name?: string
+
+  - isBurnerWallet?: bool
+
+  - invitedBy?: string
+    + go.field.type = Hash
+
+  - locale: string
+
+  - tagArtID?: string
+
+  - deviceProperties?: DeviceProperties
+    + go.tag.db = -
+    + go.field.type = DeviceProperties
+
+  - registrationEvent?: string
+
+message DeviceProperties
+  - countryCode?: string
+    + json = countryCode,omitempty
+
+  - deviceID?: string
+    + json = deviceID,omitempty
+
+  - environmentDevice?: string
+    + json = environmentDevice,omitempty
+
+  - environmentOS?: string
+    + json = environmentOS,omitempty
+
+  - environmentProduct?: string
+    + json = environmentProduct,omitempty
+
+message AccountStats
+  - rankedConstructed?: AccountStat
+    + json = rankedConstructed,omitempty
+  - rankedDiscovery?: AccountStat
+    + json = rankedDiscovery,omitempty
+  - conquestConstructed?: AccountStat
+    + json = conquestConstructed,omitempty
+  - conquestDiscovery?: AccountStat
+    + json = conquestDiscovery,omitempty
+
+message AccountSettings
+  - hidePlayerNames?: bool
+    + json = hidePlayerNames,omitempty
+  - suspended?: bool
+    + json = suspended,omitempty
+  - requestMoreInvites?: bool
+    + json = requestMoreInvites,omitempty
+  - renameLockedUntil?: timestamp
+    + json = renameLockedUntil,omitempty
+  - starterDeckV2Migration?: bool
+    + json = starterDeckV2Migration,omitempty
+  - spectateCode?: string
+    + json = spectateCode,omitempty
+  - spectateCodeExpiresAt?: timestamp
+    + json = spectateCodeExpiresAt,omitempty
+  - twitchProfile?: string
+    + json = twitchProfile,omitempty
+  - registrationEvent?: string
+    + json = registrationEvent,omitempty
+  - titleID?: uint64
+    + json = titleID,omitempty
+  - burnerAddress?: string
+    + json = burnerAddress,omitempty
+    + go.field.type = Hash
+
+message AccountStat
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - gameMode: GameMode
+    + go.field.type = GameMode
+    + go.tag.db = game_mode
+
+  - winCount: int32
+    + go.field.name = WinCount
+    + go.tag.db = win_count
+
+  - lossCount: int32
+    + go.field.name = LossCount
+    + go.tag.db = loss_count
+
+  - tieCount: int32
+    + go.field.name = TieCount
+    + go.tag.db = tie_count
+
+  - forfeitCount: int32
+    + go.field.name = ForfeitCount
+    + go.tag.db = forfeit_count
+
+  - abandonCount: int32
+    + go.field.name = AbandonCount
+    + go.tag.db = abandon_count
+
+  - winRatio: float32
+    + go.field.name = WinRatio
+    + go.tag.db = win_ratio
+
+  - gamesPlayed: int32
+    + go.field.name = GamesPlayed
+    + go.tag.db = games_played
+  
+  - experience?: uint64
+    + go.tag.db = -
+
+  - score?: int32
+    + go.tag.db = score,omitempty
+    + go.field.name = Score
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+  
+  - updateAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+    + json = -
+
+  - rank?: uint32
+    + go.tag.db = rank,omitempty
+
+  - rankProgress?: float32
+    + go.tag.db = -
+
+  - playerRank: PlayerRank
+    + go.tag.db = player_rank,omitempty
+    + go.field.type = PlayerRank
+
+  - playerRankStage: PlayerRankStage
+    + go.tag.db = player_rank_stage
+    + go.field.type = PlayerRankStage
+
+  - playerRankState: string
+    + go.tag.db = player_rank_state
+    + go.field.type = RankState
+    + json = -
+  
+  - internalPlayerRankState?: string
+    + go.tag.db = -
+    + go.field.type = RankState
+    + json = playerRankState,omitempty
+  
+  - winStreak: uint32
+    + go.tag.db = win_streak
+
+  - lossStreak: uint32
+    + go.tag.db = loss_streak
+
+  - season?: uint16
+    + go.tag.db = season
+
+  - status: AccountStatus
+    + go.tag.db = status
+    + go.field.type = AccountStatus
+    + json = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message SetInvitedByRequest
+  - address: string
+    + go.tag.db = -
+    + go.field.type = Hash
+
+  - invitedBy: string
+    + go.tag.db = invited_by
+    + go.field.type = Hash
+
+message GMAccount
+  - account: Account
+
+  - conquestsUnlocked: bool
+
+  - accountActions: []AccountAction
+
+  - ipHistory: []IPAddressHistory
+
+message TutorialProgress
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+  
+  - level: TutorialLevel
+    + go.tag.db = level
+    + go.field.type = TutorialLevel
+
+  - completed: bool
+    + go.tag.db = completed
+
+enum TutorialLevel: uint16
+  - UNKNOWN
+  - LEVEL_1
+  - LEVEL_2
+  - LEVEL_3
+  - LEVEL_4
+
+enum PlayerRank: uint16
+  - UNKNOWN
+  - UNRANKED
+  - WANDERER
+  - TRAINEE
+  - APPRENTICE
+  - EXPERT
+  - MASTER
+  - GRANDWEAVER
+
+enum PlayerRankStage: uint8
+  - STAGE_NONE
+  - STAGE_I
+  - STAGE_II
+  - STAGE_III
+
+enum CookiePolicyOption: uint16
+  - AUTHENTICATION
+  - MARKETPLACE
+  - GEO_BLOCKING
+  - PRODUCT_ANALYTICS
+
+enum ContractType: uint
+  - UNKNOWN
+  - SKYWEAVER_ASSETS
+
+
+enum ItemType: uint
+  - UNKNOWN            = 0
+
+  # Currency, range 100-199
+  - USDC               = 100
+
+  # OpenSky base (non-tradeable) assets, range 300-399
+  - SW_BASE_CARDS      = 300
+  - SW_SKYPASS         = 301
+  - SW_TITLES          = 302
+  - SW_STICKER_POINTS  = 303
+  - SW_XP              = 304
+
+  # OpenSky blockchain assets, range 400-499
+  - SW_SILVER_DUST     = 400
+  - SW_SILVER_CARDS    = 401
+  - SW_GOLD_CARDS      = 402
+  - SW_CONQUEST_TICKET = 403
+  - SW_CRYSTALS        = 404
+  - SW_STICKERS        = 405
+  - SW_HERO_SKINS      = 406
+  - SW_CARD_BACKS      = 407
+
+  # OpenSky base (non-tradeable) heroes
+  - SW_HERO            = 500
+
+
+message Item
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  # account holder of the token, if accountAddress is empty the item balance represents
+  # the total supply of that token id
+  - accountAddress?: string
+    + go.tag.db = account_address
+    + go.field.type = Hash
+    + json = -
+
+  # token contract address
+  - contractAddress?: string
+    + go.tag.db = contract_address,omitempty
+    + go.field.type = Hash
+
+  - itemType: ItemType
+    + go.tag.db = item_type,omitempty
+    + go.field.type = ItemType
+
+  - tokenID: uint64
+    + go.tag.db = token_id
+
+  - balance: string
+    + go.tag.db = balance
+    + go.field.type = prototyp.BigInt
+
+  - lastUpdateID: uint64
+    + go.tag.db = last_update_id
+
+  - updatedAt?: timestamp
+    + go.tag.db = updated_at,omitempty
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+  - isNew?: bool
+    + go.tag.db = is_new
+
+
+message ItemSummary
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - itemType: ItemType
+    + go.tag.db = item_type,omitempty
+    + go.field.type = ItemType
+
+  - totalBalance: string
+    + go.tag.db = total_balance
+    + go.field.type = prototyp.BigInt
+
+  - updatedAt?: timestamp
+    + go.tag.db = updated_at,omitempty
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+message ItemSupply
+  - itemID: uint64
+  - itemType: ItemType
+    + go.field.type = ItemType
+  - totalBalance: string
+    + go.field.type = prototyp.BigInt
+
+enum FeedEventType: uint16
+  - LEVELUP
+  - MATCH
+  - REWARD
+  - TRADE
+  - RANKUP
+  - LEADERBOARD_REWARD
+  - HERO_UNLOCK
+  - IAP_CONQUEST_MINTING
+  - DELAYED_REWARD
+  - DELAYED_REWARD_MINTED
+  - STARTED_DECK_UNLOCK
+  - CONQUEST_V2_REWARD
+
+enum Hero: uint16
+  - UNKNOWN
+  - ADA
+  - SAMYA
+  - FOX
+  - LOTUS
+  - TITUS
+  - IRIS
+  - BOURAN
+  - HORIK
+  - ZOEY
+  - AXEL
+  - ARI
+  - MIRA
+  - MAI
+  - BANJO
+  - SITTI
+
+message GetFeedRequest
+  - accountAddress: string
+    + go.field.name = AccountAddress
+    + go.field.type = Hash
+
+  - types?: []FeedEventType
+    + go.field.type = []FeedEventType
+
+message FeedEvent
+  - id: int64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - type: FeedEventType
+    + go.tag.db = event_type
+    + go.field.type = FeedEventType
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - matchId?: uint64
+    + go.tag.db = match_id,omitempty
+    + go.field.name = MatchID
+    + json = -
+
+  - match: Match
+    + go.tag.db = -
+
+  - level?: uint16
+    + go.tag.db = level,omitempty
+
+  - playerRank?: PlayerRank
+    + go.tag.db = player_rank,omitempty
+
+  - playerRankStage?: PlayerRankStage
+    + go.tag.db = player_rank_stage,omitempty
+
+  - season?: uint16
+    + go.tag.db = season
+
+  - tokenIds?: []uint64
+    + go.tag.db = token_ids,omitempty
+    + go.field.name = TokenIDs
+    + go.field.type = U64JSONBArray
+
+  - cards: []Card
+    + go.tag.db = -
+
+  - heroes: []Hero
+    + go.field.type = []Hero
+    + go.tag.db = -
+
+  - gameMode?: GameMode
+    + go.tag.db = game_mode
+
+  - leaderboardRank?: int
+    + go.tag.db = leaderboard_rank
+
+  - conquestV2Reward?: float32
+    + go.tag.db = conquest_v2_reward
+
+  - conquestV2TreasureLevel?: uint16
+    + go.tag.db = conquest_v2_treasure_level
+
+  - stickerPoints?: uint16
+    + go.tag.db = sticker_points,omitempty
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+enum DeckClass: uint16
+  - UNKNOWN_CLASS
+
+  - STR  # Strength
+  - HRT  # Hearth
+  - AGY  # Agility
+  - INT  # Intellect
+  - WIS  # Wisdom
+
+  - STH  # Strength/Heart
+  - STA  # Strength/Agility
+  - STI  # Strength/Intellect
+  - STW  # Strength/Wisdom
+
+  - HRA  # Heart/Agility
+  - HRI  # Heart/Intellect
+  - HRW  # Heart/Wisdom
+
+  - AGI  # Agility/Intellect
+  - AGW  # Agility/Wisdom
+
+  - INW  # Intellect/Wisdom
+
+enum CardType: uint32
+  - UNIT
+  - SPELL
+
+enum CardKeyword: uint32
+  - ARMOR
+  - STEALTH
+  - GUARD
+  - BANNER
+  - WITHER
+  - DEATH
+
+enum CardElement: uint16
+  - WATER
+  - FIRE
+  - EARTH
+  - AIR
+  - MIND
+  - METAL
+  - LIGHT
+  - DARK
+
+enum CardStatus: uint16
+  - PLAY
+  - BLOCKED
+  - CODE
+
+enum CardClass: uint16
+  - STR  # Strength
+  - HRT  # Hearth
+  - AGY  # Agility
+  - INT  # Intellect
+  - WIS  # Wisdom
+  - TOK  # Token
+
+
+message CardImageURL
+  - small: string
+  - medium: string
+  - large: string
+
+enum CardSet: uint16
+  - UNKNOWN
+  - CORE_SET
+  - CORE_EXPANSION
+  - CLASH_OF_INVENTORS
+  - HEXBOUND_INVASION
+  - STARTER_EXPANSION
+
+message Card
+  - id: uint64
+    + go.tag.db = id
+    + go.field.name = ID
+
+  - name: string
+    + go.tag.db = name
+
+  - description: string
+    + go.tag.db = description
+
+  - asset: string
+    + go.tag.db = asset
+
+  - class: CardClass
+    + go.tag.db = class
+    + go.field.type = CardClass
+
+  - element: CardElement
+    + go.tag.db = element
+    + go.field.type = CardElement
+
+  - type: CardType
+    + go.tag.db = type
+    + go.field.type = CardType
+
+  - manaCost: int32
+    + go.tag.db = mana_cost
+
+  - power: uint32
+    + go.tag.db = power
+
+  - health: uint32
+    + go.tag.db = health
+
+  - attachedSpellID?: uint64
+    + go.tag.db = attached_spell_id
+
+  - keywords: []string
+    + go.tag.db = keywords
+
+  - status: CardStatus
+    + go.tag.db = status
+    + go.field.type = CardStatus
+
+  - set: CardSet
+    + go.tag.db = set
+    + go.field.type = CardSet
+    + json = set
+
+  - attributes?: map<string,any>
+    + json = -
+    + go.field.type = interface{}
+
+  - imageURL: CardImageURL
+    + go.tag.db = -
+
+  - itemType: ItemType
+    + go.field.type = ItemType
+    + go.tag.db = -
+
+  - isNew?: bool
+    + go.tag.db = -
+
+  - silverCardTokenId?: uint64
+    + go.field.name = SilverCardTokenID
+    + go.tag.db = -
+
+  - goldCardTokenId?: uint64
+    + go.field.name = GoldCardTokenID
+    + go.tag.db = -
+
+  - validFromSeason: uint16
+    + json = -
+    + go.tag.db = valid_from_season
+
+message Sticker
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - name: string
+    + go.tag.db = -
+
+  - requiredPoints: uint64
+    + go.tag.db = required_points
+    + go.field.name = RequiredPoints
+
+  - asset: string
+    + go.tag.db = -
+
+  - tokenId: uint64
+    + go.tag.db = token_id
+    + go.field.name = TokenID
+
+  - season: uint16
+    + go.tag.db = season
+
+message StickerOwnershipResponse
+  - stickerBalances: map<uint64,BalanceTuple>
+
+message LevelsPerSeason
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+  - address: string
+    + go.field.type = Hash
+  - inviterID: uint64
+    + go.tag.db = inviter_id
+    + go.field.name = InviterID
+    + go.field.type = AccountID
+    + json = -
+  - inviter_address: string
+    + go.field.type = Hash
+    + go.field.name = InviterAddress
+  - season: uint16
+    + go.tag.db = season,omitempty
+  - levels: uint64
+    + go.tag.db = levels,omitempty
+  - pointsCarried: uint64
+    + go.tag.db = points_carried,omitempty
+    + go.field.name = PointsCarried
+  - pointsSpent: uint64
+    + go.tag.db = points_spent,omitempty
+    + go.field.name = PointsSpent
+
+message FriendPoints
+  - account?: Account
+    + go.tag.db = account,omitempty
+  - season: uint16
+    + go.tag.db = season
+    + json = season
+  - levels: uint64
+    + go.tag.db = levels
+    + json = levels
+  - points: uint64
+    + go.tag.db = points
+    + json = points
+  - pointsSpent: uint64
+    + go.tag.db = points_spent
+    + go.field.name = PointsSpent
+
+message CardSearchCriteria
+  - ids?: []uint64
+    + go.field.name = IDs
+
+  - cardClass?: []CardClass
+    + go.field.name = CardClass
+    + go.field.type = []CardClass
+
+  - cardType?: CardType
+    + go.field.name = CardType
+
+  - cardElement?: []CardElement
+    + go.field.name = CardElement
+    + go.field.type = []CardElement
+
+  - searchText?: string
+    + go.field.name = SearchText
+
+  - cardManaCost?: []string
+    + go.field.name = CardManaCost
+
+  - itemType?: ItemType
+    + go.field.name = ItemType
+
+  - ownedCards?: bool
+
+  - accountAddress?: string
+    + go.field.type = Hash
+
+  - includeTokens?: bool
+
+
+message GetCardsRequest
+  - ids: []uint64
+    + go.field.name = IDs
+
+  - includeUserBalances: bool
+
+  - accountAddress?: string
+    + go.field.type = Hash
+
+
+message SearchCardsRequest
+  - criteria: CardSearchCriteria
+  - includeUserBalances: bool
+  - contractQuery: bool
+
+message CardWithBalance
+  - card: Card
+    + go.tag.db = ,inline
+
+  - balance: string
+    + go.tag.db = -
+    + go.field.type = prototyp.BigInt
+
+  - balanceByType: map<string,BalanceTuple>
+    + go.tag.db = -
+
+  - createdAt: timestamp
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+
+message BalanceTuple
+  - balance: string
+    + go.tag.db = -
+    + go.field.type = prototyp.BigInt
+
+  - isNew?: bool
+    +go.tag.db = -
+
+message CardOwnershipResponse
+  - cardBalances: map<uint64,map<string,BalanceTuple>>
+
+  - lockedCards: uint64
+  - lockedCardsByClass: map<string,uint64>
+  - lockedCardsByFrame: map<string,uint64>
+  - lockedCardsByClassAndFrame: map<string,map<string,uint64>>
+
+  - unlockedCards: uint64
+  - unlockedCardsByClass: map<string,uint64>
+  - unlockedCardsByFrame: map<string,uint64>
+  - unlockedCardsByClassAndFrame: map<string,map<string,uint64>>
+
+  - pendingCards: uint64
+  - pendingCardsByClass: map<string,uint64>
+  - pendingCardsByFrame: map<string,uint64>
+  - pendingCardsByClassAndFrame: map<string,map<string,uint64>>
+
+message PendingCardsResponse
+  - cards: []Card
+  - tokenIDs: []uint64
+  - mintAt: timestamp
+
+message GMPendingCardsReponse
+  - account: Account
+  - mintAt: timestamp
+  - cardsWonLastDay: uint
+  - cardsWonLastWeek: uint
+
+message WeeklyGolds
+  - startAt: timestamp
+    + go.tag.db = start_at
+    + go.field.name = StartAt
+
+  - endAt: timestamp
+    + go.tag.db = end_at
+    + go.field.name = EndAt
+
+  - tokenId: uint64
+    + go.tag.db = token_id
+    + go.field.name = TokenID
+
+  - totalSupply: uint64
+    + go.tag.db = -
+
+#
+# Decks
+#
+
+message Deck
+  - uuid: string
+    + go.tag.db = uuid,omitempty
+    + go.field.name = UUID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - name: string
+    + go.tag.db = name
+
+  - class: DeckClass
+    + go.tag.db = class
+    + go.field.type = DeckClass
+
+  - deckString: string
+    + go.field.name = DeckString
+    + go.tag.db = deck_string
+
+  - cardIds: []uint64
+    + go.tag.db = card_ids,omitempty
+    + go.field.name = CardIDs
+    + go.field.type = U64JSONBArray
+
+  - art: string
+    + go.tag.db = art
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+
+  - isFavorite: bool
+    + go.tag.db = -
+    + go.field.name = IsFavorite
+
+  - favoritedAt: timestamp
+    + go.tag.db = favorited_at
+    + go.field.name = FavoritedAt
+    + go.field.type = *time.Time
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+  - deckType: DeckType
+    + go.tag.db = deck_type,omitempty
+    + go.field.type = DeckType
+
+  - isNew: bool
+    + go.tag.db = is_new
+
+  - conquestV2Points: uint64
+    + go.tag.db = -
+
+
+message CheckDeckResponse
+  - containsInvalid: bool
+  - accountOwnsAllCards: bool
+  - unlockedClass: bool
+
+
+message CreateDeckRequest
+  - name: string
+
+  - class?: DeckClass
+    + go.field.name = DeckClass
+    + go.fied.type = DeckClass
+
+  - cardIds: []uint64
+    + go.field.name = CardIDs
+
+  - art?: string
+
+message UpdateDeckRequestDeck
+  - deckString: string
+    + go.field.name = DeckString
+
+  - name: string
+    + go.field.name = Name
+
+  # Unused
+  - class: DeckClass
+    + go.field.name = DeckClass
+    + go.fied.type = DeckClass
+
+    - art?: string
+
+
+message UpdateDeckRequest
+  # query by..
+  - uuid?: string
+    + go.field.name = UUID
+
+  - deckString?: string
+    + go.field.name = DeckString
+
+  # update..
+  - deck: UpdateDeckRequestDeck
+
+message DeckRequest
+  # query by..
+  - uuid?: string
+    + go.field.name = UUID
+
+  - deckString?: string
+    + go.field.name = DeckString
+
+message CheckDeckRequest
+  - accountAddress?: string
+    + go.field.type = Hash
+
+  - uuid?: string
+    + go.field.name = UUID
+
+  - deckString?: string
+    + go.field.name = DeckString
+
+  - contractQuery: bool
+    + go.field.name = ContractQuery
+
+message SearchDecksRequest
+  - deckString?: string
+    + go.field.name = DeckString
+
+  - name?: string
+
+  - class?: DeckClass
+    + go.field.name = Class
+
+message InternalListUnlockedDeckStringsRequest
+  - accountAddress: string
+    + go.field.type = Hash
+
+message DeckRank
+  - deckString: string
+    + go.field.name = DeckString
+    + go.tag.db = deck_string
+
+  - class: DeckClass
+    + go.field.type = DeckClass
+    + go.tag.db = class
+
+  - cardIds: []uint64
+    + go.field.name = CardIDs
+    + go.tag.db = card_ids
+    + go.field.type = U64JSONBArray
+
+  - winCount: int32
+    + go.field.name = WinCount
+    + go.tag.db = win_count
+
+  - lossCount: int32
+    + go.field.name = LossCount
+    + go.tag.db = loss_count
+
+  - forfeitCount: int32
+    + go.field.name = ForfeitCount
+    + go.tag.db = forfeit_count
+
+  - abandonCount: int32
+    + go.field.name = AbandonCount
+    + go.tag.db = abandon_count
+
+  - tieCount: int32
+    + go.field.name = TieCount
+    + go.tag.db = tie_count
+
+  - winRatio: float32
+    + go.field.name = WinRatio
+    + go.tag.db = win_ratio
+
+  - gamesPlayed: float32
+    + go.field.name = GamesPlayed
+    + go.tag.db = games_played
+  
+  - rankState: int32
+    + go.tag.db = rank_state
+    + go.field.type = RankState
+    + json = -
+
+  - score?: int32
+    + go.tag.db = score,omitempty
+    + go.field.name = Score
+
+  - highestPlayerID: string
+    + go.field.name = HighestPlayerID
+    + go.tag.db = highest_player_id,omitempty
+    + go.field.type = AccountID
+
+  - highestPlayerAddress: string
+    + go.field.name = HighestPlayerAddress
+    + go.field.type = Hash
+
+  - cardsRevision: int32
+    + go.tag.db = cards_revision
+    + json = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message SearchDeckRanksRequest
+  - deckString?: string
+    + go.field.name = DeckString
+
+  - classes?: []DeckClass
+    + go.field.name = Classes
+
+  - withCards?: []int32
+
+
+message ListDeckRanksRequest
+  - class?: DeckClass
+    + go.field.type = DeckClass
+
+
+message DeckRankAccount
+  - deckRank: DeckRank
+    + go.field.name = DeckRank
+  - highestPlayer: Account
+    + go.field.name = HighestPlayer
+
+message DeckEquipment
+  - stickers?: []uint64
+  - heroSkin?: uint64
+  - cardBack?: uint64
+
+enum GameMode: uint32
+  - UNKNOWN
+  - RANKED_CONSTRUCTED
+  - CHALLENGE_CONSTRUCTED
+  - TUTORIAL
+  - PRACTICE_BOT
+  - RANKED_DISCOVERY
+  - CONQUEST_CONSTRUCTED
+  - CONQUEST_DISCOVERY
+  - WARM_UP
+  - CHALLENGE_DISCOVERY
+  - PRACTICE_PVP
+
+enum MatchStatus: uint32
+  - UNKNOWN
+  - COMPLETED
+  - ABANDONED
+  - FORFEITED
+  - IN_PROGRESS
+  - CRASHED
+
+message Match
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - status: MatchStatus
+    + go.tag.db = status
+    + go.field.type = MatchStatus
+
+  - player1: MatchPlayer
+    + go.tag.db = -
+
+  - player2: MatchPlayer
+    + go.tag.db = -
+  
+  - player1GameMode: GameMode
+    + go.tag.db = p1_game_mode
+    + go.field.type = GameMode
+  
+  - player2GameMode: GameMode
+    + go.tag.db = p2_game_mode
+    + go.field.type = GameMode
+
+  - player1ID: uint64
+    + go.tag.db = p1_id
+    + go.field.name = Player1ID
+    + go.field.type = AccountID
+    + json = -
+
+  - player1Address: string
+    + go.field.type = Hash
+    + json = -
+
+  - player2ID: uint64
+    + go.tag.db = p2_id
+    + go.field.name = Player2ID
+    + go.field.type = AccountID
+    + json = -
+
+  - player2Address: string
+    + go.field.type = Hash
+    + json = -
+
+  - player1DeckString: string
+    + go.tag.db = p1_deck_string
+    + json = -
+
+  - initPlayer1DeckNumCards: uint
+    + go.tag.db = p1_init_deck_num_cards
+
+  - player2DeckString: string
+    + go.tag.db = p2_deck_string
+    + json = -
+
+  - initPlayer2DeckNumCards: uint
+    + go.tag.db = p2_init_deck_num_cards
+
+  - initPlayer1DeckString: string
+    + go.tag.db = init_p1_deck_string
+    + json = -
+
+  - initPlayer2DeckString: string
+    + go.tag.db = init_p2_deck_string
+    + json = -
+
+  - player1DeckClass?: DeckClass
+    + go.tag.db = p1_deck_class
+
+  - player2DeckClass?: DeckClass
+    + go.tag.db = p2_deck_class
+
+  # player number 0, 1 or 2, where 0 is a tie
+  - winningPlayer?: uint
+    + go.tag.db = winning_player,omitempty
+
+  - turnNonce: uint32
+    + go.tag.db = turn_nonce
+
+  - player1Moves: uint32
+    + go.tag.db = p1_moves
+
+  - player2Moves: uint32
+    + go.tag.db = p2_moves
+  
+  - player1RankState: int32
+    + go.tag.db = p1_rank_state
+    + go.field.type = RankState
+    + json = -
+  
+  - player2RankState: int32
+    + go.tag.db = p2_rank_state
+    + go.field.type = RankState
+    + json = -
+
+  - metrics: map<string,any>
+    + go.tag.db = metrics
+  
+  - tutorialLevel?: TutorialLevel
+    + go.tag.db = -
+
+  - startedAt?: timestamp
+    + go.tag.db = started_at,omitempty
+
+  - endedAt?: timestamp
+    + go.tag.db = ended_at,omitempty
+
+  - updatedAt?: timestamp
+    + go.tag.db = updated_at,omitempty
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+  - replayID: string
+
+message GMMatch
+  - match: Match
+    + go.tag.db = ,inline
+  - reviewed: bool
+    + go.tag.db = reviewed
+  - duration?: uint64
+    + go.tag.db = duration_seconds
+    + go.field.type = time.Duration
+
+message MatchStartRequest
+  - player1: MatchPlayer
+  - player2: MatchPlayer
+  - info?: MatchStartInfo
+
+message MatchStartInfo
+  - player1GameMode: GameMode
+    + go.field.name = Player1GameMode
+  - player2GameMode: GameMode
+    + go.field.name = Player2GameMode
+  - player1RequestedAt: timestamp
+    + go.field.name = Player1RequestedAt
+  - player2RequestedAt: timestamp
+    + go.field.name = Player2RequestedAt
+  - matchedAt: timestamp
+    + go.field.name = MatchedAt
+
+message MatchPlayer
+  - id: uint64
+    + go.field.name = ID
+    + go.field.type = AccountID
+    + go.tag.db = id
+
+  - address: string
+    + go.field.type = Hash
+    + go.tag.db = address
+
+  - name: string
+    + go.tag.db = name
+
+  - region?: string
+    + go.tag.db = region
+    + go.field.type = Region
+
+  - tagArtID?: string
+    + go.tag.db = tag_art_id
+
+  - crystalID?: uint64
+    + go.tag.db = crystal_id
+
+  - deckString: string
+    + go.tag.db = deck_string
+
+  - initDeckString: string
+    + go.tag.db = init_deck_string
+
+  - deckClass: DeckClass
+  - playerSessionId?: string
+  - isBot: bool
+
+
+message MatchEndRequest
+  - matchID: uint64
+
+  - status: MatchStatus
+    + go.field.type = MatchStatus
+
+  # player number 0, 1 or 2, where 0 is a tie
+  - winningPlayer?: uint
+
+  - player1DeckString: string
+  - player2DeckString: string
+
+  - player1Moves: uint32
+  - player2Moves: uint32
+
+  - turnNonce: uint32
+  
+  - metrics: map<string,any>
+
+  # when null, will take current time
+  - endedAt?: timestamp
+  - player1SessionId?: string
+  - player2SessionId?: string
+
+  - player1QuestProgressUpdates: map<uint64, uint16>
+  - player2QuestProgressUpdates: map<uint64, uint16>
+
+message BotMatchEndRequest
+  - mode?: GameMode
+
+  - status: MatchStatus
+    + go.field.type = MatchStatus
+
+  # player number 0, 1 or 2, where 0 is a tie, 1 is player and 2 is bot
+  - winningPlayer?: uint
+
+  - deckString: string
+
+  - turnNonce: uint32
+
+  - tutorialLevel?: TutorialLevel
+
+  - matchStartedAt: timestamp
+
+  - metrics: map<string,any>
+
+  - playerSessionId?: string
+
+  - playerAddress?: string
+
+  - playerQuestProgressUpdates: map<uint64, uint16>
+
+message RankData
+  - rank: PlayerRank
+    + go.field.type = PlayerRank
+  - rankStage: PlayerRankStage
+    + go.field.type = PlayerRankStage
+  - requiredRankPoints: int32
+  - rankPosition: uint32
+  - score: int32
+  - scoreAbove: int32
+  - scoreBelow: int32
+
+message RewardRank
+  - beforeMatch: RankData
+  - afterMatch: RankData
+
+enum RewardExpReason: uint32
+  - RankUp
+  - MatchPlayed
+  - Draw
+  - Victory
+  - DailyQuest
+  - ConcededTooEarly
+  - TutorialCompleted
+
+message RewardExp
+  - amount: uint64
+  - reason: RewardExpReason
+    + go.field.type = RewardExpReason
+  - reasonExtraData?: int64
+  - currentLevel: uint16
+  - requiredExp: uint64
+  - beforeMatchExp: uint64
+
+message RewardCard
+  - amount: uint64
+  - card: Card # TODO: make it an Item
+  - item?: Item
+
+message RewardHero
+  - hero: Hero
+    + go.field.type = Hero
+  - deckClass: DeckClass
+    + go.field.type = DeckClass
+
+message RewardHeroSkin
+  - hero: Hero
+    + go.field.type = Hero
+  - deckClass: DeckClass
+    + go.field.type = DeckClass
+  - tokenId: uint64
+
+message RewardDeck
+  - deckClass: DeckClass
+    + go.field.type = DeckClass
+  - tokenIds: []uint64
+
+message ConquestV2TreasureProgress
+  - treasureLevel: uint16
+  - treasurePoints: uint64
+  - treasurePointsRequired: uint64
+
+message RewardConquestV2TreasureProgress
+  - beforeMatch: ConquestV2TreasureProgress
+  - afterMatch: ConquestV2TreasureProgress
+
+message Reward
+  - accountID: uint64
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+
+  - type: RewardType
+    + go.field.type = RewardType
+
+  - gameMode?: GameMode
+  - rank?: RewardRank
+  - exp?: RewardExp
+  - card?: RewardCard
+  - hero?: RewardHero
+  - heroSkin?: RewardHeroSkin
+  - deck?: RewardDeck
+  - conquestV2TreasureProgress?: RewardConquestV2TreasureProgress
+  - stickerPoints?: uint16
+
+enum RewardType: uint32
+  - EXP
+  - CARD
+  - RANK
+  # legacy
+  - PRISM
+  - HERO
+  - HERO_SKIN
+  - DECK
+  - CONQUEST_POINTS
+  - CONQUEST_TICKET
+  - STICKER
+  - CARD_BACK
+  - STICKER_POINTS
+  - TITLE
+
+enum DeckType: uint32
+  - RANDOM
+  - CUSTOM
+  - LOCKED_STARTER
+  - UNLOCKED_STARTER
+
+message ListLeaderboardRequest
+  - gameMode?: GameMode
+  - region?: string
+    + go.field.type = Region
+  - playerRank?: PlayerRank
+  - playerNamePrefix?: string
+  - season?: uint16
+
+
+message AccountLeaderboardRequest
+  - gameMode: GameMode
+  - accountAddress?: string
+  - season?: uint16
+
+message InternalGetBotAccountsRequest
+  - opponentRank: PlayerRank
+  - opponentScore: int32
+  - gameMode: GameMode
+
+message LeaderboardEntry
+  - account: Account
+
+  - accountStat: AccountStat
+    + go.tag.db = ,inline
+
+  - rank: uint32
+    + go.tag.db = rank
+
+  - rankedSilverReward: uint
+    + go.tag.db = -
+
+  - rankedTicketReward: uint
+    + go.tag.db = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message ListMatchesRequest
+  - accountAddress?: string
+    + go.field.name = AccountAddress
+    + go.field.type = Hash
+
+message GMListMatchesRequest
+  - accountAddress?: string
+    + go.field.name = AccountAddress
+    + go.field.type = Hash
+  - modes?: []GameMode
+    + go.field.type = []GameMode
+  - statuses?: []MatchStatus
+    + go.field.type = []MatchStatus
+  - reviewed?: bool
+  - max_duration?: string # A string value that can be converted into time.Duration, like "1s", "60s", etc. Valid units are `s`, `m` or `h`
+    + go.field.name = MaxDuration
+  - min_duration?: string # A string value that can be converted into time.Duration, like "1s", "60s", etc. Valid units are `s`, `m` or `h`
+    + go.field.name = MinDuration
+
+message TaskRunner
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - workGroup: string
+    + go.tag.db = work_group
+
+  - runAt: timestamp
+    + go.tag.db = run_at,omitempty
+
+
+message Task
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - queue: string
+    + go.tag.db = queue
+
+  - status: TaskStatus
+    + go.field.type = TaskStatus
+    + go.tag.db = status
+
+  - try: uint32
+    + go.tag.db = try
+
+  - runAt?: timestamp
+    + go.tag.db = run_at,omitempty
+
+  - lastRanAt?: timestamp
+    + go.tag.db = last_ran_at,omitempty
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+  - payload: []byte
+    + go.tag.db = payload
+
+  - hash?: string
+    + go.tag.db = hash,omitempty
+
+  - accountID?: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+
+enum TaskStatus: uint32
+  - PENDING
+  - PAUSED
+  - FAILED
+  - COMPLETED
+  - DISABLED
+
+
+message GameClientFeedback
+  - sentiment: string
+  - timestamp: timestamp
+  - dump: map<string,any>
+  - screenshotImageURI: string
+
+
+enum ConquestStatus: uint32
+  - UNKNOWN
+  - IN_PROGRESS
+  - REWARDS_PENDING
+  - COMPLETED
+
+enum ConquestMatchResult: uint32
+  - UNKNOWN
+  - WIN
+  - LOSS
+  - DRAW
+
+message CookiePolicy
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - policy: map<string,bool>
+    + go.tag.db = policy,omitempty
+    + go.field.type = MapStringBoolJSONB
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+message Conquest
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - status: ConquestStatus
+    + go.tag.db = status
+    + go.field.type = ConquestStatus
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - nonce: uint64
+    + go.tag.db = nonce
+
+  - mode: GameMode
+    + go.tag.db = game_mode
+    + go.field.type = GameMode
+
+  - hero: Hero
+    + go.tag.db = hero
+    + go.field.type = Hero
+
+  - deckClass?: DeckClass
+    + go.tag.db = -
+
+  - matchProgress: map<uint64,ConquestMatchResult>
+    + go.tag.db = match_progress,omitempty
+    + go.field.type = ConquestMatchResultMap
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+
+  - endedAt?: timestamp
+    + go.tag.db = ended_at,omitempty
+
+
+message ConquestStats
+  - discoveryTicketsUsed: uint32
+  - constructedTicketsUsed: uint32
+  - discoveryMatchesPlayed: uint32
+  - constructedMatchesPlayed: uint32
+  - discoveryWinRate: float32
+  - constructedWinRate: float32
+  - discoverySilverCardsWon: uint32
+  - constructedSilverCardsWon: uint32
+  - discoveryGoldCardsWon: uint32
+  - constructedGoldCardsWon: uint32
+  - firstConquestMatchPlayed: timestamp
+    + go.field.type = *time.Time
+
+message ConquestPoints
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - address: string
+    + go.tag.db = address,omitempty
+    + go.field.type = Hash
+
+  - eventID: uint16
+    + go.tag.db = event_id
+    + go.field.name = EventID
+    + json = eventID
+
+  - currentPoints: uint64
+    + go.tag.db = current_points
+    + go.field.name = CurrentPoints
+    + json = currentPoints
+
+  - totalPoints: uint64
+    + go.tag.db = total_points
+    + go.field.name = TotalPoints
+    + json = totalPoints
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message MigrateAccountRequest
+  - proof: WalletProof
+  - accountName?: string
+
+
+enum PurchaseStateAndroid: int
+  -  UNSPECIFIED_STATE
+  -  PURCHASED
+  -  PENDING
+
+message IAPPurchaseRequest
+  - productId: string
+  - transactionId?: string
+  - transactionDate: float64
+  - transactionReceipt: string
+  - purchaseToken?: string
+  - quantityIOS?: uint32
+  - originalTransactionDateIOS?: string
+  - originalTransactionIdentifierIOS?: string
+  - dataAndroid?: string
+  - signatureAndroid?: string
+  - autoRenewingAndroid?: bool
+  - purchaseStateAndroid?: PurchaseStateAndroid
+  - isAcknowledgedAndroid?: bool
+  - packageNameAndroid?: string
+  - developerPayloadAndroid?: string
+  - obfuscatedAccountIdAndroid?: string
+  - obfuscatedProfileIdAndroid?: string
+  - userIdAmazon?: string
+  - userMarketplaceAmazon?: string
+  - userJsonAmazon?: string
+  - isCanceledAmazon?: bool
+  - address: string
+  - currency: string
+  - totalPrice: float32
+  - pricePerUnit: float32
+  - receiptData?: string
+  - quantity: uint32
+
+message AppleIAP
+  - ProductID: string
+    + go.tag.db = tokens
+  - TransactionID: string
+    + go.tag.db = purchase_token
+  - Quantity: string
+    + go.tab.db = token_amount
+
+message AppleIAPResponse
+  - Status: int
+  - Environment: string
+  - AppItemID: int
+  - BundleID: string
+  - LatestReceiptInfo: []AppleIAP
+  - LatestReceipt: string
+  - IsRetryable: bool
+
+message GoogleProductPurchase
+  - AcknowledgementState: int64
+  - ConsumptionState: int64
+  - DeveloperPayload: string
+  - Kind: string
+  - ObfuscatedExternalAccountId: string
+  - ObfuscatedExternalProfileId: string
+  - OrderId: string
+  - ProductId: string
+    + go.tag.db = tokens,omitempty
+  - PurchaseState: int64
+    + go.tag.db = status
+  - PurchaseTimeMillis: int64
+  - PurchaseToken: string
+    + go.tag.db = purchase_token
+  - PurchaseType?: int64
+  - Quantity: int64
+  - RegionCode: string
+  - ForceSendFields: []string
+  - NullFields: []string
+
+enum IAPTransactionStatus: uint
+  - UNKNOWN
+  - MINTING_FAILED     # failed to mint the IAP
+  - MINTING_PENDING    # txn has been sent
+  - MINTING_SUCCESS    # txn has been mined successfully!
+  - PAYMENT_FAILED     # payment failed / invalid receipt
+
+enum ActionType: uint16
+  - MOD_BAN
+  - MOD_SUSPENSION
+  - AUTO_BAN
+  - AUTO_SUSPENSION
+  - DELAYED_MOD_BAN
+  - DELAYED_MOD_SUSPENSION
+  - DELAYED_AUTO_BAN
+  - DELAYED_AUTO_SUSPENSION
+  - MOD_FLAG
+  - AUTO_FLAG
+  - MOD_VET
+
+message AccountAction
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+    + go.field.type = uint64
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - accountAddress: string
+    + go.field.type = Hash
+
+  - createdAt?: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = time.Time
+
+  - updatedAt?: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = time.Time
+
+  - expiresAt?: timestamp
+    + go.tag.db = expires_at,omitempty
+    + go.field.name = ExpiresAt
+    + go.field.type = time.Time
+
+  - actionType: ActionType
+    + go.tag.db = action_type
+    + go.field.type = ActionType
+
+  - isActive: bool
+    + go.tag.db = is_active
+
+  - createdBy?: uint64
+    + go.tag.db = created_by
+    + go.field.type = AccountID
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+
+
+enum SignalStatus: uint32
+  - PENDING
+  - ACTED_UPON
+  - NOT_ACTIONABLE
+
+
+message AccountSignal
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - signalType: string
+    + go.tag.db = signal_type
+
+  - signalStatus: SignalStatus
+    + go.tag.db = signal_status
+    + go.field.type = SignalStatus
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+
+  - payload: []byte
+    + go.tag.db = payload
+    + json = -
+
+  - signalData: any
+    + go.tag.db = -
+
+  - score: float32
+    + go.tag.db = -
+
+  - ml_value: float64
+    + go.tag.db = ml_value
+    + go.field.name = MLScore
+    + json = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+
+message AccountSignalSummary
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - accountAddress: string
+    + go.tag.db = account_address
+    + go.field.type = Hash
+
+  - score: float64
+    + go.tag.db = score
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+
+  - account?: Account
+    + go.tag.db = -
+
+  - accountActions?: []AccountAction
+    + go.tag.db = -
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message Report
+  - reportedAddress: string
+    + go.tag.db = reported_address
+    + go.field.type = Hash
+
+  - matchId: uint64
+    + go.tag.db = match_id,omitempty
+    + go.field.name = MatchID
+
+  - reporterComment: string
+    + go.tag.db = reporter_comment
+
+
+message AppDevKey
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - appKey: string
+    + go.tag.db = app_key
+
+  - name: string
+    + go.tag.db = name
+
+  - email: string
+    + go.tag.db = email
+
+  - disabled: bool
+    + go.tag.db = disabled
+
+  - createdBy?: uint64
+    + go.tag.db = created_by,omitempty
+    + go.field.name = CreatedBy
+    + go.field.type = AccountID
+  
+  - updatedBy?: uint64
+    + go.tag.db = updated_by,omitempty
+    + go.field.name = UpdatedBy
+    + go.field.type = AccountID
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.name = UpdatedAt
+    + go.field.type = *time.Time
+  
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message CreateAppDevKeyRequest
+  - name: string
+    + go.tag.db = Name
+
+  - email: string
+    + go.tag.db = Email
+
+# Page represents a results page. This can be used both to request a page and
+# to store the state of a page.
+message Page
+  # Common for both numbered pages and cursor: Number of items per page
+  - pageSize?: uint32
+
+  # Cursor: an opaque value that represents the position of the first page,
+  # include to get previous page
+  - before?: string
+
+  # Indicates whether there's content for another page before the current one.
+  - hasBefore?: bool
+
+  # Cursor: an opaque value that represents the position of the last page,
+  # include to get next page
+  - after?: string
+
+  # Indicates whether there's content for another page after the current one.
+  - hasAfter?: bool
+
+  # Sorting filter
+  - sort?: []SortBy
+
+message SortBy
+  - column: string
+  - order: SortOrder
+
+enum SortOrder: uint32
+  - DESC
+  - ASC
+
+message TwitchFeaturedStreamer
+  - username: string
+    + go.tag.db = username
+
+
+message GMStatsResponse
+  - total_active_users: uint64
+    + go.field.name = TotalActiveUsers
+    + go.tag.db = total_active_users
+  - total_suspended_users: uint64
+    + go.field.name = TotalSuspendedUsers
+    + go.tag.db = total_suspended_users
+  - total_banned_users: uint64
+    + go.field.name = TotalBannedUsers
+    + go.tag.db = total_banned_users
+  - total_vip_users: uint64
+    + go.field.name = TotalVIPUsers
+    + go.tag.db = total_vip_users
+  - total_flagged_users: uint64
+    + go.field.name = TotalFlaggedUsers
+    + go.tag.db = total_flagged_users
+  - total_to_delete_users: uint64
+      + go.field.name = TotalToDeleteUsers
+      + go.tag.db = total_to_delete_users
+
+enum BannerType: uint16
+  - INFO
+  - WARNING
+  - EMERGENCY
+
+message Banner
+  - order: uint32
+    + go.tag.db = order_by
+  - type: BannerType
+    + go.tag.db = type
+  - color?: string
+    + go.tag.db = color,omitempty
+  - msg: string
+    + go.tag.db = msg
+  - dismissable: bool
+    + go.tag.db = dismissable
+  - id: int64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+  - link?: string
+    + go.tag.db = link,omitempty
+    + go.tag.json = link,omitempty
+  - startAt?: timestamp
+    + go.tag.db = start_at,omitempty
+    + go.tag.json = startAt,omitempty
+  - endAt?: timestamp
+    + go.tag.db = end_at,omitempty
+    + go.tag.json = endAt,omitempty
+
+message BannersRequest
+  - order: uint32
+  - bannerType: BannerType
+  - msg: string
+  - dismissable: bool
+  - color?: string
+  - link?: string
+  - startAt?: timestamp
+  - endAt?: timestamp
+
+message TwitchInfoResponse
+  - streamers_online: uint32
+    + go.field.name = StreamersOnline
+  - vods_available: uint32
+    + go.field.name = VodsAvailable
+  - streams: []TwitchStream
+
+message TwitchStream
+  - id: string
+    + go.field.name = ID
+  - user_id: string
+    + go.field.name = UserID
+  - user_login: string
+    + go.field.name = UserLogin
+  - user_name: string
+    + go.field.name = UserName
+  - game_id: string
+    + go.field.name = GameID
+  - game_name: string
+    + go.field.name = GameName
+  - type: string
+  - title: string
+  - viewer_count: uint32
+    + go.field.name = ViewerCount
+  - started_at: string
+    + go.field.name = StartedAt
+  - language: string
+  - thumbnail_url: string
+    + go.field.name = ThumbnailURL
+  - tag_ids: []string
+    + go.field.name = TagIDs
+  - is_mature: bool
+    + go.field.name = IsMature
+
+message DiscordInfoResponse
+  - users_online: uint32
+    + go.field.name = UsersOnline
+  - instant_invite_url: string
+    + go.field.name = InstantInviteURL
+
+message GameModesStatus
+  - tutorial: bool
+  - practicePVP: bool
+  - practiceBot: bool
+  - warmUp: bool
+  - rankedConstructed: bool
+  - rankedDiscovery: bool
+  - conquestConstructed: bool
+  - conquestDiscovery: bool
+  - challengeConstructed: bool
+  - challengeDiscovery: bool
+
+message GameModeStatus
+  - gameMode: GameMode
+    + go.tag.db = game_mode
+
+  - enabled: bool
+    + go.tag.db = enabled
+
+message GameModeStatusHistory
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - gameMode: GameMode
+    + go.tag.db = game_mode
+
+  - enabled: bool
+    + go.tag.db = enabled
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+message ConquestV2Pool
+  - amount: uint64
+  - totalWeight: float32
+
+message ConquestTreasureInfo
+  - amountSilver: int64
+  - amountUSDC: int64
+
+message ConquestV2PoolConfigData
+  - maxPoolCeiling?: int32
+  - poolCeiling: int32
+  - poolFloor: int32
+  - topWeightUnitPrice: float32
+  - bottomWeightUnitPrice: float32
+  - weightPerSilverCard: float32
+
+message ConquestV2PoolConfig
+  - default: ConquestV2PoolConfigData
+  - settings: ConquestV2PoolConfigData
+  - final: ConquestV2PoolConfigData
+
+message ConquestV2TreasureLevelSummary
+  - level: uint16
+  - numberOfPlayers: int32
+  - totalWeight: float32
+
+message ConquestV2Summary
+  - pool: uint64
+  - totalWeight: float32
+  - weightUnitPrice: float32
+  - treasureLevels: []ConquestV2TreasureLevelSummary
+
+message ConquestV2AccountTreasureProgress
+  - accountID:  uint64
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+  - accountName: string
+  - progress: ConquestV2TreasureProgress
+
+message Notification
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+    + json = -
+
+  - type: NotificationType
+    + go.tag.db = type
+
+  - data: any
+    + go.tag.db = data,omitempty
+    + go.field.type = *NotificationData
+    + json = -
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - seenAt: timestamp
+    + go.tag.db = seen_at,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - validFrom: timestamp
+    + go.tag.db = valid_from,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - expiresAt: timestamp
+    + go.tag.db = expires_at,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - pushEnabled: bool
+    + go.tag.db = push_enabled,omitempty
+    + json = -
+
+  - pushedAt: timestamp
+    + go.tag.db = pushed_at,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - leaderboardReward?: NotificationLeaderboardReward
+    + go.tag.db = -
+    + json = leaderboardReward,omitempty
+
+  - conquestV2Reward?: NotificationConquestV2Reward
+    + go.tag.db = -
+    + json = conquestV2Reward,omitempty
+
+  - oneTime?: NotificationOneTimeWrapper
+    + go.tag.db = -
+    + json = oneTime,omitempty
+
+  - seasonStart?: NotificationSeasonStart
+    + go.tag.db = -
+    + json = seasonStart,omitempty
+
+enum NotificationType: uint
+  - LEADERBOARD_REWARD
+  - CONQUEST_V2_REWARD
+  - ONE_TIME
+  - SKYPASS_LEVEL_INTRODUCTION
+  - SEASON_START
+
+message NotificationEarnedRank
+  - playerRank: PlayerRank
+  - playerRankStage: PlayerRankStage
+
+message NotificationLeaderboardReward
+  - season: uint16
+  - week: uint8
+  - silverCardAmounts: map<uint64, uint64>
+  - ticketAmount: uint64
+  - earnedConstructedPlayerRanks: []NotificationEarnedRank
+  - earnedDiscoveryPlayerRanks: []NotificationEarnedRank
+  - rankedConstructedRank: int
+  - rankedDiscoveryRank: int
+
+message NotificationConquestV2Reward
+  - season: uint16
+  - week: uint16
+  - treasureLevel: uint16
+  - amountUSDC: float32
+  - silverCardAmounts: map<uint64, uint64>
+
+message NotificationOneTimeWrapper
+  - id: uint64
+    + go.field.name = ID
+
+  - name: string
+
+  - data: any
+    + go.field.type = *NotificationOneTimeData
+    + json = data,omitempty
+
+message NotificationOneTime
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - name: string
+    + go.tag.db = name
+
+  - data: any
+    + go.tag.db = data,omitempty
+    + go.field.type = *NotificationOneTimeData
+    + json = data,omitempty
+
+  - filter: any
+    + go.tag.db = filter,omitempty
+    + go.field.type = *NotificationOneTimeFilter
+    + json = filter,omitempty
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.type = *time.Time
+
+  - validFrom: timestamp
+    + go.tag.db = valid_from,omitempty
+    + go.field.type = *time.Time
+    + json = validFrom,omitempty
+
+  - expiresAt: timestamp
+    + go.tag.db = expires_at,omitempty
+    + go.field.type = *time.Time
+    + json = expiresAt,omitempty
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.type = *time.Time
+
+  - updatedBy: uint64
+    + go.tag.db = updated_by,omitempty
+    + go.field.type = *AccountID
+
+message NotificationSeasonStart
+  - seasonNumber: uint16
+  - seasonName: string
+
+message ListSkypassRewardsResponse
+  - levels: []SkypassLevel
+  - seasonNumber: uint16
+  - seasonName: string
+  - hasPremium: bool
+
+message SkypassLevel
+  - level: uint16
+  - earned: bool
+  - rewards: []SkypassReward
+
+message SkypassReward
+  - id: uint64
+    + go.field.name = ID
+    + go.tag.db = id,omitempty
+
+  - level: uint16
+    + go.tag.db = level
+
+  - season: uint16
+    + go.tag.db = season
+
+  - tier: SkypassTier
+    + go.tag.db = tier
+
+  - itemType: ItemType
+    + go.tag.db = item_type
+
+  - amount: uint16
+    + go.tag.db = amount
+    + json = amount,omitempty
+
+  - isStarter: bool
+    + go.tag.db = is_starter
+
+  - isInfinite: bool
+    + go.tag.db = is_infinite
+
+  - attributes: SkypassRewardAttributes
+    + go.tag.db = attributes
+    + json = attributes,omitempty
+
+  - updatedAt: timestamp
+    + go.tag.db = updated_at,omitempty
+    + go.field.type = *time.Time
+    + json = -
+
+  - updatedBy: uint64
+    + go.tag.db = updated_by
+    + go.field.type = AccountID
+    + json = -
+
+  - claimable: bool
+  - claimed: bool
+  - gainedRewards?: []Reward
+
+message SkypassRewardAttributes
+  - tokenIDs: []uint64
+    + json = tokenIDs,omitempty
+
+  - cardSets: []CardSet
+    + json = cardSets,omitempty
+
+  - cardSetsExcluded: []CardSet
+    + json = cardSetsExcluded,omitempty
+
+  - unlockDeckClasses: []DeckClass
+    + json = unlockDeckClasses,omitempty
+
+enum SkypassTier: uint16
+  - UNKNOWN
+  - FREE
+  - PREMIUM
+
+enum PaymentProvider: uint16
+  - UNKNOWN
+  - GOOGLE_PLAY
+  - APPLE_APP_STORE
+  - STRIPE
+  - SEQUENCE
+  - SAMSUNG_GALAXY_STORE
+
+message PaymentProviderProduct
+  - provider: PaymentProvider
+  - itemType: ItemType
+  - code: string
+  - quantity: uint16
+
+message GooglePlayPaymentResponse
+  - productId: string
+  - transactionId: string
+  - transactionDate: float64
+  - transactionReceipt: string
+  - purchaseToken: string
+
+  - dataAndroid?: string
+  - signatureAndroid?: string
+  - autoRenewingAndroid?: bool
+  - purchaseStateAndroid?: PurchaseStateAndroid
+  - isAcknowledgedAndroid?: bool
+  - packageNameAndroid: string
+  - developerPayloadAndroid?: string
+  - obfuscatedAccountIdAndroid?: string
+  - obfuscatedProfileIdAndroid?: string
+
+  - currency: string
+  - totalPrice: float32
+
+message AppleAppStorePaymentResponse
+  - productId: string
+  - transactionId: string
+  - transactionDate: float64
+  - transactionReceipt: string
+  - purchaseToken?: string
+
+  - quantityIOS?: uint32
+  - originalTransactionDateIOS?: string
+  - originalTransactionIdentifierIOS?: string
+
+  - currency: string
+  - totalPrice: float32
+
+message SamsungGalaxyStorePaymentResponse
+  - itemId: string
+  - itemName: string
+  - itemPrice: float32
+  - itemPriceString: string
+  - currencyUnit: string
+  - currencyCode: string
+  - itemDesc: string
+  - type: string
+  - isConsumable: bool
+  - paymentId: string
+  - purchaseId: string
+  - purchaseDate: string
+  - passThroughParam: string
+  - itemImageUrl: string
+  - itemDownloadUrl: string
+  - orderId: string
+
+message StripeCheckout
+  - url: string
+    + go.field.name = URL
+
+message StripeEventData
+  - object: StripeEventDataObject
+
+message StripeEventDataObject
+  - id: string
+  - object: string
+
+message OnChainTransaction
+  - to: string
+  - data: string
+
+message Payment
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+
+  - status: PaymentStatus
+    + go.tag.db = status
+
+  - provider: PaymentProvider
+    + go.tag.db = provider
+
+  # e.g. blockchain transaction hash, app store purchase id
+  - externalTxnID: string
+    + go.tag.db = external_txn_id
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  - cursor: string
+    + go.tag.db = cursor,omitempty
+    + json = -
+
+enum PaymentStatus: uint16
+  - INITIATED
+  - PENDING
+  - SUCCEEDED
+  - FAILED
+
+message PaymentLog
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - paymentID: uint64
+    + go.tag.db = payment_id
+    + go.field.name = PaymentID
+
+  - data: any
+    + go.tag.db = data
+    + go.field.type = *PaymentLogData
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+message Transaction
+  - id: uint64
+    + go.tag.db = id,omitempty
+    + go.field.name = ID
+
+  - accountID: uint64
+    + go.tag.db = account_id
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+
+  - transactionType: TransactionType
+    + go.tag.db = transaction_type
+    + go.field.type = TransactionType
+
+  - tokenID: uint64
+    + go.tag.db = token_id
+
+  - amount: string
+    + go.tag.db = amount
+    + go.field.type = prototyp.BigInt
+
+  - createdAt: timestamp
+    + go.tag.db = created_at,omitempty
+    + go.field.name = CreatedAt
+    + go.field.type = *time.Time
+
+  # e.g. blockchain transaction hash, app store purchase id
+  - externalTxnID: string
+    + go.tag.db = external_txn_id
+
+enum TransactionType: uint16
+  - UNKNOWN               = 0
+  - SKYWEAVER             = 1
+  - GOOGLE_PLAY           = 2
+  - APPLE_APP_STORE       = 3
+  - STRIPE                = 4
+  - POLYGON_CHAIN         = 5
+  - GIVEAWAY              = 6
+  - TAKEAWAY              = 7
+  - SAMSUNG_GALAXY_STORE  = 8
+  - SKYPASS               = 9
+  - MATCH                 = 10
+  - LEVEL_UP              = 11
+  - LEADERBOARD_REWARD    = 12
+  - QUEST                 = 13
+
+message AnalyticsItemPurchase
+  - accountID: uint64
+    + go.field.name = AccountID
+    + go.field.type = AccountID
+  - productID: string
+    + go.field.name = ProductID
+  - currency: string
+  - pricePerUnit: float32
+  - quantity: uint32
+  - totalPrice: float32
+  - platform: string
+
+  - transactionID: string
+    + go.field.name = TransactionID
+  - token: string
+
+  - itemType: ItemType
+    + go.field.type = ItemType
+
+enum QuestPeriodicity: uint8
+  - UNKNOWN
+  - DAILY
+  - WEEKLY
+  - SEASONAL
+
+message QuestReward
+  - itemType: ItemType
+  - amount: uint16
+
+message Quest
+  - id: uint64
+    + go.field.name = ID
+  - position: uint16
+  - questType: QuestType
+  - epicType?: EpicType
+  - epicIndex?: uint16
+  - epicLength?: uint16
+  - progress: uint16
+  - endProgress: uint16
+  - reward: QuestReward
+  - periodicity: QuestPeriodicity
+  - isRerollable: bool
+  - isClaimable: bool
+  - isClaimed: bool
+  - isNew: bool
+
+message QuestsAutoRerollTimeResponse
+  - daily: timestamp
+    + go.field.type = time.Time
+  - weekly: timestamp
+    + go.field.type = time.Time
+  - seasonal: timestamp
+    + go.field.type = time.Time
+
+##
+##
+##
+
+service SkyWeaverAPI
+
+  #
+  # Auth
+  #
+
+  - GetAuthToken(ethAuthProofString: string) => (status: bool, jwtToken: string, address: string, account?: Account)
+  - GetSession() => (address: string, account?: Account)
+
+  # Account migration for legacy accounts
+  - MigrateAccount(req: MigrateAccountRequest) => (ok: bool)
+
+  #
+  # Account and user controls
+  #
+  - RegisterAccount(accountRegistration: AccountRegistration, captcha: string) => (status: bool, account: Account)
+  - GetAccount(address: string) => (account: Account)
+  - GetAccountByUsername(username: string) => (account: Account)
+  - GetAccountStats(address: string, seasons?: []uint16) => (constructedStats: []AccountStat, discoveryStats: []AccountStat)
+  - InternalGetAccountStats(address: string, seasons?: []uint16) => (constructedStats: []AccountStat, discoveryStats: []AccountStat)
+  - AccountExists(address: string) => (exists: bool, pending_migration: bool)
+  - AccountExistsByName(name: string) => (exists: bool, pending_migration: bool)
+  - UpdateAccount(account: Account) => (account: Account)
+  - RequestAccountDeletion(proof: WalletProof) => (status: bool)
+  - RequestMoreInvites() => (status: bool)
+  - SetInvitedBy(req: SetInvitedByRequest) => (ok: bool)
+  - GetPrivateSpectateCode(reset?: bool) => (code: string)
+  - ListNotifications() => (notifications: []Notification)
+  - SetNotificationsAsSeen(notificationIDs: []uint64) => (status: bool)
+  - MigrateFromBurner(ethAuthProofString: string) => (status: bool)
+  - PrepareTransferAssetsFromBurnerTransaction() => (transactions: []OnChainTransaction)
+
+  #
+  # FriendPoints
+  #
+  - GetFriendPoints(address: string) => (total: uint64, friends: []FriendPoints)
+  - GetPointsGifted(address: string) => (total: uint64, inviter: Account)
+
+  #
+  # Stickers
+  #
+  - GetStickers() => (stickers: []Sticker)
+  - GetStickersBySeason(season: uint16) => (stickers: []Sticker)
+  - GetStickerOwnership(accountAddress?: string) => (res: StickerOwnershipResponse)
+
+  #
+  # User Storage
+  #
+  - UserStorageFetch(key: string) => (object: any)
+  - UserStorageSave(key: string, object: any) => (ok: bool)
+  - UserStorageDelete(key: string) => (ok: bool)
+  - UserStorageFetchAll(keys?: []string) => (objects: map<string, any>)
+  #- UserStorageQuery(key: string, query: string) => (object: any)
+
+
+  # Feed
+  - GetFeed(page?: Page, req: GetFeedRequest) => (page?: Page, res: []FeedEvent)
+
+
+  #
+  # Items
+  #
+  - GetItemSummary(accountAddress: string, contractQuery?: bool) => (summary: map<string,ItemSummary>)
+  - GetItemSupply(tokenID: uint64) => (summary: map<string,Item>)
+  - GetBatchItemSupply(tokenIDs: []uint64) => (summary: map<uint64,map<string,Item>>)
+  - GetItemSuppliesByType(itemTypes: []ItemType) => (summary: map<uint,[]ItemSupply>)
+  - GetItemOwnershipByType(accountAddress?: string, itemTypes?: []ItemType) => (items: []Item)
+  - MarkItemsNotNew(tokenIDs: []uint64, immediately?: bool) => (ok: bool)
+  - EquipItem(itemType: ItemType, tokenID: uint64) => (item: Item)
+  - UnequipItem(itemType: ItemType, tokenID: uint64) => (ok: bool)
+  - ListEquippedItems(itemType?: ItemType) => (items: []Item)
+  - GetDeckEquipmentByDeckString(accountAddress?: string, deckString: string) => (deckEquipment: DeckEquipment)
+
+  #
+  # Cards
+  #
+
+  # query the library in-memory index, these methods are super fast
+  - GetCardLibrary(page?: Page) => (cards: []Card)
+  - GetCardsByID(cardIDs: []uint64) => (cards: []Card)
+  - GetCardsByDeckString(deckString: string) => (cards: []Card)
+
+  # query the library and also include the player's balances
+  - SearchCards(page?: Page, req: SearchCardsRequest) => (page?: Page, res: []CardWithBalance)
+
+  - GetCardOwnership(accountAddress?: string, contractQuery?: bool) => (res: CardOwnershipResponse)
+  - GetPendingCards() => (res: []PendingCardsResponse)
+
+  #
+  # Decks
+  #
+  - ListDecks(page?: Page) => (page?: Page, res: []Deck)
+  - SearchDecks(page?: Page, req: SearchDecksRequest) => (page?: Page, res: []Deck)
+  - CreateDeck(req: CreateDeckRequest) => (res: Deck)
+  - UpdateDeck(req: UpdateDeckRequest) => (res: Deck)
+  - FavoriteDeck(uuid: string) => (ok: bool)
+  - UnfavoriteDeck(uuid: string) => (ok: bool)
+  - ToggleDeckFavorite(uuid: string) => (isFavorite: bool)
+  - GetDeck(req: DeckRequest) => (res: Deck)
+  - CheckDeck(req: CheckDeckRequest) => (res: CheckDeckResponse)
+  - DeleteDeck(req: DeckRequest) => (ok: bool)
+  - SearchDeckRanks(page?: Page, req: SearchDeckRanksRequest) => (page?: Page, res: []DeckRank)
+  - ListDeckRanks(page?: Page, req: ListDeckRanksRequest) => (page?: Page, res: []DeckRankAccount)
+  - MarkDeckNotNew(uuid: string) => (ok: bool)
+  - ListUnlockedDeckClasses() => (deckClass: []DeckClass)
+  - GMResetStarterDecks(address: string) => (ok: bool)
+  - InternalListUnlockedDeckStrings(req: InternalListUnlockedDeckStringsRequest) => (deckString: []string)
+
+  #
+  # Matches
+  #
+  - ListLeaderboard(page?: Page, req: ListLeaderboardRequest) => (page?: Page, res: []LeaderboardEntry)
+  - ListMatches(page?: Page, req: ListMatchesRequest) => (page?: Page, res: []Match)
+  - GetMatch(matchID: uint64) => (match: Match)
+  - GetCurrentSeason() => (res: uint16)
+  - GetNextRewardsTime() => (res: string)
+  - GetNextSeasonTime() => (res: string)
+  - GetCurrentSeasonStartTime() => (res: string)
+  - AccountLeaderboard(page?: Page, req: AccountLeaderboardRequest) => (page?: Page, res: []LeaderboardEntry)
+
+  - GetMatchArchiveRecordsURI(matchID: uint64, replayID: string) => (ok: bool, match?: Match, archiveIndexURI: string, recordURIs: []string)
+  - GetMatchLiveRecordsURI(matchID: uint64) => (ok: bool, match?: Match, liveIndexURI: string)
+
+  - BotMatchEnd(req: BotMatchEndRequest) => (rewards: []Reward)
+
+  # admin-only / service-only
+  - InternalMatchStart(req: MatchStartRequest) => (matchID: uint64, replayID: string)
+  - InternalMatchEnd(req: MatchEndRequest) => (rewards: []Reward)
+
+  - InternalAppendMatchArchiveRecords(matchID: uint64, index: int64, jsonStringData: string) => (status: bool, uri: string)
+  - InternalAppendMatchLiveRecords(matchID: uint64, index: int64, jsonStringData: string) => (status: bool, uri: string)
+  - InternalConquestStatus(address: string) => (conquest: Conquest)
+  - InternalGetAccount(address: string) => (account: Account)
+  - InternalGetBotAccounts(req: InternalGetBotAccountsRequest) => (accounts: []Account)
+  - InternalGetPrivateSpectateCode(address: string) => (code: string)
+
+
+  #
+  # Conquest
+  #
+  - EnterConquest(hero: Hero) => (status: bool)
+  - ConquestStatus() => (conquest: Conquest)
+  - ConquestStats() =>(stats: ConquestStats)
+  - ConquestRewards() => (weeklyGolds: []WeeklyGolds)
+  - ConquestPoints() => (points: uint64, nedeed: uint64)
+  - ConquestV2Pool() => (pool: ConquestV2Pool)
+  - ConquestV2Progress() => (progress: ConquestV2TreasureProgress)
+  - ConquestTreasuresInfo() => (treasures: map<uint16,ConquestTreasureInfo>)
+
+  #
+  # Skypass
+  #
+  - ListSkypassRewards(season?: uint16, accountAddress?: string) => (res: ListSkypassRewardsResponse)
+  - ClaimSkypassRewards(ids: []uint64, accountAddress?: string) => (rewards: []Reward)
+
+  - GMListSkypassRewards(season?: uint16) => (rewards: []SkypassReward)
+  - GMUpdateSkypassRewards(season: uint16, url: string) => (rewards: []SkypassReward)
+  - GMHasSkypassPremium(address: string) => (has: bool)
+  - GMToggleSkypassPremium(address: string) => (has: bool)
+
+  #
+  # IAPs
+  #
+  # To be deprecated, Old IAP APIs. Use VerifyGooglePlayPayment/VerifyAppleAppStorePayment instead.
+  - IAPVerifyGoogleProducts2(req: IAPPurchaseRequest) => (productPurchase: GoogleProductPurchase)
+  - IAPVerifyAppleProducts2(req: IAPPurchaseRequest) => (applePurchase: AppleIAPResponse)
+
+  #
+  # Payments
+  #
+  - ListPaymentProviderProducts(provider: PaymentProvider, itemType?: ItemType) => (products: []PaymentProviderProduct)
+  - VerifyGooglePlayPayment(providerResponse: GooglePlayPaymentResponse) => (status: bool)
+  - VerifyAppleAppStorePayment(providerResponse: AppleAppStorePaymentResponse) => (status: bool)
+  - VerifySamsungGalaxyStorePayment(providerResponse: SamsungGalaxyStorePaymentResponse) => (status: bool)
+  - CreateStripePaymentIntent(productID: string) => (checkout: StripeCheckout)
+  - StripeEventWebhook(id: string, object: string, data: StripeEventData) => ()
+  - PrepareOnChainTransaction(productID: string) => (transactions: []OnChainTransaction)
+  - PrepareOnChainInCurrencyTransaction(productID: string, quantity: uint64) => (transactions: []OnChainTransaction)
+  - PrepareOnChainInItemsTransaction(productID: string, quantity: uint64, tokenIDsToBurn: []uint64) => (transactions: []OnChainTransaction)
+
+  - GMListPayments(page?: Page, status?: PaymentStatus, provider?: PaymentProvider, address?: string) => (page?: Page, payments: []Payment)
+  - GMListPaymentLogs(paymentID: uint64) => (logs: []PaymentLog)
+
+  #
+  # Quests
+  #
+  - ListQuests(accountAddress?: string) => (quests: []Quest, rewards: []Reward)
+  - ClaimQuestRewards(ids: []uint64, accountAddress?: string) => (quest: Quest, rewards: []Reward)
+  - ReRollQuest(id: uint64) => (quest: Quest, rewards: []Reward)
+  - SetQuestsAsSeen(ids: []uint64) => (status: bool)
+  - GetQuestsAutoRerollTime() => (res: QuestsAutoRerollTimeResponse)
+  - GetEpicQuestChain(epicType: EpicType) => (quests: []Quest)
+  - GMCompleteQuest(accountAddress?: string, id: uint64) => (ok: bool)
+  - GMDeleteQuest(accountAddress?: string, id: uint64) => (ok: bool)
+  - GMResetQuestReRolls(accountAddress?: string, periodicity: QuestPeriodicity) => (ok: bool)
+
+  #
+  # Misc
+  #
+  - JoinEarlyAccessList(emailAddress: string) => (status: bool, serviceError: string)
+  - RecordGameClientFeedback(req: GameClientFeedback) => (status: bool)
+  - HeroUnlockLevels() => (res: map<string,uint16>)
+  - DeckClassUnlockLevels() => (res: map<string,uint16>)
+  - AvailableXPBonuses() => (res: int)
+  - ReportAccount(report: Report) => (ok: bool)
+
+
+  #
+  # Cookie policy
+  #
+  - SaveCookiePolicy(cookieOptions: map<string,bool>) => (status: bool)
+  - GetCookiePolicy() => (res: map<string,bool>)
+
+  #
+  # Social Info
+  #
+  - GetDiscordInfo() => (data: DiscordInfoResponse)
+  - GetTwitchInfo() => (data: TwitchInfoResponse)
+  - GetFeaturedStreamers() => (streamers: []TwitchFeaturedStreamer)
+  - GMAddFeaturedStreamer(streamer: TwitchFeaturedStreamer) => (status: bool)
+  - GMRemoveFeaturedStreamer(streamer: TwitchFeaturedStreamer) => (status: bool)
+
+  #
+  # Banners
+  #
+  - GetBanners() => (banners: []Banner)
+  - GMListBanners() => (banners: []Banner)
+  - GMAddBanner(bannersRequest: BannersRequest) => (status: bool)
+  - GMModifyBanner(banner: Banner) => (status: bool)
+  - GMRemoveBanner(id: int64) => (status: bool)
+
+  #
+  # Game modes
+  #
+  - GetGameModesStatus() => (status: GameModesStatus)
+
+  #
+  # GM / Admin tools
+  #
+  - AdminListAccounts(page?: Page) => (page?: Page, accounts: []Account)
+  - AdminSearchAccounts(page?: Page, filterName: string, filterAvatar: string) => (page?: Page, accounts: []Account)
+
+  - GMFindAccount(name?: string, accountAddress?:string) => (account: Account)
+  - GMRenameAccount(oldName?: string, accountAddress?:string, newName: string, lockedUntil?: timestamp) => (account: Account)
+  - GMUnlockAllBaseCards(accountAddress?:string) => (ok: bool)
+  - GMGiveLevels(accountAddress?:string, levels: uint16) => (ok: bool)
+  - GMSetRP(accountAddress?:string, mode: GameMode, rankPoints?: int32) => (ok: bool)
+  - GMSetWarmupGamesCompleted(accountAddress?:string, numGamesCompleted: uint8) => (ok: bool)
+
+  - GMListAccountActions(page?: Page) => (page?: Page, accountActions: []AccountAction)
+  - GMCreateAccountAction(action: AccountAction) => (action: AccountAction)
+  - GMIsAccountBanned(account: string) => (banned: bool, status?: AccountStatus, accountActions: []AccountAction)
+  - GMListAccountSignals(account?: string) => (signal: []AccountSignal)
+  - GMAccountSignalSummaries(page?: Page, accountStatus?: []AccountStatus, createdBefore?: timestamp, createdAfter?: timestamp, accountAddress?: string) => (page?: Page, signals: []AccountSignalSummary)
+  - GMListAccounts(page?: Page, accountStatus?: []AccountStatus, accountActions?: []AccountStatus, createdBefore?: timestamp, createdAfter?: timestamp, conquestsUnlocked?: bool) => (page?: Page, accounts: []GMAccount)
+
+  - GMListMatches(page?: Page, req: GMListMatchesRequest) => (page?: Page, res: []GMMatch)
+  - GMSetReviewed(matchId: uint64, reviewed: bool) => (ok: bool)
+  - GMListPendingCards(page?: Page) => (page?: Page, response: []GMPendingCardsReponse)
+
+  - GMStats() => (stats: GMStatsResponse)
+
+  - GMGameModeSet(gameMode: GameMode, enable: bool) => (ok: bool)
+  - GMGameModeStatusHistory(page?: Page, gameModes?: []GameMode) => (page?: Page, statusHistory: []GameModeStatusHistory)
+
+  - GMSetConquestV2PoolConfig(poolCeiling?: int32, poolFloor?: int32, topWeightUnitPrice?: float32, bottomWeightUnitPrice?: float32, weightPerSilverCard?: float32) => (ok: bool)
+  - GMGetConquestV2PoolConfig() => (config: ConquestV2PoolConfig)
+  - GMGetConquestV2Summary() => (summary: ConquestV2Summary)
+  - GMListConquestV2AccountTreasureProgress(page?: Page) => (page?: Page, data: []ConquestV2AccountTreasureProgress)
+
+  - GMCreateOneTimeNotification(notification: NotificationOneTime) => (res: NotificationOneTime)
+  - GMListOneTimeNotifications() => (res: []NotificationOneTime)
+  - GMUpdateOneTimeNotification(notification: NotificationOneTime) => (res: NotificationOneTime)
+  - GMDeleteOneTimeNotification(id: uint64) => (ok: bool)
+
+  - GMCreateAppDevKey(req: CreateAppDevKeyRequest) => (appDevKey: AppDevKey)
+  - GMListAppDevKeys(page?: Page) => (page?: Page, data: []AppDevKey)
+  - GMDisableAppDevKey(appDevKeyId: uint64) => (ok: bool)
+  - GMEnableAppDevKey(appDevKeyId: uint64) => (ok: bool)
+  - GMGetAppDevKeyToken(appDevKeyId: uint64) => (appDevKey: AppDevKey, token: string)
+
+  #
+  # System
+  #
+  - Ping() => (status: bool)
+  - Version() => (version: Version)
+  - Clock() => (serverTime: timestamp)

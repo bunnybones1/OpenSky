@@ -1,0 +1,1 @@
+"[REWORK]- High-Health Design 2c - 0/3 shroud. Does damage using its health, rather than its power.\r\n\r\n{trigger:Play:} {Dust} target hero's top dead card. This copies its element."

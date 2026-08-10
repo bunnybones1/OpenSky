@@ -1,0 +1,5 @@
+Bot Opponent Tool
+
+Usage:
+
+pnpm start --config botconfig.sample -e integration

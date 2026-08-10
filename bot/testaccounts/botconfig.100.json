@@ -1,0 +1,704 @@
+{
+  "bots": [
+    {
+      "name": "Volepond",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "tissue approve unveil van grief more absent round crouch better come kiss",
+      "subkeyMnemonic": "again question promote rabbit crisp bag aerobic man face crack paddle display"
+    },
+    {
+      "name": "Knaverain",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "north wealth elephant opera solid believe stomach filter above enhance rule toilet",
+      "subkeyMnemonic": "genius gasp orphan fantasy lawn word random stairs rose dawn brown found"
+    },
+    {
+      "name": "Raverstorm",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "can lake across offer brick carbon little shoot spider torch regular hello",
+      "subkeyMnemonic": "flash embrace speed next stadium favorite system supreme proud faint coral boss"
+    },
+    {
+      "name": "Chopperlizard",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "frost yard extra stamp rib limit fly embark citizen concert nature leader",
+      "subkeyMnemonic": "celery mask release fat peanut rack upper dice adapt gown connect truly"
+    },
+    {
+      "name": "Tongueriver",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "farm winter chair portion hire strategy copy cloud sphere swamp victory world",
+      "subkeyMnemonic": "case quality phone cruise deny steak club perfect empower volume lounge silly"
+    },
+    {
+      "name": "Flamelegend",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "dance badge camera describe flag material lumber useless cheap copper carpet track",
+      "subkeyMnemonic": "speed chef chronic script history phrase reduce script emotion hand drill obscure"
+    },
+    {
+      "name": "Lancernickel",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "rent inflict head engine urge other piece amused biology desk advance end",
+      "subkeyMnemonic": "ski photo marine decade smile favorite lawn hero brick jelly wine venue"
+    },
+    {
+      "name": "Wingfork",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "special mail fold gauge icon muscle rebel dragon accident glimpse furnace ginger",
+      "subkeyMnemonic": "riot escape turtle spike whale lady resource solid onion rate group captain"
+    },
+    {
+      "name": "Cockatoosavage",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "wire vacant april embark immense miss sample entry main same motion fiscal",
+      "subkeyMnemonic": "mosquito delay vast story stomach peasant waste mad slab slam pepper assist"
+    },
+    {
+      "name": "Samuraisleet",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "trash assume fashion shy lonely puzzle method multiply onion wrong flush whip",
+      "subkeyMnemonic": "equal feed captain earn when fence auction erosion tiny yard try desert"
+    },
+    {
+      "name": "Songplump",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "resemble spend kid call paddle bread easily broken fall shine gravity crash",
+      "subkeyMnemonic": "excuse private truck squirrel album concert vacant edit expand weekend valid crime"
+    },
+    {
+      "name": "Hawkcopper",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "confirm shrimp ritual seed tuna boss abandon target protect pistol pumpkin maximum",
+      "subkeyMnemonic": "usual news length large evidence pizza budget account pulse scale volcano taste"
+    },
+    {
+      "name": "Dutchessroot",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "chunk beef rigid sand slot accident soul creek glad harvest budget merge",
+      "subkeyMnemonic": "modify budget confirm left scare glad assume elbow mouse ridge act ball"
+    },
+    {
+      "name": "Princehorn",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "hard say wife jar essay busy degree penalty bread odor regret clutch",
+      "subkeyMnemonic": "one engine edit stick imitate law device question grunt frog manual patrol"
+    },
+    {
+      "name": "Koalahate",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "shrimp peace sign fame harbor whisper jump spray oval garden horror relief",
+      "subkeyMnemonic": "glue such squirrel deliver approve moon wall acid bus grief giraffe flight"
+    },
+    {
+      "name": "Stormstar",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "salute trash unable inch gather crack prosper student fuel duty economy clever",
+      "subkeyMnemonic": "snow buddy hybrid goat vault wave worry fragile easy thrive hybrid cross"
+    },
+    {
+      "name": "Serpentdesert",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "delay debris whip ride flee mule agent birth prevent scatter wink side",
+      "subkeyMnemonic": "guilt large giggle code boy water home rough diary voyage screen romance"
+    },
+    {
+      "name": "Questerjade",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "leopard rent together hour novel pass glue right spice topic civil reform",
+      "subkeyMnemonic": "spoil census banana hurt control wish imitate wage one harvest love absurd"
+    },
+    {
+      "name": "Masterequinox",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "table list inhale weapon spy wrap draw can cannon oppose orbit radio",
+      "subkeyMnemonic": "warfare either scheme thank cart cereal effort cover actual rebuild hybrid confirm"
+    },
+    {
+      "name": "Maskcat",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "banner sweet current tobacco salute library energy stuff siege tail ketchup donkey",
+      "subkeyMnemonic": "favorite apology fly follow melody income letter various scale palace fat practice"
+    },
+    {
+      "name": "Warlocksunrise",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "process invest dash reward web write service crisp access village body aerobic",
+      "subkeyMnemonic": "wild affair climb tuna artwork twice coach atom water chalk dilemma left"
+    },
+    {
+      "name": "Zebrapinto",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "dream gun verb oblige enter pair silver tunnel pepper right casual fold",
+      "subkeyMnemonic": "pitch best omit moment over expire elevator seminar feed cash pole romance"
+    },
+    {
+      "name": "Talonfire",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "march secret body spray bargain strong satoshi before ready elbow ceiling wage",
+      "subkeyMnemonic": "sound reunion dove drill distance nice unaware hybrid broken range unveil sad"
+    },
+    {
+      "name": "Bellyspring",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "link pill pact panic cross palace heavy glow slim daughter hybrid mother",
+      "subkeyMnemonic": "flavor february rigid potato buffalo calm end ceiling urban empty song pulp"
+    },
+    {
+      "name": "Takerhill",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "morning dose summer amateur gossip tape depth cheese music such case physical",
+      "subkeyMnemonic": "waste talk dress swallow since culture smoke meadow album wisdom chronic kangaroo"
+    },
+    {
+      "name": "Mooseagate",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "leg rapid door swing render amazing eternal yellow normal carry clever pluck",
+      "subkeyMnemonic": "honey gas east tooth peace eager ready human angry scorpion system cloth"
+    },
+    {
+      "name": "Wingstripe",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "blame engage metal soup seek orphan equip stand genuine volcano box blouse",
+      "subkeyMnemonic": "trouble identify puppy supply fury crawl erupt web flash despair company key"
+    },
+    {
+      "name": "Forgersmall",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "spare flame resemble alarm audit drip next oven margin ordinary bicycle lounge",
+      "subkeyMnemonic": "mercy fish client chief nose media occur minor nice impose sorry close"
+    },
+    {
+      "name": "Collarphase",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "paper total remain sister damp interest quote torch that benefit toy salute",
+      "subkeyMnemonic": "early transfer short layer scheme theme frequent upon thrive table scare expire"
+    },
+    {
+      "name": "Toucanbevel",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "speed grab goddess juice find spawn nut guilt car tape exhibit walk",
+      "subkeyMnemonic": "awful mimic trim cry service ancient mix enhance nephew income man luggage"
+    },
+    {
+      "name": "Rideratom",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "moment pull lumber already custom bread cinnamon august must pigeon result food",
+      "subkeyMnemonic": "castle salute sail federal dry lend wear stone puzzle attend peanut apology"
+    },
+    {
+      "name": "Falconrag",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "sentence hamster distance venture dinosaur detail cloth physical clarify tired grid witness",
+      "subkeyMnemonic": "similar true movie review sound merge twice cricket sweet noble avoid quality"
+    },
+    {
+      "name": "Seerzircon",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "judge flee pulp because cheap grow industry margin prefer glad talk boil",
+      "subkeyMnemonic": "hello run power solid enable hire concert level promote picture lucky raccoon"
+    },
+    {
+      "name": "Coyoteequinox",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "poverty obey tooth angle method rookie crane thrive move person normal address",
+      "subkeyMnemonic": "wasp blast summer pig news slogan slab razor emerge forum october holiday"
+    },
+    {
+      "name": "Divewalnut",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "unable exercise drama trumpet then marriage industry hammer rather immune purity easy",
+      "subkeyMnemonic": "motor wealth large edge main erode tragic ugly kitchen dentist craft giggle"
+    },
+    {
+      "name": "Wolfagate",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "ancient can surprise expand song setup estate monkey embark shrug empower nest",
+      "subkeyMnemonic": "nothing victory rack tone narrow script damage jump spy loan shallow destroy"
+    },
+    {
+      "name": "Stormjasper",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "silly couple invite write room final brother ship tonight ostrich thumb usual",
+      "subkeyMnemonic": "give search flash armed gaze unfold cheap benefit chief happy disease weird"
+    },
+    {
+      "name": "Yakwax",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "ostrich payment hunt riot extra shell habit increase income you live pepper",
+      "subkeyMnemonic": "board culture dirt leisure session battle hurdle museum measure blossom label tip"
+    },
+    {
+      "name": "Touchdestiny",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "tennis alter hood penalty certain range south kidney receive priority diary soldier",
+      "subkeyMnemonic": "error tag beyond ill document tenant lecture glory boat horse poem ice"
+    },
+    {
+      "name": "Bootdune",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "seven battle brief market tape region sure cattle stock dash buffalo noble",
+      "subkeyMnemonic": "tourist firm very select destroy close medal admit spring wage pretty fever"
+    },
+    {
+      "name": "Thorncoal",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "direct address mystery train isolate ignore edge tool battle shield hybrid glad",
+      "subkeyMnemonic": "elder cigar market cliff snack turtle quantum echo melt now august gauge"
+    },
+    {
+      "name": "Crowpsychadelic",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "punch hood depart innocent bulk breeze fitness also team recall tourist evil",
+      "subkeyMnemonic": "raise best draft topple renew sweet vessel return unaware rice attitude globe"
+    },
+    {
+      "name": "Ripperrelic",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "cushion invest danger catch hover almost axis wasp three chief plastic target",
+      "subkeyMnemonic": "jaguar better task oyster morning misery opinion chase topic grow bachelor leaf"
+    },
+    {
+      "name": "Thunderglass",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "twist prize column vague daring improve symptom home census grunt aisle ignore",
+      "subkeyMnemonic": "merge three now swing orbit oppose base wrap inch salon powder early"
+    },
+    {
+      "name": "Handfire",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "brave arrive staff print twin marine heavy hand put exchange core help",
+      "subkeyMnemonic": "goose hollow poverty twist level rival have stand group real nephew source"
+    },
+    {
+      "name": "Shriekercyber",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "speed topic gate poverty cycle usual twelve wasp forward spend file never",
+      "subkeyMnemonic": "suit excite power purity inject cram develop pull endorse faculty walnut number"
+    },
+    {
+      "name": "Ottercrystal",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "term monitor nasty rule shoe stable dutch shrimp tooth escape amount expose",
+      "subkeyMnemonic": "vague air student domain town tail cluster quality need alert clap dune"
+    },
+    {
+      "name": "Snarlgrove",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "attract dad piece core salad episode special hamster ensure hand decrease sunset",
+      "subkeyMnemonic": "hunt strategy coral floor dog diesel slender number oppose grow mansion method"
+    },
+    {
+      "name": "Skullwhite",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "when oblige like inner develop intact century punch own fatigue noise crush",
+      "subkeyMnemonic": "fitness exile cushion cave frost carry raise enough guide trust drum void"
+    },
+    {
+      "name": "Biteshag",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "thing wheel erase crew floor reward rally sustain color mutual wood vault",
+      "subkeyMnemonic": "fiction farm edge okay enroll divert copy dolphin mass one banana latin"
+    },
+    {
+      "name": "Bitebird",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "lend multiply unfair slow gesture start divide wrestle exist boil spatial change",
+      "subkeyMnemonic": "raw congress burden plug addict capable plug over security afraid team average"
+    },
+    {
+      "name": "Walkermad",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "metal design toss wave wine duty clay cover employ trick pipe evil",
+      "subkeyMnemonic": "refuse lens midnight load weasel pizza trap problem need chase square effort"
+    },
+    {
+      "name": "Chanterlapis",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "analyst more surge dust race boring fury state obvious boost caught salute",
+      "subkeyMnemonic": "pig wash index laptop purchase degree pledge wreck fringe thumb poet market"
+    },
+    {
+      "name": "Palmclever",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "citizen episode wonder throw physical rely expand sausage rule faint ball current",
+      "subkeyMnemonic": "pill hockey detail bring detect sad evolve rail gloom garment nerve transfer"
+    },
+    {
+      "name": "Crystalpie",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "gas quote noble tape stay pipe off giant subway loan extra prevent",
+      "subkeyMnemonic": "penalty damage reject picture love stool route involve excess section radar short"
+    },
+    {
+      "name": "Servantpickle",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "unfair gallery urge tone note luggage tired seat lawn material found where",
+      "subkeyMnemonic": "waste liquid math horn image until outer artist hockey correct roof able"
+    },
+    {
+      "name": "Fisherzest",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "fire wasp core future blouse glass direct abstract mix screen zone mention",
+      "subkeyMnemonic": "fish work bundle near setup benefit reform cross already better penalty crunch"
+    },
+    {
+      "name": "Apeslow",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "awful boost brick suffer caution tip amused kind better host educate culture",
+      "subkeyMnemonic": "arch spread husband more become jazz usual scan eye tribe stumble region"
+    },
+    {
+      "name": "Trackcandy",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "urge claim this receive advance all inflict report actor toe three conduct",
+      "subkeyMnemonic": "melody coconut actress mail spawn elephant slam label cigar forget budget embark"
+    },
+    {
+      "name": "Paladiniris",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "duck cabin verb message length judge execute sustain gossip certain lecture retreat",
+      "subkeyMnemonic": "owner rigid left talent divorce add ramp safe panel like matrix garage"
+    },
+    {
+      "name": "Voicepurple",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "exhaust always bomb add odor breeze milk safe summer acoustic father intact",
+      "subkeyMnemonic": "north people elite rapid answer absent wise recipe social mixture slim seat"
+    },
+    {
+      "name": "Horncurly",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "wet vacuum cause cherry combine expand say kite cake memory trap reflect",
+      "subkeyMnemonic": "member rule mean saddle ankle belt output taxi offer hope dilemma execute"
+    },
+    {
+      "name": "Knighthurricane",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "twenty visit someone elephant garbage sense airport decade trick cactus wasp among",
+      "subkeyMnemonic": "rival wonder mushroom mirror claw almost course february unit wave brain trust"
+    },
+    {
+      "name": "Moosespice",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "dinosaur gap draft gallery saddle can movie gather album firm whip search",
+      "subkeyMnemonic": "miracle coast slot say dumb into canyon develop oppose prosper sound tank"
+    },
+    {
+      "name": "Touchrainbow",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "current entire junk october poverty toe artefact aerobic flag dinner strong vocal",
+      "subkeyMnemonic": "detail add click floor matrix tag industry addict pitch parrot smile code"
+    },
+    {
+      "name": "Vipercoral",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "raise guide tuition purpose forget boss inject crop credit replace level share",
+      "subkeyMnemonic": "oven invite message guide term shrimp shift black ring egg bacon popular"
+    },
+    {
+      "name": "Wyrmdawn",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "abstract flag coach range measure endless tower second try cloth dutch diagram",
+      "subkeyMnemonic": "aspect exact pig grab debris weapon come hen system detect also inmate"
+    },
+    {
+      "name": "Legenddot",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "kingdom jacket expand mean client cost west work now alarm grit exhibit",
+      "subkeyMnemonic": "essence poet salon whip dinner outdoor rare phrase oil any later region"
+    },
+    {
+      "name": "Flameglory",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "pioneer cabbage frame damp document vital expect until connect student warfare goddess",
+      "subkeyMnemonic": "lens mimic blanket unlock verb feed dress play enable motor wet balance"
+    },
+    {
+      "name": "Dolphincurly",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "vote belt material purchase swing employ visit rain name average night world",
+      "subkeyMnemonic": "oak guess crash cheese lift inquiry east butter wolf chase glow garbage"
+    },
+    {
+      "name": "Dragonmire",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "practice swallow craft capable envelope urge palm ignore organ sight tomato coral",
+      "subkeyMnemonic": "artwork carbon bunker napkin horn north cram fiction brave cook police gym"
+    },
+    {
+      "name": "Spearpollen",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "few patrol cup guide struggle charge rack half grace lawsuit success plate",
+      "subkeyMnemonic": "monster owner icon keen misery ignore banana pulp produce approve auction bulk"
+    },
+    {
+      "name": "Daggerstorm",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "silly travel wisdom private trouble thing dog kitchen reward owner summer law",
+      "subkeyMnemonic": "hood act file pottery beyond unit couple hazard hundred blind oval science"
+    },
+    {
+      "name": "Scalegarnet",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "cloth actor require area pyramid sibling width journey much electric party chief",
+      "subkeyMnemonic": "trash mask patrol scale industry fabric pull mobile round small winner globe"
+    },
+    {
+      "name": "Slicerflax",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "endorse heavy arrest during clinic boil frog torch warm season culture aunt",
+      "subkeyMnemonic": "decide tape opera interest dash logic fix fish carry soccer tape dilemma"
+    },
+    {
+      "name": "Gazelleroot",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "addict theme clown that engine health icon visit alarm olympic raven toddler",
+      "subkeyMnemonic": "prefer also author short cram rigid turtle thrive increase balance lawsuit truth"
+    },
+    {
+      "name": "Foepewter",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "congress essence agent book code burst plastic quantum nose music inspire aisle",
+      "subkeyMnemonic": "area destroy occur soup acoustic dry any vast vacuum glad version blur"
+    },
+    {
+      "name": "Guardianhorse",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "tree dawn gym transfer fashion tell pool join absurd use sail interest",
+      "subkeyMnemonic": "insane idea submit combine camera robot outer domain measure select know index"
+    },
+    {
+      "name": "Hornmagenta",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "survey cable one witness inflict bonus evolve torch input cousin fever later",
+      "subkeyMnemonic": "leopard vacant monkey collect wedding tuition arrange syrup rocket zero finish fantasy"
+    },
+    {
+      "name": "Cranestream",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "then youth injury area deposit dose about wrap mind test garden isolate",
+      "subkeyMnemonic": "penalty siege oblige tape wing state hill device canyon adapt fiber catch"
+    },
+    {
+      "name": "Twisterevening",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "almost foil awkward spy forest party chunk symptom alien cancel supreme profit",
+      "subkeyMnemonic": "soldier head rice holiday move punch submit twelve knee fat stone giant"
+    },
+    {
+      "name": "Bisonheavy",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "rookie general pause torch carpet fun bulb amateur risk inmate exhibit danger",
+      "subkeyMnemonic": "bargain motion belt forest deer fox swim plate claw curve coast regular"
+    },
+    {
+      "name": "Sharkscarlet",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "spy copper attitude glory help olive unable flat fluid aspect base apology",
+      "subkeyMnemonic": "audit trust jacket hybrid worth cruel blur inmate prepare hidden team echo"
+    },
+    {
+      "name": "Sightcerulean",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "sudden era derive easy brave project soldier connect fault toy flat fatal",
+      "subkeyMnemonic": "food retreat tide toss either uniform fat left nose again permit vibrant"
+    },
+    {
+      "name": "Mistresscaramel",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "oven sudden cram mention wealth catalog bring addict surround rookie search scare",
+      "subkeyMnemonic": "bird mixture ignore entire neutral detail maple goose deposit economy endless artwork"
+    },
+    {
+      "name": "Hoofplanet",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "soul warfare drink decide science boss dynamic horn census margin organ tragic",
+      "subkeyMnemonic": "better sorry inflict strike eye service urge improve present reject also model"
+    },
+    {
+      "name": "Robingray",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "address that dwarf current wish flat portion garage hammer usual pill hazard",
+      "subkeyMnemonic": "trust similar issue make pledge nature taste journey beach kitten zoo cute"
+    },
+    {
+      "name": "Catchersour",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "chapter party possible brother win stadium perfect hundred autumn vacuum finish coach",
+      "subkeyMnemonic": "silver sphere fame silk silver bird economy patient expire vendor vague stock"
+    },
+    {
+      "name": "Raptorjungle",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "grab merit anger impose cradle doctor list oyster super void trigger dwarf",
+      "subkeyMnemonic": "oyster reunion pelican theme vicious melt ocean plug walk valid manage race"
+    },
+    {
+      "name": "Monkeytiny",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "curtain little insane suit work gap general special burger leave next scale",
+      "subkeyMnemonic": "result era bright theme provide logic hope autumn rally cheap cannon laugh"
+    },
+    {
+      "name": "Salmontwisty",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "breeze guide universe multiply country person chronic topic snake learn blanket proof",
+      "subkeyMnemonic": "audit remind unhappy fork disorder ship area rural unfold assist gift misery"
+    },
+    {
+      "name": "Pythonhurricane",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "shield teach equip find unusual tuna ahead clock praise twist seminar apple",
+      "subkeyMnemonic": "oval dad cheap valid pool aisle truck echo shoe unable client essay"
+    },
+    {
+      "name": "Antlerruby",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "monster inject scissors quantum gather stay mule movie december sheriff museum march",
+      "subkeyMnemonic": "neither install roof motion garlic endless master betray farm pudding shy quote"
+    },
+    {
+      "name": "Lanternshadow",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "insect matrix local resource fiscal spice riot salmon inside theory shuffle ecology",
+      "subkeyMnemonic": "equip tell vanish coyote grit magnet pet federal faint impact spring alter"
+    },
+    {
+      "name": "Otterarrow",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "lens opinion thank butter veteran business shop short goddess science shell guide",
+      "subkeyMnemonic": "blast level census upgrade subway fox coral rug electric special pink typical"
+    },
+    {
+      "name": "Ribcopper",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "awesome cannon wrestle ugly announce list allow stem similar twice lunar crucial",
+      "subkeyMnemonic": "agent tonight congress genuine market bubble screen leisure loop ketchup render defense"
+    },
+    {
+      "name": "Friendsteel",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "quantum success tenant embrace screen worth stone runway patch announce seek road",
+      "subkeyMnemonic": "cheese youth frequent lazy soft fold usual estate bright hint camera primary"
+    },
+    {
+      "name": "Razorrelic",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "lock retire wear decorate rice harsh canoe airport medal dutch abuse liberty",
+      "subkeyMnemonic": "attend arm fog later install sugar purse myself cement empower alarm verify"
+    },
+    {
+      "name": "Spikeblossom",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "custom monkey laptop work industry company hockey place click village fruit fall",
+      "subkeyMnemonic": "multiply index stock divorce surge regular major wrestle diamond taxi until sand"
+    },
+    {
+      "name": "Raccooncord",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "grass clog night syrup salute juice outside before hint tip merge gather",
+      "subkeyMnemonic": "service neither hollow rifle salute poem affair coast figure quit right flame"
+    }
+  ]
+}

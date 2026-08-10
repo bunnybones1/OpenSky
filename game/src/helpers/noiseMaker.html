@@ -1,0 +1,33 @@
+<html>
+  <header>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      function onLoad() {
+        const $ = document.querySelector.bind(document)
+        var canvas = document.querySelector('#canvas1')
+        var context = canvas.getContext('2d')
+
+        const v = new THREE.Vector3()
+
+        var myImageData = context.createImageData(canvas.width, canvas.height)
+        const dataArr = myImageData.data
+        let index = 0
+        for (let iy = 0; iy < canvas.height; iy++) {
+          for (let ix = 0; ix < canvas.width; ix++) {
+            index += 4
+            v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
+            v.normalize()
+            dataArr[index] = v.x * 128 + 128
+            dataArr[index + 1] = v.y * 128 + 128
+            dataArr[index + 2] = v.z * 128 + 128
+            dataArr[index + 3] = 255
+          }
+        }
+        context.putImageData(myImageData, 0, 0)
+      }
+    </script>
+  </header>
+  <body onload="onLoad()">
+    <canvas id="canvas1" width="512" height="512"> </canvas>
+  </body>
+</html>

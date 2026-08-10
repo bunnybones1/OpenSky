@@ -1,0 +1,16 @@
+{
+  "name": "@opensky/parse-card-description",
+  "version": "1.0.0",
+  "description": "utilities for parsing opensky card text",
+  "private": true,
+  "scripts": {},
+  "dependencies": {
+    "@opensky/language-manager": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts"
+}

@@ -1,0 +1,12 @@
+diff --git a/index.js b/index.js
+index 3fff63152e1903b69458ab3ecdef761f27cd452a..d0952725173e9ef83bcc68ea9a5ef210913f155f 100644
+--- a/index.js
++++ b/index.js
+@@ -1,6 +1,6 @@
+ var newline = /\n/
+ var newlineChar = '\n'
+-var whitespace = /\s/
++var whitespace = /(?!\u00A0)\s/
+ 
+ module.exports = function(text, opt) {
+     var lines = module.exports.lines(text, opt)

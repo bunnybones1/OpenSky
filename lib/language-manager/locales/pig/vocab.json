@@ -1,0 +1,182 @@
+{
+  "armor": {
+    "text": "Akestay 1 amageday esslay omfray everythingay.",
+    "title": "Armoray"
+  },
+  "banner-spell": {
+    "text": "Ouryay erohay ainsgay +1 owerpay isthay urntay.",
+    "title": "Annerbay"
+  },
+  "banner-unit": {
+    "text": "Ouryay erohay ainsgay +1 owerpay ilewhay isthay unitay isay inay ayplay.",
+    "title": "Annerbay"
+  },
+  "conjure": {
+    "text": "Awdray ayay ardcay atthay isay inay ouryay Ismpray(say), omfray outsideyay ofay ouryay eckday.",
+    "title": "Onjurecay"
+  },
+  "dash": {
+    "text": "Isthay unitay ancay attackay enemyay unitsay ethay urntay itay isay ummonedsay, oray ifay itay asway eepingslay anday ainedgay ashday.",
+    "title": "Ashday"
+  },
+  "draw": {
+    "text": "Awdray ayay ardcay omfray ouryay eckday, ifay ossiblepay. Ifay otnay, oselay 1 ealthhay anday Onjurecay oneyay insteaday.",
+    "title": "Awdray"
+  },
+  "dust": {
+    "text": "Emoveray omfray ethay amegay.",
+    "title": "Ustday"
+  },
+  "enchanted": {
+    "text": "Ethay aracterchay isthay enchantay isay attacheday otay. ",
+    "title": "Enchanteday"
+  },
+  "enemyconjure": {
+    "text": "Awdray ayay ardcay atthay isay inay ethay enemyay Ismpray(say), omfray outsideyay ofay eirthay eckday.",
+    "title": "Onjurecay Enemyay Ardcay"
+  },
+  "enemydraw": {
+    "text": "Awdray ayay ardcay omfray ethay enemyay eckday, ifay ossiblepay. Ifay otnay, oselay 1 ealthhay anday Onjurecay oneyay omfray eirthay Ismpray(say) insteaday.",
+    "title": "Enemyay Awdray"
+  },
+  "guard": {
+    "text": "Isthay unitay'say erohay ancay'tay ebay attackeday.",
+    "title": "Uardgay"
+  },
+  "inspire": {
+    "text": "Anay effectay atthay illway iggertray afteray ouyay ayplay ayay ertaincay ardcay.",
+    "title": "Inspireyay"
+  },
+  "lifesteal": {
+    "text": "Enwhay isthay amagesday ethay enemyay erohay, ivegay ouryay erohay atthay uchmay ealthhay.",
+    "title": "Ifesteallay"
+  },
+  "lowesthealth": {
+    "text": "Osenchay andomlyray omfray ethay owestlay ealthhay argetstay inay ethay asecay ofay ayay ietay.",
+    "title": "Owestlay Ealthhay"
+  },
+  "mulligan": {
+    "text": "Eturnray ardcay(say) omfray andhay otay eckday, enthay awdray ethay amesay umbernay ofay ardscay.",
+    "title": "Ulliganmay"
+  },
+  "play": {
+    "text": "Effectsay atthay iggertray enwhay ayay unitay isay ayedplay omfray andhay.",
+    "title": "Ayplay Effectsay"
+  },
+  "ready": {
+    "text": "Ifay isthay aracterchay isay eepingslay, oray ashay alreadyay attackeday isthay urntay, itay ancay attackay againay.",
+    "title": "Eadyray"
+  },
+  "rune": {
+    "text": "Ayay 1 ostcay ellspay ithway annerbay atthay attachesay anay enchantay otay ayay unitay. Erethay isay oneyay orfay eachay elementay.",
+    "title": "Uneray"
+  },
+  "scion": {
+    "text": "Anyay Unitay ithway Ionscay inay itsay amenay.",
+    "title": "Ionscay"
+  },
+  "shroom": {
+    "text": "'Unfay Uygay' anday allay Unitsay ithway 'Roomshay' inay eirthay amenay.",
+    "title": "Roomshay"
+  },
+  "sleep": {
+    "text": "Ayay eepingslay aracterchay annotcay attackay. Unitsay areyay asleepay enwhay irstfay ummonedsay.",
+    "title": "Eepslay"
+  },
+  "stealth": {
+    "text": "Isthay unitay ancay'tay ebay attackeday unlessay itsay erohay ashay eenbay amagedday isthay urntay.",
+    "title": "Ealthstay"
+  },
+  "trait": {
+    "text": "Uardgay, ealthstay, armoray, annerbay, ifesteallay, itherway, anday ashday.",
+    "title": "Aitstray"
+  },
+  "trigger-death": {
+    "text": "Enwhay isthay isay utpay intoyay ayay aveyardgray omfray ethay attlefieldbay.",
+    "title": "Eathday"
+  },
+  "trigger-glory": {
+    "text": "Enwhay isthay aracterchay attacksay ayay erohay anday amagesday emthay.",
+    "title": "Oryglay"
+  },
+  "trigger-inspire-1c": {
+    "text": "Afteray ouyay ayplay ayay {1c} ardcay.",
+    "title": "Inspireyay 1 Ostcay"
+  },
+  "trigger-inspire-air": {
+    "text": "Afteray ouyay ayplay anay {Air} ardcay.",
+    "title": "Inspireyay {Air}"
+  },
+  "trigger-inspire-any": {
+    "text": "Afteray ouyay ayplay anyay ardcay.",
+    "title": "Inspireyay Anyay"
+  },
+  "trigger-inspire-banner": {
+    "text": "Afteray ouyay ayplay ayay ardcay ithway {Banner}.",
+    "title": "Inspireyay {Banner}"
+  },
+  "trigger-inspire-dark": {
+    "text": "Afteray ouyay ayplay ayay {Dark} ardcay.",
+    "title": "Inspireyay {Dark}"
+  },
+  "trigger-inspire-earth": {
+    "text": "Afteray ouyay ayplay anay {Earth} ardcay.",
+    "title": "Inspireyay {Earth}"
+  },
+  "trigger-inspire-guard": {
+    "text": "Afteray ouyay ayplay ayay ardcay ithway {Guard}.",
+    "title": "Inspireyay {Guard}"
+  },
+  "trigger-inspire-light": {
+    "text": "Afteray ouyay ayplay ayay {Light} ardcay.",
+    "title": "Inspireyay {Light}"
+  },
+  "trigger-inspire-metal": {
+    "text": "Afteray ouyay ayplay ayay {Metal} ardcay.",
+    "title": "Inspireyay {Metal}"
+  },
+  "trigger-inspire-mind": {
+    "text": "Afteray ouyay ayplay ayay {Mind} ardcay.",
+    "title": "Inspireyay {Mind}"
+  },
+  "trigger-inspire-spell": {
+    "text": "Afteray ouyay ayplay ayay Ellspay ardcay.",
+    "title": "Inspireyay Ellspay"
+  },
+  "trigger-inspire-water": {
+    "text": "Afteray ouyay ayplay ayay {Water} ardcay.",
+    "title": "Inspireyay {Water}"
+  },
+  "trigger-play": {
+    "text": "Enwhay isthay unitay isay ayedplay omfray andhay.",
+    "title": "Ayplay"
+  },
+  "trigger-slay-spell": {
+    "text": "Enwhay isthay Ellspay amagesday anday estroysday ayay unitay uringday ouryay urntay.",
+    "title": "Ayslay"
+  },
+  "trigger-slay-unit": {
+    "text": "Enwhay isthay Unitay amagesday anday estroysday ayay unitay uringday ouryay urntay.",
+    "title": "Ayslay"
+  },
+  "trigger-summon": {
+    "text": "Enwhay isthay unitay omescay intoyay ayplay.",
+    "title": "Ummonsay"
+  },
+  "trigger-sunrise": {
+    "text": "Enwhay isthay unitay oray enchantay'say ayerplay'say urntay artsstay.",
+    "title": "Unrisesay"
+  },
+  "trigger-sunset": {
+    "text": "Enwhay isthay unitay oray enchantay'say ayerplay'say urntay endsay.",
+    "title": "Unsetsay"
+  },
+  "wisp": {
+    "text": "Anyay Unitay ithway Ispway inay itsay amenay.",
+    "title": "Ispway"
+  },
+  "wither": {
+    "text": "Enwhay isthay amagesday ayay unitay, atthay unitay oseslay atthay uchmay owerpay.",
+    "title": "Itherway"
+  }
+}

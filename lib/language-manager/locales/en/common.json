@@ -1,0 +1,79 @@
+{
+  "options": {
+    "back": "BACK",
+    "cancel": "CANCEL",
+    "concede": "CONCEDE",
+    "confirm": "CONFIRM",
+    "continue": "CONTINUE",
+    "disabled": "Disabled",
+    "done": "DONE",
+    "enabled": "Enabled",
+    "exitReplay": "EXIT REPLAY",
+    "exitTutorial": "EXIT TUTORIAL",
+    "game": "GAME OPTIONS",
+    "gameOptions": {
+      "showCauseAndEffectLines": "Show Cause And Effect Lines",
+      "catchUpSpeed": "Catch-up Speed",
+      "heroEmotes": "Hero Emotes",
+      "showPing": "Show Ping",
+      "showSpectatorCount": "Show Spectator Count",
+      "spacebarEndsTurn": "Spacebar Ends Turn",
+      "twitchIntegration": "Twitch Integration"
+    },
+    "graphics": "GRAPHICS OPTIONS",
+    "graphicsOptions": {
+      "antialiasing": "Antialiasing",
+      "batterySaver": "Battery Saver",
+      "forceWebGL1": "Force WebGL 1",
+      "particleEffects": "Particle Effects",
+      "reduceMotion": "Reduce Motion",
+      "renderResolution": "Render Resolution",
+      "showFoilEffects": "Show Foil Effects",
+      "targetFPS": "Target FPS",
+      "vSync": "VSync"
+    },
+    "ok": "OK",
+    "options": "OPTIONS",
+    "prompt": {
+      "codeReset": "Code reset.",
+      "concede": "Are you sure you want to concede?",
+      "exitReplay": "Are you sure you want to exit this replay?",
+      "exitTutorial": "Are you sure you want to exit the tutorial?",
+      "failedReset": "Failed to reset code.",
+      "resetSpectate": "Reset your spectate code?",
+      "restart": "Restart this game?",
+      "spectateCodeInvalidateWarning": "This will invalidate your old code.",
+      "stopSpectating": "Are you sure you want to stop spectating?",
+      "watchReplay": "Watch replay?"
+    },
+    "report": "REPORT",
+    "reported": "REPORTED",
+    "settings": "SETTINGS",
+    "sound": "SOUND OPTIONS",
+    "soundOptions": {
+      "musicVolume": "Music Volume",
+      "muteAllSounds": "Mute All Sounds",
+      "sfxVolume": "SFX Volume"
+    },
+    "spectate": {
+      "copyPrivateLink": "Copy Private Link",
+      "copyPublicLink": "Copy Public Link",
+      "resetSpectateLink": "Reset Spectate Link",
+      "spectateLink": "SPECTATE LINK"
+    },
+    "stopSpectating": "STOP SPECTATING",
+    "suffix": {
+      "willApplyNextGame": " (will apply next game)",
+      "willRefresh": " (will refresh)"
+    },
+    "ui": "UI OPTIONS",
+    "uiOptions": {
+      "showRelatedCardsOnHover": "Show Related Cards On Hover",
+      "showTooltipsOnHover": "Show Tooltips On Hover",
+      "uiScale": "UI Scale",
+      "useScrollingCardSelection": "Use Scrolling Card Selection",
+      "useCombinedDeckAndGraveSidebars": "Use Combined Deck & Grave Sidebars"
+    },
+    "watchReplay": "WATCH REPLAY"
+  }
+}

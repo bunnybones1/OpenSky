@@ -1,0 +1,11 @@
+{
+  "name": "@skyweaver/state-node-sys",
+  "collaborators": [
+    "William Hua <william@attente.ca>",
+    "Ari Lotter <me@arilotter.com>"
+  ],
+  "version": "0.1.0",
+  "main": "bindings.js",
+  "types": "bindings.d.ts",
+  "module": "bindings.js"
+}

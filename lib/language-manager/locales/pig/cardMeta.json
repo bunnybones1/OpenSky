@@ -1,0 +1,187 @@
+{
+  "buff": {
+    "dmg": "{{amount}} amageday",
+    "hp": "{{amount}} ealthhay",
+    "pow": "{{amount}} owerpay"
+  },
+  "effect": "EFFECTAY",
+  "effectTypes": {
+    "Continuous": "Ontinuouscay Effectay",
+    "Death": "Eathday",
+    "Generic": "Uniqueyay Effectay",
+    "Glory": "Oryglay",
+    "Inspire": "Inspireyay",
+    "Play": "Ayplay Effectay",
+    "Slay": "Ayslay",
+    "Summon": "Ummonsay",
+    "Sunrise": "Unrisesay",
+    "Sunset": "Unsetsay"
+  },
+  "elements": {
+    "titleCase": {
+      "air": "Airay",
+      "dark": "Arkday",
+      "earth": "Earthay",
+      "fire": "Irefay",
+      "light": "Ightlay",
+      "metal": "Etalmay",
+      "mind": "Indmay",
+      "sky": "Onay Elementay",
+      "water": "Aterway"
+    },
+    "uppercase": {
+      "air": "AIRAY",
+      "dark": "ARKDAY",
+      "earth": "EARTHAY",
+      "fire": "IREFAY",
+      "light": "IGHTLAY",
+      "metal": "ETALMAY",
+      "mind": "INDMAY",
+      "sky": "ONAY ELEMENTAY",
+      "water": "ATERWAY"
+    }
+  },
+  "gameEffect": "AMEGAY FXAY",
+  "heroAbilityCardLabel": {
+    "ADA": "ADAYAY'Say ABILITYAY",
+    "ARI": "ARIYAY'Say ABILITYAY",
+    "AXEL": "AXELAY'Say ABILITYAY",
+    "BANJO": "ANJOBAY'Say ABILITYAY",
+    "BOURAN": "OURANBAY'Say ABILITYAY",
+    "FOX": "OXFAY'Say ABILITYAY",
+    "GERRY": "ERRYGAY'Say ABILITYAY",
+    "HORIK": "ORIKHAY'Say ABILITYAY",
+    "IRIS": "IRISAY'Say ABILITYAY",
+    "LOTUS": "OTUSLAY' ABILITYAY",
+    "MAI": "AIMAY'Say ABILITYAY",
+    "MIRA": "IRAMAY'Say ABILITYAY",
+    "SAMYA": "AMYASAY'Say ABILITYAY",
+    "SITTI": "ITTISAY'Say ABILITYAY",
+    "TITUS": "ITUSTAY' ABILITYAY",
+    "UNKNOWN": "EROHAY ABILITYAY",
+    "ZOEY": "OEYZAY'Say ABILITYAY"
+  },
+  "keyword": {
+    "lowerCase": {
+      "arms": "armsay",
+      "conjure": "onjurecay",
+      "death": "eathday",
+      "draw": "awdray",
+      "draws": "awsdray",
+      "dust": "ustday",
+      "enchant": "enchantay",
+      "enchanted": "enchanteday",
+      "enchants": "enchantsay",
+      "enemyconjure": "onjurecay",
+      "enemydraw": "awdray",
+      "glory": "oryglay",
+      "inspire": "inspireyay",
+      "lowesthealth": "owestlay ealthhay",
+      "mulligan": "ulliganmay",
+      "play": "ayplay",
+      "random": "andomray",
+      "ready": "eadyray",
+      "rune": "uneray",
+      "scion": "ionscay",
+      "shroom": "roomshay",
+      "sleep": "eepslay",
+      "sleeping": "eepingslay",
+      "summon": "ummonsay",
+      "summons": "ummonssay",
+      "sunrise": "unrisesay",
+      "sunset": "unsetsay",
+      "trait": "aittray",
+      "traits": "aitstray",
+      "wisp": "ispway"
+    },
+    "titleCase": {
+      "arms": "Armsay",
+      "conjure": "Onjurecay",
+      "death": "Eathday",
+      "draw": "Awdray",
+      "draws": "Awsdray",
+      "dust": "Ustday",
+      "enchant": "Enchantay",
+      "enchanted": "Enchanteday",
+      "enchants": "Enchantsay",
+      "enemyconjure": "Onjurecay",
+      "enemydraw": "Awdray",
+      "glory": "Oryglay",
+      "inspire": "Inspireyay",
+      "lowesthealth": "Owestlay Ealthhay",
+      "mulligan": "Ulliganmay",
+      "play": "Ayplay",
+      "random": "Andomray",
+      "ready": "Eadyray",
+      "rune": "Uneray",
+      "scion": "Ionscay",
+      "shroom": "Roomshay",
+      "sleep": "Eepslay",
+      "sleeping": "Eepingslay",
+      "summon": "Ummonsay",
+      "summons": "Ummonssay",
+      "sunrise": "Unrisesay",
+      "sunset": "Unsetsay",
+      "trait": "Aittray",
+      "traits": "Aitstray",
+      "wisp": "Ispway"
+    }
+  },
+  "mana": {
+    "c": "{{amount}} ostcay",
+    "m": "{{amount}} anamay"
+  },
+  "prisms": {
+    "agy": "AGILITYAY",
+    "hrt": "EARTHAY",
+    "int": "INTELLECTAY",
+    "str": "RENGTHSTAY",
+    "tok": "OKENTAY",
+    "tut": "UTORIALTAY",
+    "wis": "ISDOMWAY"
+  },
+  "rarity": {
+    "base": "Asebay",
+    "gold": "Oldgay",
+    "none": "Ockedlay",
+    "silver": "Ilversay"
+  },
+  "trait": "AITTRAY",
+  "traits": {
+    "titleCase": {
+      "armor": "Armoray",
+      "banner": "Annerbay",
+      "dash": "Ashday",
+      "guard": "Uardgay",
+      "lifesteal": "Ifesteallay",
+      "stealth": "Ealthstay",
+      "wither": "Itherway"
+    },
+    "uppercase": {
+      "armor": "ARMORAY",
+      "banner": "ANNERBAY",
+      "dash": "ASHDAY",
+      "guard": "UARDGAY",
+      "lifesteal": "IFESTEALLAY",
+      "stealth": "EALTHSTAY",
+      "wither": "ITHERWAY"
+    }
+  },
+  "triggers": {
+    "Death": "Eathday",
+    "Glory": "Oryglay",
+    "Inspire": "Inspireyay",
+    "Play": "Ayplay",
+    "Slay": "Ayslay",
+    "Summon": "Ummonsay",
+    "Sunrise": "Unrisesay",
+    "Sunset": "Unsetsay"
+  },
+  "type": {
+    "enchant": "ENCHANTAY",
+    "hero": "EROHAY",
+    "heroAbility": "EROHAY ABILITYAY",
+    "spell": "ELLSPAY",
+    "unit": "UNITAY"
+  }
+}

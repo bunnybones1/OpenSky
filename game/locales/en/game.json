@@ -1,0 +1,489 @@
+{
+  "ui": {
+    "cheats": {
+      "cheatsButton": "CHEATS",
+      "entity": "Log Entity",
+      "quicksave": "Quicksave",
+      "quickload": "Quickload",
+      "switchsides": "Switch Sides",
+      "saveAsLethalPuzzle": "Save as Lethal Puzzle",
+      "puzzleSave": {
+        "promptTitle": "Enter a Puzzle title",
+        "promptName": "Enter an author name",
+        "uploadInstructions": "Take your downloaded file, upload it to gist.github.com, then click the 'create puzzle link' button."
+      },
+      "createPuzzleLink": "Create Puzzle Link",
+      "puzzleLink": {
+        "promptUrl": "Paste your gist.github.com raw URL below",
+        "linkMessage": "Here's your puzzle link!"
+      },
+      "titles": {
+        "player": "Player",
+        "bot": "Bot"
+      },
+      "addToHand": "Add to Hand",
+      "addToDeck": "Add to Deck",
+      "addToGrave": "Add to Grave",
+      "dustHand": "Dust Hand",
+      "dustDeck": "Dust Deck",
+      "dustGrave": "Dust Grave",
+      "dustField": "Dust Field",
+      "changeMaxMana": "Change Max Mana",
+      "promptHowMuchMaxMana": "How much max mana do you want to add?",
+      "summonUnits": "Summon Units",
+      "drawCard": "Draw a Card",
+      "setHero": "Set Hero",
+      "setHeroPrompt": "Enter a hero or a Deck Class e.g. Ada, Bouran, STW, INT.\nWARNING: This will reset the sandbox!",
+      "setHeroInvalidPrisms": "Invalid Prisms {{prisms}}",
+      "modifiers": {
+        "invalidCard": "{{input}} isn't a valid card!",
+        "giveAttachment": "Give Attachment",
+        "promptWhichAttachment": "Enter a card name to attach",
+        "modifyHealth": "Modify Health",
+        "promptHowMuchHealth": "How much HP? e.g. +1, -10, +500",
+        "promptWhichCards": "Enter Card IDs or names, comma separated (e.g. 45, Songbird, Buster, squire, elderwood)",
+        "modifyPower": "Modify Power",
+        "promptHowMuchPower": "How much power? e.g. +1, -10, +500",
+        "setCost": "Set Cost",
+        "promptCost": "Enter the new cost: e.g. 0, 1, 2",
+        "setRarity": "Set Rarity",
+        "giveTrait": "Give Trait",
+        "removeTraits": "Remove Traits",
+        "setElement": "Set Element",
+        "moveToZone": "Move to Zone",
+        "moveToMyZone": "Move to My Zone",
+        "moveToEnemyZone": "Move to Enemy Zone",
+        "removeAttachment": "Remove Attachment",
+        "readyThisUnit": "Ready This Unit"
+      },
+      "hideCheatsMenu": "Hide Cheats Menu",
+      "toggleMacrosPanel": "Toggle Macros Panel",
+      "recordNewMacro": "Record New Macro",
+      "recordingMessage": "Recording... use any cheat.",
+      "toggleEffectResolution": "Effect Resolution Enabled",
+      "toggleDeathCleanup": "Death Cleanup Enabled",
+      "toggleAuraUpdate": "Aura Update Enabled",
+      "toggleShowEventAttribution": "Show Event Attribution",
+      "exportMacros": "Export Macros",
+      "importMacros": "Import Macros (will reload)",
+      "exportKeybinds": "Export Keybinds",
+      "importKeybinds": "Import Keybinds (will reload)"
+    },
+    "actionError": {
+      "GameAlreadyFinished": "Match Completed",
+      "AlreadySelectedCards": "Already chose cards",
+      "SelectedWrongNumberOfCards_one": "Choose {{count}} card",
+      "SelectedWrongNumberOfCards_other": "Choose {{count}} cards",
+      "DuplicateIndexInCardSelection": "Chose same card twice",
+      "InvalidIndexInCardSelection": "Card does not exist",
+      "ActedOutOfTurn": "Not your turn",
+      "DidNotSelectCards": "Choose your cards",
+      "DidOwnerAction": "Impossible action",
+      "PlayedNonExistentCard": "Card does not exist",
+      "PlayedOrphanedAttachedSpell": "Card does not exist",
+      "PlayedNonFieldAttachedSpell": "Can't play attachements from units outside the field",
+      "PlayedAnotherPlayersCard": "Not your card",
+      "PlayedCardOnNonExistentTarget": "Choose a target",
+      "AttackedWithNonExistentAttacker": "Choose an attacker",
+      "AttackedNonExistentDefender": "Choose a target",
+      "AttackedWithNonExistentAttackerAndDefender": "Choose an attacker",
+      "AttackedWithNonFieldAttacker": "This cannot attack",
+      "AttackedNonFieldDefender": "Choose a target",
+      "AttackedWithAnotherPlayersAttacker": "Not your unit",
+      "AttackedOwnDefender": "Choose a target",
+      "AttackedWithSleepingAttacker": "This unit is asleep",
+      "AttackedWithExhaustedAttacker": "Already attacked this turn",
+      "AttackedGuardedHero": "A guard unit is in the way",
+      "AttackedStealthUnit": "Damage enemy hero first",
+      "AttackedHeroWithDash": "Dashing units can't target the hero",
+      "AttackedNonFrontUnitWithBlindAttacker": "Can only attack the right-most unit",
+      "AttackedWithAttackerWithRoots": "Cannot attack with roots",
+      "Cheated": "Impossible action",
+      "PlayedUnplayableCard": "Can't play unplayable card",
+      "PlayedWithInsufficientMana": "Not enough mana",
+      "PlayedWithInsufficientRoom": "No room for more units",
+      "PlayedTargetingCardOnTargetUntargetableByPlayer": "That cannot be targeted",
+      "PlayedTargetingCardOnTargetUntargetableByOpponent": "That cannot be targeted",
+      "PlayedTargetingCardOnInvalidTarget": "That cannot be targeted",
+      "PlayedNonTargetingCardWithTarget": "This cannot target",
+      "PlayedTargetingCardWithoutTarget": "Choose a target",
+      "UnscriptedTutorialAction": "Please follow the tutorial"
+    },
+    "bindKey": "Bind {{action}} to which key?",
+    "bindKeyError": "Invalid key {{key}}",
+    "error": {
+      "header": "Sorry, it looks like evil Fun Guys caused a problem!",
+      "middle": "Don't worry! Our engineers are taking a look. You can reload to attempt reconnecting if your game is still in progress, or quit to the main menu.",
+      "buttonQuit": "Quit",
+      "buttonReload": "Reload"
+    },
+    "gameModeTitles": {
+      "CHALLENGE_CONSTRUCTED": "PRIVATE",
+      "CHALLENGE_DISCOVERY": "PRIVATE",
+      "CONQUEST_CONSTRUCTED": "CONQUEST",
+      "CONQUEST_DISCOVERY": "CONQUEST",
+      "LOCAL_BOT": "DEV BOT",
+      "PRACTICE_BOT": "PRACTICE BOT",
+      "PRACTICE_PVP": "PRACTICE PVP",
+      "WARM_UP": "RANKED WARM UP",
+      "RANKED_CONSTRUCTED": "RANKED",
+      "RANKED_DISCOVERY": "RANKED",
+      "REPLAY": "REPLAY",
+      "SPECTATE": "SPECTATE",
+      "TUTORIAL": "",
+      "SANDBOX": "SANDBOX",
+      "UNKNOWN": "UNKNOWN"
+    },
+    "gameModeSubtext": {
+      "CHALLENGE_CONSTRUCTED": "CONSTRUCTED",
+      "CHALLENGE_DISCOVERY": "DISCOVERY",
+      "CONQUEST_CONSTRUCTED": "CONSTRUCTED",
+      "CONQUEST_DISCOVERY": "DISCOVERY",
+      "LOCAL_BOT": "",
+      "PRACTICE_BOT": "",
+      "PRACTICE_PVP": "",
+      "WARM_UP": "",
+      "RANKED_CONSTRUCTED": "CONSTRUCTED",
+      "RANKED_DISCOVERY": "DISCOVERY",
+      "REPLAY": "",
+      "SPECTATE": "",
+      "TUTORIAL": "",
+      "SANDBOX": "",
+      "UNKNOWN": "UNKNOWN"
+    },
+    "cardSelection": {
+      "waitingForOpponent": "Waiting for opponent...",
+      "pickPromptFirst_one": "YOU GO FIRST. PICK {{count}} CARD TO KEEP.",
+      "pickPromptFirst_other": "YOU GO FIRST. PICK {{count}} CARDS TO KEEP.",
+      "pickPromptSecond_one": "YOU GO SECOND. PICK {{count}} CARD TO KEEP.",
+      "pickPromptSecond_other": "YOU GO SECOND. PICK {{count}} CARDS TO KEEP."
+    },
+    "whoseTurn": {
+      "yourTurn": "YOUR TURN",
+      "enemysTurn": "ENEMY'S TURN",
+      "untilMatchEndsInDraw_one": "{{count}} turn left until match ends in Draw",
+      "untilMatchEndsInDraw_other": "{{count}} turns left until match ends in Draw",
+      "type": {
+        "start": "START",
+        "end": "END"
+      }
+    },
+    "endTurnButton": {
+      "backToMenu": "BACK TO MENU",
+      "continue": "CONTINUE",
+      "endTurn": "END TURN",
+      "enemyTurn": "ENEMY TURN",
+      "restart": "RESTART",
+      "startGame": "START GAME",
+      "playPuzzle": "PLAY PUZZLE",
+      "playTutorial": "PLAY TUTORIAL {{level}}",
+      "playNextTutorial": "PLAY NEXT TUTORIAL",
+      "retryTutorial": "RETRY TUTORIAL"
+    },
+    "tutorial": {
+      "nextTip": "NEXT TIP"
+    },
+    "prompt": {
+      "itsNotYourTurn": "It's not your turn",
+      "noPossibleTargets": "No possible targets",
+      "noCardsToConjure": "`No cards of that type left to conjure from prisms!`",
+      "noCardsOfThatTypeLeftLose1HealthAndConjureInstead": "No cards of that type left! Lose 1 health, and Conjure instead!",
+      "noCardsLeftLose1HealthAndConjureInstead": "No cards left! Lose 1 health, and Conjure instead!"
+    },
+    "endTypeMessages": {
+      "victory": "VICTORY!",
+      "defeat": "DEFEAT",
+      "tie": "DRAW"
+    },
+    "botEndMessages": {
+      "victory": "Congratulations! Earn XP in bot games up to level 15.",
+      "defeat": "Earn XP in bot games up to level 15.",
+      "tie": "You tied!\nEarn XP in bot games up to level 15."
+    },
+    "playRankedEndMessages": {
+      "victory": "Congratulations! Play Ranked to earn more XP.",
+      "defeat": "Play Ranked to earn more XP.",
+      "tie": "You tied!\n Play Ranked to earn more XP."
+    },
+    "privateEndMessages": {
+      "victory": "Congratulations! Earn XP in private games up to level 15.",
+      "defeat": "Earn XP in private games up to level 15.",
+      "tie": "You tied!\nEarn XP in private games up to level 15."
+    },
+    "hordeEndMessages": {
+      "victory": "Congratulations! Earn XP in horde games up to level 15.",
+      "youDealtXDamageToHordeBoss": "You dealt {{damage}} damage to the Horde Boss!",
+      "tie": "You tied!\nEarn XP in horde games up to level 15."
+    },
+    "playerRank": {
+      "UNKNOWN": "Unknown",
+      "UNRANKED": "Unranked",
+      "TRAINEE": "Trainee",
+      "APPRENTICE": "Apprentice",
+      "EXPERT": "Expert",
+      "WANDERER": "Wanderer",
+      "MASTER": "Master",
+      "GRANDWEAVER": "Grandweaver"
+    },
+    "rewardRank": {
+      "reachWandererRankToUnlock": "REACH THE WANDERER RANK TO UNLOCK RANKED MODE",
+      "puzzleComplete": "PUZZLE COMPLETE!",
+      "puzzleCongrats_one": "Congratulations! You completed the puzzle {{puzzle_name}} in {{count}} try!",
+      "puzzleCongrats_other": "Congratulations! You completed the puzzle {{puzzle_name}} in {{count}} tries!",
+      "matchWin": "MATCH WIN",
+      "matchLoss": "MATCH LOSS",
+      "matchTie": "MATCH TIE",
+      "conceded": "CONCEDED",
+      "concededTooEarly": "CONCEDED TOO EARLY",
+      "rankUp": "RANK UP!",
+      "rankDown": "RANK DOWN!",
+      "rankPoints_one": "{{sign}}{{count}} RANK POINT",
+      "rankPoints_other": "{{sign}}{{count}} RANK POINTS",
+      "progress": {
+        "masterRP": "{{count}} RP",
+        "rp": "{{amount}} RP",
+        "xp": "{{amount}} XP"
+      },
+      "xpReason": {
+        "RankUp": "Rank Up Bonus XP",
+        "MatchPlayed": "Match Played",
+        "Draw": "Draw",
+        "Victory": "Victory",
+        "DailyQuest": "Daily Quest ({{extraData}} left)",
+        "ConcededTooEarly": "Conceded Too Early",
+        "TutorialCompleted": "Tutorial Completed"
+      },
+      "levelUp": "LEVEL UP!",
+      "playerLevel": "LEVEL {{level}}"
+    },
+    "rewardHero": {
+      "heroUnlock": "CONGRATS! YOU UNLOCKED A NEW HERO!",
+      "heroAndStarterUnlock": "CONGRATS! YOU UNLOCKED A NEW HERO\nAND A 25 CARD STARTER DECK!",
+      "dualPrismUnlock": "DUAL PRISM HEROS UNLOCKED!",
+      "dualPrismBuildTip": "You may now build decks with two Prisms"
+    },
+    "rewardCard": {
+      "singleCardUnlock": {
+        "agy": "CONGRATS! YOU UNLOCKED AN AGILITY CARD",
+        "hrt": "CONGRATS! YOU UNLOCKED A HEART CARD",
+        "int": "CONGRATS! YOU UNLOCKED AN INTELLECT CARD",
+        "str": "CONGRATS! YOU UNLOCKED A STRENGTH CARD",
+        "tok": "CONGRATS! YOU UNLOCKED A NO PRISM CARD",
+        "tut": "CONGRATS! YOU UNLOCKED A TUTORIAL CARD",
+        "wis": "CONGRATS! YOU UNLOCKED A WISDOM CARD"
+      },
+      "multiCardUnlock": {
+        "agy": "CONGRATS! YOU UNLOCKED AGILITY CARDS",
+        "hrt": "CONGRATS! YOU UNLOCKED HEART CARDS",
+        "int": "CONGRATS! YOU UNLOCKED INTELLECT CARDS",
+        "str": "CONGRATS! YOU UNLOCKED STRENGTH CARDS",
+        "tok": "CONGRATS! YOU UNLOCKED NO PRISM CARDS",
+        "tut": "CONGRATS! YOU UNLOCKED TUTORIAL CARDS",
+        "wis": "CONGRATS! YOU UNLOCKED WISDOM CARDS"
+      },
+      "youUnlockedCards_one": "YOU UNLOCKED A NEW BASE CARD!",
+      "youUnlockedCards_other": "YOU UNLOCKED NEW BASE CARDS!",
+      "congratsYouUnlockedACard": "CONGRATS! YOU UNLOCKED A CARD",
+      "congratsYouUnlockedCard_one": "CONGRATS! YOU UNLOCKED {{count}} CARD",
+      "congratsYouUnlockedCard_other": "CONGRATS! YOU UNLOCKED {{count}} CARDS",
+      "baseCard_one": "+{{count}} BASE CARD",
+      "baseCard_other": "+{{count}} BASE CARDS"
+    },
+    "artBy": "Art by",
+    "unknown": "Unknown",
+    "stickers": "STICKERS",
+    "Bot": "Bot",
+    "thisGame": "This game",
+    "nextTurn": "Next turn",
+    "ForTurn_one": "For {{count}} turn",
+    "ForTurn_other": "For {{count}} turns",
+    "vs": {
+      "winner": "♕ WINNER",
+      "conquestMatch": "MATCH {{match}}",
+      "loadingAssets": "Loading assets... {{timeLeft}}",
+      "waitingForOpponent": "Waiting for opponent... {{timeLeft}}",
+      "VS": "VS"
+    }
+  },
+  "emote": {
+    "labels": {
+      "hello": "HELLO",
+      "thanks": "THANKS",
+      "taunt": "TAUNT",
+      "gg": "GG",
+      "wow": "WOW",
+      "oops": "OOPS"
+    },
+    "timeout": {
+      "UNKNOWN": "<MISSING> timeout",
+      "ADA": "Time to take action!",
+      "LOTUS": "Time flows ever onward.",
+      "SAMYA": "Whoa! Better move fast!",
+      "BOURAN": "The end draws close...",
+      "ARI": "Yikes! Better think fast!",
+      "SITTI": "I'd better act soon.",
+      "FOX": "Time to take action.",
+      "TITUS": "Double time!",
+      "HORIK": "I must take action.",
+      "IRIS": "I must act now.",
+      "ZOEY": "The fuse is running down!",
+      "AXEL": "The future closes in.",
+      "MIRA": "Yikes, I'm running out of time!",
+      "MAI": "My turn is almost over!",
+      "BANJO": "The timer is running out"
+    },
+    "UNKNOWN": {
+      "gg": "<MISSING> GG",
+      "hello": "<MISSING> HELLO",
+      "oops": "<MISSING> OOPS",
+      "thanks": "<MISSING> THANKS",
+      "taunt": "<MISSING> TAUNT",
+      "wow": "<MISSING> WOW"
+    },
+    "ADA": {
+      "gg": "GG!",
+      "hello": "Hello.",
+      "oops": "Whoops.",
+      "thanks": "Thank you.",
+      "taunt": "I'd rather not hurt you.",
+      "wow": "Amazing!"
+    },
+    "LOTUS": {
+      "gg": "Good Game.",
+      "hello": "Greetings.",
+      "oops": "A lapse in judgement.",
+      "thanks": "You have my thanks.",
+      "taunt": "Your plan is lacking.",
+      "wow": "Most remarkable."
+    },
+    "SAMYA": {
+      "gg": "GG!",
+      "hello": "Hiya!",
+      "oops": "Oops!",
+      "thanks": "Thanks!",
+      "taunt": "Here I come!",
+      "wow": "Whoa!"
+    },
+    "BOURAN": {
+      "gg": "GG.",
+      "hello": "Hello...",
+      "oops": "A blunder...",
+      "thanks": "Thank you...",
+      "taunt": "Death comes for you...",
+      "wow": "Interesting..."
+    },
+    "ARI": {
+      "gg": "GG.",
+      "hello": "Oh, hello.",
+      "oops": "Err... a momentary error.",
+      "thanks": "Um, thanks.",
+      "taunt": "I've outsmarted you.",
+      "wow": "Incredible!"
+    },
+    "SITTI": {
+      "gg": "Good Game.",
+      "hello": "Greetings, OpenSky.",
+      "oops": "Oh, how unfortunate.",
+      "thanks": "Thank you.",
+      "taunt": "Don't push yourself, dear.",
+      "wow": "Very impressive."
+    },
+    "FOX": {
+      "gg": "GG!",
+      "hello": "Hey there.",
+      "oops": "I... meant to do that.",
+      "thanks": "Much obliged.",
+      "taunt": "Don't act like you're not impressed.",
+      "wow": "Dang!"
+    },
+    "TITUS": {
+      "gg": "GG.",
+      "hello": "Greetings, friend.",
+      "oops": "Oh Shoot!",
+      "thanks": "Thanks pal!",
+      "taunt": "Make friends, not war.",
+      "wow": "Far out!"
+    },
+    "HORIK": {
+      "gg": "Good Game.",
+      "hello": "Hello.",
+      "oops": "Pheh.",
+      "thanks": "Thanks.",
+      "taunt": "You will fall before me.",
+      "wow": "Impressive."
+    },
+    "IRIS": {
+      "gg": "GG.",
+      "hello": "Greetings, fellow traveller.",
+      "oops": "Mistakes are natural.",
+      "thanks": "Sky bless you.",
+      "taunt": "Stand aside.",
+      "wow": "By the Sky!"
+    },
+    "ZOEY": {
+      "gg": "GG!",
+      "hello": "Hey you!",
+      "oops": "Oh Rats!",
+      "thanks": "Thanks! Hahaha!",
+      "taunt": "Hahahahahaha!",
+      "wow": "Wowie!"
+    },
+    "AXEL": {
+      "gg": "Good Game.",
+      "hello": "Hello.",
+      "oops": "An error.",
+      "thanks": "I appreciate it.",
+      "taunt": "I've forseen your end.",
+      "wow": "Intriguing!"
+    },
+    "MIRA": {
+      "gg": "GG!",
+      "hello": "Nice to meet you.",
+      "oops": "That's not good.",
+      "thanks": "Thank you.",
+      "taunt": "I've got brains and brawn!",
+      "wow": "Just incredible!"
+    },
+    "MAI": {
+      "gg": "GG <3!!!",
+      "hello": "Heya!",
+      "oops": "Oops!",
+      "thanks": "Thanks! <3",
+      "taunt": "Too EZ!",
+      "wow": "OMG!"
+    },
+    "BANJO": {
+      "gg": "GG!",
+      "hello": "Hello there!",
+      "oops": "That's an oopsie!",
+      "thanks": "Thank you, good friend!",
+      "taunt": [
+        "You fight like an Elderwood!",
+        "You have the grace of a Zomboid!",
+        "You squawk like a Songbird!"
+      ],
+      "wow": "Hoho! Amazing!"
+    }
+  },
+  "zone": {
+    "Deck": "Deck",
+    "Hand": "Hand",
+    "RevealedHand": "Revealed Hand",
+    "Field": "Field",
+    "Graveyard": "Graveyard",
+    "Dust": "Dust",
+    "RevealedDust": "Revealed Dust",
+    "Attachment": "Attached",
+    "Limbo": "Limbo",
+    "RevealedLimbo": "Revealed Limbo",
+    "Casting": "Casting",
+    "CardSelection": "Card Selection",
+    "HeroAbility": "Hero Ability"
+  },
+  "sidebarUI": {
+    "buttonLabel": {
+      "DECK": "DECK",
+      "GRAVEYARD": "GRAVEYARD"
+    }
+  }
+}

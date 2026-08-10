@@ -1,0 +1,86 @@
+[package]
+authors = [
+  "William Hua <william@attente.ca>",
+  "Ari Lotter <me@arilotter.com>",
+  "Ramin Kaviani < raminkaviani@live.ca>",
+]
+build = "build.rs"
+edition = "2018"
+name = "skyweaver-rs"
+version = "0.1.0"
+
+[build-dependencies]
+card-movement-simulator = { git = "https://github.com/horizon-games/card-movement-simulator.git", tag = "0.9.3" }
+Inflector = "^0.11"
+lazy_static = "^1"
+regex = "^1"
+serde_json = "^1"
+design-data-loader = { path = "../../design-data/rust" }
+
+
+[build-dependencies.serde]
+features = ["derive"]
+version = "^1"
+
+[build-dependencies.syn]
+features = ["full"]
+version = "^1"
+
+[dependencies]
+card-movement-simulator = { git = "https://github.com/horizon-games/card-movement-simulator.git", tag = "0.9.3" }
+wasm-bindgen = { version = "^0.2.87", features = [
+  "serde-serialize",
+], optional = true }
+first-class-variants = { version = "^0.0", git = "https://github.com/horizon-games/first-class-variants" }
+ambassador = "^0.1"
+byteorder = "^1"
+console_error_panic_hook = "^0.1"
+erased-serde = "0.3.12"
+itertools = "^0.8"
+lazy_static = "^1"
+rand = "^0.8"
+rand_core = "^0.6"
+rand_xorshift = "^0.3"
+serde-big-array = "^0.1"
+serde_cbor = "^0.10"
+strum = "^0.15"
+strum_macros = "^0.15"
+
+
+[dependencies.getrandom]
+features = ["js"]
+version = "0.2"
+
+[dependencies.indexmap]
+features = ["serde-1"]
+version = "^1"
+
+[dependencies.js-sys]
+optional = true
+version = "^0.3"
+
+[dependencies.serde]
+features = ["rc", "derive"]
+version = "^1"
+
+[dependencies.typescript-definitions]
+features = ["serde-wasm-bindgen"]
+git = "https://github.com/arilotter/typescript-definitions"
+optional = true
+
+[dev-dependencies]
+card-movement-simulator = { git = "https://github.com/horizon-games/card-movement-simulator.git", tag = "0.9.3", default-features = false, features = [
+  "no-crypto",
+] }
+criterion = "0.3"
+
+[features]
+bindings = [
+  "std",
+  "card-movement-simulator/bindings",
+  "js-sys",
+  "wasm-bindgen",
+  "typescript-definitions",
+]
+default = ["std"]
+std = ["card-movement-simulator/std"]

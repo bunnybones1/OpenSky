@@ -1,0 +1,15 @@
+{
+  "name": "@skyweaver/state-browser-sys",
+  "collaborators": [
+    "William Hua <william@attente.ca>",
+    "Ari Lotter <me@arilotter.com>"
+  ],
+  "version": "0.1.0",
+  "module": "bindings.js",
+  "sideEffects": [
+    "./bindings.js",
+    "./snippets/*"
+  ],
+  "types": "bindings.d.ts",
+  "main": "bindings.js"
+}

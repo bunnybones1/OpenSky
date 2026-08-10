@@ -1,0 +1,17 @@
+{
+  "name": "@opensky/analytics",
+  "version": "1.0.0",
+  "description": "analytics libs shared across packages",
+  "private": true,
+  "scripts": {
+  },
+  "dependencies": {
+    "@databeat/tracker": "^0.9.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts"
+}

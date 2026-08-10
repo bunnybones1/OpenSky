@@ -1,0 +1,6 @@
+{
+  "MATCHMAKER_URL": "ws://localhost:8888",
+  "GITCOMMIT": "dev",
+  "AUTH_CHAIN_URL": "https://rpc-mainnet.matic.network",
+  "SKYWEAVER_API_URL": "http://localhost:1337"
+}

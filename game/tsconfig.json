@@ -1,0 +1,26 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./build",
+    "target": "es2018",
+    
+    "lib": ["dom", "dom.iterable", "esnext", "WebWorker"],
+    "jsx":"react-jsx",
+    
+
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+    "strictPropertyInitialization": false,
+    "isolatedModules": true,
+    "useDefineForClassFields": false,
+    "incremental": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts","src/**/*.tsx", "src/**/*.json" ]
+}

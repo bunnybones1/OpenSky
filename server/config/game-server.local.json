@@ -1,0 +1,56 @@
+{
+  "server": {
+    "host": "localhost",
+    "port": 8000,
+    "jwtSecret": "game-server-jwt-secret",
+    "accountMnemonic": "test test test test test test test test test test test junk"
+  },
+  "logging": {
+    "service": "game-server-local",
+    "level": "debug",
+    "json": false,
+    "concise": true,
+    "metricsSink": "0.0.0.0"
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379
+  },
+  "ethereum": {
+    "authChainUrl": "https://nodes.sequence.app/polygon/AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14"
+  },
+  "services": {
+    "openskyAPI": {
+      "uri": "http://localhost:1337",
+      "authToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXJ2aWNlIjoiZ2FtZS1zZXJ2ZXIifQ.pV_Rleoj49So-tyZzeCAxkdXeUjmh4PiNh_4kOd2tuA",
+      "userAuthentication": {
+        "jwtSecret": "changemenow"
+      }
+    }
+  },
+  "settings": {
+    "worker": {
+      "maxThreadCount": 100,
+      "minThreadPoolSize": 4,
+      "maxMatchesPerThread": 5,
+      "threadInactiveTimeoutMs": 30000,
+      "threadRestartInterval": 10
+    },
+    "abandonTimeout": 35000,
+    "turnExpiryEnabled": true,
+    "turnExtendable": true,
+    "turnExpiry": 60000,
+    "turnExtension": 5000,
+    "commitRevealExpiry": 3000,
+    "matchRecords": {
+      "enabled": true,
+      "bufferSize": 50
+    },
+    "AbandonPenaltyWindowSeconds": 86400,
+    "AbandonInactiveTurnMax": 5,
+    "EarlyConcedeTurnMin": 0,
+    "AbandonPenalty": [0, 0, 0, 0],
+    "cheats": false,
+    "chat": false
+  }
+}

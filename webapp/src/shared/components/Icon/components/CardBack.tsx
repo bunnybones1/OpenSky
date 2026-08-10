@@ -1,0 +1,22 @@
+import { memo } from 'react'
+
+import { IconSVG } from '../shared/components/IconSVG'
+import { IconSVGProps } from '../shared/types/icon-svg-props'
+
+export const CardBack = memo(({ color, height }: IconSVGProps) => (
+  <IconSVG boxWidth={48} boxHeight={48} color={color} height={height}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M22.7506 11.4383C23.4543 10.8753 24.4475 10.8525 25.1763 11.3825L30.6763 15.3825C31.1938 15.7589 31.5 16.3601 31.5 17V31C31.5 31.6399 31.1938 32.2411 30.6763 32.6175L25.1763 36.6175C24.4409 37.1523 23.4373 37.1237 22.7335 36.5479L17.6205 32.3645C17.4068 32.1897 17.3753 31.8747 17.5501 31.6609L17.8668 31.274C18.9159 29.9916 20.806 29.8026 22.0883 30.8518L24.0719 32.4747L27.5 29.9816V18.0185L24.0578 15.515L21 17.9613V23.0976L23.9407 25.6707C24.1485 25.8526 24.1696 26.1685 23.9878 26.3763L23.6585 26.7526C22.5675 27.9995 20.6722 28.1258 19.4253 27.0348L17.683 25.5103C17.249 25.1305 17 24.5819 17 24.0052V17C17 16.3924 17.2762 15.8178 17.7506 15.4383L22.7506 11.4383Z"
+      fillOpacity={0.65}
+    />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M13 14.0478V33.973L24 42.0397L35 33.973V14.0478L24 5.96399L13 14.0478ZM24 1L9 12.0234V36L24 47L39 36V12.0234L24 1Z"
+    />
+  </IconSVG>
+))
+
+CardBack.displayName = 'CardBack'

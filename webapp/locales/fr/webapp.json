@@ -1,0 +1,157 @@
+{
+  "account": {},
+  "appUpdateModal": {},
+  "cache": {},
+  "cardBack": {},
+  "cardBacks": {},
+  "cardDetails": {},
+  "cards": {
+    "effects": {},
+    "elements": {},
+    "grades": {},
+    "prisms": {},
+    "sorts": {}
+  },
+  "confirmModal": {},
+  "cookies": {},
+  "createAccount": {},
+  "createDeck": {
+    "deckCodes": {
+      "AGI": {},
+      "AGW": {},
+      "AGY": {},
+      "HRA": {},
+      "HRI": {},
+      "HRT": {},
+      "HRW": {},
+      "INT": {},
+      "INW": {},
+      "STA": {},
+      "STH": {},
+      "STI": {},
+      "STR": {},
+      "STW": {},
+      "undefined": {},
+      "UNKNOWN_CLASS": {},
+      "WIS": {}
+    }
+  },
+  "credits": {},
+  "dashboard": {
+    "stickers": {
+      "ownershipFilter": {}
+    }
+  },
+  "deckBuilder": {
+    "prismFilter": {}
+  },
+  "decks": {
+    "sorts": {}
+  },
+  "deleteAccount": {},
+  "downloadAssets": {},
+  "feed": {},
+  "gameMode": {},
+  "general": {},
+  "generic": {},
+  "heroes": {},
+  "heroFeature": {},
+  "home": {
+    "mainFeatureConquest": {},
+    "mainFeatureSkypass": {}
+  },
+  "install": {},
+  "inviteFriends": {},
+  "iosAppUpdateModal": {},
+  "leaderboardRewardsModal": {
+    "1": {},
+    "2": {},
+    "3": {}
+  },
+  "market": {},
+  "matchHistory": {},
+  "matchMaker": {},
+  "mobileInstallPrompt": {},
+  "navigation": {},
+  "notification": {},
+  "notificationModal": {},
+  "notifications": {
+    "conquestTreasure": {},
+    "leaderboardRewards": {}
+  },
+  "offlineModal": {},
+  "pagination": {},
+  "play": {
+    "gameModes": {
+      "CONQUEST": {},
+      "header": {}
+    },
+    "premadeDecks": {
+      "AGI": {},
+      "AGW": {},
+      "AGY": {},
+      "HRA": {},
+      "HRI": {},
+      "HRT": {},
+      "HRW": {},
+      "INT": {},
+      "INW": {},
+      "STA": {},
+      "STH": {},
+      "STI": {},
+      "STR": {},
+      "STW": {},
+      "WIS": {}
+    },
+    "rewards": {}
+  },
+  "playerLeaderboard": {},
+  "playPage": {
+    "CONQUEST": {},
+    "deckSelector": {
+      "titles": {}
+    },
+    "gameTypeSelector": {
+      "buttonDescriptions": {}
+    },
+    "matchMaker": {
+      "statusTexts": {}
+    },
+    "PRACTICE": {},
+    "RANKED": {},
+    "TUTORIAL": {}
+  },
+  "profile": {
+    "spectate": {}
+  },
+  "prompt": {},
+  "purchaseSkypass": {},
+  "quests": {},
+  "ranks": {},
+  "search": {
+    "itemsCardsActions": {}
+  },
+  "sentry": {},
+  "sets": {},
+  "shop": {
+    "buyMode": {},
+    "sellMode": {}
+  },
+  "signTransaction": {},
+  "skypass": {
+    "detailsDescs": {},
+    "detailsTitles": {},
+    "stickerPointsTooltip": {},
+    "thumbs": {},
+    "titleLabels": {},
+    "titles": {}
+  },
+  "support": {
+    "cookies": {},
+    "sanctions": {},
+    "USconfirm": {}
+  },
+  "time": {},
+  "tooltip": {},
+  "unsupportedBrowser": {}
+}

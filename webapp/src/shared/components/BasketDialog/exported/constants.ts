@@ -1,0 +1,1 @@
+export const BASKET_DIALOG_ID = 'BASKET_DIALOG_ID'

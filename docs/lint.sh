@@ -1,0 +1,1 @@
+markdownlint-cli2 --config "./.markdownlint-cli2.jsonc" --fix "**/*.md" "#node_modules"

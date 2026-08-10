@@ -1,0 +1,297 @@
+{
+  "options": {
+    "back": "ACKBAY",
+    "cancel": "ANCELCAY",
+    "concede": "ONCEDECAY",
+    "confirm": "ONFIRMCAY",
+    "continue": "ONTINUECAY",
+    "disabled": "Isabledday",
+    "done": "ONEDAY",
+    "enabled": "Enableday",
+    "exitReplay": "EXITAY EPLAYRAY",
+    "exitTutorial": "EXITAY UTORIALTAY",
+    "game": "AMEGAY OPTIONSAY",
+    "gameOptions": {
+      "catchUpSpeed": "Atchcay-upay Eedspay",
+      "heroEmotes": "Erohay Emotesay",
+      "showPing": "Owshay Ingpay",
+      "showSpectatorCount": "Owshay Ectatorspay Ountcay",
+      "spacebarEndsTurn": "Acebarspay Endsay Urntay",
+      "twitchIntegration": "Itchtway Integrationay"
+    },
+    "graphics": "APHICSGRAY OPTIONSAY",
+    "graphicsOptions": {
+      "antialiasing": "Antialiasingay",
+      "batterySaver": "Atterybay Aversay",
+      "forceWebGL1": "Orcefay Ebglway 1",
+      "particleEffects": "Articlepay Effectsay",
+      "reduceMotion": "Educeray Otionmay",
+      "renderResolution": "Enderray Esolutionray",
+      "showFoilEffects": "Owshay Oilfay Effectsay",
+      "targetFPS": "Argettay SFPAY",
+      "vSync": "YNCVSAY"
+    },
+    "ok": "OKAY",
+    "options": "OPTIONSAY",
+    "prompt": {
+      "codeReset": "Odecay esetray.",
+      "concede": "Areyay ouyay uresay ouyay antway otay oncedecay?",
+      "exitReplay": "Areyay ouyay uresay ouyay antway otay exitay isthay eplayray?",
+      "exitTutorial": "Areyay ouyay uresay ouyay antway otay exitay ethay utorialtay?",
+      "failedReset": "Ailedfay otay esetray odecay.",
+      "resetSpectate": "Esetray ouryay ectatespay odecay?",
+      "restart": "Estartray isthay amegay?",
+      "spectateCodeInvalidateWarning": "Isthay illway invalidateyay ouryay olday odecay.",
+      "stopSpectating": "Areyay ouyay uresay ouyay antway otay opstay ectatingspay?",
+      "watchReplay": "Atchway eplayray?"
+    },
+    "report": "EPORTRAY",
+    "reported": "EPORTEDRAY",
+    "settings": "ETTINGSSAY",
+    "sound": "OUNDSAY OPTIONSAY",
+    "soundOptions": {
+      "musicVolume": "Usicmay Olumevay",
+      "muteAllSounds": "Utemay Allay Oundssay",
+      "sfxVolume": "XSFAY Olumevay"
+    },
+    "spectate": {
+      "copyPrivateLink": "Opycay Ivatepray Inklay",
+      "copyPublicLink": "Opycay Ublicpay Inklay",
+      "resetSpectateLink": "Esetray Ectatespay Inklay",
+      "spectateLink": "ECTATESPAY INKLAY"
+    },
+    "stopSpectating": "OPSTAY ECTATINGSPAY",
+    "suffix": {
+      "willApplyNextGame": " (illway applyay extnay amegay)",
+      "willRefresh": " (illway efreshray)"
+    },
+    "ui": "UIYAY OPTIONSAY",
+    "uiOptions": {
+      "showRelatedCardsOnHover": "Owshay Elatedray Ardscay Onay Overhay",
+      "showTooltipsOnHover": "Owshay Ooltipstay Onay Overhay",
+      "uiScale": "UIYAY Alescay",
+      "useScrollingCardSelection": "Useyay Rollingscay Ardcay Electionsay"
+    },
+    "watchReplay": "ATCHWAY EPLAYRAY"
+  },
+  "ui": {
+    "actionError": {
+      "ActedOutOfTurn": "Otnay ouryay urntay",
+      "AlreadySelectedCards": "Alreadyay osechay ardscay",
+      "AttackedGuardedHero": "Ayay uardgay unitay isay inay ethay ayway",
+      "AttackedHeroWithDash": "Ashingday unitsay ancay'tay argettay ethay erohay",
+      "AttackedNonExistentDefender": "Oosechay ayay argettay",
+      "AttackedNonFieldDefender": "Oosechay ayay argettay",
+      "AttackedNonFrontUnitWithBlindAttacker": "Ancay onlyay attackay ethay ightray-ostmay unitay",
+      "AttackedOwnDefender": "Oosechay ayay argettay",
+      "AttackedStealthUnit": "Amageday enemyay erohay irstfay",
+      "AttackedWithAnotherPlayersAttacker": "Otnay ouryay unitay",
+      "AttackedWithAttackerWithRoots": "Annotcay attackay ithway ootsray",
+      "AttackedWithExhaustedAttacker": "Alreadyay attackeday isthay urntay",
+      "AttackedWithNonExistentAttacker": "Oosechay anay attackeray",
+      "AttackedWithNonExistentAttackerAndDefender": "Oosechay anay attackeray",
+      "AttackedWithNonFieldAttacker": "Isthay annotcay attackay",
+      "AttackedWithSleepingAttacker": "Isthay unitay isay asleepay",
+      "Cheated": "Impossibleyay actionay",
+      "DidNotSelectCards": "Oosechay ouryay ardscay",
+      "DidOwnerAction": "Impossibleyay actionay",
+      "DuplicateIndexInCardSelection": "Osechay amesay ardcay icetway",
+      "GameAlreadyFinished": "Atchmay Ompletedcay",
+      "InvalidIndexInCardSelection": "Ardcay oesday otnay existay",
+      "PlayedAnotherPlayersCard": "Otnay ouryay ardcay",
+      "PlayedCardOnNonExistentTarget": "Oosechay ayay argettay",
+      "PlayedNonExistentCard": "Ardcay oesday otnay existay",
+      "PlayedNonFieldAttachedSpell": "Ancay'tay ayplay attachementsay omfray unitsay outsideyay ethay ieldfay",
+      "PlayedNonTargetingCardWithTarget": "Isthay annotcay argettay",
+      "PlayedOrphanedAttachedSpell": "Ardcay oesday otnay existay",
+      "PlayedTargetingCardOnInvalidTarget": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardOnTargetUntargetableByOpponent": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardOnTargetUntargetableByPlayer": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardWithoutTarget": "Oosechay ayay argettay",
+      "PlayedUnplayableCard": "Ancay'tay ayplay unplayableyay ardcay",
+      "PlayedWithInsufficientMana": "Otnay enoughay anamay",
+      "PlayedWithInsufficientRoom": "Onay oomray orfay oremay unitsay",
+      "SelectedWrongNumberOfCards_one": "Oosechay {{count}} ardcay",
+      "SelectedWrongNumberOfCards_other": "Oosechay {{count}} ardscay",
+      "UnscriptedTutorialAction": "Easeplay ollowfay ethay utorialtay"
+    },
+    "bindKey": "Indbay {{action}} otay ichwhay eykay?",
+    "bindKeyError": "Invaliday eykay {{key}}",
+    "error": {
+      "buttonQuit": "Uitqay",
+      "buttonReload": "Eloadray",
+      "header": "Orrysay, itay ookslay ikelay evilay Unfay Uysgay ausedcay ayay oblempray!",
+      "middle": "Onday'tay orryway! Ouray engineersay areyay akingtay ayay ooklay. Ouyay ancay eloadray otay attemptay econnectingray ifay ouryay amegay isay illstay inay ogresspray, oray uitqay otay ethay ainmay enumay."
+    },
+    "ForTurn_one": "Orfay {{count}} urntay",
+    "ForTurn_other": "Orfay {{count}} urnstay",
+    "gameModeSubtext": {
+      "CHALLENGE_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "CHALLENGE_DISCOVERY": "ISCOVERYDAY",
+      "CONQUEST_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "CONQUEST_DISCOVERY": "ISCOVERYDAY",
+      "LOCAL_BOT": "",
+      "PRACTICE_BOT": "",
+      "PRACTICE_PVP": "",
+      "RANKED_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "RANKED_DISCOVERY": "ISCOVERYDAY",
+      "REPLAY": "",
+      "SANDBOX": "",
+      "SPECTATE": "",
+      "TUTORIAL": "",
+      "UNKNOWN": "UNKNOWNAY",
+      "WARM_UP": ""
+    },
+    "gameModeTitles": {
+      "CHALLENGE_CONSTRUCTED": "IVATEPRAY",
+      "CHALLENGE_DISCOVERY": "IVATEPRAY",
+      "CONQUEST_CONSTRUCTED": "ONQUESTCAY",
+      "CONQUEST_DISCOVERY": "ONQUESTCAY",
+      "LOCAL_BOT": "EVDAY OTBAY",
+      "PRACTICE_BOT": "ACTICEPRAY OTBAY",
+      "PRACTICE_PVP": "ACTICEPRAY PPVAY",
+      "RANKED_CONSTRUCTED": "ANKEDRAY",
+      "RANKED_DISCOVERY": "ANKEDRAY",
+      "REPLAY": "EPLAYRAY",
+      "SANDBOX": "ANDBOXSAY",
+      "SPECTATE": "ECTATESPAY",
+      "TUTORIAL": "UTORIALTAY",
+      "UNKNOWN": "UNKNOWNAY",
+      "WARM_UP": "ANKEDRAY ARMWAY UPAY"
+    },
+    "hordeEndMessages": {
+      "tie": "Ouyay iedtay!\nEarnay XPAY inay ordehay amesgay upay otay evellay 15.",
+      "victory": "Ongratulationscay! Earnay XPAY inay ordehay amesgay upay otay evellay 15.",
+      "youDealtXDamageToHordeBoss": "Ouyay ealtday {{damage}} amageday otay ethay Ordehay Ossbay!"
+    },
+    "nextTurn": "Extnay urntay",
+    "playerRank": {
+      "APPRENTICE": "Apprenticeyay",
+      "EXPERT": "Expertay",
+      "GRANDWEAVER": "Andweavergray",
+      "MASTER": "Astermay",
+      "TRAINEE": "Aineetray",
+      "UNKNOWN": "Unknownay",
+      "UNRANKED": "Unrankeday",
+      "WANDERER": "Andererway"
+    },
+    "playRankedEndMessages": {
+      "defeat": "Ayplay Ankedray otay earnay oremay XPAY.",
+      "tie": "Ouyay iedtay!\n Ayplay Ankedray otay earnay oremay XPAY.",
+      "victory": "Ongratulationscay! Ayplay Ankedray otay earnay oremay XPAY."
+    },
+    "privateEndMessages": {
+      "defeat": "Earnay XPAY inay ivatepray amesgay upay otay evellay 15.",
+      "tie": "Ouyay iedtay!\nEarnay XPAY inay ivatepray amesgay upay otay evellay 15.",
+      "victory": "Ongratulationscay! Earnay XPAY inay ivatepray amesgay upay otay evellay 15."
+    },
+    "prompt": {
+      "itsNotYourTurn": "Itay'say otnay ouryay urntay",
+      "noCardsLeftLose1HealthAndConjureInstead": "Onay ardscay eftlay! Oselay 1 ealthhay, anday Onjurecay insteaday!",
+      "noCardsOfThatTypeLeftLose1HealthAndConjureInstead": "Onay ardscay ofay atthay petyay eftlay! Oselay 1 ealthhay, anday Onjurecay insteaday!",
+      "noCardsToConjure": "`Onay ardscay ofay atthay petyay eftlay otay onjurecay omfray ismspray!`",
+      "noPossibleTargets": "Onay ossiblepay argetstay"
+    },
+    "rewardCard": {
+      "baseCard_one": "+{{count}} ASEBAY ARDCAY",
+      "baseCard_other": "+{{count}} ASEBAY ARDSCAY",
+      "congratsYouUnlockedACard": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ARDCAY",
+      "congratsYouUnlockedCard_one": "ONGRATSCAY! OUYAY UNLOCKEDAY {{count}} ARDCAY",
+      "congratsYouUnlockedCard_other": "ONGRATSCAY! OUYAY UNLOCKEDAY {{count}} ARDSCAY",
+      "multiCardUnlock": {
+        "agy": "ONGRATSCAY! OUYAY UNLOCKEDAY AGILITYAY ARDSCAY",
+        "hrt": "ONGRATSCAY! OUYAY UNLOCKEDAY EARTHAY ARDSCAY",
+        "int": "ONGRATSCAY! OUYAY UNLOCKEDAY INTELLECTAY ARDSCAY",
+        "str": "ONGRATSCAY! OUYAY UNLOCKEDAY RENGTHSTAY ARDSCAY",
+        "tok": "ONGRATSCAY! OUYAY UNLOCKEDAY ONAY ISMPRAY ARDSCAY",
+        "tut": "ONGRATSCAY! OUYAY UNLOCKEDAY UTORIALTAY ARDSCAY",
+        "wis": "ONGRATSCAY! OUYAY UNLOCKEDAY ISDOMWAY ARDSCAY"
+      },
+      "singleCardUnlock": {
+        "agy": "ONGRATSCAY! OUYAY UNLOCKEDAY ANAY AGILITYAY ARDCAY",
+        "hrt": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EARTHAY ARDCAY",
+        "int": "ONGRATSCAY! OUYAY UNLOCKEDAY ANAY INTELLECTAY ARDCAY",
+        "str": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay RENGTHSTAY ARDCAY",
+        "tok": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ONAY ISMPRAY ARDCAY",
+        "tut": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay UTORIALTAY ARDCAY",
+        "wis": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ISDOMWAY ARDCAY"
+      },
+      "youUnlockedCards_one": "OUYAY UNLOCKEDAY Ayay EWNAY ASEBAY ARDCAY!",
+      "youUnlockedCards_other": "OUYAY UNLOCKEDAY EWNAY ASEBAY ARDSCAY!"
+    },
+    "rewardHero": {
+      "dualPrismBuildTip": "Ouyay aymay ownay uildbay ecksday ithway otway Ismspray",
+      "dualPrismUnlock": "UALDAY ISMPRAY EROSHAY UNLOCKEDAY!",
+      "heroAndStarterUnlock": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EWNAY EROHAY\nANDAY Ayay 25 ARDCAY ARTERSTAY ECKDAY!",
+      "heroUnlock": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EWNAY EROHAY!"
+    },
+    "rewardRank": {
+      "conceded": "ONCEDEDCAY",
+      "concededTooEarly": "ONCEDEDCAY OOTAY EARLYAY",
+      "levelUp": "EVELLAY UPAY!",
+      "matchLoss": "ATCHMAY OSSLAY",
+      "matchTie": "ATCHMAY IETAY",
+      "matchWin": "ATCHMAY INWAY",
+      "playerLevel": "EVELLAY {{level}}",
+      "progress": {
+        "masterRP": "{{count}} RPAY",
+        "rp": "{{amount}} RPAY",
+        "xp": "{{amount}} XPAY"
+      },
+      "puzzleComplete": "UZZLEPAY OMPLETECAY!",
+      "puzzleCongrats_one": "Ongratulationscay! Ouyay ompletedcay ethay uzzlepay {{puzzle_name}} inay {{count}} ytray!",
+      "puzzleCongrats_other": "Ongratulationscay! Ouyay ompletedcay ethay uzzlepay {{puzzle_name}} inay {{count}} iestray!",
+      "rankDown": "ANKRAY OWNDAY!",
+      "rankPoints_one": "{{sign}}{{count}} ANKRAY OINTPAY",
+      "rankPoints_other": "{{sign}}{{count}} ANKRAY OINTSPAY",
+      "rankUp": "ANKRAY UPAY!",
+      "reachWandererRankToUnlock": "EACHRAY ETHAY ANDERERWAY ANKRAY OTAY UNLOCKAY ANKEDRAY ODEMAY",
+      "xpReason": {
+        "ConcededTooEarly": "Oncededcay Ootay Earlyay",
+        "DailyQuest": "Ailyday Uestqay ({{extraData}} eftlay)",
+        "Draw": "Awdray",
+        "MatchPlayed": "Atchmay Ayedplay",
+        "RankUp": "Ankray Upay Onusbay XPAY",
+        "TutorialCompleted": "Utorialtay Ompletedcay",
+        "Victory": "Ictoryvay"
+      }
+    },
+    "stickers": "ICKERSSTAY",
+    "thisGame": "Isthay amegay",
+    "tutorial": {
+      "nextTip": "EXTNAY IPTAY"
+    },
+    "unknown": "Unknownay",
+    "vs": {
+      "conquestMatch": "ATCHMAY {{match}}",
+      "loadingAssets": "Oadinglay assetsay... {{timeLeft}}",
+      "VS": "VSAY",
+      "waitingForOpponent": "Aitingway orfay opponentay... {{timeLeft}}",
+      "winner": "♕ INNERWAY"
+    },
+    "whoseTurn": {
+      "enemysTurn": "ENEMYAY'Say URNTAY",
+      "type": {
+        "end": "ENDAY",
+        "start": "ARTSTAY"
+      },
+      "untilMatchEndsInDraw_one": "{{count}} urntay eftlay untilay atchmay endsay inay Awdray",
+      "untilMatchEndsInDraw_other": "{{count}} urnstay eftlay untilay atchmay endsay inay Awdray",
+      "yourTurn": "OURYAY URNTAY"
+    }
+  },
+  "zone": {
+    "Attachment": "Attacheday",
+    "CardSelection": "Ardcay Electionsay",
+    "Casting": "Astingcay",
+    "Deck": "Eckday",
+    "Dust": "Ustday",
+    "Field": "Ieldfay",
+    "Graveyard": "Aveyardgray",
+    "Hand": "Andhay",
+    "Limbo": "Imbolay",
+    "RevealedDust": "Evealedray Ustday",
+    "RevealedHand": "Evealedray Andhay",
+    "RevealedLimbo": "Evealedray Imbolay"
+  }
+}

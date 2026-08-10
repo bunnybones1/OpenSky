@@ -1,0 +1,15 @@
+import { memo } from 'react'
+
+import { ImageIconSVG } from '../shared/components/ImageIconSVG'
+import { ImageIconSVGProps } from '../shared/types/image-icon-svg-props'
+
+export const ElementFire = memo(({ height }: ImageIconSVGProps) => (
+  <ImageIconSVG boxWidth={48} boxHeight={48} height={height}>
+    <path
+      fill="rgb(244, 11, 11)"
+      d="M19.87,4c11.79,5.48,14.06,12.81,9.42,21.34,4.28-2.3,6.13-5.68,4.33-10.59C37.75,17.52,39.93,23,39.84,29c-.13,7.93-4.21,12.89-9.4,15a10.9,10.9,0,0,0,1.72-6c0-5.08-3.27-9.25-7.46-9.73a5.83,5.83,0,1,1-8.63,6.59A11.45,11.45,0,0,0,15.63,38a10.92,10.92,0,0,0,1.47,5.56C12.16,41.25,8.33,36.35,8.17,29c-.13-5.75,2.09-9.55,7.15-12.32-1.91,3.58-1.17,7.74.87,9.47C14.85,17.4,28.14,12.66,19.88,4h0Z"
+    />
+  </ImageIconSVG>
+))
+
+ElementFire.displayName = 'ElementFire'

@@ -1,0 +1,9 @@
+node_modules
+
+.env
+config/creds.env
+
+cache
+artifacts/build-info
+artifacts/**/*.dbg.json
+networks/*_RANDOM.json

@@ -1,0 +1,3 @@
+export const SKYPASS_UNIT_PRICE = 14.95
+export const SILVER_CARDS_BURN_CONSUMPTION = 15
+export const IS_PREMIUM_SKYPASS_AVAILABLE = false

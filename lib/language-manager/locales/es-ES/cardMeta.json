@@ -1,0 +1,22 @@
+{
+  "buff": {},
+  "effectTypes": {},
+  "elements": {
+    "titleCase": {},
+    "uppercase": {}
+  },
+  "heroAbilityCardLabel": {},
+  "keyword": {
+    "lowerCase": {},
+    "titleCase": {}
+  },
+  "mana": {},
+  "prisms": {},
+  "rarity": {},
+  "traits": {
+    "titleCase": {},
+    "uppercase": {}
+  },
+  "triggers": {},
+  "type": {}
+}

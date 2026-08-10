@@ -1,0 +1,15 @@
+import { memo } from 'react'
+
+import { ImageIconSVG } from '../shared/components/ImageIconSVG'
+import { ImageIconSVGProps } from '../shared/types/image-icon-svg-props'
+
+export const ElementMind = memo(({ height }: ImageIconSVGProps) => (
+  <ImageIconSVG boxWidth={48} boxHeight={48} height={height}>
+    <path
+      fill="rgb(136, 48, 239)"
+      d="M40.74,26.33c-.46-1.87-2.26-4.54-3.72-6.52C38.48,8.77,31.91,4,21.21,4A13.6,13.6,0,0,0,7.26,17.49c0,7,3.25,10.23,6.45,13.54A32.44,32.44,0,0,1,11,44h17.7a16.9,16.9,0,0,1,.17-7.85c1.66-.06,5.38.87,7.71.41a16.77,16.77,0,0,0,.93-4.65V31l.93-.47a27.09,27.09,0,0,0,0-3.72C38.88,26.79,40.28,26.79,40.74,26.33ZM22,25c-5,0-9-3.36-9-7.5S17,10,22,10s9,3.36,9,7.5S27,25,22,25Z"
+    />
+  </ImageIconSVG>
+))
+
+ElementMind.displayName = 'ElementMind'

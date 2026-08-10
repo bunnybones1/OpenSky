@@ -1,0 +1,36 @@
+{
+  "name": "@skyweaver/cards",
+  "version": "1.0.0",
+  "scripts": {
+    "csv-to-json": "tsx ./scripts/parse-card-sheet.ts",
+    "start": "pnpm run patch",
+    "patch": "tsx ./scripts/patch.ts",
+    "gen-analytics-card-library": "tsx ./scripts/gen-analytics-card-library.ts",
+    "pretty-patch-notes": "tsx ./scripts/pretty-patch-notes.ts",
+    "gen-weekly-golds-sql": "tsx ./scripts/weekly-golds-sql.ts",
+    "discovery-odds": "tsx ./scripts/discovery-odds.ts",
+    "migrate": "tsx scripts/cards_ids_mapping.ts",
+    "store-csv-to-translate": "tsx ./scripts/store-csv-to-translate.ts",
+    "gen-latest-card-list": "tsx ./scripts/gen-latest-card-list",
+    "test": "pnpm run patch exit"
+  },
+  "author": "Ari Lotter",
+  "devDependencies": {
+    "@opensky/design-data": "workspace:*",
+    "@opensky/language-manager": "workspace:*",
+    "@opensky/parse-card-description": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@opensky/tools": "workspace:*",
+    "@types/node": "^20.6.3",
+    "dayjs": "^1.10.6",
+    "fs-extra": "^11.1.1",
+    "prettier": "^3.0.0",
+    "simple-git": "^3.19.1",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6"
+  },
+  "private": true,
+  "dependencies": {
+    "bun": "^1.0.33"
+  }
+}

@@ -1,0 +1,70 @@
+# http://www.graphviz.org/content/cluster
+# quick preview at http://viz-js.com/
+
+digraph G {
+    rankdir="LR"
+    overlap=false
+    node [shape=doublecircle]
+	edge [penwidth=4]
+    subgraph cluster_CardComponents {
+        label="Card"
+        finalZone
+        StateZone -> finalZone [taillabel="onChange" weight=-1]
+        UserZone -> finalZone [taillabel="onChange" weight=-1]
+    }
+
+    subgraph cluster_CardZoneSystem {
+        label="CardZoneSystem"
+        rezonedCards [shape=cylinder]
+        node [shape=parallelogram]
+        animateMoveCard [label="animate rezonedCards\nclear rezonedCards"]
+        rezonedCards -> animateMoveCard [dir=none style=dotted] 
+        onUpdate -> animateMoveCard 
+    }
+    subgraph cluster_AnimOrchestrator {
+        label="AnimOrchestrator"
+        node [shape=parallelogram]
+        changeCardStateZone [label="change card state zone"]
+        onStateUpdate -> changeCardStateZone 
+    }
+    changeCardStateZone:e -> StateZone
+    subgraph cluster_UX {
+        label="UX"
+        node [shape=parallelogram]
+        changeCardUserZone [label="change card user zone"]
+        onInteraction -> changeCardUserZone 
+    }
+    changeCardUserZone:e -> UserZone
+    contextualUserState [label="contextually implied\nanimations like\nconjure-likes" shape=parallelogram]
+    changeCardStateZone:n -> contextualUserState:s
+    contextualUserState:n -> changeCardUserZone:s
+    finalZone -> rezonedCards [taillabel="onChange" weight=-1]
+    subgraph cluster_zones {
+        graph [color=white]
+        edge [style=tapered penwidth=24 dir=forward arrowhead=none weight=1000]
+        StateZones [
+            label="Deck |
+                Hand |
+                Field |
+                Graveyard |
+                Dust |
+                Attachment |
+                Limbo |
+                Casting |
+                CardSelection
+            "
+            shape=record
+        ]
+        StateZones -> StateZone 
+
+        UserZones [
+            label="Staging |
+                Conjuring |
+                Reward |
+                UseState
+            "
+            shape=record
+        ]
+        UserZones -> UserZone
+    }
+}

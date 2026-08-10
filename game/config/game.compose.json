@@ -1,0 +1,19 @@
+{
+  "API_HOST": "https://local-opensky-api.0xhorizon.net",
+  "ASSETS_URL": "https://local-assets.0xhorizon.net",
+  "ASSETS_VERSION_HASH": "",
+  "ASSETS_MANIFEST_GAME_HASH": "",
+  "MATCHMAKER_URL": "https://local-matchmaker.0xhorizon.net",
+  "ETHEREUM_HOST_PROVIDER": "https://nodes.sequence.app/polygon/AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
+  "WEBAPP_URL": "https://local.0xhorizon.net",
+  "GAME_BASE_URL_PATH": "/game/",
+  "GAME_SERVER_WALLET_ADDRESS": "0x05897F832CC3941d6d3e08c1ea4b80eD32C6830b",
+  "LOCAL_WALLET_PROVIDER_KEY": "local",
+  "TURN_TIMER_ENABLED": true,
+  "TURN_TIMER_MAX": "60000",
+  "ARCADEUM_API_URL": "https://local-arcadeum-api.0xhorizon.net",
+  "ANALYTICS": false,
+  "REMOTE_LOG_URL": "http://0.0.0.0:1111",
+  "DIRECT_BALANCE_FETCH": true,
+  "DEPLOY_ENV": ""
+}

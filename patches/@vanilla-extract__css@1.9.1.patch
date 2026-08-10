@@ -1,0 +1,11 @@
+diff --git a/dist/declarations/src/vars.d.ts b/dist/declarations/src/vars.d.ts
+index 835f1ed2794c90638462219ed22b2a4863905c3b..421607b8e7cd2815528ce8ff8e9f975b0890b87e 100644
+--- a/dist/declarations/src/vars.d.ts
++++ b/dist/declarations/src/vars.d.ts
+@@ -1,5 +1,6 @@
+ import { Contract, MapLeafNodes, CSSVarFunction } from '@vanilla-extract/private';
+ import { Tokens, NullableTokens, ThemeVars } from './types';
++export { Contract, MapLeafNodes, CSSVarFunction } from '@vanilla-extract/private';
+ export declare function createVar(debugId?: string): CSSVarFunction;
+ export declare function fallbackVar(...values: [string, ...Array<string>]): CSSVarFunction;
+ export declare function assignVars<VarContract extends Contract>(varContract: VarContract, tokens: MapLeafNodes<VarContract, string>): Record<CSSVarFunction, string>;

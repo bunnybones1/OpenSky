@@ -1,0 +1,3 @@
+*.sol linguist-language=Solidity
+game/patches/*.patch eol=lf
+Cargo.toml eol=lf

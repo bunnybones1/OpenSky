@@ -1,0 +1,440 @@
+{
+  "emote": {
+    "ADA": {
+      "gg": "¡GG!",
+      "hello": "Hola.",
+      "oops": "Vaya.",
+      "taunt": "Preferiría no hacerte daño.",
+      "thanks": "Gracias.",
+      "wow": "¡Increíble!"
+    },
+    "ARI": {
+      "hello": "Oh, hola.",
+      "oops": "Eh... un error momentáneo.",
+      "taunt": "Te he superado.",
+      "thanks": "Eh, gracias.",
+      "wow": "¡Increíble!"
+    },
+    "AXEL": {
+      "gg": "Buen juego.",
+      "hello": "Hola.",
+      "oops": "Un error.",
+      "taunt": "He previsto tu fin.",
+      "thanks": "Lo aprecio.",
+      "wow": "¡Interesante!"
+    },
+    "BANJO": {
+      "gg": "¡GG!",
+      "hello": "¡Hola!",
+      "oops": "¡Vaya error!",
+      "taunt": {
+        "0": "¡Luchas como un Elderwood!",
+        "1": "¡Tienes la gracia de un Zomboid!",
+        "2": "¡Chillas como un Pájaro Cantor!"
+      },
+      "thanks": "¡Gracias, buen amigo!",
+      "wow": "¡Jaja! ¡Increíble!"
+    },
+    "BOURAN": {
+      "hello": "Hola...",
+      "oops": "Un error...",
+      "taunt": "La muerte viene por ti...",
+      "thanks": "Gracias...",
+      "wow": "Interesante..."
+    },
+    "FOX": {
+      "hello": "Hola.",
+      "oops": "Yo... quería hacer eso.",
+      "taunt": "No finjas que no estás impresionado.",
+      "thanks": "Muy agradecido.",
+      "wow": "¡Rayos!"
+    },
+    "HORIK": {
+      "gg": "Buen juego.",
+      "hello": "Hola.",
+      "oops": "Puf.",
+      "taunt": "Caerás ante mí.",
+      "thanks": "Gracias.",
+      "wow": "Impresionante."
+    },
+    "IRIS": {
+      "hello": "Saludos, compañero de viaje.",
+      "oops": "Los errores son naturales.",
+      "taunt": "Hazte a un lado.",
+      "thanks": "Que el Cielo te bendiga.",
+      "wow": "¡Por el Cielo!"
+    },
+    "labels": {
+      "hello": "HOLA",
+      "oops": "UPS",
+      "taunt": "PROVOCAR",
+      "thanks": "GRACIAS"
+    },
+    "LOTUS": {
+      "gg": "Buen juego.",
+      "hello": "Saludos.",
+      "oops": "Un error de juicio.",
+      "taunt": "Tu plan es insuficiente.",
+      "thanks": "Tienes mi agradecimiento.",
+      "wow": "Muy notable."
+    },
+    "MAI": {
+      "gg": "¡GG <3!",
+      "hello": "¡Hola!",
+      "oops": "¡Ups!",
+      "taunt": "¡Demasiado fácil!",
+      "thanks": "¡Gracias! <3",
+      "wow": "¡Dios mío!"
+    },
+    "MIRA": {
+      "gg": "¡GG!",
+      "hello": "Encantado de conocerte.",
+      "oops": "Eso no es bueno.",
+      "taunt": "¡Tengo cerebro y músculo!",
+      "thanks": "Gracias.",
+      "wow": "¡Simplemente increíble!"
+    },
+    "SAMYA": {
+      "gg": "¡GG!",
+      "hello": "¡Hola!",
+      "oops": "¡Ups!",
+      "taunt": "¡Allá voy!",
+      "thanks": "¡Gracias!",
+      "wow": "¡Vaya!"
+    },
+    "SITTI": {
+      "gg": "Buen juego.",
+      "hello": "Saludos, OpenSky.",
+      "oops": "Oh, qué desafortunado.",
+      "taunt": "No te esfuerces demasiado, querido.",
+      "thanks": "Gracias.",
+      "wow": "Muy impresionante."
+    },
+    "timeout": {
+      "ADA": "¡Hora de actuar!",
+      "ARI": "¡Vaya! ¡Mejor pensar rápido!",
+      "AXEL": "El futuro se acerca.",
+      "BANJO": "Se acaba el tiempo del temporizador",
+      "BOURAN": "El final se acerca...",
+      "FOX": "Hora de tomar acción.",
+      "HORIK": "Debo tomar acción.",
+      "IRIS": "Debo actuar ahora.",
+      "LOTUS": "El tiempo fluye sin cesar.",
+      "MAI": "¡Mi turno está casi terminado!",
+      "MIRA": "Vaya, se me acaba el tiempo.",
+      "SAMYA": "¡Vaya! ¡Mejor moverse rápido!",
+      "SITTI": "Será mejor que actúe pronto.",
+      "TITUS": "¡Tiempo doble!",
+      "UNKNOWN": "<MISSING> tiempo agotado",
+      "ZOEY": "¡La mecha se está acabando!"
+    },
+    "TITUS": {
+      "hello": "Saludos, amigo.",
+      "oops": "¡Vaya!",
+      "taunt": "Haz amigos, no la guerra.",
+      "thanks": "¡Gracias, amigo!",
+      "wow": "¡Genial!"
+    },
+    "UNKNOWN": {
+      "hello": "<MISSING> HOLA",
+      "oops": "<MISSING> UPS",
+      "taunt": "<MISSING> BURLA",
+      "thanks": "<MISSING> GRACIAS",
+      "wow": "<MISSING> ¡GUAU!"
+    },
+    "ZOEY": {
+      "hello": "¡Oye tú!",
+      "oops": "¡Oh, ratas!",
+      "taunt": "¡Jajajajaja!",
+      "thanks": "¡Gracias! ¡Jajaja!",
+      "wow": "¡Vaya!"
+    }
+  },
+  "sidebarUI": {
+    "buttonLabel": {}
+  },
+  "ui": {
+    "actionError": {
+      "ActedOutOfTurn": "No es tu turno",
+      "AlreadySelectedCards": "Ya eligió cartas",
+      "AttackedGuardedHero": "Una unidad guardiana está en el camino",
+      "AttackedHeroWithDash": "Las unidades rápidas no pueden atacar al héroe",
+      "AttackedNonExistentDefender": "Elige un objetivo",
+      "AttackedNonFieldDefender": "Elige un objetivo",
+      "AttackedNonFrontUnitWithBlindAttacker": "Solo puede atacar a la unidad más a la derecha",
+      "AttackedOwnDefender": "Elige un objetivo",
+      "AttackedStealthUnit": "Daña al héroe enemigo primero",
+      "AttackedWithAnotherPlayersAttacker": "No es tu unidad",
+      "AttackedWithAttackerWithRoots": "No puede atacar con raíces",
+      "AttackedWithExhaustedAttacker": "Ya atacó en este turno",
+      "AttackedWithNonExistentAttacker": "Elige un atacante",
+      "AttackedWithNonExistentAttackerAndDefender": "Elige un atacante",
+      "AttackedWithNonFieldAttacker": "Esto no puede atacar",
+      "AttackedWithSleepingAttacker": "Esta unidad está dormida",
+      "Cheated": "Acción imposible",
+      "DidNotSelectCards": "Elige tus cartas",
+      "DidOwnerAction": "Acción imposible",
+      "DuplicateIndexInCardSelection": "Elegiste la misma carta dos veces",
+      "GameAlreadyFinished": "Partida completada",
+      "InvalidIndexInCardSelection": "La carta no existe",
+      "PlayedAnotherPlayersCard": "No es tu carta",
+      "PlayedCardOnNonExistentTarget": "Elige un objetivo",
+      "PlayedNonExistentCard": "La carta no existe",
+      "PlayedNonFieldAttachedSpell": "No se pueden jugar accesorios de unidades fuera del campo",
+      "PlayedNonTargetingCardWithTarget": "Esto no puede seleccionar",
+      "PlayedOrphanedAttachedSpell": "La carta no existe",
+      "PlayedTargetingCardOnInvalidTarget": "Eso no puede ser seleccionado",
+      "PlayedTargetingCardOnTargetUntargetableByOpponent": "Eso no puede ser seleccionado",
+      "PlayedTargetingCardOnTargetUntargetableByPlayer": "Eso no puede ser seleccionado",
+      "PlayedTargetingCardWithoutTarget": "Elige un objetivo",
+      "PlayedUnplayableCard": "No se puede jugar una carta no jugable",
+      "PlayedWithInsufficientMana": "No hay suficiente maná",
+      "PlayedWithInsufficientRoom": "No hay espacio para más unidades",
+      "SelectedWrongNumberOfCards_one": "Elija {{count}} carta",
+      "SelectedWrongNumberOfCards_other": "Elija {{count}} cartas",
+      "UnscriptedTutorialAction": "Por favor, sigue el tutorial"
+    },
+    "artBy": "Arte por",
+    "botEndMessages": {
+      "defeat": "Gana XP en partidas contra bots hasta nivel 15.",
+      "tie": "¡Empate!\nGana XP en partidas contra bots hasta nivel 15.",
+      "victory": "¡Felicidades! Gana XP en juegos contra bots hasta el nivel 15."
+    },
+    "cardSelection": {
+      "pickPromptFirst_one": "VAS PRIMERO. ELIGE {{count}} CARTA PARA MANTENER.",
+      "pickPromptFirst_other": "VAS PRIMERO. ELIGE {{count}} CARTAS PARA MANTENER.",
+      "pickPromptSecond_one": "VAS SEGUNDO. ELIGE {{count}} CARTA PARA MANTENER.",
+      "pickPromptSecond_other": "VAS SEGUNDO. ELIGE {{count}} CARTAS PARA MANTENER.",
+      "waitingForOpponent": "Esperando al oponente..."
+    },
+    "cheats": {
+      "addToDeck": "Añadir al mazo",
+      "addToGrave": "Añadir a la tumba",
+      "addToHand": "Añadir a la mano",
+      "changeMaxMana": "Cambiar maná máximo",
+      "cheatsButton": "TRUCOS",
+      "createPuzzleLink": "Crear enlace de rompecabezas",
+      "drawCard": "Robar una Carta",
+      "dustDeck": "Pulverizar mazo",
+      "dustField": "Pulverizar campo",
+      "dustGrave": "Pulverizar tumba",
+      "dustHand": "Pulverizar mano",
+      "modifiers": {
+        "giveAttachment": "Dar Accesorio",
+        "giveTrait": "Dar Rasgo",
+        "invalidCard": "{{input}} no es una carta válida!",
+        "modifyHealth": "Modificar Salud",
+        "modifyPower": "Modificar Poder",
+        "moveToEnemyZone": "Mover a Zona Enemiga",
+        "moveToMyZone": "Mover a Mi Zona",
+        "promptCost": "Ingrese el nuevo costo: ej. 0, 1, 2",
+        "promptHowMuchHealth": "¿Cuántos puntos de vida? Ej. +1, -10, +500",
+        "promptHowMuchPower": "¿Cuánto poder? Ej. +1, -10, +500",
+        "promptWhichAttachment": "Ingrese el nombre de una carta para adjuntar",
+        "promptWhichCards": "Ingrese los ID de las cartas o nombres, separados por comas (ej. 45, Songbird, Buster, squire, elderwood)",
+        "readyThisUnit": "Preparar esta unidad",
+        "removeAttachment": "Eliminar accesorio",
+        "removeTraits": "Eliminar Rasgos",
+        "setCost": "Establecer Costo",
+        "setElement": "Establecer Elemento",
+        "setRarity": "Establecer Rareza"
+      },
+      "promptHowMuchMaxMana": "¿Cuánto maná máximo quieres agregar?",
+      "puzzleLink": {
+        "linkMessage": "¡Aquí está tu enlace de rompecabezas!",
+        "promptUrl": "Pega tu URL en bruto de gist.github.com a continuación"
+      },
+      "puzzleSave": {
+        "promptName": "Ingresa un nombre de autor",
+        "uploadInstructions": "Toma tu archivo descargado, súbelo a gist.github.com y luego haz clic en el botón 'crear enlace de rompecabezas'."
+      },
+      "quickload": "Carga rápida",
+      "quicksave": "Guardado rápido",
+      "saveAsLethalPuzzle": "Guardar como Puzzle Letal",
+      "setHero": "Establecer Héroe",
+      "setHeroInvalidPrisms": "Prismas no válidos {{prisms}}",
+      "setHeroPrompt": "Ingrese un héroe o una Clase de Mazo, por ejemplo, Ada, Bouran, STW, INT.\nADVERTENCIA: ¡Esto reiniciará el área de pruebas!",
+      "summonUnits": "Invocar Unidades",
+      "titles": {
+        "player": "Jugador"
+      }
+    },
+    "endTurnButton": {
+      "backToMenu": "VOLVER AL MENÚ",
+      "continue": "CONTINUAR",
+      "endTurn": "FIN DE TURNO",
+      "enemyTurn": "TURNO DEL ENEMIGO",
+      "playNextTutorial": "JUGAR SIGUIENTE TUTORIAL",
+      "playPuzzle": "JUGAR ROMPECABEZAS",
+      "playTutorial": "JUGAR TUTORIAL {{level}}",
+      "restart": "REINICIAR",
+      "retryTutorial": "REINTENTAR TUTORIAL",
+      "startGame": "INICIAR JUEGO"
+    },
+    "endTypeMessages": {
+      "defeat": "DERROTA",
+      "tie": "EMPATE",
+      "victory": "¡VICTORIA!"
+    },
+    "error": {
+      "buttonQuit": "Salir",
+      "buttonReload": "Recargar",
+      "header": "¡Lo siento, parece que los Fun Guys malvados causaron un problema!",
+      "middle": "¡No te preocupes! Nuestros ingenieros están echando un vistazo. Puedes recargar para intentar reconectar si tu juego aún está en curso, o salir al menú principal."
+    },
+    "ForTurn_one": "Por {{count}} turno",
+    "ForTurn_other": "Por {{count}} turnos",
+    "gameModeSubtext": {
+      "CHALLENGE_CONSTRUCTED": "CONSTRUIDO",
+      "CHALLENGE_DISCOVERY": "DESCUBRIMIENTO",
+      "CONQUEST_CONSTRUCTED": "CONSTRUIDO",
+      "CONQUEST_DISCOVERY": "DESCUBRIMIENTO",
+      "RANKED_CONSTRUCTED": "CONSTRUIDO",
+      "RANKED_DISCOVERY": "DESCUBRIMIENTO",
+      "UNKNOWN": "DESCONOCIDO"
+    },
+    "gameModeTitles": {
+      "CHALLENGE_CONSTRUCTED": "PRIVADO",
+      "CHALLENGE_DISCOVERY": "PRIVADO",
+      "CONQUEST_CONSTRUCTED": "CONQUISTA",
+      "CONQUEST_DISCOVERY": "CONQUISTA",
+      "PRACTICE_BOT": "BOT DE PRÁCTICA",
+      "PRACTICE_PVP": "PVP DE PRÁCTICA",
+      "RANKED_CONSTRUCTED": "CLASIFICADO",
+      "RANKED_DISCOVERY": "CLASIFICADO",
+      "REPLAY": "REPETICIÓN",
+      "SANDBOX": "CAJA DE ARENA",
+      "SPECTATE": "ESPECTADOR",
+      "UNKNOWN": "DESCONOCIDO",
+      "WARM_UP": "CALENTAMIENTO CLASIFICADO"
+    },
+    "hordeEndMessages": {
+      "tie": "¡Empate!\nGana XP en partidas de horda hasta nivel 15.",
+      "victory": "¡Felicidades! Gana XP en partidas de horda hasta nivel 15.",
+      "youDealtXDamageToHordeBoss": "¡Infligiste {{damage}} de daño al Jefe de la Horda!"
+    },
+    "nextTurn": "Siguiente turno",
+    "playerRank": {
+      "APPRENTICE": "Novato",
+      "EXPERT": "Experto",
+      "GRANDWEAVER": "Gran Tejedor",
+      "MASTER": "Maestro",
+      "TRAINEE": "Aprendiz",
+      "UNKNOWN": "Desconocido",
+      "UNRANKED": "No clasificado",
+      "WANDERER": "Caminante"
+    },
+    "playRankedEndMessages": {
+      "defeat": "Juega en clasificatoria para ganar más XP.",
+      "tie": "¡Empate!\nJuega en clasificatoria para ganar más XP.",
+      "victory": "¡Felicidades! Juega en clasificatoria para ganar más XP."
+    },
+    "privateEndMessages": {
+      "defeat": "Gana XP en partidas privadas hasta nivel 15.",
+      "tie": "¡Empate!\nGana XP en partidas privadas hasta nivel 15.",
+      "victory": "¡Felicidades! Gana XP en partidas privadas hasta nivel 15."
+    },
+    "prompt": {
+      "itsNotYourTurn": "No es tu turno",
+      "noCardsLeftLose1HealthAndConjureInstead": "¡No quedan cartas! Pierde 1 de vida y ¡Conjura en su lugar!",
+      "noCardsOfThatTypeLeftLose1HealthAndConjureInstead": "¡No quedan cartas de ese tipo! Pierde 1 de vida y ¡Conjura en su lugar!",
+      "noCardsToConjure": "`¡No quedan cartas de ese tipo para conjurar de prismas!`",
+      "noPossibleTargets": "No hay objetivos posibles"
+    },
+    "rewardCard": {
+      "baseCard_one": "+{{count}} CARTA BASE",
+      "baseCard_other": "+{{count}} CARTAS BASE",
+      "congratsYouUnlockedACard": "¡FELICIDADES! HAS DESBLOQUEADO UNA CARTA",
+      "congratsYouUnlockedCard_one": "¡FELICIDADES! HAS DESBLOQUEADO {{count}} CARTA",
+      "congratsYouUnlockedCard_other": "¡FELICIDADES! HAS DESBLOQUEADO {{count}} CARTAS",
+      "multiCardUnlock": {
+        "agy": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE AGILIDAD",
+        "hrt": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE CORAZÓN",
+        "int": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE INTELECTO",
+        "str": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE FUERZA",
+        "tok": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS SIN PRISMA",
+        "tut": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE TUTORIAL",
+        "wis": "¡FELICIDADES! ¡DESBLOQUEASTE CARTAS DE SABIDURÍA"
+      },
+      "singleCardUnlock": {
+        "agy": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE AGILIDAD",
+        "hrt": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE CORAZÓN",
+        "int": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE INTELECTO",
+        "str": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE FUERZA",
+        "tok": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA SIN PRISMA",
+        "tut": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE TUTORIAL",
+        "wis": "¡FELICIDADES! ¡DESBLOQUEASTE UNA CARTA DE SABIDURÍA"
+      },
+      "youUnlockedCards_one": "¡DESBLOQUEASTE UNA NUEVA CARTA BASE!",
+      "youUnlockedCards_other": "¡HAS DESBLOQUEADO NUEVAS CARTAS BASE!"
+    },
+    "rewardHero": {
+      "dualPrismBuildTip": "Ahora puedes construir mazos con dos Prismas",
+      "dualPrismUnlock": "¡HÉROES DE DOBLE PRISMA DESBLOQUEADOS!",
+      "heroAndStarterUnlock": "¡FELICIDADES! ¡DESBLOQUEASTE UN NUEVO HÉROE\nY UN MAZO INICIAL DE 25 CARTAS!",
+      "heroUnlock": "¡FELICIDADES! ¡DESBLOQUEASTE UN NUEVO HÉROE!"
+    },
+    "rewardRank": {
+      "conceded": "RENDIDO",
+      "concededTooEarly": "RENDIDO DEMASIADO PRONTO",
+      "levelUp": "¡SUBE DE NIVEL!",
+      "matchLoss": "DERROTA EN EL PARTIDO",
+      "matchTie": "EMPATE EN EL PARTIDO",
+      "matchWin": "VICTORIA EN EL PARTIDO",
+      "playerLevel": "NIVEL {{level}}",
+      "progress": {},
+      "puzzleComplete": "¡ROMPECABEZAS COMPLETO!",
+      "puzzleCongrats_one": "¡Felicidades! Completaste el rompecabezas {{puzzle_name}} en {{count}} intento!",
+      "puzzleCongrats_other": "¡Felicidades! Completaste el rompecabezas {{puzzle_name}} en {{count}} intentos!",
+      "rankDown": "¡BAJADA DE RANGO!",
+      "rankPoints_one": "{{sign}}{{count}} PUNTO DE RANGO",
+      "rankPoints_other": "{{sign}}{{count}} PUNTOS DE RANGO",
+      "rankUp": "¡SUBIDA DE RANGO!",
+      "reachWandererRankToUnlock": "ALCANZA EL RANGO CAMINANTE PARA DESBLOQUEAR EL MODO CLASIFICATORIO",
+      "xpReason": {
+        "ConcededTooEarly": "Rendido Demasiado Pronto",
+        "DailyQuest": "Misión Diaria ({{extraData}} restantes)",
+        "Draw": "Empate",
+        "MatchPlayed": "Partida Jugada",
+        "RankUp": "Bono de XP por Subida de Rango",
+        "TutorialCompleted": "Tutorial Completado",
+        "Victory": "Victoria"
+      }
+    },
+    "stickers": "PEGATINAS",
+    "thisGame": "Este juego",
+    "tutorial": {
+      "nextTip": "SIGUIENTE CONSEJO"
+    },
+    "unknown": "Desconocido",
+    "vs": {
+      "conquestMatch": "PARTIDA {{match}}",
+      "loadingAssets": "Cargando recursos... {{timeLeft}}",
+      "waitingForOpponent": "Esperando al oponente... {{timeLeft}}",
+      "winner": "♕ GANADOR"
+    },
+    "whoseTurn": {
+      "enemysTurn": "TURNO DEL ENEMIGO",
+      "type": {
+        "end": "FIN",
+        "start": "COMIENZO"
+      },
+      "untilMatchEndsInDraw_one": "{{count}} turno restante hasta que el partido termine en Empate",
+      "untilMatchEndsInDraw_other": "{{count}} turnos restantes hasta que el partido termine en Empate",
+      "yourTurn": "TU TURNO"
+    }
+  },
+  "zone": {
+    "Attachment": "Adjunto",
+    "CardSelection": "Selección de Cartas",
+    "Casting": "Lanzamiento",
+    "Deck": "Mazo",
+    "Dust": "Pulverizar",
+    "Field": "Campo",
+    "Graveyard": "Cementerio",
+    "Hand": "Mano",
+    "RevealedDust": "Pulverizar Revelado",
+    "RevealedHand": "Mano Revelada",
+    "RevealedLimbo": "Limbo Revelado"
+  }
+}

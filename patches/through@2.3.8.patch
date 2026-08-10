@@ -1,0 +1,13 @@
+diff --git a/index.js b/index.js
+index ca5fc5901fd8751c04f4b15a0572f5673d959e27..7987a292827558911757300e7d6f3457ede5f4ac 100644
+--- a/index.js
++++ b/index.js
+@@ -15,7 +15,7 @@ function through (write, end, opts) {
+   end = end || function () { this.queue(null) }
+ 
+   var ended = false, destroyed = false, buffer = [], _ended = false
+-  var stream = new Stream()
++  var stream = Stream.default ? new Stream.default() : new Stream()
+   stream.readable = stream.writable = true
+   stream.paused = false
+ 

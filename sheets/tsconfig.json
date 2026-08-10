@@ -1,0 +1,33 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+
+    "outDir": "./build",
+
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noErrorTruncation": true,
+    "forceConsistentCasingInFileNames": true,
+    "strictPropertyInitialization": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "useDefineForClassFields": true,
+
+    "sourceMap": true,
+    "inlineSources": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "files": [
+    "typings/import-jpg.d.ts",
+    "typings/import-png.d.ts",
+    "typings/import-gif.d.ts",
+    "typings/import-md.d.ts"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@opensky/game-analytics",
+  "version": "0.5.0",
+  "description": "OpenSky Game Analytics",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "concurrently \"tsc -w\" \"nodemon --watch ./dist/ --exec pnpm build\"",
+    "dist": "rm -rf dist && pnpm ncc build src/index.ts -o dist && cp ../state/js-bindings/packages/node-sys/bindings_bg.wasm ./dist",
+    "start": "FUNCTION_TARGET=getVersionAndIDFromReplay npx functions-framework --signature-type=cloudevent",
+    "start2": "FUNCTION_TARGET=pubMatchData npx functions-framework --signature-type=cloudevent --port=8081",
+    "gen-sample-analytics": "tsx ./scripts/gen-sample-analytics"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google-cloud/pubsub": "^3.1.0",
+    "@google-cloud/storage": "^6.3.0",
+    "@google/events": "^5.4.0",
+    "@horizongames/node-logger": "^1.0.8",
+    "@opensky/deck-string-codec": "workspace:*",
+    "@opensky/proto": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*",
+    "@skyweaver/state-node-sys": "workspace:*",
+    "ethers": "^5.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^14.14.35",
+    "@vercel/ncc": "^0.34.0",
+    "concurrently": "^7.3.0",
+    "express": "^4.18.1",
+    "nodemon": "^2.0.1",
+    "replace-in-file-webpack-plugin": "^1.0.6",
+    "rollup": "^3.2.3",
+    "ts-loader": "^9.3.1",
+    "tsconfig-paths": "^3.9.0",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^4.10.0",
+    "ws": "^7.2.0"
+  }
+}

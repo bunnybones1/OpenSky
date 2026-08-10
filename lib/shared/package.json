@@ -1,0 +1,45 @@
+{
+  "name": "@opensky/shared",
+  "version": "1.0.0",
+  "description": "shared libraries for opensky packages",
+  "private": true,
+  "scripts": {},
+  "dependencies": {
+    "@0xsequence/ethauth": "0.8.1",
+    "@0xsequence/utils": "^0.43.34",
+    "@opensky/language-manager": "workspace:*",
+    "@opensky/parse-card-description": "workspace:*",
+    "@opensky/proto": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*",
+    "ethers": "^5.5.1",
+    "hash.js": "^1.1.7",
+    "i18next": "^22.0.6",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/node": "^20.6.3",
+    "typescript": "^5.1.6"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./*": {
+      "import": "./src/*.ts",
+      "require": "./src/*.ts",
+      "types": "./src/*.ts"
+    },
+    "./utils": {
+      "import": "./src/utils/index.ts",
+      "require": "./src/utils/index.ts",
+      "types": "./src/utils/index.ts"
+    },
+    "./utils/*": {
+      "import": "./src/utils/*.ts",
+      "require": "./src/utils/*.ts",
+      "types": "./src/utils/*.ts"
+    }
+  }
+}

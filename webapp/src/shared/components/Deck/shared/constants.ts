@@ -1,0 +1,15 @@
+export const DECK_Z_INDEXES = {
+  BASE: 1,
+  HIGHLIGHT: 1,
+  BACKGROUND: 2,
+  BACKGROUND_GRADIENT: 3,
+  PRISM: 4,
+  FRAME: 5,
+  CARDS: 6,
+  FAVOURITE: 7,
+  DECK_INFO: 8,
+  DECK_STATS: 9,
+  LOCK: 10
+}
+
+export const DECK_RATIO = 459 / 300

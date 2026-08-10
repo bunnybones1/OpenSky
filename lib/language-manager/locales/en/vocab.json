@@ -1,0 +1,186 @@
+{
+  "trigger-summon": {
+    "title": "Summon",
+    "text": "When this unit comes into play."
+  },
+  "lifesteal": {
+    "title": "Lifesteal",
+    "text": "When this damages the enemy hero, give your hero that much health."
+  },
+  "ready": {
+    "title": "Ready",
+    "text": "If this character is sleeping, or has already attacked this turn, it can attack again."
+  },
+  "dust": {
+    "title": "Dust",
+    "text": "Remove from the game."
+  },
+  "trigger-play": {
+    "title": "Play",
+    "text": "When this unit is played from hand."
+  },
+  "trigger-inspire-mind": {
+    "title": "Inspire {Mind}",
+    "text": "After you play a {Mind} card."
+  },
+  "inspire": {
+    "title": "Inspire",
+    "text": "An effect that will trigger after you play a certain card."
+  },
+  "trigger-inspire-guard": {
+    "title": "Inspire {Guard}",
+    "text": "After you play a card with {Guard}."
+  },
+  "scion": {
+    "title": "Scion",
+    "text": "Any Unit with Scion in its name."
+  },
+  "trigger-inspire-banner": {
+    "title": "Inspire {Banner}",
+    "text": "After you play a card with {Banner}."
+  },
+  "trigger-inspire-light": {
+    "title": "Inspire {Light}",
+    "text": "After you play a {Light} card."
+  },
+  "trigger-slay-unit": {
+    "title": "Slay",
+    "text": "When this Unit damages and destroys a unit during your turn."
+  },
+  "sleep": {
+    "title": "Sleep",
+    "text": "A sleeping character cannot attack. Units are asleep when first summoned."
+  },
+  "trigger-death": {
+    "title": "Death",
+    "text": "When this is put into a graveyard from the battlefield."
+  },
+  "trigger-sunset": {
+    "title": "Sunset",
+    "text": "When this unit or enchant's player's turn ends."
+  },
+  "trigger-inspire-earth": {
+    "title": "Inspire {Earth}",
+    "text": "After you play an {Earth} card."
+  },
+  "rune": {
+    "title": "Rune",
+    "text": "A 1 cost spell with banner that attaches an enchant to a unit. There is one for each element."
+  },
+  "trigger-inspire-any": {
+    "title": "Inspire Any",
+    "text": "After you play any card."
+  },
+  "trigger-inspire-dark": {
+    "title": "Inspire {Dark}",
+    "text": "After you play a {Dark} card."
+  },
+  "wither": {
+    "title": "Wither",
+    "text": "When this damages a unit, that unit loses that much power."
+  },
+  "enchanted": {
+    "title": "Enchanted",
+    "text": "The character this enchant is attached to. "
+  },
+  "blade": {
+    "title": "Blade",
+    "text": "All Spells with 'Blade' in their name."
+  },
+  "trigger-inspire-air": {
+    "title": "Inspire {Air}",
+    "text": "After you play an {Air} card."
+  },
+  "trigger-slay-spell": {
+    "title": "Slay",
+    "text": "When this Spell damages and destroys a unit during your turn."
+  },
+  "enemydraw": {
+    "title": "Enemy Draw",
+    "text": "Draw a card from the enemy deck, if possible. If not, lose 1 health and Conjure one from their Prism(s) instead."
+  },
+  "trigger-inspire-1c": {
+    "title": "Inspire 1 Cost",
+    "text": "After you play a {1c} card."
+  },
+  "armor": {
+    "title": "Armor",
+    "text": "Takes 1 damage less from everything."
+  },
+  "trait": {
+    "title": "Traits",
+    "text": "Guard, stealth, armor, banner, lifesteal, wither, and dash."
+  },
+  "trigger-sunrise": {
+    "title": "Sunrise",
+    "text": "When this unit or enchant's player's turn starts."
+  },
+  "trigger-inspire-spell": {
+    "title": "Inspire Spell",
+    "text": "After you play a Spell card."
+  },
+  "dash": {
+    "title": "Dash",
+    "text": "This unit can attack enemy units the turn it is summoned, or if it was sleeping and gained dash."
+  },
+  "banner-unit": {
+    "title": "Banner",
+    "text": "Your hero gains +1 power while this unit is in play."
+  },
+  "stealth": {
+    "title": "Stealth",
+    "text": "This unit can't be attacked unless its hero has been damaged this turn."
+  },
+  "banner-spell": {
+    "title": "Banner",
+    "text": "Your hero gains +1 power this turn."
+  },
+  "conjure": {
+    "title": "Conjure",
+    "text": "Draw a card that is in your Prism(s), from outside of your deck."
+  },
+  "trigger-inspire-metal": {
+    "title": "Inspire {Metal}",
+    "text": "After you play a {Metal} card."
+  },
+  "enemyconjure": {
+    "title": "Conjure Enemy Card",
+    "text": "Draw a card that is in the enemy Prism(s), from outside of their deck."
+  },
+  "trigger-inspire-water": {
+    "title": "Inspire {Water}",
+    "text": "After you play a {Water} card."
+  },
+  "wisp": {
+    "title": "Wisp",
+    "text": "Any Unit with Wisp in its name."
+  },
+  "mulligan": {
+    "title": "Mulligan",
+    "text": "Return card(s) from hand to deck, then draw the same number of cards."
+  },
+  "guard": {
+    "title": "Guard",
+    "text": "This unit's hero can't be attacked."
+  },
+  "play": {
+    "title": "Play Effects",
+    "text": "Effects that trigger when a unit is played from hand."
+  },
+  "draw": {
+    "title": "Draw",
+    "text": "Draw a card from your deck, if possible. If not, lose 1 health and Conjure one instead."
+  },
+  "trigger-glory": {
+    "title": "Glory",
+    "text": "When this character attacks a hero and damages them."
+  },
+  "lowesthealth": {
+    "title": "Lowest Health",
+    "text": "Chosen randomly from the lowest health targets in the case of a tie."
+  },
+  "shroom": {
+    "title": "Shroom",
+    "text": "'Fun Guy' and all Units with 'Shroom' in their name."
+  }
+}

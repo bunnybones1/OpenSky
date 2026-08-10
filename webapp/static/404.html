@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenSky - 404</title>
+  </head>
+  <style>
+    @font-face {
+      font-family: 'Barlow Condensed';
+      src: url('./BarlowCondensed-Regular.ttf');
+    }
+
+    body,
+    html {
+      width: 100vw;
+      height: 100vh;
+      text-align: center;
+      background: #0c061e;
+
+      font-weight: medium;
+      font-family: 'Barlow Condensed';
+      font-size: 18pt;
+    }
+    img {
+      max-width: 900px;
+      width: 70%;
+    }
+    a {
+      display: inline-block;
+      width: 168px;
+      height: 43px;
+      color: white;
+      text-decoration: none;
+      position: relative;
+    }
+    p {
+      color: #c5b4f5;
+    }
+
+    .angledBox {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      clip-path: polygon(
+        0% 0%,
+        calc(100% - 6px) 0%,
+        100% 6px,
+        100% 100%,
+        6px 100%,
+        0% calc(100% - 6px)
+      );
+    }
+
+    .angledBoxContainer {
+      background: rgb(75, 231, 136) none repeat scroll 0% 0%;
+      filter: drop-shadow(rgb(20, 166, 94) 0px 0px 0px);
+    }
+
+    .angledBoxContainer:hover {
+      background: rgb(134, 251, 180) none repeat scroll 0% 0%;
+    }
+
+    .angledBoxInner {
+      inset: 1px;
+      background: rgba(0, 0, 0, 0)
+        linear-gradient(
+          rgb(44, 147, 85) 0%,
+          rgb(44, 147, 85) 29%,
+          rgb(44, 147, 85) 49%,
+          rgb(37, 135, 76) 50%,
+          rgb(37, 135, 76) 100%
+        )
+        repeat scroll 0% 0%;
+
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .angledBoxInner:hover {
+      background: rgba(0, 0, 0, 0)
+        linear-gradient(
+          rgb(62, 176, 107) 0%,
+          rgb(62, 176, 107) 29%,
+          rgb(62, 176, 107) 49%,
+          rgb(48, 157, 91) 50%,
+          rgb(48, 157, 91) 100%
+        )
+        repeat scroll 0% 0%;
+    }
+  </style>
+  <body>
+    <img src="./404.jpeg" />
+    <p>It looks like you've reached the edge of Sky. There's nothing here.</p>
+    <a href="/">
+      <div class="angledBox angledBoxContainer">
+        <div class="angledBox angledBoxInner">Go Back Home</div>
+      </div>
+    </a>
+  </body>
+</html>

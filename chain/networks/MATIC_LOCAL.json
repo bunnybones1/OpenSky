@@ -1,0 +1,70 @@
+[
+  {
+    "contractName": "NiftyswapFactory",
+    "address": "0x41bB3b1C84cB903ebe5cC82b0A648aBb502923d2"
+  },
+  {
+    "contractName": "OpenSkyAssets",
+    "address": "0xFe52b949359ad121072a0c3df3CB61a519fa6581"
+  },
+  {
+    "contractName": "ERC20Wrapper",
+    "address": "0xC39eF7B133Ad083Da98d8Dd8350bABca03664081"
+  },
+  {
+    "contractName": "LeaderboardRewardFactory",
+    "address": "0xCD38fD5cc1101C98FB56E7Fa17Fb1D30e26F16da"
+  },
+  {
+    "contractName": "LeaderboardTicketRewardFactory",
+    "address": "0xaED4A3D470e79C53f7DF3D3bB4b259303f1B145C"
+  },
+  {
+    "contractName": "FreeConquestEntriesFactory",
+    "address": "0x260EdC9925EaAb022ef68339e4a50D1926Ea4113"
+  },
+  {
+    "contractName": "SilverRewardFactory",
+    "address": "0x5BE5824a727DDaFeCee033FB013bbF10245a700D"
+  },
+  {
+    "contractName": "GoldRewardFactory",
+    "address": "0x742baCeb8870677339A79dacfE2cC7279799a280"
+  },
+  {
+    "contractName": "ConquestEntriesFactory",
+    "address": "0x2e7dd4b107E7449700Df4eB74dF910443B0a8AcF"
+  },
+  {
+    "contractName": "OldConquest",
+    "address": "0xae70bbb459916CC32c961Df4a47556f0Fd587f3c"
+  },
+  {
+    "contractName": "Conquest",
+    "address": "0x7025c776d56ce881b2176939fB0e6ec7a7fd3F23"
+  },
+  {
+    "contractName": "CrystalFactory",
+    "address": "0x47dE9FE2CC67376125946A8dDaF1f837F85018C6"
+  },
+  {
+    "contractName": "LegacyHeroFactory",
+    "address": "0xA027E46F436fE9835615Bab077581494CC19043D"
+  },
+  {
+    "contractName": "LegacyHeroSale",
+    "address": "0x8e7ccED538F8597fa189b6502DAd1dEa21e64B67"
+  },
+  {
+    "contractName": "LegacyHeroSale",
+    "address": "0x8e7ccED538F8597fa189b6502DAd1dEa21e64B67"
+  },
+  {
+    "contractName": "NiftyswapExchange",
+    "address": "0x58D82D9fb669AEc50832F3703698479Ff7567559"
+  },
+  {
+    "contractName": "USDC",
+    "address": "0x1B95DF265442a0cDd5159B81AB3F6C78C0C47E93"
+  }
+]

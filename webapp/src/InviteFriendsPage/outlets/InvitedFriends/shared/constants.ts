@@ -1,0 +1,5 @@
+export enum INVITED_FRIENDS_TABLE_WIDTHS {
+  JOINED = 104,
+  POINTS = 124,
+  USER = 526
+}

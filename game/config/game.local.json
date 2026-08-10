@@ -1,0 +1,19 @@
+{
+  "API_HOST": "http://localhost:1337",
+  "ASSETS_URL": "https://assets.skyweaver.net",
+  "ASSETS_VERSION_HASH": "",
+  "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
+  "MATCHMAKER_URL": "http://localhost:8888",
+  "ETHEREUM_HOST_PROVIDER": "https://nodes.sequence.app/polygon/AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
+  "WEBAPP_URL": "http://localhost:3000",
+  "GAME_BASE_URL_PATH": "/game/",
+  "GAME_SERVER_WALLET_ADDRESS": "0x05897F832CC3941d6d3e08c1ea4b80eD32C6830b",
+  "LOCAL_WALLET_PROVIDER_KEY": "local",
+  "TURN_TIMER_ENABLED": true,
+  "TURN_TIMER_MAX": "30000",
+  "ANALYTICS": false,
+  "WEBAPP_ANALYTICS_KEY": "",
+  "REMOTE_LOG_URL": "http://0.0.0.0:1111",
+  "DIRECT_BALANCE_FETCH": true,
+  "DEPLOY_ENV": ""
+}

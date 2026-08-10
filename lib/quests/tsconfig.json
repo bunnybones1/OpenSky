@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "module": "esnext",
+    "baseUrl": ".",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "resolveJsonModule": true,
+  },
+  "include": ["./src", "./scripts", "./tests", "./sheet_imported"]
+}

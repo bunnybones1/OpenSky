@@ -1,0 +1,1 @@
+export const MAX_CONQUEST_TREASURE_LEVEL = 10

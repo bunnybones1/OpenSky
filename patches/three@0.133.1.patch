@@ -1,0 +1,44 @@
+diff --git a/build/three.js b/build/three.js
+index 7fcc3d5..da99509 100644
+--- a/build/three.js
++++ b/build/three.js
+@@ -5122,9 +5122,6 @@
+ 					enumerable: true,
+ 					value: scale
+ 				},
+-				modelViewMatrix: {
+-					value: new Matrix4()
+-				},
+ 				normalMatrix: {
+ 					value: new Matrix3()
+ 				},
+@@ -5137,6 +5134,7 @@
+ 			});
+ 			this.matrix = new Matrix4();
+ 			this.matrixWorld = new Matrix4();
++			this.modelViewMatrix = new Matrix4();
+ 			this.matrixAutoUpdate = Object3D.DefaultMatrixAutoUpdate;
+ 			this.matrixWorldNeedsUpdate = false;
+ 			this.layers = new Layers();
+diff --git a/build/three.module.js b/build/three.module.js
+index 44a3041..55fe34c 100644
+--- a/build/three.module.js
++++ b/build/three.module.js
+@@ -6677,9 +6677,6 @@ class Object3D extends EventDispatcher {
+ 				enumerable: true,
+ 				value: scale
+ 			},
+-			modelViewMatrix: {
+-				value: new Matrix4()
+-			},
+ 			normalMatrix: {
+ 				value: new Matrix3()
+ 			},
+@@ -6693,6 +6690,7 @@ class Object3D extends EventDispatcher {
+ 
+ 		this.matrix = new Matrix4();
+ 		this.matrixWorld = new Matrix4();
++		this.modelViewMatrix = new Matrix4();
+ 
+ 		this.matrixAutoUpdate = Object3D.DefaultMatrixAutoUpdate;
+ 		this.matrixWorldNeedsUpdate = false;

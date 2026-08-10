@@ -1,0 +1,61 @@
+.console-line {
+  border-top: 1px solid lightgray;
+  border-bottom: 1px solid lightgray;
+  font-family: monospace;
+}
+
+.console-line pre {
+  display: inline;
+  padding-right: 8px;
+  white-space: pre-wrap;
+}
+
+.timestamp {
+  font-size: 8px;
+  padding-right: 8px;
+}
+
+.log::before {
+  content: '📝';
+  display: inline-block;
+  text-align: center;
+  font-size: 8px;
+  border: 1px solid var(--text);
+  border-radius: 999px;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+
+.error {
+  color: var(--error-text);
+  background: var(--error-bg);
+}
+.error::before {
+  content: '❌';
+  display: inline-block;
+  text-align: center;
+  font-size: 8px;
+  border: 1px solid var(--error-text);
+  border-radius: 999px;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+
+.warn {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+}
+
+.warn::before {
+  content: '⚠️';
+  display: inline-block;
+  text-align: center;
+  font-size: 8px;
+  border: 1px solid var(--warn-text);
+  border-radius: 999px;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}

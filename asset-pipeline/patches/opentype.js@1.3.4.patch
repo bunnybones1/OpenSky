@@ -1,0 +1,26 @@
+diff --git a/dist/opentype.js b/dist/opentype.js
+index 0499d3f45b351489a70a47373aa055c24dba09d2..c30782dd1f2c2d63b8cb02e7b71e3a6336c2d7fd 100644
+--- a/dist/opentype.js
++++ b/dist/opentype.js
+@@ -7459,7 +7459,7 @@
+ 	            // even if allFeatures is sorted alphabetically by feature tag.
+ 	            for (var i = 0; i < featIndexes.length; i++) {
+ 	                featureRecord = allFeatures[featIndexes[i]];
+-	                if (featureRecord.tag === feature) {
++	                if (featureRecord && featureRecord.tag === feature) {
+ 	                    return featureRecord.feature;
+ 	                }
+ 	            }
+diff --git a/src/layout.js b/src/layout.js
+index e622c3ec89ea0aac1e82e9079ee22edcaf21bdac..360413eaa660871226773bd7529af9926decbc5d 100644
+--- a/src/layout.js
++++ b/src/layout.js
+@@ -213,7 +213,7 @@ Layout.prototype = {
+             // even if allFeatures is sorted alphabetically by feature tag.
+             for (let i = 0; i < featIndexes.length; i++) {
+                 featureRecord = allFeatures[featIndexes[i]];
+-                if (featureRecord.tag === feature) {
++                if (featureRecord && featureRecord.tag === feature) {
+                     return featureRecord.feature;
+                 }
+             }

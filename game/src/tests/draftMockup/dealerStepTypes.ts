@@ -1,0 +1,25 @@
+import type DraftState from './DraftState'
+
+export type DealerStepName =
+  | 'start'
+  | 'acceptingPlayers'
+  | 'packCardCube'
+  | 'packEventCube'
+  | 'packAvatarCube'
+  | 'avatarSelectionStart'
+  | 'playerAvatarSelectionMiddle'
+  | 'avatarSelectionEnd'
+  | 'eventSelectionStart'
+  | 'eventSelectionMiddle'
+  | 'eventSelectionEnd'
+  | 'playerCardSelection'
+  | 'playNextEvent'
+  | 'handOutOnePackToPlayers'
+  | 'acceptPlayerCardChoices'
+  | 'playLifeAuctionEvent'
+  | 'playRandomizerEvent'
+  | 'playBoonChoiceEvent'
+  | 'waitIndefinitely'
+  | 'waitAMoment'
+
+export type DraftDealerStep = (state: DraftState) => boolean

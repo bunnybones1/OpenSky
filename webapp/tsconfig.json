@@ -1,0 +1,45 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./build",
+    "target": "es2018",
+
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"],
+    "jsx": "react-jsx",
+
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noErrorTruncation": true,
+    "forceConsistentCasingInFileNames": true,
+    "strictPropertyInitialization": false,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": false,
+    "useDefineForClassFields": true,
+
+    "sourceMap": true,
+    "inlineSources": true,
+
+    "paths": {
+      "~/*": ["./src/*"],
+      "#/*": ["./src/components/*"],
+      "p/*": ["./public/*"]
+    },
+
+    "plugins": [
+      {
+        "name": "@styled/typescript-styled-plugin"
+      }
+    ],
+    "jsxImportSource": "@emotion/react",
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "files": [
+    "typings/import-jpg.d.ts",
+    "typings/import-png.d.ts",
+    "typings/import-gif.d.ts",
+    "typings/import-md.d.ts",
+  ]
+}

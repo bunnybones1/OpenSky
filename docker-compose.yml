@@ -1,0 +1,190 @@
+services:
+  dozzle:
+    container_name: dozzle
+    image: amir20/dozzle:latest
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    environment:
+      - DOZZLE_TAILSIZE=2000
+    ports:
+      - 127.0.0.1:8082:8080
+    restart: on-failure
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dozzle.rule=Host(`logs.0xhorizon.net`)
+
+  redis:
+    container_name: redis
+    image: redis:6-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: on-failure
+
+  postgres:
+    container_name: postgres
+    image: postgres:13
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: on-failure
+
+  traefik:
+    container_name: traefik
+    image: traefik:2.4
+    command: --configFile=/etc/traefik/traefik.yml
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - type: bind
+        source: ./compose/traefik
+        target: /etc/traefik
+    ports:
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:80:80"
+    restart: on-failure
+
+  localhost-bridge:
+    container_name: localhost-bridge
+    image: qoomon/docker-host
+    cap_add: [ 'NET_ADMIN', 'NET_RAW' ]
+    restart: on-failure
+
+  cors-anywhere:
+    container_name: cors-anywhere
+    image: redocly/cors-anywhere
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: on-failure
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.cors-everywhere.rule=Host(`cors-everywhere.0xhorizon.net`)
+
+  pgweb:
+    container_name: pgweb
+    image: sosedoff/pgweb
+    environment:
+      # Set PGWEB_DB_PASSWORD in your local shell/.env before `docker compose up` (keep it out of git).
+      - DATABASE_URL=postgres://postgres:${PGWEB_DB_PASSWORD:-REDACTED_SET_VIA_ENV}@postgres:5432/postgres?sslmode=disable
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      - postgres
+    restart: on-failure
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pgweb.rule=Host(`db.0xhorizon.net`,`postgres.0xhorizon.net`)
+
+  matchmaker:
+    container_name: matchmaker
+    build: ./compose/matchmaker
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:8888:8888"
+    depends_on:
+      - redis
+      - server
+      - opensky-api
+    labels:
+      - traefik.enable=true
+
+  draft:
+    container_name: draft
+    build: ./compose/draft
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:7777:7777"
+    depends_on:
+      - redis
+      - opensky-api
+    labels:
+      - traefik.enable=true
+
+  server:
+    container_name: server
+    build: ./compose/server
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - redis
+    labels:
+      - traefik.enable=true
+    environment:
+      - TLS=true
+      - INTERNAL_TLS=false
+      - SERVER_URL=local-server.0xhorizon.net
+      - INTERNAL_SERVER_URL=server:8000
+
+  webapp:
+    container_name: webapp
+    build: ./compose/webapp
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:3000:3000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.webapp.rule=Host(`local.0xhorizon.net`)
+      - traefik.http.routers.webapp.priority=1000
+
+  game:
+    container_name: game
+    build: ./compose/game
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:3001:3001"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.game.rule=(Host(`local.0xhorizon.net`)&&PathPrefix(`/game/`))
+      - traefik.http.routers.game.priority=2000
+
+  opensky-api:
+    container_name: opensky-api
+    build: ./compose/opensky-api
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    ports:
+      - "127.0.0.1:1337:1337"
+    depends_on:
+      - postgres
+    labels:
+      - traefik.enable=true
+
+  opensky-worker:
+    container_name: opensky-worker
+    build: ./compose/opensky-worker
+    volumes:
+      - type: bind
+        source: .
+        target: /OpenSky
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:1338:1338"
+    labels:
+      - traefik.enable=false
+
+volumes:
+  postgres-data:

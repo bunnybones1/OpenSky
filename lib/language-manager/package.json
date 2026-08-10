@@ -1,0 +1,39 @@
+{
+  "name": "@opensky/language-manager",
+  "version": "1.0.0",
+  "description": "opensky language files manager",
+  "private": true,
+  "scripts": {
+    "wordcount": "tsx ./scripts/count.ts",
+    "sort": "tsx ./scripts/sort-en.ts",
+    "crowdin-upload": "tsx ./scripts/upload-to-crowdin.ts",
+    "crowdin-download": "tsx ./scripts/download-from-crowdin.ts",
+    "crowdin-untranslated": "tsx ./scripts/build-untranslated.ts"
+  },
+  "dependencies": {
+    "i18next": "^22.4.15",
+    "i18next-chained-backend": "^4.2.0",
+    "i18next-http-backend": "^2.2.0"
+  },
+  "devDependencies": {
+    "@crowdin/crowdin-api-client": "^1.21.1",
+    "@types/node": "^20.6.3",
+    "node-stream-zip": "^1.15.0",
+    "temp": "^0.9.4",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6",
+    "undici": "^5.22.1"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./scripts/*": {
+      "import": "./scripts/*.ts",
+      "require": "./scripts/*.ts",
+      "types": "./scripts/*.ts"
+    }
+  }
+}

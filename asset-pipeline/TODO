@@ -1,0 +1,31 @@
+TODO
+--
+
+build-pipeline
+
+- [x] Detect orphaned files
+- [x] Separate manifests for game and webapp
+- [ ] Separate manifests for game detected gl format
+- [ ] art-full and art-rows sub dirs should just be singular 'unit', 'spell', 'bg' to make it simpler to construct paths
+- [x] move command and result hashes inside the build-pipeline dir to keep the root cleaner
+- [x] move orphaned inside the build-pipeline dir to keep the root cleaner
+- [ ] Add task dependency graph
+- [ ] Add way to force tasks to run instead of skip if work is already complete
+- [ ] Use a task runner like Undertaker
+
+scratch
+
+- [ ] meta data json files need to be recorded in command/result hash
+- [ ] all scratch related work needs to be in its own scratch task and happen before webapp or game tasks
+
+game
+
+- [ ] Audio pipeline task
+- [x] GLTF pipeline task
+- [ ] Font pipeline task
+
+webapp
+
+- [ ] fix thumbnail generation
+- [ ] better png optimization
+- [ ] frame svgs to png task needs to be recorded in command/result hash

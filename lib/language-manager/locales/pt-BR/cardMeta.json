@@ -1,0 +1,187 @@
+{
+  "buff": {
+    "dmg": "{{amount}} Dano",
+    "hp": "{{amount}} Vida",
+    "pow": "{{amount}} Poder"
+  },
+  "effect": "EFEITO",
+  "effectTypes": {
+    "Continuous": "Efeito Contínuo",
+    "Death": "Morte",
+    "Generic": "Efeito Único",
+    "Glory": "Glória",
+    "Inspire": "Inspirar",
+    "Play": "Efeito de Jogar",
+    "Slay": "Ceifar",
+    "Summon": "Invocar",
+    "Sunrise": "Alvorada",
+    "Sunset": "Poente"
+  },
+  "elements": {
+    "titleCase": {
+      "air": "Ar",
+      "dark": "Trevas",
+      "earth": "Terra",
+      "fire": "Fogo",
+      "light": "Luz",
+      "metal": "Metal",
+      "mind": "Mente",
+      "sky": "Sem Elemento",
+      "water": "Água"
+    },
+    "uppercase": {
+      "air": "AR",
+      "dark": "SOMBRA",
+      "earth": "TERRA",
+      "fire": "FOGO",
+      "light": "LUZ",
+      "metal": "METAL",
+      "mind": "MENTE",
+      "sky": "SEM ELEMENTO",
+      "water": "ÁGUA"
+    }
+  },
+  "gameEffect": "FX JOGO",
+  "heroAbilityCardLabel": {
+    "ADA": "TALENTO DE ADA",
+    "ARI": "TALENTO DE ARI",
+    "AXEL": "TALENTO DE AXEL",
+    "BANJO": "TALENTO DE BANJO",
+    "BOURAN": "TALENTO DE BOURAN",
+    "FOX": "TALENTO DE FOX",
+    "GERRY": "TALENTO DE GERRY",
+    "HORIK": "TALENTO DE HORIK",
+    "IRIS": "TALENTO DE IRIS",
+    "LOTUS": "TALENTO DE LOTUS",
+    "MAI": "TALENTO DE MAI",
+    "MIRA": "TALENTO DE MIRA",
+    "SAMYA": "TALENTO DE SAMYA",
+    "SITTI": "TALENTO DE SITTI",
+    "TITUS": "TALENTO DE TITUS",
+    "UNKNOWN": "TALENTO DE HERÓI",
+    "ZOEY": "TALENTO DE ZOEY"
+  },
+  "keyword": {
+    "lowerCase": {
+      "arms": "braços",
+      "conjure": "conjurar",
+      "death": "morte",
+      "draw": "comprar",
+      "draws": "compra",
+      "dust": "exile",
+      "enchant": "encanto",
+      "enchanted": "encantado",
+      "enchants": "encanta",
+      "enemyconjure": "conjure",
+      "enemydraw": "compre",
+      "glory": "glória",
+      "inspire": "inspirar",
+      "lowesthealth": "menor Vida",
+      "mulligan": "mulligan",
+      "play": "jogar",
+      "random": "aleatoriamente",
+      "ready": "pronto",
+      "rune": "runa",
+      "scion": "senciente",
+      "shroom": "cogugente",
+      "sleep": "inerte",
+      "sleeping": "inerte",
+      "summon": "invocar",
+      "summons": "invoca",
+      "sunrise": "alvorada",
+      "sunset": "poente",
+      "trait": "aspecto",
+      "traits": "aspectos",
+      "wisp": "cintila"
+    },
+    "titleCase": {
+      "arms": "Braços",
+      "conjure": "Conjurar",
+      "death": "Morte",
+      "draw": "Comprar",
+      "draws": "Compra",
+      "dust": "Exilar",
+      "enchant": "Encanto",
+      "enchanted": "Encantado",
+      "enchants": "Encanta",
+      "enemyconjure": "Conjurar",
+      "enemydraw": "Comprar",
+      "glory": "Glória",
+      "inspire": "Inspirar",
+      "lowesthealth": "Menor Vida",
+      "mulligan": "Mulligan",
+      "play": "Jogar",
+      "random": "Aleatoriamente",
+      "ready": "Pronto",
+      "rune": "Runa",
+      "scion": "Senciente",
+      "shroom": "Cogugente",
+      "sleep": "Inerte",
+      "sleeping": "Inerte",
+      "summon": "Invocar",
+      "summons": "Invoca",
+      "sunrise": "Alvorada",
+      "sunset": "Poente",
+      "trait": "Aspecto",
+      "traits": "Aspectos",
+      "wisp": "Cintila"
+    }
+  },
+  "mana": {
+    "c": "{{amount}} Custo",
+    "m": "{{amount}} Mana"
+  },
+  "prisms": {
+    "agy": "AGILIDADE",
+    "hrt": "CORAÇÃO",
+    "int": "INTELECTO",
+    "str": "FORÇA",
+    "tok": "TOKEN",
+    "tut": "TUTORIAL",
+    "wis": "SABEDORIA"
+  },
+  "rarity": {
+    "base": "Base",
+    "gold": "Ouro",
+    "none": "Bloqueado",
+    "silver": "Prata"
+  },
+  "trait": "ASPECTO",
+  "traits": {
+    "titleCase": {
+      "armor": "Couraça",
+      "banner": "Emblema",
+      "dash": "Pressa",
+      "guard": "Defensor",
+      "lifesteal": "Drenagem",
+      "stealth": "Oculto",
+      "wither": "Aflição"
+    },
+    "uppercase": {
+      "armor": "COURAÇA",
+      "banner": "EMBLEMA",
+      "dash": "PRESSA",
+      "guard": "DEFENSOR",
+      "lifesteal": "DRENAGEM",
+      "stealth": "OCULTO",
+      "wither": "AFLIÇÃO"
+    }
+  },
+  "triggers": {
+    "Death": "Morte",
+    "Glory": "Glória",
+    "Inspire": "Inspirar",
+    "Play": "Jogar",
+    "Slay": "Ceifar",
+    "Summon": "Invocar",
+    "Sunrise": "Alvorada",
+    "Sunset": "Poente"
+  },
+  "type": {
+    "enchant": "ENCANTO",
+    "hero": "HERÓI",
+    "heroAbility": "TALENTO DE HERÓI",
+    "spell": "MAGIA",
+    "unit": "UNIDADE"
+  }
+}

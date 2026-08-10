@@ -1,0 +1,1 @@
+export const DECKBUILDER_HEADER_HEIGHT = 55

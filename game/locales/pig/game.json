@@ -1,0 +1,489 @@
+{
+  "emote": {
+    "ADA": {
+      "gg": "GGAY!",
+      "hello": "Ellohay.",
+      "oops": "Oopswhay.",
+      "taunt": "Iyay'day atherray otnay urthay ouyay.",
+      "thanks": "Ankthay ouyay.",
+      "wow": "Amazingay!"
+    },
+    "ARI": {
+      "gg": "GGAY.",
+      "hello": "Ohay, ellohay.",
+      "oops": "Erray... ayay omentarymay erroray.",
+      "taunt": "Iyay'evay outsmarteday ouyay.",
+      "thanks": "Umay, anksthay.",
+      "wow": "Incredibleyay!"
+    },
+    "AXEL": {
+      "gg": "Oodgay Amegay.",
+      "hello": "Ellohay.",
+      "oops": "Anay erroray.",
+      "taunt": "Iyay'evay orseenfay ouryay enday.",
+      "thanks": "Iyay appreciateyay itay.",
+      "wow": "Intriguingay!"
+    },
+    "BANJO": {
+      "gg": "GGAY!",
+      "hello": "Ellohay erethay!",
+      "oops": "Atthay'say anay oopsieyay!",
+      "taunt": [
+        "Ouyay ightfay ikelay anay Elderwooday!",
+        "Ouyay avehay ethay acegray ofay ayay Omboidzay!",
+        "Ouyay uawksqay ikelay ayay Ongbirdsay!"
+      ],
+      "thanks": "Ankthay ouyay, oodgay iendfray!",
+      "wow": "Ohohay! Amazingay!"
+    },
+    "BOURAN": {
+      "gg": "GGAY.",
+      "hello": "Ellohay...",
+      "oops": "Ayay underblay...",
+      "taunt": "Eathday omescay orfay ouyay...",
+      "thanks": "Ankthay ouyay...",
+      "wow": "Interestingay..."
+    },
+    "FOX": {
+      "gg": "GGAY!",
+      "hello": "Eyhay erethay.",
+      "oops": "Iyay... eantmay otay oday atthay.",
+      "taunt": "Onday'tay actay ikelay ouyay'eray otnay impresseday.",
+      "thanks": "Uchmay obligeday.",
+      "wow": "Angday!"
+    },
+    "HORIK": {
+      "gg": "Oodgay Amegay.",
+      "hello": "Ellohay.",
+      "oops": "Ehphay.",
+      "taunt": "Ouyay illway allfay eforebay emay.",
+      "thanks": "Anksthay.",
+      "wow": "Impressiveyay."
+    },
+    "IRIS": {
+      "gg": "GGAY.",
+      "hello": "Eetingsgray, ellowfay avellertray.",
+      "oops": "Istakesmay areyay aturalnay.",
+      "taunt": "Andstay asideyay.",
+      "thanks": "Yskay essblay ouyay.",
+      "wow": "Byay ethay Yskay!"
+    },
+    "labels": {
+      "gg": "GGAY",
+      "hello": "ELLOHAY",
+      "oops": "OOPSAY",
+      "taunt": "AUNTTAY",
+      "thanks": "ANKSTHAY",
+      "wow": "OWWAY"
+    },
+    "LOTUS": {
+      "gg": "Oodgay Amegay.",
+      "hello": "Eetingsgray.",
+      "oops": "Ayay apselay inay udgementjay.",
+      "taunt": "Ouryay anplay isay ackinglay.",
+      "thanks": "Ouyay avehay myay anksthay.",
+      "wow": "Ostmay emarkableray."
+    },
+    "MAI": {
+      "gg": "GGAY <3!!!",
+      "hello": "Eyahay!",
+      "oops": "Oopsay!",
+      "taunt": "Ootay EZAY!",
+      "thanks": "Anksthay! <3",
+      "wow": "OMGAY!"
+    },
+    "MIRA": {
+      "gg": "GGAY!",
+      "hello": "Icenay otay eetmay ouyay.",
+      "oops": "Atthay'say otnay oodgay.",
+      "taunt": "Iyay'evay otgay ainsbray anday awnbray!",
+      "thanks": "Ankthay ouyay.",
+      "wow": "Ustjay incredibleyay!"
+    },
+    "SAMYA": {
+      "gg": "GGAY!",
+      "hello": "Iyahay!",
+      "oops": "Oopsay!",
+      "taunt": "Erehay Iyay omecay!",
+      "thanks": "Anksthay!",
+      "wow": "Oawhay!"
+    },
+    "SITTI": {
+      "gg": "Oodgay Amegay.",
+      "hello": "Eetingsgray, Yweaverskay.",
+      "oops": "Ohay, owhay unfortunateyay.",
+      "taunt": "Onday'tay ushpay ourselfyay, earday.",
+      "thanks": "Ankthay ouyay.",
+      "wow": "Eryvay impressiveyay."
+    },
+    "timeout": {
+      "ADA": "Imetay otay aketay actionay!",
+      "ARI": "Ikesyay! Etterbay inkthay astfay!",
+      "AXEL": "Ethay uturefay osesclay inay.",
+      "BANJO": "Ethay imertay isay unningray outay",
+      "BOURAN": "Ethay enday awsdray oseclay...",
+      "FOX": "Imetay otay aketay actionay.",
+      "HORIK": "Iyay ustmay aketay actionay.",
+      "IRIS": "Iyay ustmay actay ownay.",
+      "LOTUS": "Imetay owsflay everay onwarday.",
+      "MAI": "Myay urntay isay almostay overay!",
+      "MIRA": "Ikesyay, Iyay'may unningray outay ofay imetay!",
+      "SAMYA": "Oawhay! Etterbay ovemay astfay!",
+      "SITTI": "Iyay'day etterbay actay oonsay.",
+      "TITUS": "Oubleday imetay!",
+      "UNKNOWN": "<ISSINGMAY> imeouttay",
+      "ZOEY": "Ethay usefay isay unningray ownday!"
+    },
+    "TITUS": {
+      "gg": "GGAY.",
+      "hello": "Eetingsgray, iendfray.",
+      "oops": "Ohay Ootshay!",
+      "taunt": "Akemay iendsfray, otnay arway.",
+      "thanks": "Anksthay alpay!",
+      "wow": "Arfay outay!"
+    },
+    "UNKNOWN": {
+      "gg": "<ISSINGMAY> GGAY",
+      "hello": "<ISSINGMAY> ELLOHAY",
+      "oops": "<ISSINGMAY> OOPSAY",
+      "taunt": "<ISSINGMAY> AUNTTAY",
+      "thanks": "<ISSINGMAY> ANKSTHAY",
+      "wow": "<ISSINGMAY> OWWAY"
+    },
+    "ZOEY": {
+      "gg": "GGAY!",
+      "hello": "Eyhay ouyay!",
+      "oops": "Ohay Atsray!",
+      "taunt": "Ahahahahahahay!",
+      "thanks": "Anksthay! Ahahahay!",
+      "wow": "Owieway!"
+    }
+  },
+  "sidebarUI": {
+    "buttonLabel": {
+      "DECK": "ECKDAY",
+      "GRAVEYARD": "AVEYARDGRAY"
+    }
+  },
+  "ui": {
+    "actionError": {
+      "ActedOutOfTurn": "Otnay ouryay urntay",
+      "AlreadySelectedCards": "Alreadyay osechay ardscay",
+      "AttackedGuardedHero": "Ayay uardgay unitay isay inay ethay ayway",
+      "AttackedHeroWithDash": "Ashingday unitsay ancay'tay argettay ethay erohay",
+      "AttackedNonExistentDefender": "Oosechay ayay argettay",
+      "AttackedNonFieldDefender": "Oosechay ayay argettay",
+      "AttackedNonFrontUnitWithBlindAttacker": "Ancay onlyay attackay ethay ightray-ostmay unitay",
+      "AttackedOwnDefender": "Oosechay ayay argettay",
+      "AttackedStealthUnit": "Amageday enemyay erohay irstfay",
+      "AttackedWithAnotherPlayersAttacker": "Otnay ouryay unitay",
+      "AttackedWithAttackerWithRoots": "Annotcay attackay ithway ootsray",
+      "AttackedWithExhaustedAttacker": "Alreadyay attackeday isthay urntay",
+      "AttackedWithNonExistentAttacker": "Oosechay anay attackeray",
+      "AttackedWithNonExistentAttackerAndDefender": "Oosechay anay attackeray",
+      "AttackedWithNonFieldAttacker": "Isthay annotcay attackay",
+      "AttackedWithSleepingAttacker": "Isthay unitay isay asleepay",
+      "Cheated": "Impossibleyay actionay",
+      "DidNotSelectCards": "Oosechay ouryay ardscay",
+      "DidOwnerAction": "Impossibleyay actionay",
+      "DuplicateIndexInCardSelection": "Osechay amesay ardcay icetway",
+      "GameAlreadyFinished": "Atchmay Ompletedcay",
+      "InvalidIndexInCardSelection": "Ardcay oesday otnay existay",
+      "PlayedAnotherPlayersCard": "Otnay ouryay ardcay",
+      "PlayedCardOnNonExistentTarget": "Oosechay ayay argettay",
+      "PlayedNonExistentCard": "Ardcay oesday otnay existay",
+      "PlayedNonFieldAttachedSpell": "Ancay'tay ayplay attachementsay omfray unitsay outsideyay ethay ieldfay",
+      "PlayedNonTargetingCardWithTarget": "Isthay annotcay argettay",
+      "PlayedOrphanedAttachedSpell": "Ardcay oesday otnay existay",
+      "PlayedTargetingCardOnInvalidTarget": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardOnTargetUntargetableByOpponent": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardOnTargetUntargetableByPlayer": "Atthay annotcay ebay argetedtay",
+      "PlayedTargetingCardWithoutTarget": "Oosechay ayay argettay",
+      "PlayedUnplayableCard": "Ancay'tay ayplay unplayableyay ardcay",
+      "PlayedWithInsufficientMana": "Otnay enoughay anamay",
+      "PlayedWithInsufficientRoom": "Onay oomray orfay oremay unitsay",
+      "SelectedWrongNumberOfCards_one": "Oosechay {{count}} ardcay",
+      "SelectedWrongNumberOfCards_other": "Oosechay {{count}} ardscay",
+      "UnscriptedTutorialAction": "Easeplay ollowfay ethay utorialtay"
+    },
+    "artBy": "Artay byay",
+    "bindKey": "Indbay {{action}} otay ichwhay eykay?",
+    "bindKeyError": "Invaliday eykay {{key}}",
+    "Bot": "Otbay",
+    "botEndMessages": {
+      "defeat": "Earnay XPAY inay otbay amesgay upay otay evellay 15.",
+      "tie": "Ouyay iedtay!\nEarnay XPAY inay otbay amesgay upay otay evellay 15.",
+      "victory": "Ongratulationscay! Earnay XPAY inay otbay amesgay upay otay evellay 15."
+    },
+    "cardSelection": {
+      "pickPromptFirst_one": "OUYAY OGAY IRSTFAY. ICKPAY {{count}} ARDCAY OTAY EEPKAY.",
+      "pickPromptFirst_other": "OUYAY OGAY IRSTFAY. ICKPAY {{count}} ARDSCAY OTAY EEPKAY.",
+      "pickPromptSecond_one": "OUYAY OGAY ECONDSAY. ICKPAY {{count}} ARDCAY OTAY EEPKAY.",
+      "pickPromptSecond_other": "OUYAY OGAY ECONDSAY. ICKPAY {{count}} ARDSCAY OTAY EEPKAY.",
+      "waitingForOpponent": "Aitingway orfay opponentay..."
+    },
+    "cheats": {
+      "addToDeck": "Adday otay Eckday",
+      "addToGrave": "Adday otay Avegray",
+      "addToHand": "Adday otay Andhay",
+      "changeMaxMana": "Angechay Axmay Anamay",
+      "cheatsButton": "EATSCHAY",
+      "createPuzzleLink": "Eatecray Uzzlepay Inklay",
+      "drawCard": "Awdray ayay Ardcay",
+      "dustDeck": "Ustday Eckday",
+      "dustField": "Ustday Ieldfay",
+      "dustGrave": "Ustday Avegray",
+      "dustHand": "Ustday Andhay",
+      "entity": "Oglay Entityay",
+      "exportKeybinds": "Exportay Eybindskay",
+      "exportMacros": "Exportay Acrosmay",
+      "hideCheatsMenu": "Idehay Eatschay Enumay",
+      "importKeybinds": "Importay Eybindskay (illway eloadray)",
+      "importMacros": "Importay Acrosmay (illway eloadray)",
+      "modifiers": {
+        "giveAttachment": "Ivegay Attachmentay",
+        "giveTrait": "Ivegay Aittray",
+        "invalidCard": "{{input}} isnay'tay ayay alidvay ardcay!",
+        "modifyHealth": "Odifymay Ealthhay",
+        "modifyPower": "Odifymay Owerpay",
+        "moveToEnemyZone": "Ovemay otay Enemyay Onezay",
+        "moveToMyZone": "Ovemay otay Myay Onezay",
+        "moveToZone": "Ovemay otay Onezay",
+        "promptCost": "Enteray ethay ewnay ostcay: eyay.gay. 0, 1, 2",
+        "promptHowMuchHealth": "Owhay uchmay HPAY? eyay.gay. +1, -10, +500",
+        "promptHowMuchPower": "Owhay uchmay owerpay? eyay.gay. +1, -10, +500",
+        "promptWhichAttachment": "Enteray ayay ardcay amenay otay attachay",
+        "promptWhichCards": "Enteray Ardcay IDSAY oray amesnay, ommacay eparatedsay (eyay.gay. 45, Ongbirdsay, Usterbay, uiresqay, elderwooday)",
+        "readyThisUnit": "Eadyray Isthay Unitay",
+        "removeAttachment": "Emoveray Attachmentay",
+        "removeTraits": "Emoveray Aitstray",
+        "setCost": "Etsay Ostcay",
+        "setElement": "Etsay Elementay",
+        "setRarity": "Etsay Arityray"
+      },
+      "promptHowMuchMaxMana": "Owhay uchmay axmay anamay oday ouyay antway otay adday?",
+      "puzzleLink": {
+        "linkMessage": "Erehay'say ouryay uzzlepay inklay!",
+        "promptUrl": "Astepay ouryay istgay.ithubgay.omcay awray URLAY elowbay"
+      },
+      "puzzleSave": {
+        "promptName": "Enteray anay authoray amenay",
+        "promptTitle": "Enteray ayay Uzzlepay itletay",
+        "uploadInstructions": "Aketay ouryay ownloadedday ilefay, uploaday itay otay istgay.ithubgay.omcay, enthay ickclay ethay 'eatecray uzzlepay inklay' uttonbay."
+      },
+      "quickload": "Uickloadqay",
+      "quicksave": "Uicksaveqay",
+      "recordingMessage": "Ecordingray... useyay anyay eatchay.",
+      "recordNewMacro": "Ecordray Ewnay Acromay",
+      "saveAsLethalPuzzle": "Avesay asay Ethallay Uzzlepay",
+      "setHero": "Etsay Erohay",
+      "setHeroInvalidPrisms": "Invaliday Ismspray {{prisms}}",
+      "setHeroPrompt": "Enteray ayay erohay oray ayay Eckday Assclay eyay.gay. Adayay, Ouranbay, WSTAY, INTAY.\nARNINGWAY: Isthay illway esetray ethay andboxsay!",
+      "summonUnits": "Ummonsay Unitsay",
+      "switchsides": "Itchsway Idessay",
+      "titles": {
+        "bot": "Otbay",
+        "player": "Ayerplay"
+      },
+      "toggleAuraUpdate": "Aurayay Updateyay Enableday",
+      "toggleDeathCleanup": "Eathday Eanupclay Enableday",
+      "toggleEffectResolution": "Effectay Esolutionray Enableday",
+      "toggleMacrosPanel": "Oggletay Acrosmay Anelpay",
+      "toggleShowEventAttribution": "Owshay Eventay Attributionay"
+    },
+    "endTurnButton": {
+      "backToMenu": "ACKBAY OTAY ENUMAY",
+      "continue": "ONTINUECAY",
+      "endTurn": "ENDAY URNTAY",
+      "enemyTurn": "ENEMYAY URNTAY",
+      "playNextTutorial": "AYPLAY EXTNAY UTORIALTAY",
+      "playPuzzle": "AYPLAY UZZLEPAY",
+      "playTutorial": "AYPLAY UTORIALTAY {{level}}",
+      "restart": "ESTARTRAY",
+      "retryTutorial": "ETRYRAY UTORIALTAY",
+      "startGame": "ARTSTAY AMEGAY"
+    },
+    "endTypeMessages": {
+      "defeat": "EFEATDAY",
+      "tie": "AWDRAY",
+      "victory": "ICTORYVAY!"
+    },
+    "error": {
+      "buttonQuit": "Uitqay",
+      "buttonReload": "Eloadray",
+      "header": "Orrysay, itay ookslay ikelay evilay Unfay Uysgay ausedcay ayay oblempray!",
+      "middle": "Onday'tay orryway! Ouray engineersay areyay akingtay ayay ooklay. Ouyay ancay eloadray otay attemptay econnectingray ifay ouryay amegay isay illstay inay ogresspray, oray uitqay otay ethay ainmay enumay."
+    },
+    "ForTurn_one": "Orfay {{count}} urntay",
+    "ForTurn_other": "Orfay {{count}} urnstay",
+    "gameModeSubtext": {
+      "CHALLENGE_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "CHALLENGE_DISCOVERY": "ISCOVERYDAY",
+      "CONQUEST_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "CONQUEST_DISCOVERY": "ISCOVERYDAY",
+      "LOCAL_BOT": "",
+      "PRACTICE_BOT": "",
+      "PRACTICE_PVP": "",
+      "RANKED_CONSTRUCTED": "ONSTRUCTEDCAY",
+      "RANKED_DISCOVERY": "ISCOVERYDAY",
+      "REPLAY": "",
+      "SANDBOX": "",
+      "SPECTATE": "",
+      "TUTORIAL": "",
+      "UNKNOWN": "UNKNOWNAY",
+      "WARM_UP": ""
+    },
+    "gameModeTitles": {
+      "CHALLENGE_CONSTRUCTED": "IVATEPRAY",
+      "CHALLENGE_DISCOVERY": "IVATEPRAY",
+      "CONQUEST_CONSTRUCTED": "ONQUESTCAY",
+      "CONQUEST_DISCOVERY": "ONQUESTCAY",
+      "LOCAL_BOT": "EVDAY OTBAY",
+      "PRACTICE_BOT": "ACTICEPRAY OTBAY",
+      "PRACTICE_PVP": "ACTICEPRAY PPVAY",
+      "RANKED_CONSTRUCTED": "ANKEDRAY",
+      "RANKED_DISCOVERY": "ANKEDRAY",
+      "REPLAY": "EPLAYRAY",
+      "SANDBOX": "ANDBOXSAY",
+      "SPECTATE": "ECTATESPAY",
+      "TUTORIAL": "",
+      "UNKNOWN": "UNKNOWNAY",
+      "WARM_UP": "ANKEDRAY ARMWAY UPAY"
+    },
+    "hordeEndMessages": {
+      "tie": "Ouyay iedtay!\nEarnay XPAY inay ordehay amesgay upay otay evellay 15.",
+      "victory": "Ongratulationscay! Earnay XPAY inay ordehay amesgay upay otay evellay 15.",
+      "youDealtXDamageToHordeBoss": "Ouyay ealtday {{damage}} amageday otay ethay Ordehay Ossbay!"
+    },
+    "nextTurn": "Extnay urntay",
+    "playerRank": {
+      "APPRENTICE": "Apprenticeyay",
+      "EXPERT": "Expertay",
+      "GRANDWEAVER": "Andweavergray",
+      "MASTER": "Astermay",
+      "TRAINEE": "Aineetray",
+      "UNKNOWN": "Unknownay",
+      "UNRANKED": "Unrankeday",
+      "WANDERER": "Andererway"
+    },
+    "playRankedEndMessages": {
+      "defeat": "Ayplay Ankedray otay earnay oremay XPAY.",
+      "tie": "Ouyay iedtay!\n Ayplay Ankedray otay earnay oremay XPAY.",
+      "victory": "Ongratulationscay! Ayplay Ankedray otay earnay oremay XPAY."
+    },
+    "privateEndMessages": {
+      "defeat": "Earnay XPAY inay ivatepray amesgay upay otay evellay 15.",
+      "tie": "Ouyay iedtay!\nEarnay XPAY inay ivatepray amesgay upay otay evellay 15.",
+      "victory": "Ongratulationscay! Earnay XPAY inay ivatepray amesgay upay otay evellay 15."
+    },
+    "prompt": {
+      "itsNotYourTurn": "Itay'say otnay ouryay urntay",
+      "noCardsLeftLose1HealthAndConjureInstead": "Onay ardscay eftlay! Oselay 1 ealthhay, anday Onjurecay insteaday!",
+      "noCardsOfThatTypeLeftLose1HealthAndConjureInstead": "Onay ardscay ofay atthay petyay eftlay! Oselay 1 ealthhay, anday Onjurecay insteaday!",
+      "noCardsToConjure": "`Onay ardscay ofay atthay petyay eftlay otay onjurecay omfray ismspray!`",
+      "noPossibleTargets": "Onay ossiblepay argetstay"
+    },
+    "rewardCard": {
+      "baseCard_one": "+{{count}} ASEBAY ARDCAY",
+      "baseCard_other": "+{{count}} ASEBAY ARDSCAY",
+      "congratsYouUnlockedACard": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ARDCAY",
+      "congratsYouUnlockedCard_one": "ONGRATSCAY! OUYAY UNLOCKEDAY {{count}} ARDCAY",
+      "congratsYouUnlockedCard_other": "ONGRATSCAY! OUYAY UNLOCKEDAY {{count}} ARDSCAY",
+      "multiCardUnlock": {
+        "agy": "ONGRATSCAY! OUYAY UNLOCKEDAY AGILITYAY ARDSCAY",
+        "hrt": "ONGRATSCAY! OUYAY UNLOCKEDAY EARTHAY ARDSCAY",
+        "int": "ONGRATSCAY! OUYAY UNLOCKEDAY INTELLECTAY ARDSCAY",
+        "str": "ONGRATSCAY! OUYAY UNLOCKEDAY RENGTHSTAY ARDSCAY",
+        "tok": "ONGRATSCAY! OUYAY UNLOCKEDAY ONAY ISMPRAY ARDSCAY",
+        "tut": "ONGRATSCAY! OUYAY UNLOCKEDAY UTORIALTAY ARDSCAY",
+        "wis": "ONGRATSCAY! OUYAY UNLOCKEDAY ISDOMWAY ARDSCAY"
+      },
+      "singleCardUnlock": {
+        "agy": "ONGRATSCAY! OUYAY UNLOCKEDAY ANAY AGILITYAY ARDCAY",
+        "hrt": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EARTHAY ARDCAY",
+        "int": "ONGRATSCAY! OUYAY UNLOCKEDAY ANAY INTELLECTAY ARDCAY",
+        "str": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay RENGTHSTAY ARDCAY",
+        "tok": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ONAY ISMPRAY ARDCAY",
+        "tut": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay UTORIALTAY ARDCAY",
+        "wis": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay ISDOMWAY ARDCAY"
+      },
+      "youUnlockedCards_one": "OUYAY UNLOCKEDAY Ayay EWNAY ASEBAY ARDCAY!",
+      "youUnlockedCards_other": "OUYAY UNLOCKEDAY EWNAY ASEBAY ARDSCAY!"
+    },
+    "rewardHero": {
+      "dualPrismBuildTip": "Ouyay aymay ownay uildbay ecksday ithway otway Ismspray",
+      "dualPrismUnlock": "UALDAY ISMPRAY EROSHAY UNLOCKEDAY!",
+      "heroAndStarterUnlock": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EWNAY EROHAY\nANDAY Ayay 25 ARDCAY ARTERSTAY ECKDAY!",
+      "heroUnlock": "ONGRATSCAY! OUYAY UNLOCKEDAY Ayay EWNAY EROHAY!"
+    },
+    "rewardRank": {
+      "conceded": "ONCEDEDCAY",
+      "concededTooEarly": "ONCEDEDCAY OOTAY EARLYAY",
+      "levelUp": "EVELLAY UPAY!",
+      "matchLoss": "ATCHMAY OSSLAY",
+      "matchTie": "ATCHMAY IETAY",
+      "matchWin": "ATCHMAY INWAY",
+      "playerLevel": "EVELLAY {{level}}",
+      "progress": {
+        "masterRP": "{{count}} RPAY",
+        "rp": "{{amount}} RPAY",
+        "xp": "{{amount}} XPAY"
+      },
+      "puzzleComplete": "UZZLEPAY OMPLETECAY!",
+      "puzzleCongrats_one": "Ongratulationscay! Ouyay ompletedcay ethay uzzlepay {{puzzle_name}} inay {{count}} ytray!",
+      "puzzleCongrats_other": "Ongratulationscay! Ouyay ompletedcay ethay uzzlepay {{puzzle_name}} inay {{count}} iestray!",
+      "rankDown": "ANKRAY OWNDAY!",
+      "rankPoints_one": "{{sign}}{{count}} ANKRAY OINTPAY",
+      "rankPoints_other": "{{sign}}{{count}} ANKRAY OINTSPAY",
+      "rankUp": "ANKRAY UPAY!",
+      "reachWandererRankToUnlock": "EACHRAY ETHAY ANDERERWAY ANKRAY OTAY UNLOCKAY ANKEDRAY ODEMAY",
+      "xpReason": {
+        "ConcededTooEarly": "Oncededcay Ootay Earlyay",
+        "DailyQuest": "Ailyday Uestqay ({{extraData}} eftlay)",
+        "Draw": "Awdray",
+        "MatchPlayed": "Atchmay Ayedplay",
+        "RankUp": "Ankray Upay Onusbay XPAY",
+        "TutorialCompleted": "Utorialtay Ompletedcay",
+        "Victory": "Ictoryvay"
+      }
+    },
+    "stickers": "ICKERSSTAY",
+    "thisGame": "Isthay amegay",
+    "tutorial": {
+      "nextTip": "EXTNAY IPTAY"
+    },
+    "unknown": "Unknownay",
+    "vs": {
+      "conquestMatch": "ATCHMAY {{match}}",
+      "loadingAssets": "Oadinglay assetsay... {{timeLeft}}",
+      "VS": "VSAY",
+      "waitingForOpponent": "Aitingway orfay opponentay... {{timeLeft}}",
+      "winner": "♕ INNERWAY"
+    },
+    "whoseTurn": {
+      "enemysTurn": "ENEMYAY'Say URNTAY",
+      "type": {
+        "end": "ENDAY",
+        "start": "ARTSTAY"
+      },
+      "untilMatchEndsInDraw_one": "{{count}} urntay eftlay untilay atchmay endsay inay Awdray",
+      "untilMatchEndsInDraw_other": "{{count}} urnstay eftlay untilay atchmay endsay inay Awdray",
+      "yourTurn": "OURYAY URNTAY"
+    }
+  },
+  "zone": {
+    "Attachment": "Attacheday",
+    "CardSelection": "Ardcay Electionsay",
+    "Casting": "Astingcay",
+    "Deck": "Eckday",
+    "Dust": "Ustday",
+    "Field": "Ieldfay",
+    "Graveyard": "Aveyardgray",
+    "Hand": "Andhay",
+    "HeroAbility": "Erohay Abilityay",
+    "Limbo": "Imbolay",
+    "RevealedDust": "Evealedray Ustday",
+    "RevealedHand": "Evealedray Andhay",
+    "RevealedLimbo": "Evealedray Imbolay"
+  }
+}

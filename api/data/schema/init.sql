@@ -1,0 +1,1 @@
+-- Init.sql should only be run after a clean (empty) db schema

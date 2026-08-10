@@ -1,0 +1,20 @@
+use super::effect_helpers::*;
+
+intrinsic_effect!(Effect::Unit {
+  triggers: vec![unit_death!(|game, my_id, _phase| Box::pin(async move {
+    let owner = game.owner(my_id);
+    for _ in 0..4 {
+      let enemy = game
+        .lowest_health_character(enemy(owner), |c| c.is_unit())
+        .await;
+      if let Some(randomly_selected_enemy) = enemy {
+        game
+          .give_spell(randomly_selected_enemy, enchant::CHAINS)
+          .await;
+        game.damage(randomly_selected_enemy, 1, my_id).await;
+      }
+    }
+  }))
+  .into()],
+  on_play: None
+});

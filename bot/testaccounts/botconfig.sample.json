@@ -1,0 +1,39 @@
+{
+  "bots": [
+    {
+      "name": "randy",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 0,
+      "mnemonic": "solid toast congress grass swamp liquid tip symptom focus rib kidney awake",
+      "subkeyMnemonic": "aisle slide permit nurse salute prize put must dress visual script save"
+    },
+    {
+      "name": "jeremy",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 10,
+      "mnemonic": "shrug ill wreck retire pond jacket swamp renew able satisfy disagree book",
+      "subkeyMnemonic": "song element defense giant bulb clay sentence strong small shallow tuition garment"
+    },
+    {
+      "name": "benny",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 5,
+      "mnemonic": "beef vanish dust rail gospel balance fade private merge cheese open range",
+      "subkeyMnemonic": "spin pitch absorb gain scorpion tissue either solar fat tank next kid"
+    },
+    {
+      "name": "marigold",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 9,
+      "mnemonic": "reunion tongue struggle gym any side arch style parent toast catch track",
+      "subkeyMnemonic": "funny surround capable suggest drastic trend number near rely nut route giraffe"
+    },
+    {
+      "name": "bobby",
+      "gameMode": "RANKED_DISCOVERY",
+      "difficulty": 7,
+      "mnemonic": "theme canyon obtain universe artist energy napkin aspect sting tonight predict sniff",
+      "subkeyMnemonic": "cook leader float peasant exist repair pledge anchor hurt they eyebrow atom"
+    }
+  ]
+}

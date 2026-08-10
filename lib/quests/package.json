@@ -1,0 +1,46 @@
+{
+  "name": "@opensky/quests",
+  "version": "1.0.0",
+  "description": "opensky quests",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint ./src --ext .ts,.tsx --max-warnings=0",
+    "lint:fix": "eslint ./src --ext .ts,.tsx --fix",
+    "patch": "tsx ./scripts/patch.ts"
+  },
+  "dependencies": {
+    "@opensky/proto": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*"
+  },
+  "devDependencies": {
+    "@opensky/language-manager": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@skyweaver/state-node-sys": "workspace:*",
+    "@opensky/tools": "workspace:*",
+    "@types/papaparse": "^4.5.9",
+    "@typescript-eslint/eslint-plugin": "^6.7.5",
+    "@typescript-eslint/parser": "^6.7.5",
+    "@vitest/coverage-c8": "^0.29.8",
+    "@vitest/ui": "^0.31.0",
+    "eslint": "^8.46.0",
+    "eslint-config-prettier": "^8.9.0",
+    "eslint-define-config": "^1.15.0",
+    "eslint-plugin-deprecation": "^1.5.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "eslint-plugin-unused-imports": "^3.0.0",
+    "immer": "^9.0.21",
+    "papaparse": "^5.3.0",
+    "prettier": "^3.0.0",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6",
+    "vite": "^4.4.8",
+    "vitest": "^0.34.1"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts"
+}

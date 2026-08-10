@@ -1,0 +1,1022 @@
+{
+  "account": {
+    "accountMigration": "MIGRACIÓN DE CUENTA",
+    "ChangeTitle": "Cambiar título",
+    "CurrentRank": "Rango actual",
+    "enterSky": "ENTRAR A SKY",
+    "incorrectPassword": "¡contraseña incorrecta!",
+    "LibraryCollection": "Colección de la biblioteca",
+    "metamaskFailed": "falló la autenticación de metamask",
+    "migrateWithMetamask": "Migrar con Metamask",
+    "migratingAccount": "migrando cuenta",
+    "PlayerName": "Nombre del jugador",
+    "previousAccountLineOne": "Si ya tenías una cuenta de OpenSky, puedes vincularla",
+    "previousAccountLineTwo": "ingresando tu contraseña o metamask."
+  },
+  "appUpdateModal": {
+    "description": "Hola OpenSky, parece que estás usando una versión antigua del juego, por favor actualiza para continuar.",
+    "upgradeNow": "Actualizar ahora"
+  },
+  "cache": {
+    "additionalTechnicalInfo": "INFORMACIÓN TÉCNICA ADICIONAL",
+    "cached": "En caché",
+    "cacheOverview": "RESUMEN DE LA CACHÉ",
+    "errorFetching": "Hubo un error al obtener información del almacenamiento en caché",
+    "fetchingGameCacheInfo": "Obteniendo información de la caché del juego...",
+    "gameCacheInfo": "INFORMACIÓN DE LA CACHÉ DEL JUEGO",
+    "gameTextureFormat": "Formato de textura del juego",
+    "loadingCacheInfo": "Cargando información de caché...",
+    "needsToBeCached": "Necesita ser almacenado en caché",
+    "Small": "Pequeño",
+    "storageQuotaExceeded": "CUOTA DE ALMACENAMIENTO EXCEDIDA",
+    "textureResolutionFamily": "familia de resolución de textura",
+    "UI": "Interfaz de usuario",
+    "unableToCacheLineOne": "No podemos almacenar más archivos en su dispositivo. Considere eliminar",
+    "unableToCacheLineTwo": "algunos de sus archivos para una experiencia de juego más rápida.",
+    "unableToFetch": "No se puede obtener el tamaño total de la caché. Algunos navegadores no admiten esto.",
+    "unableToGetSize": "No se puede obtener el tamaño",
+    "updating": "Actualizando...",
+    "usingDiskSpaceWithArgs": "Usando {{ used }}mb de {{ total }}mb de almacenamiento total."
+  },
+  "cardBack": {
+    "viewOnSkypass": "Ver en el Skypass"
+  },
+  "cardBacks": {
+    "MyCardBacks": "Mis reversos de cartas"
+  },
+  "cardDetails": {
+    "artist": "Arte por",
+    "baseExplanation": "No intercambiable, desbloqueado al subir de nivel",
+    "baseNotTradable": "Las cartas base no son intercambiables.",
+    "enchantNotTradable": "Las cartas de encantamiento no son intercambiables.",
+    "goldExplanation": "Intercambiable, cantidad limitada, ganado a través de Conquista",
+    "newBadge": "NUEVO",
+    "relatedCards": "CARTAS RELACIONADAS",
+    "relatedDecks": "MAZOS RELACIONADOS",
+    "silverExplanation": "Intercambiable, ganado a través de Conquista y Tabla de clasificación",
+    "tokenNotTradable": "Las cartas de ficha no son intercambiables."
+  },
+  "cards": {
+    "cardsOwned": "cartas en propiedad",
+    "CardType": "TIPO DE CARTA",
+    "ClashSet": "Choque de inventores",
+    "CoreExpansion": "Expansión básica",
+    "CoreSet": "Set básico",
+    "EFFECT": "EFECTO",
+    "effects": {
+      "Conjure": "Conjurar",
+      "ContinuousEffect": "Efecto continuo",
+      "Death": "Muerte",
+      "Draw": "Robar",
+      "Dust": "Pulverizar",
+      "Glory": "Gloria",
+      "Inspire": "Inspirar",
+      "Play": "Jugar",
+      "Random": "Aleatorio",
+      "Ready": "Listo",
+      "Slay": "Aniquilar",
+      "Summon": "Invocar",
+      "Sunrise": "Amanecer",
+      "Sunset": "Puesta de sol",
+      "UniqueEffect": "Efecto único"
+    },
+    "Element": "ELEMENTO",
+    "elements": {
+      "air": "Aire",
+      "dark": "Oscuridad",
+      "earth": "Tierra",
+      "fire": "Fuego",
+      "light": "Luz",
+      "mind": "Mente",
+      "water": "Agua"
+    },
+    "Elements": "ELEMENTOS",
+    "grades": {
+      "Gold": "Oro",
+      "Silver": "Plata"
+    },
+    "HexboundSet": "Invasión Hexbound",
+    "LockedDesc": "Desbloquea esta carta Base subiendo de nivel.",
+    "MyCards": "Mis cartas",
+    "OtherEffects": "OTROS EFECTOS",
+    "prisms": {
+      "agy": "Agilidad",
+      "hrt": "Corazón",
+      "int": "Intelecto",
+      "str": "Fuerza",
+      "wis": "Sabiduría"
+    },
+    "sorts": {
+      "DateAsc": "Fecha recibida antiguo-nuevo",
+      "DateDesc": "Fecha recibida de nuevo a antiguo",
+      "HealthDesc": "Salud alto-bajo",
+      "ManaAsc": "Maná bajo-alto",
+      "ManaDesc": "Maná alto-bajo",
+      "PowerDesc": "Poder alto-bajo",
+      "PriceAsc": "Precio bajo-alto",
+      "PriceDesc": "Precio alto-bajo",
+      "QuantityAsc": "Cantidad bajo-alto",
+      "QuantityDesc": "Cantidad alto-bajo"
+    },
+    "Spell": "Hechizo",
+    "TRAIT": "RASGO",
+    "Traits": "RASGOS",
+    "Unit": "Unidad",
+    "UnitEffects": "EFECTOS DE UNIDAD"
+  },
+  "confirmModal": {
+    "yes": "Sí"
+  },
+  "cookies": {},
+  "createAccount": {
+    "enter": "ENTRAR",
+    "migratePassword": "Tu antigua contraseña de Arcadeum",
+    "password": "Contraseña",
+    "usernameLabel": "Nombre de usuario",
+    "usernamePlaceholder": "Ingresa tu nombre de usuario"
+  },
+  "createDeck": {
+    "constructDeck": "CONSTRUIR MAZO",
+    "deckCodes": {
+      "AGI": {
+        "desc": "Supera y engaña a tus enemigos en cada turno con estrategias inteligentes y unidades y hechizos rápidos que los dejarán mareados. Pocos pueden esperar igualar la velocidad del pensamiento.",
+        "prisms": "AGILIDAD + INTELECTO",
+        "title": "El Desafiante"
+      },
+      "AGW": {
+        "desc": "Canaliza tu calma interior y furia exterior para convertirte en el arroyo que fluye y la tormenta furiosa. Supera y arrasa todo lo que se interponga en tu camino hacia la victoria.",
+        "prisms": "AGILIDAD + SABIDURÍA",
+        "title": "La Buscadora de Sabiduría"
+      },
+      "AGY": {
+        "abbreviatedPrisms": "AGI",
+        "desc": "Muévete y ataca con la furia del rayo, superando y abrumando a todos los desafiantes en un torbellino de velocidad. Tus enemigos ni siquiera sabrán qué les golpeó.",
+        "prisms": "AGILIDAD"
+      },
+      "HRA": {
+        "desc": "Golpea rápido y fuerte con unidades que luchan más allá de la muerte y hechizos que drenan la vida de tus adversarios. La vida es efímera, especialmente la de tus enemigos.",
+        "prisms": "CORAZÓN + AGILIDAD"
+      },
+      "HRI": {
+        "desc": "El ingenio estratégico y la capacidad de manipular la vida y la muerte te ofrecen infinitas posibilidades tácticas. Supera tanto a tus oponentes como a la muerte misma.",
+        "prisms": "CORAZÓN + INTELECTO"
+      },
+      "HRT": {
+        "abbreviatedPrisms": "CRZ",
+        "desc": "Domina los poderes de la vida y la muerte para derrotar a tus enemigos y hacer que tus aliados regresen del más allá. ¿Quién puede oponerse a la muerte misma?",
+        "prisms": "CORAZÓN"
+      },
+      "HRW": {
+        "abbreviatedPrisms": "CRZ + SAB",
+        "desc": "El profundo entendimiento y respeto por el ciclo de la vida te otorgan un poder que pocos pueden imaginar. Donde otros temerían a la muerte, tú caminas junto a ella como un igual.",
+        "prisms": "CORAZÓN + SABIDURÍA"
+      },
+      "INT": {
+        "desc": "Orquesta estrategias elaboradas para superar y dominar a todos los que se opongan a ti, dejándolos indefensos para contraatacar. Tu mente es el arma más poderosa de todas.",
+        "prisms": "INTELECTO"
+      },
+      "INW": {
+        "desc": "Usa el ingenio táctico junto con la fortaleza mental y espiritual para superar y sobrevivir a tus enemigos. El verdadero poder no reside en simplemente saber, sino en comprender.",
+        "prisms": "INTELECTO + SABIDURÍA"
+      },
+      "STA": {
+        "abbreviatedPrisms": "FZA + AGI",
+        "desc": "Ataca con abrumadora fuerza y velocidad en un golpe doble que enviará a tus oponentes al suelo. Arrasa y destruye a todos los que te desafíen.",
+        "prisms": "FUERZA + AGILIDAD"
+      },
+      "STH": {
+        "abbreviatedPrisms": "FZA + CRZ",
+        "desc": "Usa tu dominio sobre la vida y la muerte para traer de vuelta a tus unidades más poderosas una y otra vez. Tus aliados se desprenderán de la muerte incluso mientras destruyen a sus enemigos.",
+        "prisms": "FUERZA + CORAZÓN"
+      },
+      "STI": {
+        "desc": "Combina la fuerza física y la fortaleza mental para triunfar sobre los enemigos en fuerza y estrategia. ¿Por qué conformarse con cerebro o músculo cuando puedes manejar ambos?",
+        "prisms": "INTELECTO + FUERZA"
+      },
+      "STR": {
+        "abbreviatedPrisms": "FZA",
+        "desc": "Invoca unidades poderosas y lanza hechizos devastadores para abrumar y aplastar a tus enemigos y fortalecer a tus aliados. Todos temblarán ante tu poder imparable.",
+        "prisms": "FUERZA"
+      },
+      "STW": {
+        "abbreviatedPrisms": "FZA + SAB",
+        "desc": "La fuerza del cuerpo y del alma van de la mano, otorgándote una determinación inquebrantable. La verdadera victoria pertenece no a aquellos que destruyen, sino a aquellos que resisten.",
+        "prisms": "FUERZA + SABIDURÍA"
+      },
+      "undefined": {
+        "desc": "Jugar con un héroe desbloqueado seleccionado al azar.",
+        "name": "Aleatorio"
+      },
+      "UNKNOWN_CLASS": {
+        "desc": "Jugar con un héroe desbloqueado seleccionado al azar.",
+        "name": "Aleatorio"
+      },
+      "WIS": {
+        "abbreviatedPrisms": "SAB",
+        "desc": "Tu profundo entendimiento del Cielo te ofrece ventajas inimaginables. Maneja el poder antiguo y tu propio espíritu para humillar a tus enemigos.",
+        "prisms": "SABIDURÍA"
+      }
+    },
+    "deckStringPlaceHolder": "Importar desde cadena de mazo",
+    "importDeck": "IMPORTAR MAZO",
+    "invalidString": "La cadena de mazo no es válida.",
+    "lockedCardsWarning": "Algunas de las cartas de este mazo están bloqueadas y se aleatorizarán cada vez que se utilice en el juego.",
+    "prismsLocked": "Prisma(s) bloqueado(s), ¿ver mazo?",
+    "title": "SELECCIONAR UN HÉROE",
+    "warningEnd": "¿Aún quieres guardarlo?"
+  },
+  "credits": {
+    "3DModelling": "MODELADO 3D",
+    "allOurAlphaAndBetaTesters": "Todos nuestros testers Alfa y Beta",
+    "animation": "ANIMACIÓN",
+    "art": "ARTE",
+    "artDirection": "DIRECCIÓN DE ARTE",
+    "backEndDevelopers": "DESARROLLADORES DE BACKEND",
+    "blockchainDevelopers": "DESARROLLADORES DE BLOCKCHAIN",
+    "community": "COMUNIDAD",
+    "dataAnalytics&Research": "ANÁLISIS DE DATOS E INVESTIGACIÓN",
+    "developedBy": "DESARROLLADO POR",
+    "economyDesign": "DISEÑO DE ECONOMÍA",
+    "finance&Operations": "FINANZAS Y OPERACIONES",
+    "founders": "FUNDADORES",
+    "gameDesign": "DISEÑO DE JUEGO",
+    "gameDevelopers": "DESARROLLADORES DE JUEGO",
+    "gameProductDirectors": "DIRECTORES DE JUEGO/PRODUCTO",
+    "gameStory": "HISTORIA DEL JUEGO",
+    "investors": "INVERSORES",
+    "leadGameDeveloper": "DESARROLLADOR PRINCIPAL DE JUEGO",
+    "music&SFX": "MÚSICA Y EFECTOS DE SONIDO",
+    "qualityAssurance": "CONTROL DE CALIDAD",
+    "specialThanks": "AGRADECIMIENTOS ESPECIALES",
+    "UXDesign": "DISEÑO DE EXPERIENCIA DE USUARIO",
+    "webMobileDevelopers": "DESARROLLADORES WEB/MÓVIL"
+  },
+  "dashboard": {
+    "404": "Parece que has llegado al borde del cielo",
+    "404Button": "VOLVER A INICIO",
+    "delete": "Tu cuenta fue eliminada",
+    "inQueue": "EN COLA",
+    "login": "INICIAR SESIÓN",
+    "stickers": {
+      "allStickersEarnedBody": "¡Más pegatinas la próxima temporada!",
+      "allStickersEarnedHeader": "¡Todas las recompensas recolectadas!",
+      "collect": "COLECCIONAR",
+      "ownershipFilter": {
+        "OWNED": "Mis Pegatinas"
+      },
+      "ptsForNextReward": "Siguiente recompensa (<strong>{{ earned }}</strong>/{{ required }}pts)",
+      "stickerPoints": "PUNTOS DE PEGATINA",
+      "stickersCollected": "{{ unlocked }}/{{ collected }} recolectadas",
+      "toEarnStickers": "PARA GANAR PEGATINAS"
+    },
+    "tagline": "Un juego de cartas coleccionables de otra dimensión."
+  },
+  "deckBuilder": {
+    "noUnlockedDesc": "Enfréntate a oponentes para aprender nuevos hechizos y reclutar maravillosas criaturas para luchar a tu lado.",
+    "prismFilter": {
+      "AGY": "Agilidad",
+      "HRT": "Corazón",
+      "INT": "Intelecto",
+      "STR": "Fuerza",
+      "UNKNOWN_CLASS": "Todo",
+      "WIS": "Sabiduría"
+    }
+  },
+  "decks": {
+    "AddMissingToCart": "Añadir cartas faltantes al carrito",
+    "buyDecks": "COMPRAR MAZOS",
+    "createDeck": "CREAR MAZO",
+    "CreateDeck": "Crear Mazo",
+    "DeckName": "Nombre del Mazo",
+    "deckNameError": "Debe tener menos de 16 caracteres",
+    "DeckString": "Cadena de mazo",
+    "DeleteDeck": "Eliminar mazo",
+    "EditDeck": "Editar Mazo",
+    "GoToLeaderboard": "➞ Ir a la Tabla de Posiciones",
+    "HideStats": "Ocultar estadísticas",
+    "ImportDeck": "Importar mazo",
+    "ManaCurve": "CURVA DE MANÁ",
+    "MarketDeck": "Mazo del Mercado",
+    "MissingAddedToCart": "Cartas faltantes añadidas al carrito",
+    "NoTopPlayer": "Juega para ser el mejor jugador",
+    "SaveDeck": "Guardar Mazo",
+    "ShowStats": "Mostrar estadísticas",
+    "sorts": {
+      "AlphabeticalAsc": "Alfabético (A-Z)",
+      "AlphabeticalDesc": "Alfabético (Z-A)",
+      "LastModified": "Última modificación"
+    },
+    "TopPlayer": "MEJOR JUGADOR"
+  },
+  "deleteAccount": {
+    "areYouSure": "¿Estás seguro? Se perderá todo tu progreso.",
+    "enterYourUsername": "Ingresa tu nombre de usuario para confirmar",
+    "onceDeleted": "Una vez que elimines tu cuenta, no hay vuelta atrás. Por favor, tenlo por seguro.",
+    "walletAccess": "(Todavía tendrás acceso a la cartera)"
+  },
+  "downloadAssets": {},
+  "feed": {
+    "availableInLibrary": "Ahora disponible en tu biblioteca.",
+    "starterDeckUnlocked": "Mazo Inicial Desbloqueado!"
+  },
+  "gameMode": {},
+  "general": {
+    "ACCOUNT": "CUENTA",
+    "allowPushNotifications": "Permitir notificaciones push",
+    "Back": "Atrás",
+    "becomeAStreamer": "Conviértete en un Streamer de OpenSky",
+    "cacheInfo": "Información de Caché",
+    "cancel": "Cancelar",
+    "clearAll": "Borrar todo",
+    "comingSoon": "¡Próximamente!",
+    "Confirm": "Confirmar",
+    "CONFIRM": "CONFIRMAR",
+    "Copied": "Copiado",
+    "credits": "Créditos",
+    "CREDITS": "CRÉDITOS",
+    "deleteAccount": "Eliminar mi cuenta",
+    "element": "Elemento",
+    "favoriteCard": "Carta favorita",
+    "FEATURED": "DESTACADO",
+    "filters": "Filtros",
+    "gameContent": "CONTENIDO DEL JUEGO",
+    "grade": "Calificación",
+    "Hide": "Ocultar",
+    "install": "Instalar",
+    "LevelWithArg": "Nivel {{ level }}",
+    "LIVE": "EN VIVO",
+    "liveChannels": "CANALES EN VIVO",
+    "LOCALE": "IDIOMA",
+    "location": "Ubicación",
+    "name": "Nombre",
+    "newAccount": "NUEVA CUENTA",
+    "notification": "NOTIFICACIÓN",
+    "notifications": "NOTIFICACIONES",
+    "openDeviceSettings": "Abrir configuración del dispositivo",
+    "openWallet": "Abrir cartera",
+    "pause": "Pausa",
+    "Player": "Jugador",
+    "Points": "Puntos",
+    "price": "Precio",
+    "PVP": "VS JUGADOR",
+    "save": "Guardar",
+    "Show": "Mostrar",
+    "stateConfirmation": "Confirmación de Estado",
+    "stock": "Inventario",
+    "submit": "Enviar",
+    "supply": "Suministro",
+    "uninstall": "Desinstalar",
+    "userLocation": "Ubicación del Usuario",
+    "view": "Ver"
+  },
+  "generic": {
+    "AddToOrder": "Añadir al pedido",
+    "AddToOrderWithMode": "Añadir al pedido {{ mode }}",
+    "All": "Todo",
+    "Buy": "Comprar",
+    "Cancel": "Cancelar",
+    "CANCEL": "CANCELAR",
+    "Card": "Carta",
+    "CARD": "Carta",
+    "cards": "cartas",
+    "Clear": "Borrar",
+    "ConfirmOrder": "Confirmar {{ type }}",
+    "Conquest": "Conquista",
+    "CONTINUE": "CONTINUAR",
+    "COPIED": "¡COPIADO!",
+    "copyInviteURL": "COPIAR URL DE INVITACIÓN",
+    "Cost": "Costo",
+    "COST": "COSTO",
+    "Deselect": "Deseleccionar",
+    "DUPLICATES": "DUPLICADOS",
+    "Equip": "Equipar",
+    "EQUIPPED": "EQUIPADO",
+    "guest": "Invitado",
+    "IAPType": "Tipo de IAP",
+    "INSTALL": "INSTALAR",
+    "Item": "Artículo",
+    "Items": "Artículos",
+    "Locked": "Bloqueado",
+    "LOCKED": "BLOQUEADO",
+    "ME": "YO",
+    "Minted": "Acuñado",
+    "new": "Nuevo",
+    "NEW": "NUEVO",
+    "NotApplicable": "N/D",
+    "Now": "Ahora",
+    "OnlyEquipped": "Solo equipado",
+    "Owned": "Poseído",
+    "Ownership": "Propiedad",
+    "OWNERSHIP": "PROPIEDAD",
+    "Play": "Jugar",
+    "polygon": "Polígono",
+    "Practice": "Práctica",
+    "Prism": "Prisma",
+    "PRISM": "PRISMA",
+    "Quantity": "Cantidad",
+    "Ranked": "Clasificado",
+    "refresh": "Actualizar",
+    "RemoveFromOrder": "Eliminar del pedido",
+    "RemoveFromOrderWithMode": "Eliminar del pedido {{ mode }}",
+    "Save": "Guardar",
+    "Search": "Buscar",
+    "Select": "Seleccionar",
+    "selectLanguage": "Seleccionar un idioma",
+    "Sell": "Vender",
+    "Settings": "Configuración",
+    "SKIP": "OMITIR",
+    "Sorting": "Ordenar",
+    "TRAIT": "RASGO",
+    "Type": "Tipo",
+    "Unavailable": "No disponible",
+    "Unequip": "Desequipar",
+    "UnitPrice": "Precio unitario",
+    "Unlocked": "Desbloqueado",
+    "Wallet": "Cartera",
+    "walletAddress": "Dirección de la cartera"
+  },
+  "heroes": {
+    "MySkins": "Mis apariencias"
+  },
+  "heroFeature": {
+    "confirmAndContinue": "CONFIRMAR Y CONTINUAR",
+    "confirmGoldCards": "CONFIRMAR CARTAS DORADAS",
+    "heroSkin": "PIEL DE HÉROE",
+    "heroSkinSubHeader": "(Máximo 5 pieles/pedido)",
+    "maxInCart": "(máx)",
+    "maxSkinsInCart": "Solo puedes agregar un máximo de 5 pieles por pedido",
+    "orderDetailsTitle": "ACUÑAR PIELES DE HÉROE",
+    "selectedCardsCount": "{{ count }} Cartas seleccionadas",
+    "selectGoldCardsTitle": "SELECCIONAR CARTAS DORADAS",
+    "totalSkinsInOrder": "TOTAL ({{ total }} ARTÍCULOS)"
+  },
+  "home": {
+    "mainFeatureConquest": {
+      "title": "GANA CARTAS DE PLATA HEXBOUND EN TESOROS DE CONQUISTA"
+    },
+    "mainFeatureSkypass": {
+      "descriptionLineOne": "Juega partidas, gana XP, sube de nivel y reclama recompensas de tiempo limitado en el Skypass.",
+      "descriptionLineTwo": "¡Cada temporada trae nuevas oportunidades para desbloquear nuevas cartas de Invasión Hexbound!",
+      "title": "LOS HEXBOUND HAN INVADIDO",
+      "titleDescription": "RECLAMAR RECOMPENSAS EN EL SKYPASS"
+    }
+  },
+  "install": {
+    "downloadGame": "Descargar contenido del juego para tiempos de carga más rápidos en el juego",
+    "onWiFi": "en Wi-Fi",
+    "updateAutomatically": "Actualizar el juego automáticamente"
+  },
+  "inviteFriends": {
+    "collectFromSkypass": "También puedes recolectar más puntos de pegatinas subiendo de nivel en tu Skypass",
+    "collection": "Una vez desbloqueadas, las pegatinas pueden tardar hasta 24 horas en aparecer en tu cuenta.",
+    "confirmInvitedByWarning": "Esta acción no se puede deshacer",
+    "disclaimer": "Solo disponible hasta el final de la temporada.",
+    "giftedAmt": "Has regalado <strong>{{ total }}</strong> punto(s) a tu amigo.",
+    "goToSkypass": "Ir a Skypass",
+    "header": "Invita a tus amigos para obtener pegatinas de temporada",
+    "invitedByBody": "Escribe la <strong>dirección de la cartera</strong> del usuario que te invitó.",
+    "invitedByFooter": "(Tu amigo comenzará a ganar puntos a medida que subas de nivel.)",
+    "invitedByHeader": "¿QUIÉN TE INVITÓ?",
+    "invitedYouHeader": "FUERON INVITADOS POR:",
+    "joinedOnHeader": "Se unió el",
+    "maxFriends": "Solo se contarán los puntos de tus 5 amigos con mejor rendimiento",
+    "noFriendsBody": "Copia tu enlace de invitación y envíalo a un amigo. ¡Cuando se registren usando este enlace, ganarás puntos cada vez que suban de nivel!",
+    "noFriendsHeader": "Oh, parece que aún no has invitado a ningún amigo.",
+    "progressHeaderTitle": "SEGUIMIENTO DE RECOMPENSAS POR INVITAR A UN AMIGO",
+    "shareCTA": "Comparte este enlace con tus amigos para obtener puntos",
+    "stickerExplainerBody": "Toca tu héroe, selecciona la opción de pegatina y luego elige entre las pegatinas disponibles.",
+    "stickerExplainerHeader": "Usa pegatinas para comunicarte y reaccionar durante el juego",
+    "subHeader": "Cada vez que tus amigos <span>suban de nivel</span>, tú ganas",
+    "subNavInvited": "AMIGOS INVITADOS",
+    "subNavRewards": "RECOMPENSAS",
+    "top5Disclaimer": "*Solo los 5 mejores amigos de la temporada te otorgarán puntos.",
+    "topFriends": "TOP 5 AMIGOS ESTA TEMPORADA"
+  },
+  "iosAppUpdateModal": {
+    "description": "Hola OpenSky, hemos notado que tu versión de iOS causa algunos errores inesperados, te recomendamos encarecidamente que actualices a la última versión de iOS.",
+    "dismiss": "Más tarde"
+  },
+  "leaderboardRewardsModal": {
+    "1": {
+      "header": "Cuatro semanas por temporada"
+    },
+    "2": {
+      "header": "Dos tablas de posiciones"
+    },
+    "3": {
+      "header": "Jugar, Ganar, Poseer"
+    }
+  },
+  "market": {
+    "buyTicketsNow": "Comprar entradas ahora",
+    "countryRestrictionsFound": "Las restricciones por país y la documentación de términos de servicio se pueden encontrar",
+    "fetchingCardBalances": "Obteniendo saldos de las cartas...",
+    "goBackToHome": "VOLVER AL INICIO",
+    "here": "aquí",
+    "platformUnavailable": "Lo sentimos, parece que el Mercado no está disponible en su plataforma",
+    "regionUnavailable": "Lo sentimos, el Mercado no está disponible en su región."
+  },
+  "matchHistory": {
+    "latestMatches": "ÚLTIMOS PARTIDOS"
+  },
+  "matchMaker": {
+    "acceptMatch": "Aceptar partida",
+    "matchFoundModal": "¡Oponente encontrado! Por favor, acepta en {{ count }}.",
+    "matchFoundModalAcceptOnly": "¡Oponente encontrado! La partida comenzará en {{ count }}."
+  },
+  "mobileInstallPrompt": {
+    "alreadyHave": "¿Ya tienes un código de acceso?",
+    "download": "Descarga OpenSky para jugar",
+    "waitList": "UNIRSE A LA LISTA DE ESPERA"
+  },
+  "navigation": {
+    "backToTop": "VOLVER ARRIBA",
+    "goBack": "REGRESAR",
+    "home": "INICIO",
+    "items": "OBJETOS",
+    "market": "MERCADO",
+    "play": "JUGAR",
+    "ranks": "RANGOS"
+  },
+  "notification": {
+    "conquestTicketFailed": "Fallido",
+    "conquestTicketFailedSecondary": "Error al comprar boletos de conquista",
+    "conquestTicketPurchased": "Orden de boleto de conquista enviada",
+    "conquestTicketSuccess": "Éxito",
+    "conquestTicketSuccessSecondary": "Has obtenido nuevos boletos de conquista",
+    "error": "¡Vaya! Algo salió mal.",
+    "moreDetails": "Haz clic para más detalles.",
+    "nativeError": "¡Vaya! Parece que OpenSky se cerró inesperadamente.",
+    "orderCompleteBuy": "¡Éxito! Compra completada",
+    "orderCompleteSell": "¡Éxito! Venta completada",
+    "orderPendingFail": "Orden fallida. Orden anterior aún pendiente.",
+    "orderPlacedFail": "Error al colocar la orden",
+    "sendReport": "Envíanos un informe",
+    "skyPassCheckout": "Esperando el pago...",
+    "skyPassSuccess": "Éxito",
+    "skyPassSuccessSecondary": "Has activado Skypass Premium"
+  },
+  "notificationModal": {
+    "buyHeroSkins": "VER MERCADO",
+    "checkItems": "VER ARTÍCULOS"
+  },
+  "notifications": {
+    "conquestTreasure": {},
+    "leaderboardRewards": {}
+  },
+  "offlineModal": {
+    "description": "OpenSky ha perdido conexión a internet."
+  },
+  "pagination": {
+    "next": "Siguiente",
+    "prev": "Anterior"
+  },
+  "play": {
+    "CARD": "CARTA",
+    "chooseSilverCard": "CONVERTIR CARTAS EN TICKETS DE CONQUISTA",
+    "congratsNewCards": "¡FELICITACIONES! OBTUVISTE NUEVAS CARTAS",
+    "conquestCostExplanationiOS": "1 Carta Plateada",
+    "conquestEntry": "Usa Tickets para entrar al modo Conquista",
+    "conquestPointsPerMatch": "Puntos por partida",
+    "conquestSilverRewards": "¡HAS GANADO CARTAS DE PLATA DE EXPANSIÓN EN CONQUISTA!",
+    "conquestWarningLineOne": "Advertencia: Conquista no está disponible para",
+    "conquestWeeklyGolds": "Estas cartas Doradas solo están disponibles para acuñar por tiempo limitado.",
+    "convertSilverWarning": "¡Atención! Estás a punto de convertir tus cartas en Tickets de Conquista, esto no se puede deshacer.",
+    "convertTo": "Convertir a {{ count }}",
+    "createGameCode": "CREAR CÓDIGO DE PARTIDA",
+    "customizeNotifications": "¡Puedes personalizar tus notificaciones para recibir actualizaciones sobre contenido especial!",
+    "delayedGoldMinting": "Las cartas doradas tardan 24 horas en ser acuñadas una vez",
+    "excludesLastSet": "Excluye el último conjunto de expansión.",
+    "exitConquest": "PREPARANDO CONQUISTA...",
+    "gameMode": "MODO DE JUEGO",
+    "gameModes": {
+      "CONQUEST": {
+        "collectTreasure": "Recolecta tus recompensas de Tesoro al final de la semana.",
+        "description": "Competencia de rachas de victorias por objetos raros.",
+        "descriptionLong": "Competencia de rachas de victorias por objetos raros.",
+        "descriptionShort": "Compite por cartas de oro",
+        "level10": "¡Felicidades! Alcanzaste el nivel 10.",
+        "pendingGolds": "Cartas pendientes por acuñar",
+        "title": "CONQUISTA",
+        "toUnlock": "Alcanza el rango de Aprendiz para desbloquear el modo Conquista",
+        "unlockMore": "¡Sigue jugando para desbloquear más cartas de oro!"
+      },
+      "header": {}
+    },
+    "getTickets": "OBTENER ENTRADAS",
+    "goToDeckCollection": "Ir a la Colección de Mazos",
+    "hero": "HÉROE",
+    "howDoesConquest": "¿CÓMO FUNCIONA LA CONQUISTA?",
+    "limitedTimeMinting": "Estas cartas doradas se ofrecerán solo esta semana y nunca más serán acuñadas.",
+    "over100Golds": "There are over 100 different Gold cards to collect!",
+    "loading": "CARGANDO...",
+    "loadingConquestPrices": "BUSCANDO EL MEJOR PRECIO...",
+    "myDeck": "Mi Mazo",
+    "noMatchesFound": "No se encontraron partidas.",
+    "noMintsPending": "Actualmente no hay cartas esperando ser acuñadas.",
+    "noTicketsWarning": "Advertencia: Actualmente no hay Entradas de Conquista disponibles. Por favor, espere otras 6 horas antes de comprar.",
+    "play": "JUGAR",
+    "premadeDecks": {
+      "AGI": {},
+      "AGW": {},
+      "AGY": {},
+      "HRA": {},
+      "HRI": {},
+      "HRT": {},
+      "HRW": {},
+      "INT": {},
+      "INW": {},
+      "STA": {},
+      "STH": {},
+      "STI": {},
+      "STR": {},
+      "STW": {},
+      "WIS": {}
+    },
+    "rankedConstructedLocked": "El modo clasificado está bloqueado. Juega partidas de práctica hasta alcanzar el primer rango.",
+    "rankUp": "ASCENSO DE RANGO",
+    "rewardDetails": "DETALLES DE RECOMPENSA",
+    "rewards": {
+      "levelWeeklyTreasureLineOne": "SUBE DE NIVEL TU TESORO SEMANAL CON PUNTOS DE CONQUISTA",
+      "levelWeeklyTreasureLineTwo": "AGREGANDO ARTÍCULOS COMERCIALIZABLES A TU MAZO"
+    },
+    "selectDeck": "SELECCIONAR MAZO",
+    "silversAvailable": "PLATAS DISPONIBLES",
+    "silversCanBeWon": "Cualquier carta de plata se puede ganar al azar en Conquista en todo momento.",
+    "startConquest": "ENTRAR CON ENTRADA",
+    "ticketAccepted": "Entrada de Conquista Aceptada",
+    "treasureToolTipHeader": "NIVEL 5 A 10 CONTIENE {{ expansion }} CARTAS DE PLATA",
+    "troubleAccepting": "Lo sentimos, estamos teniendo problemas para aceptar esta Entrada de Conquista.",
+    "tryReloading": "Por favor, intenta recargar OpenSky",
+    "typeAMatchCode": "Escribe un código de partida",
+    "ViewSelected": "Ver seleccionado",
+    "watch": "VER",
+    "weekRewards": "RECOMPENSAS SEMANALES",
+    "welcome": "Bienvenido a OpenSky",
+    "wonInConquest": "que se ganan en Conquista.",
+    "yourFriend": "tu amigo",
+    "youWon": "Ganaste"
+  },
+  "playerLeaderboard": {
+    "rewardExplainer": "La recompensa de carta plateada excluye la última expansión"
+  },
+  "playPage": {
+    "CONQUEST": {},
+    "deckSelector": {
+      "titles": {}
+    },
+    "gameTypeSelector": {
+      "buttonDescriptions": {}
+    },
+    "matchMaker": {
+      "statusTexts": {}
+    },
+    "PRACTICE": {},
+    "RANKED": {},
+    "TUTORIAL": {}
+  },
+  "portraitWarning": "Por favor, gira tu dispositivo",
+  "profile": {
+    "accountSince": "EN SKY DESDE {{ accountSince }}",
+    "achievedDesc": "Has logrado este rango.",
+    "achievedTitle": "Logrado",
+    "addedFriend": "¡AÑADIDO!",
+    "addFriend": "AÑADIR A CONTACTOS",
+    "addressCopied": "Dirección copiada",
+    "baseCards": "Cartas Base",
+    "blockchainDescriptionTitle": "¿CÓMO FUNCIONA LA CADENA DE BLOQUES?",
+    "changeCover": "Cambiar portada",
+    "changeRegion": "Cambiar región",
+    "COLLECTION": "COLECCIÓN",
+    "collectionCount": "{{ cardCount }} Cartas Únicas",
+    "CONQUEST": "CONQUISTA",
+    "currentLevel": "NIVEL {{ level }}",
+    "dangerZone": "ZONA DE PELIGRO",
+    "externalAchievedDesc": "Este jugador ha logrado este rango.",
+    "friendRemoved": "¡ELIMINADO!",
+    "goldCards": "Cartas Doradas",
+    "goldsCollected": "Oros recolectados",
+    "hardReset": "Reinicio Duro",
+    "hardResetDesc": "Se reinicia a este valor mensualmente.",
+    "hardResetTitle": "Reinicio Duro",
+    "leaderboard": "Clasificación",
+    "logout": "Cerrar sesión",
+    "manageContact": "Administrar contacto",
+    "Matches": "Partidas",
+    "MATCHES": "PARTIDAS",
+    "noActivity": "Aún no tienes ninguna actividad.",
+    "noActivityExternal": "Este usuario no tiene ninguna actividad.",
+    "nonTradable": "No intercambiable",
+    "notagArtResults": "No pudimos encontrar ninguna carta con ese nombre.",
+    "playedConquestForFirstTimeOn": "Jugó Conquista por primera vez en",
+    "position": "Posición",
+    "rank": "RANGO",
+    "rankDesc": "Nombre del rango.",
+    "rankExplanation": "Todos los rangos por encima de Errante comenzarán a perder Puntos de Rango (RP) cada Temporada, y a veces incluso semanalmente",
+    "rankPoints": "Puntos de Rango",
+    "RANKS": "RANGOS",
+    "ranksProgressTitle": "Sistema de Rango",
+    "rankTitle": "Rango",
+    "removeFriend": "ELIMINAR AMIGO",
+    "requiresDesc": "Puntos necesarios para subir de rango.",
+    "requiresTitle": "Requerido",
+    "REWARDS": "RECOMPENSAS",
+    "seasonEndsIn": "La temporada termina en:",
+    "silverCards": "Cartas Plateadas",
+    "silversCollected": "Platas recolectadas",
+    "softReset": "Reinicio Suave",
+    "softResetDesc": "Se reinicia a este valor semanalmente.",
+    "softResetTitle": "Reinicio Suave",
+    "spectate": {
+      "confirmModalBody": "Todos los espectadores existentes perderán el acceso",
+      "confirmModalDisclaimer": "Esta acción no se puede deshacer",
+      "confirmModalHeader": "¿Estás seguro de que deseas restablecer tu Enlace Secreto?",
+      "disclaimer": "Comparte este enlace para que otros jugadores observen tus partidas desde tu perspectiva. Restablecer este enlace eliminará a los espectadores existentes.",
+      "disclaimerOtherPlayerPublic": "Observa las partidas de este usuario sin ver su mano y mazo.",
+      "disclaimerPublic": "Comparte este enlace para que otros jugadores observen tus partidas sin ver tu mano y mazo.",
+      "headerPlural": "ENLACES DE ESPECTADOR",
+      "headerSingular": "ENLACE DE ESPECTADOR",
+      "headerTabPrivate": "Enlace Secreto",
+      "headerTabPublic": "Enlace Público",
+      "resetButton": "Restablecer enlace",
+      "wasReset": "¡Enlace restablecido!"
+    },
+    "STATS": "ESTADÍSTICAS",
+    "tagArtEmpty": "Introduce un nombre de carta o elemento arriba para seleccionar arte.",
+    "tickets": "Entradas",
+    "ticketsUsed": "Boletos utilizados",
+    "totalItemBalance": "Saldo total de objetos:",
+    "tradable": "Intercambiable",
+    "tradableItemsTip": "Los objetos intercambiables se almacenan de forma segura en tu billetera blockchain",
+    "uniq": "Único.",
+    "usernameLabel": "Nombre de usuario",
+    "WALLET": "CARTERA",
+    "winStreak": "Racha de Victorias",
+    "xpRewardDesc": "Se otorga una vez alcanzado este rango.",
+    "xpRewardTitle": "Recompensa"
+  },
+  "prompt": {
+    "dismiss": "No mostrar esto de nuevo"
+  },
+  "purchaseSkypass": {
+    "inAppPurchase": "Compra en la aplicación"
+  },
+  "quests": {},
+  "ranks": {
+    "abandons": "Abandonos",
+    "allTimeLevel": "Nivel de Todos los Tiempos",
+    "APPRENTICE": "Aprendiz",
+    "collectedHeader": "Recolectado",
+    "constructedMode": "Construido",
+    "craftProgress": "({{ owned }}/{{ total }}) Desbloqueado",
+    "CurrentSeason": "Temporada Actual",
+    "decks": "Mazos",
+    "discoveryMode": "Descubrimiento",
+    "emptyBoardMessage": "¡Vaya! No pudimos encontrar ningún {{ type }} que coincida con tu búsqueda.",
+    "emptyBoardMessageSeason": "Esto podría deberse al inicio de una nueva temporada.",
+    "EXPERT": "Experto",
+    "gamesPlayed": "Partidas Jugadas",
+    "gamesPlayedHeader": "Juegos",
+    "GRANDWEAVER": "Gran Tejedor",
+    "howItWorks": "¿Cómo funciona?",
+    "leaderboardRewardsModalHeader": "RECOMPENSAS SEMANALES CLASIFICATORIAS",
+    "losses": "Derrotas",
+    "mana": "Maná",
+    "MASTER": "Maestro",
+    "player": "Jugador",
+    "players": "Jugadores",
+    "prism": "Prisma",
+    "PROPHET": "Profeta",
+    "rank": "Rango",
+    "RECRUIT": "Recluta",
+    "rewardHeader": "Recompensa Semanal",
+    "SCHOLAR": "Erudito",
+    "score": "Puntuación",
+    "SeasonNum": "Temporada {{ season }}",
+    "topPlayer": "Mejor jugador",
+    "TRAINEE": "Practicante",
+    "UNKNOWN": "Desconocido",
+    "UNRANKED": "Sin rango",
+    "WANDERER": "Caminante",
+    "weekElapsedOfTotal": "Semana {{ elapsed }} de {{ total }}",
+    "winRate": "Tasa de Victorias",
+    "winRateHeader": "Tasa de victorias",
+    "wins": "Victorias",
+    "yourRegion": "Tu Región"
+  },
+  "search": {
+    "emptySearch": "No pudimos encontrar ningún {{ item }} que coincida con esa búsqueda.",
+    "emptySearchSub": "{{ action }} para obtener más {{ item }}.",
+    "itemsCardsActions": {
+      "noBase": "Subir de nivel",
+      "noBasePractice": "Jugar partidas de práctica",
+      "noBaseTutorial": "Jugar el Tutorial",
+      "noGolds": "Jugar Conquista",
+      "noSilver": "Jugar Clasificatoria"
+    },
+    "MultipleOwned": "Múltiples en propiedad",
+    "noResultAllHeroes": "Has recolectado todas las apariencias de héroe",
+    "noResultsAllCardBacks": "¡Has desbloqueado todos los reversos de cartas!",
+    "noResultsAllStickers": "¡Has recolectado todas las pegatinas!",
+    "noResultsCardBacks": "Obtén reversos de cartas del Skypass",
+    "noResultsCardBacksButton": "VER SKYPASS",
+    "noResultsHeroes": "No has recolectado ninguna apariencia de héroe",
+    "noResultsHeroesButton": "DESCUBRIR APARIENCIAS DE HÉROE",
+    "noResultsStickers": "¡Aún no has recolectado ninguna pegatina!",
+    "noResultsStickersButton": "INVITA A AMIGOS PARA RECOLECTAR PEGATINAS",
+    "searchResults": "{{ results }} resultados"
+  },
+  "sentry": {
+    "feedback": "Envíanos un informe explicando tu problema para ayudarnos a mejorar",
+    "oops": "¡Vaya! Algo salió mal.",
+    "placeholder": "Por favor, cuéntanos más sobre tu problema",
+    "submit": "Enviar informe"
+  },
+  "sets": {
+    "HEXBOUND_INVASION": "INVASIÓN HEXBOUND"
+  },
+  "shop": {
+    "addedToOrder": "Añadido al pedido",
+    "addToOrder": "Añadir al pedido",
+    "buyMode": {
+      "deselect": "Eliminar",
+      "detailsButton": "Agregar a la orden de compra",
+      "select": "Agregar al pedido"
+    },
+    "buyTicketsWithInAppPurchase": "COMPRAR ENTRADAS CON COMPRA EN LA APLICACIÓN",
+    "cartTotal": "TOTAL ({{count}} ARTÍCULOS)",
+    "changeNetwork": "Cambiar Red",
+    "confirmBuy": "CONFIRMAR COMPRA",
+    "currentBalance": "Saldo actual",
+    "currentBalanceWithArg": "Saldo actual: {{ usdcBalance }}",
+    "deckElo": "MEJORES MAZOS",
+    "deckGamesPlayed": "MÁS JUGADO",
+    "feeToolTip": "Incluye una tarifa de mercado de OpenSky del <strong>5.75%</strong>, una tarifa de protocolo de Niftyswap.io del <strong>3%</strong> y una tolerancia al deslizamiento del <strong>2%</strong> (la parte no utilizada se reembolsa)",
+    "getTickets": "Obtener Entradas",
+    "mintHeroExplanation": "10 cartas Doradas se queman automáticamente (destruidas) para acuñar (crear) cada apariencia de Héroe Legado. También se aplica una tarifa de acuñación.",
+    "MintingIn": "Acuñación en {{ hours }}h {{ minutes }}m",
+    "MintingInProg": "Acuñación en progreso",
+    "networkWarning": "Red de Ethereum incorrecta. Por favor, cambia a Matic Mainnet.",
+    "noRefunds": "no podemos emitir reembolsos.",
+    "payWithGoldCardsAllowed": "Puedes pagar con cartas de oro",
+    "price": "Precio unitario",
+    "Price": "Precio",
+    "processing": "Procesando...",
+    "purchase": "Comprar",
+    "quantity": "Cantidad",
+    "reviewOrder": "Revisar pedido",
+    "salesAreFinal": "Todas las transacciones son definitivas",
+    "salesAreFinalTooltip": "Debido a la economía abierta de OpenSky, no podemos emitir reembolsos.",
+    "selectProduct": "Seleccionar Producto",
+    "sellMode": {
+      "detailsButton": "Agregar a la orden de venta"
+    },
+    "subNavCardBacks": "FONDOS DE CARTAS",
+    "subNavCards": "CARTAS",
+    "subNavDecks": "MAZOS",
+    "subNavHeroes": "HÉROES",
+    "subNavStickers": "PEGATINAS",
+    "titleCart": "ORDEN DE COMPRA",
+    "titleSell": "ORDEN DE VENTA",
+    "tradableNature": "Debido a la naturaleza de los objetos intercambiables en la economía abierta de OpenSky,"
+  },
+  "signTransaction": {
+    "completeAction": "Cartera de Sequence para completar esta acción.",
+    "confirmSignagure": "Confirma la firma en tu",
+    "popUp": "Si no lo ves, verifica si tu navegador está bloqueando las ventanas emergentes.",
+    "whySignDescription": "Para mantener tu cuenta de OpenSky segura, cada vez que realices una acción que pueda afectar el saldo o la seguridad de tu cuenta, es necesario que confirmes en tu cartera de Sequence.",
+    "whySignTitle": "¿Por qué necesito firmar?"
+  },
+  "skypass": {
+    "claimReward": "Reclamar recompensa",
+    "deck": "Mazo",
+    "detailsDescs": {},
+    "detailsTitles": {},
+    "goPremium": "Hazte Premium",
+    "goPremiumToUnlock": "Desbloquea con Premium",
+    "reachLevel": "Alcanza el nivel {{level}}",
+    "rewardClaimed": "Recompensa reclamada",
+    "season": "Temporada {{number}}: {{name}}",
+    "seasonLevelAmount": "nivel {{level}}",
+    "sticker": "Pegatina",
+    "stickerPointsTooltip": {},
+    "thumbs": {
+      "CLAIM": "RECLAMAR",
+      "FREE": "GRATIS"
+    },
+    "title": "Título",
+    "titleLabels": {
+      "SW_CARD_BACKS": "Fondo de Carta",
+      "SW_HERO": "Héroe",
+      "SW_HERO_SKINS": "Aspecto de Héroe",
+      "SW_STICKER_POINTS": "Punto de Pegatina",
+      "SW_TITLES": "Título"
+    },
+    "titles": {
+      "SW_BASE_CARDS": "Carta Base",
+      "SW_CARD_BACKS": "Fondo de Carta",
+      "SW_CONQUEST_TICKET": "Boleto de Conquista",
+      "SW_GOLD_CARDS": "Carta Dorada",
+      "SW_HERO": "Héroe",
+      "SW_HERO_SKINS": "Aspecto de Héroe",
+      "SW_SILVER_CARDS": "Carta Plateada",
+      "SW_STICKER_POINTS": "Punto de Pegatina",
+      "SW_STICKERS": "Pegatina",
+      "SW_TITLES": "Título"
+    },
+    "tradableTooltip": "Estos objetos están acuñados en la cadena de bloques y se pueden comerciar usando tu Cartera de Secuencia."
+  },
+  "support": {
+    "accountBanned": "Lo sentimos, parece que esta cuenta ha sido bloqueada.",
+    "addOpenSkyToHome": "Agrega OpenSky a la pantalla de inicio para acceder al Mercado en tu dispositivo.",
+    "chat": "Chatea con nosotros",
+    "cookieDisclaimerLineOne": "Utilizamos cookies para proporcionar servicios y mejorar su experiencia.",
+    "cookieDisclaimerLineThree": "Política de Cookies",
+    "cookieDisclaimerLineTwo": "Al hacer clic en Aceptar, está dando su consentimiento para nuestro uso de cookies como se describe en nuestra",
+    "cookies": {
+      "authDesc": "Para autenticar correctamente a los usuarios, requerimos el uso de información de sesión de usuario, como tokens de sesión, para autenticar adecuadamente a los usuarios en nuestros sistemas.",
+      "authTitle": "Autenticación y autorización",
+      "geoBlockingDesc": "Necesitamos almacenar la IP de un usuario en todas las sesiones para bloquear correctamente los países, ya que necesitamos incluir en la lista negra a los países que no tienen leyes favorables sobre criptomonedas o donde podría ser problemático para nosotros prestar servicio.",
+      "marketplaceDesc": "Monitoreamos la actividad del usuario y las operaciones en el OpenSky Marketplace, para garantizar el cumplimiento normativo adecuado y para prevenir cualquier uso injusto o ilegal del Marketplace.",
+      "productAnalyticsDesc": "Rastreamos el comportamiento y las acciones del usuario para mejorar la experiencia del producto.",
+      "productAnalyticsTitle": "Análisis de Producto"
+    },
+    "forMoreInfoAboutOur": "Para obtener más información sobre nuestro",
+    "helpSectionLink": "Guía y preguntas frecuentes",
+    "or": "o",
+    "pleaseDownloadEither": "Por favor, descarga",
+    "pleaseFollowLink": ", sigue el enlace que se encuentra aquí.",
+    "pleaseLogInAgain": "Por favor, inicia sesión de nuevo",
+    "safariLogin": "Asegúrate de estar en Safari.",
+    "sanctions": {
+      "accessibilityHeader": "Vivo en los Estados Unidos. ¿OpenSky será completamente accesible para mí?",
+      "accessibilityLineOne": "OpenSky es accesible en los Estados Unidos, pero algunos estados tienen acceso",
+      "accessibilityLineTwo": "limitado. Los jugadores de los estados enumerados a continuación tienen acceso a OpenSky, pero",
+      "header": "Países de OpenSky y regiones restringidas",
+      "lastRevisedOn": "Última revisión el",
+      "limitedAccessLineOne": "Acceso limitado: Si te encuentras en uno de estos estados, puedes jugar",
+      "limitedAccessLineThree": "transacciones del mercado y la economía de OpenSky",
+      "limitedAccessLineTwo": "OpenSky, pero debido a razones regulatorias, no puedes participar en",
+      "marketplaceHeader": "¿Puedo jugar a OpenSky sin participar en el mercado?",
+      "marketplaceLineFour": "participar en transacciones del mercado y la economía de OpenSky.",
+      "marketplaceLineOne": "OpenSky estará accesible a través de skyweaver.net pero no estará disponible",
+      "marketplaceLineThree": "países, puedes jugar a OpenSky, pero debido a razones regulatorias, no puedes",
+      "marketplaceLineTwo": "en la App Store y Google Play Store. Si te encuentras en uno de estos",
+      "noAppLineOne": "OpenSky estará accesible a través de skyweaver.net pero no estará disponible",
+      "noAppLineTwo": "en la App Store y Google Play Store.",
+      "restrictionsLineFour": "resides en uno de estos países.",
+      "restrictionsLineOne": "Si te encuentras en uno de estos países, no se te permitirá",
+      "restrictionsLineThree": "ni estará disponible en la App Store o Google Play Store si",
+      "restrictionsLineTwo": "acceder a OpenSky. OpenSky no estará accesible a través de skyweaver.net,",
+      "version": "Versión",
+      "whatCountries": "¿En qué países NO estará disponible OpenSky?",
+      "willBeBlocked": "OpenSky estará bloqueado en estos países"
+    },
+    "sessionExpired": "Sesión expirada",
+    "USconfirm": {
+      "limitedAccessDisclaimerLineFive": "Por favor confirme el estado de EE. UU. en el que se encuentra actualmente",
+      "limitedAccessDisclaimerLineFour": "confirmar el estado en el que se encuentra para continuar.",
+      "limitedAccessDisclaimerLineOne": "En este momento,",
+      "limitedAccessDisclaimerLineThree": "a jugadores ubicados en ciertos estados de EE. UU. por razones regulatorias, y debe",
+      "limitedAccessDisclaimerLineTwo": "OpenSky ofrece acceso limitado",
+      "noLongerUScitizen": "Ya no ciudadano de EE. UU.",
+      "state": "Estado"
+    },
+    "usernameIsTaken": "El nombre de usuario ya está en uso"
+  },
+  "time": {},
+  "tooltip": {
+    "allowNotifications": "Necesitas permitir las notificaciones de OpenSky yendo a la configuración de tu dispositivo",
+    "baseCardsExplainerLineOne": "Las cartas base son objetos no comerciables GRATIS para todos.",
+    "baseCardsExplainerLineTwo": "Se desbloquean al subir de nivel.",
+    "conquestRequirement": "La Conquista está bloqueada hasta que alcances el rango de Aprendiz en el modo Clasificado",
+    "conquestRulesHeaderLineOne": "CUANTO MÁS GANES, MEJOR SERÁ TU RECOMPENSA",
+    "conquestRulesHeaderLineTwo": "PAQUETE AL FINAL DE UNA CONQUISTA",
+    "conquestRulesLineFive": "Más victorias equivale a",
+    "conquestRulesLineFour": "que ganes 3 veces o pierdas una vez.",
+    "conquestRulesLineOne": "Usar un Ticket",
+    "conquestRulesLineSeven": "Las cartas doradas tardan 24 horas en acuñarse",
+    "conquestRulesLineSix": "mejores recompensas al final.",
+    "conquestRulesLineThree": "Juega Conquista hasta",
+    "conquestRulesLineTwo": "y comienza tu Conquista",
+    "conquestTicketsExplainerLineOne": "Los boletos de Conquista se utilizan",
+    "conquestTicketsExplainerLineTwo": "para entrar en una ronda de Conquista y ganar recompensas.",
+    "discoveryExplainer": "Ambos jugadores usan un mazo de cartas preconstruido.",
+    "ELOChangeLineOne": "Tu ELO para esta temporada. Cambia cuando",
+    "ELOChangeLineTwo": "ganas o pierdes una partida Clasificada.",
+    "goldCardsExplainerLineOne": "Las cartas doradas son objetos cosméticos comerciables que",
+    "goldCardsExplainerLineTwo": "se obtienen al completar Conquistas.",
+    "positionWithinRankedLineOne": "Tu posición dentro de un Rango.",
+    "positionWithinRankedLineTwo": "Haz clic para ver en la Tabla de clasificación.",
+    "rankExplainerLineOne": "Los rangos son niveles que los jugadores deben escalar para llegar a la",
+    "rankExplainerLineThree": "partidas en el modo Clasificado.",
+    "rankExplainerLineTwo": "cima de la tabla de clasificación. Sube de rango en una temporada ganando",
+    "silverCardsExplainerLineOne": "Las cartas plateadas son objetos cosméticos comerciables que",
+    "silverCardsExplainerLineTwo": "se obtienen de la Tabla de clasificación Clasificada.",
+    "silverSavingsLineTwo": "comprando y quemando las Platas más baratas automáticamente.",
+    "skytagRequirement": "Necesitas poseer una carta para usarla como fondo de tu SkyTag."
+  },
+  "unsupportedBrowser": {
+    "browserNotSupported": "OpenSky no es compatible con tu navegador."
+  }
+}

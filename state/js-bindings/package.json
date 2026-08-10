@@ -1,0 +1,37 @@
+{
+  "name": "@skyweaver/state-generator",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "bash ./scripts/build-packages.sh",
+    "gen-json-from-design": "cat ../cards/card_library_design.csv | pnpm run --silent tsx ./scripts/parse-card-sheet.ts > ../cards/design.json",
+    "gen-card": "pnpm gen-card-sql",
+    "gen-card-sql": "tsx ./scripts/gen-card-library-sql.ts",
+    "gen-skypass-rewards": "tsx ./scripts/gen-skypass-rewards-sql.ts",
+    "patch": "tsx ./scripts/patch.ts",
+    "wasm-version": "node -p \"require('./bundle/node').getVersion()\""
+  },
+  "author": "Ari Lotter",
+  "private": true,
+  "dependencies": {
+    "@opensky/language-manager": "workspace:*",
+    "@opensky/parse-card-description": "workspace:*",
+    "@opensky/proto": "workspace:*",
+    "@opensky/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@opensky/design-data": "workspace:*",
+    "@types/fs-extra": "^11.0.1",
+    "@types/glob": "^7.1.1",
+    "@types/node": "^20.6.3",
+    "@types/papaparse": "^4.5.9",
+    "fs-extra": "^11.1.1",
+    "glob": "^7.1.7",
+    "json-literal-typer": "^0.1.1",
+    "node-jq": "^1.12.0",
+    "papaparse": "^5.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^3.11.0",
+    "typescript": "^5.1.6"
+  }
+}

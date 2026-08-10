@@ -1,0 +1,9 @@
+docs/*.html
+dist/
+build/
+node_modules
+yarn-error.log
+.cache
+!dist/assets.json
+google-translation-service-account.json
+stats.html

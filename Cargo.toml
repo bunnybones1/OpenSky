@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "./design-data/rust",
+    "./sheets/src-tauri",
+    "./state/state",
+    "./state/replayer",
+    "./state/fuzzer",
+    "./state/js-bindings",
+]
+resolver = "2"
+
+[profile.release]
+debug = "line-tables-only" # include debug symbols to find crashes in prod
+codegen-units = 1          # less parallelism, more optimization
+lto = 'fat'                # link time optimization.
+opt-level = 'z'            # Optimize for size.

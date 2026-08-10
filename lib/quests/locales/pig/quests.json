@@ -1,0 +1,894 @@
+{
+  "ABiiiigStick": {
+    "name": "Ayay Iiiigbay Ickstay",
+    "text": "Avehay anay Elderwooday ithway 8 owerpay oray oremay inay ayplay"
+  },
+  "AcrosstheRainbow": {
+    "name": "Acrossay ethay Ainbowray",
+    "text": "Ayplay ayay ardcay ofay eachay ifferentday elementay, inay ayay inglesay urntay"
+  },
+  "AdasResolve": {
+    "name": "Adayay'say Esolveray",
+    "text": "Ayplay ayay amegay asay Adayay"
+  },
+  "AdasResolvePlus": {
+    "name": "Adayay'say Esolveray +",
+    "text": "Inway 2 amesgay asay Adayay"
+  },
+  "AFriendAppears": {
+    "name": "Ayay Iendfray Appearsay",
+    "text": "Oostbay ethay atsstay ofay 10 Unitsay"
+  },
+  "Agilityweaver": {
+    "name": "Agilityweaveray",
+    "text": "Inway 2 amesgay ithway anay Agilityay Erohay"
+  },
+  "AirBattler": {
+    "name": "Airay Attlerbay",
+    "text": "Ayplay 10 Airay ardscay"
+  },
+  "AirBattlerPLUS": {
+    "name": "Airay Attlerbay +",
+    "text": "Ayplay 30 Airay ardscay"
+  },
+  "AirBattlerPLUSPLUS": {
+    "name": "Airay Attlerbay ++",
+    "text": "Ayplay 500 Airay ardscay"
+  },
+  "AllTogether": {
+    "name": "Allay Ogethertay",
+    "text": "Avehay ayay ardcay omfray eachay Ismpray inay ouryay avegray atay ethay amesay imetay"
+  },
+  "AnArmyisBuilt": {
+    "name": "Anay Armyay isay Uiltbay",
+    "text": "Ummonsay 10 Eefolktray Aplingsay"
+  },
+  "AnEnemyApproaches": {
+    "name": "Anay Enemyay Approachesay",
+    "text": "Estroyday 10 enemyay Unitsay"
+  },
+  "Annihilation": {
+    "name": "Annihilationay",
+    "text": "Estroyday 4+ enemyay Unitsay inay oneyay urntay"
+  },
+  "ArcaneOverflow": {
+    "name": "Arcaneyay Overfloway",
+    "text": "Oday 40 amageday otay enemyay Eroeshay usingay ellsspay"
+  },
+  "ArisInsight": {
+    "name": "Ariyay'say Insightay",
+    "text": "Ayplay ayay amegay asay Ariyay"
+  },
+  "ArisInsightII": {
+    "name": "Ariyay'say Insightay +",
+    "text": "Inway 2 amesgay asay Ariyay"
+  },
+  "ArmisEnvoy": {
+    "name": "Armisay Envoyay",
+    "text": "Attackay ithway anay Armisay Uardgay 10 imestay"
+  },
+  "Armoured": {
+    "name": "Armoureday",
+    "text": "Ayplay 10 Unitsay ithway Armoray"
+  },
+  "ASmallSacrifice": {
+    "name": "Ayay Allsmay Acrificesay",
+    "text": "Estroyday 5 ofay ouryay ownay Unitsay usingay ellsspay atthay oday otnay ealday amageday"
+  },
+  "AxelsVision": {
+    "name": "Axelay'say Isionvay",
+    "text": "Ayplay ayay amegay asay Axelay"
+  },
+  "BackforMore": {
+    "name": "Ackbay orfay Oremay",
+    "text": "Ummonsay 50+ Unitsay omfray ouryay aveyardgray"
+  },
+  "BackfromtheBrink": {
+    "name": "Ackbay omfray ethay Inkbray",
+    "text": "Allfay elowbay 10 ealthhay anday enthay inway ethay amegay ilewhay aboveyay 32 ealthhay"
+  },
+  "BakersDozen": {
+    "name": "Akerbay'say Ozenday",
+    "text": "Attackay ithway ouryay Erohay 13 imestay"
+  },
+  "BalancePatch": {
+    "name": "Alancebay Atchpay",
+    "text": "Ayplay 5 ardscay ithway Annerbay atthay usuallyay onday'tay avehay Annerbay"
+  },
+  "BanjosMirth": {
+    "name": "Anjobay'say Irthmay",
+    "text": "Ayplay ayay amegay asay Anjobay"
+  },
+  "Beastmaster": {
+    "name": "Eastmasterbay",
+    "text": "Ummonsay 20+ Unitsay inay oneyay amegay"
+  },
+  "BigBird": {
+    "name": "Igbay Irdbay",
+    "text": "Attackay ithway ouryay Erohay enwhay eythay avehay 5 oray oremay owerpay"
+  },
+  "BigHitter": {
+    "name": "Igbay Itterhay",
+    "text": "Oday 15+ amageday otay ethay enemyay Erohay ithway ayay inglesay attackay"
+  },
+  "BigSpender": {
+    "name": "Igbay Enderspay",
+    "text": "Endspay 20+ anamay inay oneyay urntay"
+  },
+  "Blighted": {
+    "name": "Ightedblay",
+    "text": "Adday 20+ Ightsblay otay ouryay opponentay'say ecksday"
+  },
+  "Boing": {
+    "name": "Oingbay!",
+    "text": "Eturnray 5+ Unitsay otay andhay inay oneyay amegay"
+  },
+  "BouransShadow": {
+    "name": "Ouranbay'say Adowshay",
+    "text": "Ayplay ayay amegay asay Ouranbay"
+  },
+  "BouransShadowII": {
+    "name": "Ouranbay'say Adowshay +",
+    "text": "Inway 2 amesgay asay Ouranbay"
+  },
+  "BringhometheBacon": {
+    "name": "Ingbray omehay ethay Aconbay",
+    "text": "Efeatday ethay enemyay Erohay byay attackingay emthay ithway Okeypay, Ailpigmay"
+  },
+  "Bubbly": {
+    "name": "Ubblybay",
+    "text": "Avehay anay allyay Ubblesbay ithway 10 oray oremay ealthhay"
+  },
+  "BurnBabyBurn": {
+    "name": "Urnbay Abybay Urnbay!",
+    "text": "Estroyday 5 Unitsay usingay ethay Amesflay enchantay"
+  },
+  "BurnedOut": {
+    "name": "Urnedbay Outay",
+    "text": "Inway ayay amegay ilewhay ouyay avehay onay ardscay eftlay inay ouryay eckday"
+  },
+  "ByMyHand": {
+    "name": "Byay Myay Andhay!",
+    "text": "Efeatday ethay enemyay Erohay ithway anay attackay omfray ouryay ownay Erohay"
+  },
+  "Calamaritastrophe": {
+    "name": "Alamaricay-astrophetay",
+    "text": "Efeatday ethay opponentay usingay ayay Entacletay"
+  },
+  "Champion": {
+    "name": "Ampionchay",
+    "text": "Inway 10 Amesgay"
+  },
+  "CloneArmy": {
+    "name": "Oneclay Armyay",
+    "text": "Ayplay ourfay oray oremay ofay ethay amesay Unitay inay oneyay amegay"
+  },
+  "Combotastic": {
+    "name": "Ombotasticcay!",
+    "text": "Ayplay 4+ Ellsspay anday/oray Unitsay inay oneyay urntay"
+  },
+  "Competitor": {
+    "name": "Ompetitorcay",
+    "text": "Ayplay 80 Amesgay"
+  },
+  "ConcedingwithStyle": {
+    "name": "Oncedingcay ithway Ylestay",
+    "text": "Efeatday ouryay ownay Erohay usingay ayay ellspay"
+  },
+  "ContagiousVictory": {
+    "name": "Ontagiouscay Ictoryvay",
+    "text": "Efeatday anay enemyay Erohay usingay ayay Omboidzay Eathday Effectay"
+  },
+  "CoupDeGrace": {
+    "name": "Oupcay Eday Acegray",
+    "text": "Overkillay ethay enemyay Erohay byay 5 oray oremay amageday"
+  },
+  "CrystalGrowth": {
+    "name": "Ystalcray Owthgray",
+    "text": "Aingay 5 oray oremay axmay anamay usingay ellsspay anday effectsay inay oneyay amegay"
+  },
+  "Curseslinger": {
+    "name": "Ursecay-ingerslay",
+    "text": "Aceplay 20+ enchantsay ontoyay enemyay Unitsay inay oneyay amegay"
+  },
+  "DarkBattler": {
+    "name": "Arkday Attlerbay",
+    "text": "Ayplay 10 Arkday ardscay"
+  },
+  "DarkBattlerPLUS": {
+    "name": "Arkday Attlerbay +",
+    "text": "Ayplay 30 Arkday ardscay"
+  },
+  "DarkBattlerPLUSPLUS": {
+    "name": "Arkday Attlerbay ++",
+    "text": "Ayplay 500 Arkday ardscay"
+  },
+  "Dashing": {
+    "name": "Ashingday",
+    "text": "Ayplay 10 Unitsay ithway Ashday"
+  },
+  "DeadonArrival": {
+    "name": "Eadday onay Arrivalay",
+    "text": "Ayplay ayay Unitay anday avehay itay ieday inay ethay amesay urntay"
+  },
+  "Deathcaller": {
+    "name": "Eathcallerday",
+    "text": "Iggertray ethay Eathday effectay ofay anay allyay ilewhay itay'say onay ethay oardbay"
+  },
+  "Demilitarize": {
+    "name": "Emilitarizeday",
+    "text": "Estroyday 10 enemyay Armisay Uardgay"
+  },
+  "DemonRush": {
+    "name": "Emonday Ushray",
+    "text": "Attackay ithway ouryay Erohay 4+ imestay inay oneyay urntay"
+  },
+  "Destroy": {
+    "name": "Estroyday!",
+    "text": "Oday 5000 amageday otay enemiesay"
+  },
+  "Determinator": {
+    "name": "Eterminatorday",
+    "text": "Ayplay 20 Amesgay"
+  },
+  "DidntNeedIt": {
+    "name": "Idnday'tay Eednay Itay",
+    "text": "Inway ayay amegay ithway ayay Anamay Ystalcray inay ouryay andhay"
+  },
+  "DieAgainLater": {
+    "name": "Ieday Againay Aterlay",
+    "text": "Iggertray 20+ allyay Unitay'say eathday effectsay inay oneyay amegay"
+  },
+  "DinoDiscount": {
+    "name": "Inoday Iscountday",
+    "text": "Ayplay 10 ardscay atthay avehay adhay eirthay ostcay educedray"
+  },
+  "DOOMED": {
+    "name": "OOMEDDAY!",
+    "text": "Estroyday 8+ Unitsay ithway oneyay Ealsay ofay Oomday"
+  },
+  "DoubleRainbow": {
+    "name": "Oubleday Ainbowray",
+    "text": "Avehay 2+ ardscay ofay eachay elementay inay ouryay avegray atay onceyay"
+  },
+  "DustDevil": {
+    "name": "Ustday Evilday",
+    "text": "Ustday 10 ardscay inay oneyay amegay"
+  },
+  "EarthBattler": {
+    "name": "Earthay Attlerbay",
+    "text": "Ayplay 10 Earthay ardscay"
+  },
+  "EarthBattlerPLUS": {
+    "name": "Earthay Attlerbay +",
+    "text": "Ayplay 30 Earthay ardscay"
+  },
+  "EarthBattlerPLUSPLUS": {
+    "name": "Earthay Attlerbay ++",
+    "text": "Ayplay 500 Earthay ardscay"
+  },
+  "Empowered": {
+    "name": "Empowereday",
+    "text": "Useyay Adayay'say Erohay Abilityay 150 imestay"
+  },
+  "EmptyHanded": {
+    "name": "Emptyay-Andedhay",
+    "text": "Inway ayay amegay ilewhay ouryay andhay isay emptyay"
+  },
+  "Enchanting": {
+    "name": "Enchantingay",
+    "text": "Attachay 200 enchantsay"
+  },
+  "Enchantress": {
+    "name": "Enchantressay",
+    "text": "Ontrolcay reethay+ Unitsay ithway atay eastlay reethay ifferentday enchantsay"
+  },
+  "Encore": {
+    "name": "Encoreyay",
+    "text": "Ummonsay 10+ Unitsay omfray ouryay aveyardgray inay oneyay amegay"
+  },
+  "EvenlyOdd": {
+    "name": "Evenlyay Odday",
+    "text": "Inway ayay amegay usingay ayay eckday ontainingcay onlyay evenay-ostcay ardscay"
+  },
+  "FireBattler": {
+    "name": "Irefay Attlerbay",
+    "text": "Ayplay 10 Irefay ardscay"
+  },
+  "FireBattlerPLUS": {
+    "name": "Irefay Attlerbay +",
+    "text": "Ayplay 30 Irefay ardscay"
+  },
+  "FireBattlerPLUSPLUS": {
+    "name": "Irefay Attlerbay ++",
+    "text": "Ayplay 500 Irefay ardscay"
+  },
+  "Fireworks": {
+    "name": "Ireworksfay!",
+    "text": "Oday 40 Amageday usingay Estivalfay Annoncay'say Eathday effectay"
+  },
+  "FirstBlood": {
+    "name": "Irstfay Oodblay",
+    "text": "Ebay ethay irstfay ayerplay otay estroyday ayay Unitay inay ayay amegay, 20 imestay"
+  },
+  "FoxsBravado": {
+    "name": "Oxfay'say Avadobray",
+    "text": "Ayplay ayay amegay asay Oxfay"
+  },
+  "FriendlyFire": {
+    "name": "Iendlyfray Irefay",
+    "text": "Estroyday 10 ofay ouryay ownay Unitsay usingay ouryay ownay ellsspay anday effectsay"
+  },
+  "FromtheJawsofDefeat": {
+    "name": "Omfray ethay Awsjay ofay Efeatday",
+    "text": "Efeatday ethay enemyay Erohay ilewhay ouryay Erohay ashay 5 oray esslay ealthhay emainingray"
+  },
+  "FullBoard": {
+    "name": "Ullfay Oardbay",
+    "text": "Othbay ouyay anday ouryay opponentay avehay ixsay Unitsay inay ayplay atay ethay amesay imetay"
+  },
+  "FullyEquipped": {
+    "name": "Ullyfay Equippeday",
+    "text": "Attackay ilewhay ouryay Erohay ashay Annerbay, Itherway, Ifesteallay anday Armoray"
+  },
+  "Gardener": {
+    "name": "Ardenergay",
+    "text": "Ummonsay 10 Elderwooday"
+  },
+  "Gifted": {
+    "name": "Iftedgay",
+    "text": "Orcefay ouryay opponentay otay awdray 3 oray oremay ardscay inay oneyay urntay"
+  },
+  "GlizzyGobbler": {
+    "name": "Izzyglay Obblergay",
+    "text": "Ayplay 10+ Izziesglay"
+  },
+  "Glorious": {
+    "name": "Oriousglay!",
+    "text": "Iggertray 5+ Oryglay effectsay inay oneyay amegay"
+  },
+  "Gottagofast2": {
+    "name": "Ottagay ogay Astfay!",
+    "text": "Inway ayay amegay erewhay everyay Unitay ouyay ayplay ashay Ashday"
+  },
+  "GrandLarceny": {
+    "name": "Andgray Arcenylay",
+    "text": "Ayplay Atterybay anday Oinkyay! ilewhay ouyay avehay Errygay ethay oongay inay ayplay"
+  },
+  "Gravekeeper": {
+    "name": "Avekeepergray",
+    "text": "Avehay 30 oray oremay eadday Unitsay inay ouryay aveyardgray inay oneyay amegay"
+  },
+  "Guardbreaker": {
+    "name": "Uardbreakergay",
+    "text": "Estroyday 10 enemyay Unitsay atthay avehay Uardgay oray Armoray"
+  },
+  "Guarded": {
+    "name": "Uardedgay",
+    "text": "Ayplay 10 Unitsay ithway Uardgay"
+  },
+  "HallowedSwords": {
+    "name": "Allowedhay Ordssway",
+    "text": "Attackay ithway anay Armisay Uardgay atthay ashay Itherway anday Ifesteallay"
+  },
+  "HandtoHand": {
+    "name": "Andhay otay Andhay",
+    "text": "Oday 20+ amageday otay ethay enemyay Erohay usingay ouryay Erohay inay ayay inglesay urntay"
+  },
+  "Healer": {
+    "name": "Ealerhay",
+    "text": "Ecoverray 20+ ealthhay inay oneyay amegay"
+  },
+  "Heartweaver": {
+    "name": "Eartweaverhay",
+    "text": "Inway 2 amesgay ithway ayay Earthay Erohay"
+  },
+  "HeavyHitter": {
+    "name": "Eavyhay Itterhay",
+    "text": "Inway ayay amegay usingay ayay eckday ontainingcay onay ardscay underay 4 anamay"
+  },
+  "HerosJourney": {
+    "name": "Erohay'say Ourneyjay",
+    "text": "Ayplay ayay amegay ithway Adayay"
+  },
+  "HerosJourneyII": {
+    "name": "Erohay'say Ourneyjay IIYAY",
+    "text": "Ayplay ayay amegay ithway Amyasay"
+  },
+  "HerosJourneyIII": {
+    "name": "Erohay'say Ourneyjay IIIYAY",
+    "text": "Ayplay ayay amegay ithway Ouranbay"
+  },
+  "HerosJourneyIV": {
+    "name": "Erohay'say Ourneyjay IVAY",
+    "text": "Ayplay ayay amegay ithway Ariyay"
+  },
+  "HerosJourneyV": {
+    "name": "Erohay'say Ourneyjay Vay",
+    "text": "Ayplay ayay amegay ithway Otuslay"
+  },
+  "HexboundHorde": {
+    "name": "Exboundhay Ordehay",
+    "text": "Ontrolcay ixsay Omboidzay atay onceyay"
+  },
+  "HolyWords": {
+    "name": "Olyhay Ordsway",
+    "text": "Ummonsay 20 Armoreday Uardgay usingay Ontiffpay ofay Armisay"
+  },
+  "HoriksBurden": {
+    "name": "Orikhay'say Urdenbay",
+    "text": "Ayplay ayay amegay asay Orikhay"
+  },
+  "HowOriginal2": {
+    "name": "Owhay Originalay",
+    "text": "Ayplay reethay ofay ethay amesay Unitay oray ellspay inay oneyay urntay"
+  },
+  "IllbeBack": {
+    "name": "Iyay'llay ebay Ackbay",
+    "text": "Avehay ayay inglesay Agsray ethay Eturnedray eturnray omfray ethay avegray icetway inay oneyay urntay"
+  },
+  "Improvisation": {
+    "name": "Improvisationay",
+    "text": "Ayplay 30 ardscay atthay ereway Onjuredcay"
+  },
+  "Intellectweaver": {
+    "name": "Intellectweaveray",
+    "text": "Inway 2 amesgay ithway anay Intellectay Erohay"
+  },
+  "IrisGrace": {
+    "name": "Irisay' Acegray",
+    "text": "Ayplay ayay amegay asay Irisay"
+  },
+  "IronWill": {
+    "name": "Ironay Illway",
+    "text": "Oostbay ethay atsstay ofay 5 allyay Unitsay"
+  },
+  "KaZam": {
+    "name": "Akay-Amzay!",
+    "text": "Oday 20+ amageday ithway Amzay inay oneyay urntay"
+  },
+  "LastStand": {
+    "name": "Astlay Andstay",
+    "text": "Inway ayay amegay ilewhay atay exactlyay 1 ealthhay"
+  },
+  "LegionofArmis": {
+    "name": "Egionlay ofay Armisay",
+    "text": "Ontrolcay ixsay Armisay Uardgay atay onceyay"
+  },
+  "LightBattler": {
+    "name": "Ightlay Attlerbay",
+    "text": "Ayplay 10 Ightlay ardscay"
+  },
+  "LightBattlerPLUS": {
+    "name": "Ightlay Attlerbay +",
+    "text": "Ayplay 30 Ightlay ardscay"
+  },
+  "LightBattlerPLUSPLUS": {
+    "name": "Ightlay Attlerbay ++",
+    "text": "Ayplay 500 Ightlay ardscay"
+  },
+  "LightthePath": {
+    "name": "Ightlay ethay Athpay",
+    "text": "Attachay Ieldshay otay unitsay usingay Awndelverday 30 imestay"
+  },
+  "Lively": {
+    "name": "Ivelylay",
+    "text": "Ayplay 10 Unitsay ithway Ifesteallay"
+  },
+  "LockedUp": {
+    "name": "Ockedlay Upay",
+    "text": "Attachay Ainschay otay 10 Unitsay"
+  },
+  "LongLivetheKing": {
+    "name": "Onglay Ivelay ethay Ingkay",
+    "text": "Eviveray ayay opycay ofay Aronisphay ithway ishay ownay Unsetsay effectay"
+  },
+  "LotusPatience": {
+    "name": "Otuslay' Atiencepay",
+    "text": "Ayplay ayay amegay asay Otuslay"
+  },
+  "LotusPatienceII": {
+    "name": "Otuslay' Atiencepay +",
+    "text": "Inway 2 amesgay asay Otuslay"
+  },
+  "LowtotheGround": {
+    "name": "Owlay otay ethay Oundgray",
+    "text": "Inway ayay amegay usingay ayay eckday ontainingcay onay ardscay overay 3 anamay"
+  },
+  "Magnificant": {
+    "name": "Agnificantmay",
+    "text": "Ayplay 10 ardscay atthay avehay adhay eirthay ostcay educedray"
+  },
+  "MaisBreakthrough": {
+    "name": "Aimay'say Eakthroughbray",
+    "text": "Ayplay ayay amegay asay Aimay"
+  },
+  "MajorInvestment": {
+    "name": "Ajormay Investmentay",
+    "text": "Endspay 300+ Anamay"
+  },
+  "ManaInvestment": {
+    "name": "Anamay Investmentay",
+    "text": "Endspay 100+ Anamay"
+  },
+  "Manetastic": {
+    "name": "Anetasticmay",
+    "text": "Oostbay ethay atsstay ofay 10 oray oremay Unitsay ithway oneyay useyay ofay Oriousglay Anemay"
+  },
+  "MasterAnimist": {
+    "name": "Astermay Animistay",
+    "text": "Iggertray Animayay onay allyay Unitsay 10 imestay"
+  },
+  "MasterofDeath": {
+    "name": "Astermay ofay Eathday",
+    "text": "Iggertray ethay Eathday effectay ofay 10 allyay Unitsay"
+  },
+  "MatterReshaper": {
+    "name": "Attermay Eshaperray",
+    "text": "Useyay Ariyay'say Erohay Abilityay 75 imestay"
+  },
+  "Megashroom": {
+    "name": "Egashroommay",
+    "text": "Iggertray Echshroommay'say eathday effectay 10+ imestay inay oneyay amegay"
+  },
+  "MetalBattler": {
+    "name": "Etalmay Attlerbay",
+    "text": "Ayplay 10 Etalmay ardscay"
+  },
+  "MetalBattlerPLUS": {
+    "name": "Etalmay Attlerbay +",
+    "text": "Ayplay 30 Etalmay ardscay"
+  },
+  "MetalBattlerPLUSPLUS": {
+    "name": "Etalmay Attlerbay ++",
+    "text": "Ayplay 500 Etalmay ardscay"
+  },
+  "MeteorShower": {
+    "name": "Eteormay Owershay",
+    "text": "Ayplay 10 Ireballfay"
+  },
+  "MicroManagement": {
+    "name": "Icromay-Anagementmay",
+    "text": "Attackay ithway ayay Icronmay Onedray 10 imestay"
+  },
+  "MightofEarth": {
+    "name": "Ightmay ofay Earthay",
+    "text": "Increaseyay ethay owerpay oray ealthhay ofay 10 Unitsay"
+  },
+  "MightyStrike": {
+    "name": "Ightymay Rikestay",
+    "text": "Attackay ithway ayay Unitay atthay ashay 15 Owerpay oray oremay"
+  },
+  "MightyThick": {
+    "name": "Ightymay Ickthay",
+    "text": "Attackay ithway ayay Unitay atthay ashay 15 Ealthhay oray oremay"
+  },
+  "MindBattler": {
+    "name": "Indmay Attlerbay",
+    "text": "Ayplay 10 Indmay ardscay"
+  },
+  "MindBattlerPLUS": {
+    "name": "Indmay Attlerbay +",
+    "text": "Ayplay 30 Indmay ardscay"
+  },
+  "MindBattlerPLUSPLUS": {
+    "name": "Indmay Attlerbay ++",
+    "text": "Ayplay 500 Indmay ardscay"
+  },
+  "MirasMettle": {
+    "name": "Iramay'say Ettlemay",
+    "text": "Ayplay ayay amegay asay Iramay"
+  },
+  "MirrorMatched": {
+    "name": "Irrormay Atchedmay",
+    "text": "Ayplay reethay amesgay erewhay ouyay anday ouryay opponentay avehay ethay amesay Erohay"
+  },
+  "OddlyEven": {
+    "name": "Oddlyay Evenay",
+    "text": "Inway ayay amegay usingay ayay eckday ontainingcay onlyay odday-ostcay ardscay"
+  },
+  "Om": {
+    "name": "Omay",
+    "text": "Useyay Otuslay' Erohay Abilityay 50 imestay"
+  },
+  "Onezeroonezeroone": {
+    "name": "Onezeroonezerooneyay",
+    "text": "Efeatday ethay enemyay Erohay usingay Unophobiayay (Eatedcray byay Axhay)"
+  },
+  "OntheRoadAgain": {
+    "name": "Onay ethay Oadray Againay",
+    "text": "Ayplay ayay amegay"
+  },
+  "OntheRoadAgainII": {
+    "name": "Onay ethay Oadray Againay IIYAY",
+    "text": "Attackay ithway 2 Unitsay onay oneyay urntay"
+  },
+  "OntheRoadAgainIII": {
+    "name": "Onay ethay Oadray Againay IIIYAY",
+    "text": "Ayplay ayay Unitay ithway 5 oray oremay ealthhay"
+  },
+  "Oops": {
+    "name": "Oopsay!",
+    "text": "Attackay anay enemyay Unitay ithoutway ealingday amageday otay itay"
+  },
+  "OTK": {
+    "name": "OTKAY",
+    "text": "Oday 32+ amageday otay ethay enemyay Erohay inay oneyay urntay"
+  },
+  "Overkill": {
+    "name": "Overkillay",
+    "text": "Efeatday ethay enemyay Erohay ilewhay estroyingday oneyay oray oremay ofay eirthay Unitsay atay ethay amesay imetay"
+  },
+  "OversoldCemetery": {
+    "name": "Oversolday Emeterycay",
+    "text": "Avehay 40+ ardscay inay ouryay avegray atay onceyay"
+  },
+  "Pacifist": {
+    "name": "Acifistpay",
+    "text": "Inway ayay amegay ilewhay otnay attackingay ithway ouryay Erohay onay atay eastlay ivefay ifferentday urnstay"
+  },
+  "PainandGain": {
+    "name": "Ainpay anday Aingay",
+    "text": "Ayplay Oulpyresay Itantay orfay 0 anamay"
+  },
+  "PatientStudent": {
+    "name": "Atientpay Udentstay",
+    "text": "Inway ayay Ankedray amegay afteray ouryay TH10AY urntay"
+  },
+  "PhyrricVictory": {
+    "name": "Yrricphay Ictoryvay",
+    "text": "Inway ayay amegay ithway anay emptyay eckday anday emptyay andhay"
+  },
+  "PleaseNerf": {
+    "name": "Easeplay Erfnay!",
+    "text": "Iggertray Oodwitchbray'say effectay inay ayay amegay"
+  },
+  "PokeofDoom": {
+    "name": "Okepay ofay Oomday",
+    "text": "Efeatday anay enemyay Erohay atay 1 ealthhay byay oingday exactlyay 1 amageday"
+  },
+  "PowerUp": {
+    "name": "Owerpay Upay!",
+    "text": "Oostbay ethay atsstay ofay 40 Unitsay usingay ellsspay"
+  },
+  "PrismPowered": {
+    "name": "Ismpray Oweredpay",
+    "text": "Useyay oray iggertray ethay effectay ofay ayay Erohay Abilityay 350 imestay"
+  },
+  "RageoftheDead": {
+    "name": "Ageray ofay ethay Eadday",
+    "text": "Iggertray 15+ eathday effectsay ithway oneyay useyay ofay Avegray Oilray"
+  },
+  "RainbowRestriction": {
+    "name": "Ainbowray Estrictionray",
+    "text": "Inway ayay amegay ithway ayay eckday atthay ashay atay eastlay 3 ardscay ofay eachay Elementay"
+  },
+  "RainbowResurrection": {
+    "name": "Ainbowray Esurrectionray",
+    "text": "Esurrectray Yskay Oenixphay 3 imestay inay oneyay amegay"
+  },
+  "RainbowRider": {
+    "name": "Ainbowray Iderray",
+    "text": "Ayplay otway ardscay ofay eachay elementay inay oneyay amegay"
+  },
+  "RecklessRage": {
+    "name": "Ecklessray Ageray",
+    "text": "Avehay ouryay Erohay aketay 10+ amageday inay ayay inglesay oneyay ofay ouryay ownay urnstay"
+  },
+  "ReducedtoAtoms": {
+    "name": "Educedray otay Atomsay",
+    "text": "Ustday 100 enemyay Unitsay"
+  },
+  "RegeneratorPLUS": {
+    "name": "Egeneratorray",
+    "text": "Ivegay 15 ealthhay otay alliesay"
+  },
+  "RegeneratorPLUSPLUS": {
+    "name": "Egeneratorray +",
+    "text": "Ivegay 200 Ealthhay otay alliesay"
+  },
+  "RestinPeace": {
+    "name": "Estray inay Eacepay",
+    "text": "Ustday 10 eadday enemyay ardscay"
+  },
+  "Ribbit": {
+    "name": "Ibbitray!",
+    "text": "Urntay 5 enemyay Unitsay intoyay Opliteshay"
+  },
+  "Ritualistic": {
+    "name": "Itualisticray",
+    "text": "Useyay Ouranbay'say Erohay Abilityay 75 imestay"
+  },
+  "SamyasSwiftness": {
+    "name": "Amyasay'say Iftnesssway",
+    "text": "Ayplay ayay amegay asay Amyasay"
+  },
+  "SamyasSwiftnessII": {
+    "name": "Amyasay'say Iftnesssway +",
+    "text": "Inway 2 amesgay asay Amyasay"
+  },
+  "SeasonalChampion": {
+    "name": "Easonalsay Ampionchay",
+    "text": "Inway 40 Amesgay"
+  },
+  "Sequence": {
+    "name": "Equencesay",
+    "text": "Ayplay ayay 1 ostcay, 2 ostcay, 3 ostcay, anday 4 ostcay ostcay ardcay, inay ayay owray"
+  },
+  "Shatterer": {
+    "name": "Atterershay",
+    "text": "Estroyday 5 Unitsay atthay avehay ethay Ostbitefray enchantay"
+  },
+  "Shhhhhhh": {
+    "name": "Hhhhhhshay!",
+    "text": "Attachay Ilencesay otay 10 Unitsay"
+  },
+  "Showoff": {
+    "name": "Owoffshay",
+    "text": "Inway ethay amegay ithoutway attackingay ithway ouryay Erohay evenay onceyay"
+  },
+  "SittisSpite": {
+    "name": "Ittisay'say Itespay",
+    "text": "Ayplay ayay amegay asay Ittisay"
+  },
+  "SkillwiththeQuill": {
+    "name": "Illskay ithway ethay Uillqay",
+    "text": "Ivegay ayay unitay +8/+8 ithway Gnancyay Ecretssay"
+  },
+  "Slayer": {
+    "name": "Ayerslay!",
+    "text": "Iggertray ethay Ayslay effectsay ofay 5+ Unitsay inay oneyay amegay"
+  },
+  "Smoosh": {
+    "name": "Ooshsmay!",
+    "text": "Estroyday reethay oray oremay Unitsay ithway ayay inglesay useyay ofay Itay'say ayay Aptray!"
+  },
+  "SpeedDemon": {
+    "name": "Eedspay Emonday",
+    "text": "Inway ayay Ankedray amegay eforebay ethay enday ofay ouryay H8tay urntay"
+  },
+  "SpeedofLight": {
+    "name": "Eedspay ofay Ightlay",
+    "text": "Useyay Amyasay'say Erohay Abilityay 75 imestay"
+  },
+  "Spelless": {
+    "name": "Ellessspay",
+    "text": "Inway ayay amegay usingay ayay eckday atthay ontainscay onay Ellsspay oray Attacheday Ellsspay"
+  },
+  "Spellslinger": {
+    "name": "Ellslingerspay",
+    "text": "Ayplay 20+ Ellsspay inay oneyay amegay"
+  },
+  "Stealthy": {
+    "name": "Ealthystay",
+    "text": "Ayplay 10 Unitsay ithway Ealthstay"
+  },
+  "StingOperation": {
+    "name": "Ingstay Operationay",
+    "text": "Ayplay 4+ Ellowjacksyay inay oneyay urntay"
+  },
+  "Stophittingyourself": {
+    "name": "Opstay ittinghay ourselfyay!",
+    "text": "Oday amageday otay ethay enemyay Erohay ithway ayay Unitay atthay artedstay inay eirthay eckday"
+  },
+  "Strengthweaver": {
+    "name": "Rengthweaverstay",
+    "text": "Inway 2 amesgay ithway ayay Rengthstay Erohay"
+  },
+  "Summoner": {
+    "name": "Ummonersay",
+    "text": "Iggertray 10+ ummonsay effectsay inay oneyay amegay"
+  },
+  "Surprise": {
+    "name": "Urprisesay!",
+    "text": "Estroyday 20 Unitsay ithway Eefray iverday onay ethay urntay ehay opspay ackbay upay"
+  },
+  "Surveillance": {
+    "name": "Urveillancesay",
+    "text": "Evealray 15 ardscay inay enemyay andshay"
+  },
+  "TheBattleisWon": {
+    "name": "Ethay Attlebay isay Onway",
+    "text": "Oday 30 amageday otay enemiesay"
+  },
+  "TheReturned": {
+    "name": "Ethay Eturnedray",
+    "text": "Ummonsay ethay amesay Unitay omfray ouryay avegray 3+ imestay inay oneyay amegay"
+  },
+  "TheReturnerer": {
+    "name": "Ethay Eturnererray",
+    "text": "Avehay Agsray ethay Eturnedray eturnray omfray ethay avegray 30 imestay"
+  },
+  "ThousandCuts": {
+    "name": "Ousandthay Utscay",
+    "text": "Oday 1 amageday otay ethay enemyay Erohay ivefay oray oremay imestay inay oneyay urntay, anday inway atthay urntay"
+  },
+  "ThreesCompany": {
+    "name": "Reethay'say Ompanycay",
+    "text": "Inway ayay amegay erewhay ouyay onlyay ayplay 3 ostcay ardscay"
+  },
+  "Tidyup": {
+    "name": "Idytay upay",
+    "text": "Eplaceray oray emoveray 5 oray oremay attachmentsay onay Unitsay/Eroeshay inay oneyay urntay"
+  },
+  "TitusTune": {
+    "name": "Itustay' Unetay",
+    "text": "Ayplay ayay amegay asay Itustay"
+  },
+  "UnfathomableWealth": {
+    "name": "Unfathomableyay Ealthway",
+    "text": "Awdray anday/oray Onjurecay 10 ithway ellsspay"
+  },
+  "Unitless": {
+    "name": "Unitlessay",
+    "text": "Inway ayay amegay usingay ayay eckday atthay ontainscay onay Unitay ardscay"
+  },
+  "UNKNOWN": {
+    "name": "unknownay uestqay IDAY",
+    "text": "unknownay uestqay IDAY!"
+  },
+  "Vampire": {
+    "name": "Ampirevay",
+    "text": "Ealstay 15 ealthhay omfray ethay enemyay Erohay usingay ifesteallay ardscay"
+  },
+  "VaporMaster": {
+    "name": "Aporvay Astermay",
+    "text": "Iggertray Aporsvay onay allyay Unitsay 10 imestay"
+  },
+  "WaterBattler": {
+    "name": "Aterway Attlerbay",
+    "text": "Ayplay 10 Aterway ardscay"
+  },
+  "WaterBattlerPLUS": {
+    "name": "Aterway Attlerbay +",
+    "text": "Ayplay 30 Aterway ardscay"
+  },
+  "WaterBattlerPLUSPLUS": {
+    "name": "Aterway Attlerbay ++",
+    "text": "Ayplay 500 Aterway ardscay"
+  },
+  "WelcomeOpenSky": {
+    "name": "Elcomeway Yweaverskay!",
+    "text": "Ayplay ouryay irstfay amegay"
+  },
+  "WhatDoesntKillYou": {
+    "name": "Atwhay Oesnday'tay Illkay Ouyay...",
+    "text": "Inway ayay amegay inay ichwhay ouryay Erohay ooktay 30 oray oremay otaltay amageday"
+  },
+  "WhiteWhale": {
+    "name": "Itewhay Alewhay",
+    "text": "Estroyday ayay Eacherbray, oray useyay ayay Eacherbray otay efeatday ouryay opponentay"
+  },
+  "WildlandChampion": {
+    "name": "Ildlandway Ampionchay",
+    "text": "Iggertray ethay effectay ofay Ildlandway Eirhay 50 imestay"
+  },
+  "Wisdomweaver": {
+    "name": "Isdomweaverway",
+    "text": "Inway 2 amesgay ithway ayay Isdomway Erohay"
+  },
+  "Withered": {
+    "name": "Itheredway",
+    "text": "Ayplay 10 Unitsay ithway Itherway"
+  },
+  "WRATH": {
+    "name": "ATHWRAY!",
+    "text": "Estroyday 4+ enemyay Unitsay ithway ayay inglesay ellspay"
+  },
+  "ZoeysJustice": {
+    "name": "Oeyzay'say Usticejay",
+    "text": "Ayplay ayay amegay asay Oeyzay"
+  },
+  "ZombieSlayer": {
+    "name": "Ombiezay Ayerslay",
+    "text": "Estroyday 20 enemyay Omboidzay"
+  },
+  "ZomboidEnvoy": {
+    "name": "Omboidzay Envoyay",
+    "text": "Attackay ithway ayay Omboidzay 10 imestay"
+  },
+  "ZomboidWrangler": {
+    "name": "Omboidzay Anglerwray",
+    "text": "Ummonsay Omboidzay 5 imestay"
+  }
+}
