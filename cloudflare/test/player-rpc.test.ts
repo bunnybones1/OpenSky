@@ -920,6 +920,64 @@ describe('legacy player RPC compatibility', () => {
     })
 
     expect(
+      await (
+        await rpc(
+          'GetBatchItemSupply',
+          { tokenIDs: [42, 999, 42] },
+          false
+        )
+      ).json()
+    ).toMatchObject({
+      summary: {
+        42: {
+          SW_SILVER_CARDS: { tokenID: 42, balance: '7' },
+          SW_GOLD_CARDS: { tokenID: 42, balance: '3' }
+        }
+      }
+    })
+    expect(
+      (
+        await rpc(
+          'GetBatchItemSupply',
+          { tokenIDs: Array.from({ length: 51 }, (_, index) => index) },
+          false
+        )
+      ).status
+    ).toBe(400)
+
+    expect(
+      await (
+        await rpc(
+          'GetItemSuppliesByType',
+          { itemTypes: ['SW_SILVER_CARDS', 'SW_GOLD_CARDS'] },
+          false
+        )
+      ).json()
+    ).toEqual({
+      summary: {
+        401: [
+          {
+            itemID: 42,
+            itemType: 'SW_SILVER_CARDS',
+            totalBalance: '7'
+          }
+        ],
+        402: [
+          {
+            itemID: 42,
+            itemType: 'SW_GOLD_CARDS',
+            totalBalance: '3'
+          }
+        ]
+      }
+    })
+    expect(
+      (
+        await rpc('GetItemSuppliesByType', { itemTypes: [] }, false)
+      ).status
+    ).toBe(400)
+
+    expect(
       (
         await rpc('GetItemSummary', {
           accountAddress: `identity:${otherUserId}`

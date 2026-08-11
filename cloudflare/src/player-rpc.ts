@@ -5,6 +5,7 @@ import type {
   DeckEquipment,
   FeedEvent,
   Item,
+  ItemSupply,
   ItemSummary,
   ItemType,
   Page,
@@ -91,6 +92,11 @@ const ITEM_TYPE_BY_TOKEN_CODE: Record<number, ItemType> = {
   10: 'SW_XP' as ItemType,
   254: 'SW_CONQUEST_TICKET' as ItemType
 }
+
+const ITEM_TYPE_ID = Object.fromEntries(
+  Object.entries(ITEM_TYPE_BY_ID).map(([id, itemType]) => [itemType, Number(id)])
+) as Record<string, number>
+const KNOWN_ITEM_TYPES = new Set(Object.values(ITEM_TYPE_BY_ID))
 
 const SUMMARY_ITEM_TYPES = new Set<ItemType>([
   'SW_SILVER_DUST' as ItemType,
@@ -1204,6 +1210,68 @@ export class PlayerRpcRepository {
       }
     }
     return supply
+  }
+
+  async batchItemSupply(
+    itemIds: number[]
+  ): Promise<Record<number, Record<string, Item>>> {
+    if (itemIds.length > 50) throw invalidArgument('tokens exceed the limit')
+    if (
+      !itemIds.every(
+        itemId =>
+          Number.isSafeInteger(itemId) && itemId >= 0 && itemId <= 0xffff
+      )
+    ) {
+      throw invalidArgument('tokenIDs are invalid')
+    }
+    const supplies = await Promise.all(
+      [...new Set(itemIds)].map(async itemId => [
+        itemId,
+        await this.itemSupply(itemId)
+      ] as const)
+    )
+    return Object.fromEntries(
+      supplies.filter(([, supply]) => Object.keys(supply).length > 0)
+    )
+  }
+
+  async itemSuppliesByType(
+    itemTypes: ItemType[]
+  ): Promise<Record<number, ItemSupply[]>> {
+    if (itemTypes.length === 0) throw invalidArgument('itemTypes cannot be empty')
+    if (!itemTypes.every(itemType => KNOWN_ITEM_TYPES.has(itemType))) {
+      throw invalidArgument('itemTypes contains an invalid item type')
+    }
+    const selected = [...new Set(itemTypes)].filter(itemType =>
+      SUPPLY_ITEM_TYPES.has(itemType)
+    )
+    if (selected.length === 0) return {}
+    const placeholders = selected.map(() => '?').join(',')
+    const result = await this.database
+      .prepare(
+        `SELECT item_type, token_id, SUM(balance) AS total_balance
+         FROM player_items
+         WHERE item_type IN (${placeholders}) AND balance > 0
+         GROUP BY item_type, token_id
+         ORDER BY item_type ASC, token_id ASC`
+      )
+      .bind(...selected)
+      .all<{
+        item_type: ItemType
+        token_id: number
+        total_balance: number
+      }>()
+    const supplies: Record<number, ItemSupply[]> = {}
+    for (const row of result.results) {
+      const id = ITEM_TYPE_ID[row.item_type]
+      if (id === undefined) continue
+      ;(supplies[id] ??= []).push({
+        itemID: row.token_id,
+        itemType: row.item_type,
+        totalBalance: String(row.total_balance)
+      })
+    }
+    return supplies
   }
 
   private async ownedItem(

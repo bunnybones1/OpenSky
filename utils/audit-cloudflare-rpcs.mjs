@@ -38,10 +38,12 @@ const CRITICAL_METHODS = [
   'GetCardLibrary',
   'GetCardsByDeckString',
   'GetCardsByID',
+  'GetBatchItemSupply',
   'GetFeed',
   'GetGameModesStatus',
   'GetItemOwnershipByType',
   'GetItemSummary',
+  'GetItemSuppliesByType',
   'ListDecks',
   'ListLeaderboard',
   'ListMatches',
@@ -57,7 +59,7 @@ const CRITICAL_METHODS = [
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 77) {
+  if (audit.implemented.length < 79) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {

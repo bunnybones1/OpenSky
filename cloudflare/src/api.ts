@@ -706,6 +706,26 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'GetBatchItemSupply': {
+        const body = await requestBody<{ tokenIDs?: unknown }>(request)
+        if (!Array.isArray(body.tokenIDs)) {
+          throw invalidArgument('tokenIDs is required')
+        }
+        return json(request, env, {
+          summary: await playerRpc.batchItemSupply(body.tokenIDs)
+        })
+      }
+
+      case 'GetItemSuppliesByType': {
+        const body = await requestBody<{ itemTypes?: unknown }>(request)
+        if (!Array.isArray(body.itemTypes)) {
+          throw invalidArgument('itemTypes is required')
+        }
+        return json(request, env, {
+          summary: await playerRpc.itemSuppliesByType(body.itemTypes)
+        })
+      }
+
       case 'GetItemOwnershipByType': {
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ itemTypes?: ItemType[] }>(request)
