@@ -21,7 +21,11 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible
   Glicko/RP rank transitions and rank reward receipts, and match completion in
-  D1.
+  D1;
+- source spectator roles, public/private knowledge levels, private access
+  codes, emotes, connection limits, and hibernation-safe attachments; and
+- source-shaped initialization/gameplay replay records exposed through
+  capability-protected same-origin archive URLs.
 
 The gateway, not the browser, is the identity authority. It validates the
 Google session, maps the user to the stable 20-byte game principal, then adds
@@ -30,10 +34,10 @@ fields remain on source-compatible client messages but are not trusted.
 
 ## Deliberately pending
 
-Spectator sessions, replay/match-log archival, match/rank-up XP and item
-rewards, Grandweaver promotion, and Conquest state remain in `server/` and must
-be ported as later milestones before this service replaces every production
-game-server behavior.
+Conquest state/rewards, the shared game-abandon cooldown, and anonymous public
+spectator entry remain pending. Wallet-backed item merging is intentionally an
+API/account integration rather than game-server authentication. These gaps must
+be closed before the Cloudflare service replaces every source production mode.
 
 ## Configuration
 

@@ -1,9 +1,10 @@
 # Cloudflare deployment
 
-The Cloudflare deployment runs the Vite webapp, browser-hosted game client, and the first
-TypeScript API slices as one Worker. The game deliberately supports `LOCAL_BOT` only. OpenSky
-identity is independent of blockchain wallets: Google OIDC is the first login provider, while
-wallet connections are a separate, optional integration reserved for WalletConnect.
+The Cloudflare deployment runs the original Vite webapp and browser game client
+behind a TypeScript API gateway. Separate Workers own the matchmaker, match
+allocation service, and authoritative game Durable Objects. OpenSky identity is
+independent of blockchain wallets: Google OIDC is the first login provider,
+while wallet connections remain a separate, optional WalletConnect integration.
 
 ## Identity model
 
@@ -160,17 +161,27 @@ and progress are not migrated.
 
 ## Current boundary
 
-- `LOCAL_BOT` simulates both players in the browser using the existing TypeScript/Wasm state code.
+- `LOCAL_BOT` remains available, while `PRACTICE_BOT`, ranked, challenge, and
+  multiplayer routing use the ported matchmaker, match service, and authoritative
+  game Durable Objects.
+- The authoritative service preserves the original WASM state engine, WebSocket
+  messages, bots, timers, reconnects, spectators, quests, XP, rank transitions,
+  rewards, and replay archives.
+- D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
+  match history, profile feed, competitive stats, and item summary reads.
 - Card and presentation assets still load from the configured external assets host.
 - Google authentication and identity sessions are native TypeScript Worker services.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- `PRACTICE_BOT`, ranked play, multiplayer, decks, rewards, inventory, and legacy account-data
-  migration still require additional service ports.
-- `/matchmaker` remains reserved as a same-origin path for a later Durable Object/WebSocket slice.
+- Conquest state/rewards, captcha-triggered shadow bans, the cross-service game
+  abandon cooldown, social/invite APIs, marketplace writes, and administrative
+  APIs still require ports.
+- Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
 
-Add WalletConnect as an account-settings integration: connect a wallet, sign a nonce owned by the
-current OpenSky session, persist the verified address in `wallet_connections`, and expose wallet
-contents without granting that wallet authority over the user's login session.
+Port Conquest as an isolated state-and-reward milestone before enabling its
+queues. WalletConnect can then be added independently in account settings:
+connect a wallet, sign a session-owned nonce, persist the verified address, and
+merge wallet contents at read boundaries without granting the wallet authority
+over the user's login session.

@@ -3,11 +3,13 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- Cloudflare Worker: `opensky-webapp`
-- Cloudflare version: `2a45de9c-2d2a-4323-b3d9-6950dee9120c`
-- Deployed source commit: `985cd4a`
-- Deployed: 2026-08-10
-- Applied D1 migrations: `0001` through `0007`
+- API/web Worker: `opensky-webapp` (`d15079d2-8ba4-4123-bd18-c405ea7f3258`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`839347c9-83d1-4b44-befc-b96a73d33fcc`)
+- Match service Worker: `cloud-weasel-match-service` (`0368327d-21e7-4d74-a70c-ba8fd28ae9a4`)
+- Game Worker: `cloud-weasel-game-server` (`8c93af91-509b-4e2a-a12d-a51a032e1664`)
+- Deployed source commits through: `bd0b430`
+- Deployed: 2026-08-11
+- Applied D1 migrations: `0001` through `0021`
 
 ## Verified scope
 
@@ -17,8 +19,13 @@
 - Starter quest claims and the original quest progression chain
 - Basic SkyPass card claims for the ported season data
 - Legacy deck listing, creation, update, deletion, and deck-string encoding
-- Practice mode using the original local-bot game client
+- Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads
+- Profile reward/rank feed and competitive match history
+- Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
+- Durable matchmaking, acceptance/refusal cooldowns, and active-match reconnects
+- Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
+  match rewards, private/public spectators, and capability-protected replays
 
-WalletConnect remains an optional future integration. Wallet-dependent trading,
-marketplace, ranked, and other backend RPCs are not part of this deployment
-milestone yet.
+WalletConnect remains an optional future integration. Conquest, captcha/shadow
+ban policy, game-abandon cooldown sharing, social/invite APIs, marketplace
+writes, legacy data migration, and administrative RPCs remain pending.
