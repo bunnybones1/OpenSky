@@ -164,6 +164,10 @@ and progress are not migrated.
 - `LOCAL_BOT` remains available, while `PRACTICE_BOT`, ranked, challenge, and
   multiplayer routing use the ported matchmaker, match service, and authoritative
   game Durable Objects.
+- Google identities use the source Tutorial, Ranked, Practice PvP, and Conquest
+  route components; the initial practice-only identity routing guard has been
+  removed. Existing rank/deck locks remain authoritative in the client, with
+  server-side queue admission as the security boundary.
 - The authoritative service preserves the original WASM state engine, WebSocket
   messages, bots, timers, reconnects, spectators, quests, XP, rank transitions,
   rewards, and replay archives.

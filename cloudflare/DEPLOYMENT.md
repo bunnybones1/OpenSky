@@ -3,11 +3,11 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`6050f16a-47cc-4e28-b1cb-5393f4dffa44`)
+- API/web Worker: `opensky-webapp` (`f3663c8b-76a9-45cc-84ae-1ffd08dd4c40`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`3c6e42be-d092-4fb7-a5dd-9b52e7467cce`)
 - Game Worker: `cloud-weasel-game-server` (`e534216e-7183-4c30-8fd3-e007e883dcd7`)
-- Deployed component commits: web/API `bf35cc3`; game `04772bf`; matchmaker and
+- Deployed component commits: web/API `216f30d`; game `04772bf`; matchmaker and
   match service `c9e2201`
 - Deployed: 2026-08-11
 - Applied D1 migrations: `0001` through `0024`
@@ -26,6 +26,7 @@
   original Invite Friends screens
 - Profile reward/rank feed and competitive match history
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
+- Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
 - Durable matchmaking, acceptance/refusal cooldowns, active-match reconnects,
   opt-in source-compatible captcha/shadow-ban enforcement, and release-scoped
   game-abandon cooldown bridging
