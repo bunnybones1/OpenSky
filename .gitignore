@@ -25,6 +25,7 @@ dump.rdb
 api/data/schema/schema.sql
 .pnpm-store/
 .wrangler/
+.dev.vars
 *.retry
 
 # configuration

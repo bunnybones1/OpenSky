@@ -1,9 +1,9 @@
 # Cloudflare deployment
 
-The first Cloudflare slice deploys the Vite webapp and the browser-hosted game client as one
-Cloudflare Worker with static assets. It deliberately supports `LOCAL_BOT` only. The API,
-matchmaker, multiplayer game server, persistence, and authenticated Practice queue remain out of
-scope until their service boundaries are ported to TypeScript/Workers.
+The Cloudflare deployment runs the Vite webapp, browser-hosted game client, and the first
+TypeScript API slice as one Worker. The game deliberately supports `LOCAL_BOT` only. Wallet login,
+Cloudflare account registration, session restoration, and cookie-policy persistence use D1; the
+matchmaker, multiplayer game server, and authenticated Practice queue remain out of scope.
 
 ## Build
 
@@ -35,6 +35,15 @@ The build also fails if an emitted file exceeds Cloudflare Workers' 25 MiB stati
 
 ## Local Cloudflare preview
 
+Apply the D1 migrations before the first local run:
+
+```sh
+pnpm db:migrate:cloudflare:local
+```
+
+Provide a development-only signing key through `.dev.vars` or Wrangler's `--var` option. Never
+commit the production signing key.
+
 ```sh
 pnpm preview:cloudflare
 ```
@@ -50,27 +59,50 @@ When using a custom `RELEASE_VERSION`, replace `cloudflare` in that path with th
 
 ## Deploy
 
-Authenticate Wrangler with the intended Cloudflare account, review the Worker name in
-`wrangler.jsonc`, and run:
+The production Worker uses the `opensky-auth` D1 binding in `wrangler.jsonc`. On a new Cloudflare
+account, create that database and replace the generated `database_id` in the configuration:
+
+```sh
+pnpm --dir cloudflare exec wrangler d1 create opensky-auth --config ../wrangler.jsonc
+```
+
+Apply migrations and configure the session signing secret before deploying:
+
+```sh
+pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --remote --config ../wrangler.jsonc
+pnpm --dir cloudflare exec wrangler secret put SESSION_SIGNING_KEY --config ../wrangler.jsonc
+```
+
+Then build and deploy:
 
 ```sh
 pnpm deploy:cloudflare
 ```
 
-No Worker compute is used in this phase. Requests are served as static assets, with SPA fallback
-for webapp routes.
+Static requests use Cloudflare Assets with SPA fallback. Only `/api/*` is routed through Worker
+compute first.
+
+## Ported API surface
+
+- `GetAuthToken` validates the ETHAuth proof with Sequence and issues an OpenSky HS256 session.
+- `GetSession` restores the D1 account for a valid session.
+- `RegisterAccount`, `AccountExists`, and `AccountExistsByName` persist and query Cloudflare accounts.
+- `GetCookiePolicy` and `SaveCookiePolicy` cover the webapp's login-finalization dependency.
+
+First-time Sequence wallets are automatically registered in the Cloudflare profile. The D1 data is
+currently isolated from the legacy Go/Postgres deployment, so legacy names, decks, inventory, and
+progress are not migrated.
 
 ## Current boundary
 
 - `LOCAL_BOT` simulates both players in the browser using the existing TypeScript/Wasm state code.
 - Card and presentation assets still load from the configured external assets host.
-- The signed-in webapp, `PRACTICE_BOT`, ranked play, multiplayer, rewards, inventory, and account
-  persistence still require the existing API/matchmaker/server stack.
-- `/api` and `/matchmaker` are reserved as same-origin paths in the Cloudflare profiles so later
-  Worker services can be added without rebuilding client URL assumptions.
+- Wallet login and the minimal account/session state are native TypeScript Worker services.
+- `PRACTICE_BOT`, ranked play, multiplayer, decks, rewards, inventory, and legacy account-data
+  migration still require additional service ports.
+- `/matchmaker` remains reserved as a same-origin path for a later Durable Object/WebSocket slice.
 
 ## Suggested next slice
 
-Port the read-only configuration/card-metadata API surface used during webapp startup to a typed
-Worker and bind it at `/api`. After that, move authenticated sessions and deck persistence, then
-replace the Practice matchmaker hop with a Worker/Durable Object game session.
+Port the minimal deck/read-model endpoints needed by the signed-in Play screen, then replace the
+Practice matchmaker hop with a Worker/Durable Object game session.

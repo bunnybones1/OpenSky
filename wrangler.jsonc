@@ -14,7 +14,7 @@
     {
       "binding": "AUTH_DB",
       "database_name": "opensky-auth",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "2ac6fbbd-359b-407c-9d87-bd62b17a7548",
       "migrations_dir": "./cloudflare/migrations"
     }
   ],
