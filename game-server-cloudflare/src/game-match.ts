@@ -830,7 +830,7 @@ export class GameMatch implements DurableObject {
         questProgress,
         endedAt
       )
-      await applyMatchStats(
+      const stats = await applyMatchStats(
         this.env.AUTH_DB,
         metadata.proposalId,
         metadata.match.matchSettings.season,
@@ -847,7 +847,8 @@ export class GameMatch implements DurableObject {
           metadata.result?.winner ?? null,
           JSON.stringify({
             ...(metadata.result ?? {}),
-            questProgress: progression.questProgress
+            questProgress: progression.questProgress,
+            rewards: stats.rewards
           }),
           endedAt,
           endedAt,
@@ -861,7 +862,10 @@ export class GameMatch implements DurableObject {
       for (const player of [0, 1] as const) {
         this.sendToPrincipal(principals[player], {
           type: 'rewards',
-          data: progression.rewards[player] as never[]
+          data: [
+            ...progression.rewards[player],
+            ...stats.rewards[player]
+          ] as never[]
         })
       }
       metadata.completionRecorded = true

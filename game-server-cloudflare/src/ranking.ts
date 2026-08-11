@@ -402,6 +402,14 @@ export const lookupRankByScoreAndExperience = (
 export const lookupRankByScore = (points: number) =>
   lookupRankByScoreAndExperience(points, MINIMUM_EXPERIENCE_FOR_RANKED)
 
+export const lookupRankByType = (
+  rank: PlayerRank,
+  stage: PlayerRankStage
+) =>
+  PLAYER_RANKS.find(
+    definition => definition.rank === rank && definition.stage === stage
+  ) ?? PLAYER_RANKS[0]
+
 export const nextRankPoints = (rank: RankDefinition) => {
   const index = PLAYER_RANKS.indexOf(rank)
   if (rank.rank === PlayerRank.MASTER || index < 0) return rank.minimumPoints

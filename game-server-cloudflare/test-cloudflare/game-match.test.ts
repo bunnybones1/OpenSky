@@ -91,6 +91,28 @@ const insertQuestPlayers = async () => {
        VALUES (?, 'Player Two', 'two@example.com', NULL, ?, ?)`
     ).bind(USER_ID_2, now, now),
     env.AUTH_DB.prepare(
+      `INSERT INTO game_accounts (id, user_id, created_at)
+       VALUES (1, ?, ?)`
+    ).bind(USER_ID_1, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO game_accounts (id, user_id, created_at)
+       VALUES (2, ?, ?)`
+    ).bind(USER_ID_2, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_stats
+         (user_id, game_mode, season, score, player_rank, player_rank_stage,
+          player_rank_state, created_at, updated_at)
+       VALUES (?, 'RANKED_CONSTRUCTED', 126, 0, 'WANDERER', 'STAGE_I',
+               '[-1,1750,350,0]', ?, ?)`
+    ).bind(USER_ID_1, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_stats
+         (user_id, game_mode, season, score, player_rank, player_rank_stage,
+          player_rank_state, created_at, updated_at)
+       VALUES (?, 'RANKED_CONSTRUCTED', 126, 0, 'WANDERER', 'STAGE_I',
+               '[-1,1750,350,0]', ?, ?)`
+    ).bind(USER_ID_2, now, now),
+    env.AUTH_DB.prepare(
       `INSERT INTO player_quests
          (rowid, user_id, quest_key, title, description, progress, target,
           reward_xp, status, created_at, updated_at, quest_type, position,
@@ -426,11 +448,36 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     const completionMessages = collectMessages(first, 3)
     first.send(JSON.stringify({ type: 'abandon_match' }))
-    expect((await completionMessages).map(message => message.type)).toEqual([
+    const completed = await completionMessages
+    expect(completed.map(message => message.type)).toEqual([
       'gameplay',
       'match_ended',
       'rewards'
     ])
+    expect(completed[2]).toMatchObject({
+      type: 'rewards',
+      data: [
+        {
+          accountID: 1,
+          type: 'RANK',
+          gameMode: 'RANKED_CONSTRUCTED',
+          rank: {
+            beforeMatch: {
+              rank: 'WANDERER',
+              rankStage: 'STAGE_I',
+              score: 0,
+              requiredRankPoints: 100
+            },
+            afterMatch: {
+              rank: 'WANDERER',
+              rankStage: 'STAGE_I',
+              score: 0,
+              requiredRankPoints: 100
+            }
+          }
+        }
+      ]
+    })
     const endedStatus = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
     })
@@ -460,7 +507,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     const stats = await env.AUTH_DB.prepare(
       `SELECT user_id, win_count, loss_count, tie_count, win_streak,
-              loss_streak, season
+              loss_streak, season, score, player_rank, player_rank_stage,
+              player_rank_state
        FROM player_account_stats
        WHERE game_mode = 'RANKED_CONSTRUCTED'
        ORDER BY user_id`
@@ -472,6 +520,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       win_streak: number
       loss_streak: number
       season: number
+      score: number
+      player_rank: string
+      player_rank_stage: string
+      player_rank_state: string
     }>()
     expect(stats.results).toEqual([
       {
@@ -481,7 +533,11 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         tie_count: 0,
         win_streak: 0,
         loss_streak: 1,
-        season: 126
+        season: 126,
+        score: 0,
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I',
+        player_rank_state: '[-1,1750,350,0]'
       },
       {
         user_id: USER_ID_2,
@@ -490,7 +546,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         tie_count: 0,
         win_streak: 1,
         loss_streak: 0,
-        season: 126
+        season: 126,
+        score: 43,
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I',
+        player_rank_state:
+          '[1,1882.1627313643605,350,43]'
       }
     ])
     expect(
@@ -501,7 +562,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         0,
         new Date(Date.now() + 1_000).toISOString()
       )
-    ).toBe(false)
+    ).toMatchObject({
+      applied: false,
+      rewards: [
+        [expect.objectContaining({ type: 'RANK' })],
+        [expect.objectContaining({ type: 'RANK' })]
+      ]
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM multiplayer_match_stats_applied

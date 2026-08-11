@@ -19,7 +19,8 @@ wire messages. It is a separate service from `matchmaker-ts`.
   and restore-on-event behavior;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
-- idempotent quest progression, competitive counters, and match completion in
+- idempotent quest progression, competitive counters, source-compatible
+  Glicko/RP rank transitions and rank reward receipts, and match completion in
   D1.
 
 The gateway, not the browser, is the identity authority. It validates the
@@ -29,9 +30,10 @@ fields remain on source-compatible client messages but are not trusted.
 
 ## Deliberately pending
 
-Spectator sessions, replay/match-log archival, full end-of-match rewards/rank
-transitions, and Conquest state remain in `server/` and must be ported as later
-milestones before this service replaces every production game-server behavior.
+Spectator sessions, replay/match-log archival, match/rank-up XP and item
+rewards, Grandweaver promotion, and Conquest state remain in `server/` and must
+be ported as later milestones before this service replaces every production
+game-server behavior.
 
 ## Configuration
 

@@ -1,3 +1,22 @@
+import {
+  GameMode,
+  PlayerRank,
+  PlayerRankStage,
+  Reward,
+  RewardType
+} from '@opensky/proto'
+
+import {
+  applySourceRankProtections,
+  lookupRankByScore,
+  nextRankPoints,
+  parseRankState,
+  serializeRankState,
+  updateRankState,
+  type RankDefinition,
+  type RankingOutcome
+} from './ranking'
+
 interface MatchPlayersRow {
   player1_user_id: string | null
   player2_user_id: string | null
@@ -5,6 +24,21 @@ interface MatchPlayersRow {
 
 interface MatchStatsRow extends MatchPlayersRow {
   mode: string
+}
+
+interface AccountStatsRow {
+  user_id: string
+  account_id: number | null
+  score: number
+  player_rank: PlayerRank
+  player_rank_stage: PlayerRankStage
+  player_rank_state: string
+}
+
+interface MatchStatsReceiptRow {
+  player1_rewards_json: string
+  player2_rewards_json: string
+  processed_at: string
 }
 
 interface QuestProgressRow {
@@ -25,6 +59,12 @@ interface ProgressionReceiptRow {
 export interface MatchProgressionReceipt {
   questProgress: [Record<number, number>, Record<number, number>]
   rewards: [Array<Record<string, unknown>>, Array<Record<string, unknown>>]
+  processedAt: string
+}
+
+export interface MatchStatsReceipt {
+  applied: boolean
+  rewards: [Reward[], Reward[]]
   processedAt: string
 }
 
@@ -59,6 +99,38 @@ const receipt = (database: D1Database, proposalId: string) =>
     )
     .bind(proposalId)
     .first<ProgressionReceiptRow>()
+
+const parseRewardList = (value: string): Reward[] => {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? (parsed as Reward[]) : []
+  } catch {
+    return []
+  }
+}
+
+const statsReceipt = async (
+  database: D1Database,
+  proposalId: string,
+  applied: boolean
+): Promise<MatchStatsReceipt | undefined> => {
+  const row = await database
+    .prepare(
+      `SELECT player1_rewards_json, player2_rewards_json, processed_at
+       FROM multiplayer_match_stats_applied WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<MatchStatsReceiptRow>()
+  if (!row) return undefined
+  return {
+    applied,
+    rewards: [
+      parseRewardList(row.player1_rewards_json),
+      parseRewardList(row.player2_rewards_json)
+    ],
+    processedAt: row.processed_at
+  }
+}
 
 /**
  * Applies the source quest engine's trusted deltas once per accepted match.
@@ -174,13 +246,36 @@ export const applyMatchProgression = async (
  * mutation share one D1 batch so Durable Object/alarm retries cannot count a
  * completed match twice.
  */
+const ranked = (rank: PlayerRank) =>
+  ![PlayerRank.UNKNOWN, PlayerRank.UNRANKED].includes(rank)
+
+const rankData = (
+  rank: PlayerRank,
+  stage: PlayerRankStage,
+  definition: RankDefinition,
+  score: number
+) => ({
+  rank,
+  rankStage: stage,
+  requiredRankPoints: nextRankPoints(definition),
+  rankPosition: 0,
+  score,
+  scoreAbove: 0,
+  scoreBelow: 0
+})
+
+/**
+ * Applies ranked counters and the source Glicko/RP transition exactly once.
+ * The exact reward payload is stored with the guard row, so an alarm retry
+ * returns the original transition instead of applying or reporting it twice.
+ */
 export const applyMatchStats = async (
   database: D1Database,
   proposalId: string,
   season: number,
   winner: 0 | 1 | undefined,
   processedAt: string
-): Promise<boolean> => {
+): Promise<MatchStatsReceipt> => {
   const match = await database
     .prepare(
       `SELECT mode, player1_user_id, player2_user_id
@@ -190,36 +285,114 @@ export const applyMatchStats = async (
     .first<MatchStatsRow>()
   if (!match) throw new Error('match ledger row was not found')
   if (!['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].includes(match.mode)) {
-    return false
+    return { applied: false, rewards: [[], []], processedAt }
   }
   if (!Number.isSafeInteger(season) || season < 1 || season > 10_000) {
     throw new Error('match season is invalid')
   }
 
-  const exists = await database
-    .prepare(
-      'SELECT 1 FROM multiplayer_match_stats_applied WHERE proposal_id = ?'
-    )
-    .bind(proposalId)
-    .first()
-  if (exists) return false
-
-  const statements: D1PreparedStatement[] = []
   const userIds = [match.player1_user_id, match.player2_user_id] as const
-  for (const player of [0, 1] as const) {
-    const userId = userIds[player]
-    if (!userId) continue
-    const won = winner === player ? 1 : 0
-    const tied = winner === undefined ? 1 : 0
-    const lost = winner !== undefined && winner !== player ? 1 : 0
-    statements.push(
+  const existing = await statsReceipt(database, proposalId, false)
+  if (existing) return existing
+
+  const initializers = userIds
+    .filter((userId): userId is string => userId !== null)
+    .map(userId =>
       database
         .prepare(
           `INSERT OR IGNORE INTO player_account_stats
              (user_id, game_mode, season, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?)`
         )
-        .bind(userId, match.mode, season, processedAt, processedAt),
+        .bind(userId, match.mode, season, processedAt, processedAt)
+    )
+  if (initializers.length > 0) await database.batch(initializers)
+
+  const accountStats = await Promise.all(
+    userIds.map(userId =>
+      userId
+        ? database
+            .prepare(
+              `SELECT stats.user_id, account.id AS account_id, stats.score,
+                      stats.player_rank, stats.player_rank_stage,
+                      stats.player_rank_state
+               FROM player_account_stats stats
+               LEFT JOIN game_accounts account ON account.user_id = stats.user_id
+               WHERE stats.user_id = ? AND stats.game_mode = ? AND stats.season = ?`
+            )
+            .bind(userId, match.mode, season)
+            .first<AccountStatsRow>()
+        : Promise.resolve(null)
+    )
+  )
+
+  const outcomes: [RankingOutcome, RankingOutcome] =
+    winner === undefined
+      ? [0.5, 0.5]
+      : winner === 0
+        ? [1, 0]
+        : [0, 1]
+  const oldStates = accountStats.map(stats =>
+    stats ? parseRankState(stats.player_rank_state, stats.score) : undefined
+  )
+  const statements: D1PreparedStatement[] = []
+  const rewards: [Reward[], Reward[]] = [[], []]
+
+  for (const player of [0, 1] as const) {
+    const userId = userIds[player]
+    const stats = accountStats[player]
+    if (!userId || !stats) continue
+    const won = winner === player ? 1 : 0
+    const tied = winner === undefined ? 1 : 0
+    const lost = winner !== undefined && winner !== player ? 1 : 0
+    const opponent = player === 0 ? 1 : 0
+    const canUpdateRank =
+      ranked(stats.player_rank) &&
+      oldStates[player] !== undefined &&
+      oldStates[opponent] !== undefined
+    let score = stats.score
+    let playerRank = stats.player_rank
+    let playerRankStage = stats.player_rank_stage
+    let playerRankState = stats.player_rank_state
+
+    if (canUpdateRank) {
+      const currentDefinition = lookupRankByScore(stats.score)
+      const updated = updateRankState(
+        outcomes[player],
+        oldStates[player]!,
+        oldStates[opponent]!
+      )
+      const protectedResult = applySourceRankProtections(
+        currentDefinition,
+        oldStates[player]!,
+        updated
+      )
+      score = protectedResult.state.points
+      playerRank = protectedResult.rank.rank
+      playerRankStage = protectedResult.rank.stage
+      playerRankState = serializeRankState(protectedResult.state)
+      rewards[player].push({
+        accountID: stats.account_id ?? 0,
+        type: RewardType.RANK,
+        gameMode: match.mode as GameMode,
+        rank: {
+          beforeMatch: rankData(
+            stats.player_rank,
+            stats.player_rank_stage,
+            currentDefinition,
+            stats.score
+          ),
+          afterMatch: rankData(
+            playerRank,
+            playerRankStage,
+            protectedResult.rank,
+            score
+          )
+        }
+      })
+    }
+
+    statements.push(
       database
         .prepare(
           `UPDATE player_account_stats
@@ -228,6 +401,10 @@ export const applyMatchStats = async (
                tie_count = tie_count + ?,
                win_streak = CASE WHEN ? = 1 THEN win_streak + 1 ELSE 0 END,
                loss_streak = CASE WHEN ? = 1 THEN loss_streak + 1 ELSE 0 END,
+               score = ?,
+               player_rank = ?,
+               player_rank_stage = ?,
+               player_rank_state = ?,
                updated_at = ?
            WHERE user_id = ? AND game_mode = ? AND season = ?
              AND NOT EXISTS (
@@ -241,6 +418,10 @@ export const applyMatchStats = async (
           tied,
           won,
           lost,
+          score,
+          playerRank,
+          playerRankStage,
+          playerRankState,
           processedAt,
           userId,
           match.mode,
@@ -252,14 +433,23 @@ export const applyMatchStats = async (
   statements.push(
     database
       .prepare(
-        `INSERT INTO multiplayer_match_stats_applied (proposal_id, processed_at)
-         SELECT ?, ?
+        `INSERT INTO multiplayer_match_stats_applied
+           (proposal_id, player1_rewards_json, player2_rewards_json, processed_at)
+         SELECT ?, ?, ?, ?
          WHERE NOT EXISTS (
            SELECT 1 FROM multiplayer_match_stats_applied WHERE proposal_id = ?
          )`
       )
-      .bind(proposalId, processedAt, proposalId)
+      .bind(
+        proposalId,
+        JSON.stringify(rewards[0]),
+        JSON.stringify(rewards[1]),
+        processedAt,
+        proposalId
+      )
   )
   await database.batch(statements)
-  return true
+  const stored = await statsReceipt(database, proposalId, true)
+  if (!stored) throw new Error('ranked match receipt was not persisted')
+  return stored
 }
