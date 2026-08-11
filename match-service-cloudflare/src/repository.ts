@@ -25,6 +25,8 @@ export interface MultiplayerMatchRow {
   match_payload_json: string
   server_address: string | null
   status: 'creating' | 'active' | 'ended' | 'failed'
+  player1_principal: string
+  player2_principal: string
 }
 
 export interface NewMultiplayerMatch {
@@ -46,7 +48,7 @@ export class MatchRepository {
     return this.database
       .prepare(
         `SELECT id, proposal_id, replay_id, mode, version, match_payload_json,
-                server_address, status
+                server_address, status, player1_principal, player2_principal
          FROM multiplayer_matches
          WHERE proposal_id = ?`
       )
@@ -161,14 +163,39 @@ export class MatchRepository {
   }
 
   async activate(proposalId: string, serverAddress: string) {
-    await this.database
-      .prepare(
-        `UPDATE multiplayer_matches
-         SET status = 'active', server_address = ?, updated_at = ?
-         WHERE proposal_id = ?`
-      )
-      .bind(serverAddress, new Date().toISOString(), proposalId)
-      .run()
+    const row = await this.findByProposal(proposalId)
+    if (!row) throw new Error('match allocation was not persisted')
+    const now = new Date().toISOString()
+    await this.database.batch([
+      this.database
+        .prepare(
+          `UPDATE multiplayer_matches
+           SET status = 'ended',
+               result_json = COALESCE(result_json, ?),
+               ended_at = COALESCE(ended_at, ?),
+               updated_at = ?
+           WHERE proposal_id != ? AND status = 'active'
+             AND (player1_principal IN (?, ?)
+               OR player2_principal IN (?, ?))`
+        )
+        .bind(
+          JSON.stringify({ reason: 'superseded', byProposalId: proposalId }),
+          now,
+          now,
+          proposalId,
+          row.player1_principal,
+          row.player2_principal,
+          row.player1_principal,
+          row.player2_principal
+        ),
+      this.database
+        .prepare(
+          `UPDATE multiplayer_matches
+           SET status = 'active', server_address = ?, updated_at = ?
+           WHERE proposal_id = ? AND status IN ('creating', 'active')`
+        )
+        .bind(serverAddress, now, proposalId)
+    ])
   }
 
   async fail(proposalId: string) {

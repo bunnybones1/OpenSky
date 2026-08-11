@@ -124,6 +124,9 @@ export default {
         serverAddress: existing.server_address
       })
     }
+    if (existing?.status === 'ended') {
+      return json({ error: 'accepted proposal has already ended' }, 409)
+    }
 
     try {
       const replayId = existing?.replay_id ?? crypto.randomUUID()

@@ -174,6 +174,50 @@ describe('Cloud Weasel accepted-match service', () => {
     })
   })
 
+  it('supersedes an older active match without allowing it to reactivate', async () => {
+    const first = await create()
+    expect(first.status).toBe(200)
+
+    const newerDispatch = {
+      ...dispatch(),
+      proposalId: 'proposal-practice-2',
+      createdAtMs: Date.now() + 1
+    }
+    const newer = await create(newerDispatch)
+    expect(newer.status).toBe(200)
+
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT proposal_id, status, result_json, ended_at
+       FROM multiplayer_matches ORDER BY id`
+    ).all<{
+      proposal_id: string
+      status: string
+      result_json: string | null
+      ended_at: string | null
+    }>()
+    expect(rows.results).toEqual([
+      expect.objectContaining({
+        proposal_id: PROPOSAL_ID,
+        status: 'ended',
+        ended_at: expect.any(String)
+      }),
+      expect.objectContaining({
+        proposal_id: 'proposal-practice-2',
+        status: 'active'
+      })
+    ])
+    expect(JSON.parse(rows.results[0].result_json!)).toEqual({
+      reason: 'superseded',
+      byProposalId: 'proposal-practice-2'
+    })
+
+    const staleRetry = await create()
+    expect(staleRetry.status).toBe(409)
+    expect(await staleRetry.json()).toEqual({
+      error: 'accepted proposal has already ended'
+    })
+  })
+
   it('hides its internal endpoint and binds idempotency to the accepted proposal', async () => {
     const denied = await create(dispatch(), 'wrong-secret')
     expect(denied.status).toBe(404)
