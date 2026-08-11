@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 85 |
-| Remaining source RPCs | 87 |
+| Ported source RPCs | 86 |
+| Remaining source RPCs | 86 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -26,7 +26,7 @@ count or the critical player-facing compatibility set regresses.
 | Content and discovery | 3 | Deck-rank search and reward-schedule reads. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
 | Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
-| Other product | 5 | Account reporting, feedback, live-record and miscellaneous reads. |
+| Other product | 4 | Account reporting, feedback, live-record and miscellaneous reads. |
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are
