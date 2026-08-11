@@ -26,6 +26,9 @@ api/data/schema/schema.sql
 .pnpm-store/
 .wrangler/
 .dev.vars
+.env
+.env.local
+.env.*.local
 *.retry
 
 # configuration

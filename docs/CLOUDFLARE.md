@@ -62,8 +62,18 @@ For a local Wrangler preview, also add the exact origin and callback printed by 
 http://localhost:8787/api/auth/google/callback
 ```
 
-Copy `.dev.vars.example` to `.dev.vars` for local development and fill in the values. `.dev.vars`
-is ignored by Git. Never commit the Google client secret or the production session signing key.
+Copy the Worker runtime template for local development and fill in the values:
+
+```sh
+cp .dev.vars.example .dev.vars
+```
+
+`.dev.vars` is ignored by Git. Never commit the Google client secret or the production session
+signing key.
+
+The separate `.env.example` documents optional build and deployment values such as
+`RELEASE_VERSION`, `GITCOMMIT`, and Cloudflare CI credentials. Copy it to `.env` only if your shell,
+IDE, or CI system loads dotenv files; repository scripts do not automatically source `.env`.
 
 The production Worker needs all three secrets:
 

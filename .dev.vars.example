@@ -1,3 +1,9 @@
+# Cloudflare Worker runtime values for local `wrangler dev`.
+# Copy this file to `.dev.vars`. Never commit the populated file.
+
+# Generate a random value with at least 32 characters.
 SESSION_SIGNING_KEY=replace-with-at-least-32-random-characters
-GOOGLE_CLIENT_ID=replace-with-google-web-client-id
+
+# Google Auth Platform OAuth client with application type "Web application".
+GOOGLE_CLIENT_ID=replace-with-google-web-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
