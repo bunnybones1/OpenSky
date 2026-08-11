@@ -1,6 +1,7 @@
 import type { AccountRegistration } from '@opensky/proto'
 
 import { AccountsRepository } from './accounts'
+import { CookiePoliciesRepository } from './cookie-policies'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
 import { bearerToken, signSession, verifySession } from './jwt'
@@ -76,6 +77,7 @@ export const handleApiRequest = async (
 
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
+  const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
 
   try {
     switch (method) {
@@ -139,6 +141,21 @@ export const handleApiRequest = async (
         if (!body.name) throw invalidArgument('name is required')
         const account = await accounts.findByName(body.name)
         return json(request, env, { exists: !!account, pending_migration: false })
+      }
+
+      case 'GetCookiePolicy': {
+        const address = await sessionAddress(request, env)
+        return json(request, env, { res: await cookiePolicies.get(address) })
+      }
+
+      case 'SaveCookiePolicy': {
+        const address = await sessionAddress(request, env)
+        const body = await requestBody<{ cookieOptions?: Record<string, boolean> }>(request)
+        if (!body.cookieOptions || typeof body.cookieOptions !== 'object') {
+          throw invalidArgument('cookieOptions is required')
+        }
+        await cookiePolicies.save(address, body.cookieOptions)
+        return json(request, env, { status: true })
       }
 
       default:

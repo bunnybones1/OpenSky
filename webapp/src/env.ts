@@ -63,6 +63,7 @@ interface Environment {
   USER_PILOT_TOKEN: string
 
   LOCAL_BOT_ENABLED: boolean
+  AUTO_REGISTER_WALLET: boolean
 }
 
 const assetsUrl = (url: string, version: string): string => {
@@ -151,7 +152,8 @@ const env: Environment = {
   ),
   USER_PILOT_TOKEN: String(window.APP_CONFIG.USER_PILOT_TOKEN || ''),
 
-  LOCAL_BOT_ENABLED: window.APP_CONFIG.LOCAL_BOT_ENABLED === true
+  LOCAL_BOT_ENABLED: window.APP_CONFIG.LOCAL_BOT_ENABLED === true,
+  AUTO_REGISTER_WALLET: window.APP_CONFIG.AUTO_REGISTER_WALLET === true
 }
 
 // eslint-disable-next-line

@@ -12,7 +12,7 @@
   "WEBAPP_URL": "/",
   "MATCHMAKER_URL": "/matchmaker/",
   "ANALYTICS": false,
-  "SEQUENCE_API_KEY": "",
+  "SEQUENCE_API_KEY": "AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
   "SEQUENCE_API_HOST": "https://api.sequence.app",
   "SEQUENCE_METADATA_HOST": "https://metadata.sequence.app",
   "SEQUENCE_SESSIONS_HOST": "https://sessions.sequence.app",
@@ -28,5 +28,6 @@
   "CAPTCHA2_SITE_KEY": "",
   "GEOBLOCKING": false,
   "USER_PILOT_TOKEN": "",
-  "LOCAL_BOT_ENABLED": true
+  "LOCAL_BOT_ENABLED": true,
+  "AUTO_REGISTER_WALLET": true
 }

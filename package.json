@@ -15,8 +15,11 @@
     "clean": "pnpm dlx rimraf node_modules ./**/node_modules",
     "audit:fix": "pnpm dlx pnpm-audit-fix",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
-    "preview:cloudflare": "pnpm build:cloudflare && pnpm dlx wrangler@4.110.0 dev",
-    "deploy:cloudflare": "pnpm build:cloudflare && pnpm dlx wrangler@4.110.0 deploy"
+    "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",
+    "deploy:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler deploy --config ../wrangler.jsonc",
+    "test:cloudflare": "pnpm --filter @opensky/cloudflare test",
+    "typecheck:cloudflare": "pnpm --filter @opensky/cloudflare typecheck",
+    "db:migrate:cloudflare:local": "pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --local --config ../wrangler.jsonc"
   },
   "devDependencies": {
     "dpdm": "^3.10.0",

@@ -80,6 +80,26 @@ describe('Cloudflare auth RPC', () => {
 
     const exists = await rpc('AccountExistsByName', { name: 'opensky_90F8B' })
     expect(await exists.json()).toEqual({ exists: true, pending_migration: false })
+
+    const emptyPolicy = await rpc('GetCookiePolicy', {}, token)
+    expect(await emptyPolicy.json()).toEqual({ res: {} })
+
+    const savePolicy = await rpc(
+      'SaveCookiePolicy',
+      { cookieOptions: { AUTHENTICATION: false, PRODUCT_ANALYTICS: true } },
+      token
+    )
+    expect(await savePolicy.json()).toEqual({ status: true })
+
+    const savedPolicy = await rpc('GetCookiePolicy', {}, token)
+    expect(await savedPolicy.json()).toEqual({
+      res: {
+        AUTHENTICATION: true,
+        GEO_BLOCKING: true,
+        MARKETPLACE: true,
+        PRODUCT_ANALYTICS: true
+      }
+    })
   })
 
   it('rejects registration for an address other than the authenticated wallet', async () => {

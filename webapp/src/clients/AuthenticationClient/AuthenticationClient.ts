@@ -378,20 +378,33 @@ export class _AuthenticationClient_DONT_USE_DIRECTLY {
 
       console.log('Authorizing Sequence wallet with OpenSky.')
 
-      const { JWT, sequenceJWT } = await getOpenSkyAuthFromSequence(sequenceWallet)
+      const { JWT, sequenceJWT, address } =
+        await getOpenSkyAuthFromSequence(sequenceWallet)
 
       console.log('Sequence auth succeeded. Finding account for wallet.')
 
       const session = await APIClient.opensky.getSession(getAuthHeaders(JWT))
+      let account = session.account
 
-      if (!!session.account) {
+      if (!account && env.AUTO_REGISTER_WALLET) {
+        console.log('Creating a Cloudflare account for this wallet.')
+        const registration = await this.createAccount(
+          address,
+          JWT,
+          sequenceJWT,
+          false
+        )
+        if (registration.status) account = registration.account
+      }
+
+      if (account) {
         console.log('Found OpenSky account for wallet! Finishing log in.')
 
         setJWTs({ openskyJWT: JWT, sequenceJWT })
 
         addTrackers()
 
-        this.finalizeAuthedUser(session.account)
+        await this.finalizeAuthedUser(account)
       } else {
         throw new Error('No OpenSky account found for this wallet. Create one first.')
       }
