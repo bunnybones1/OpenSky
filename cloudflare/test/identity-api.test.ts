@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers'
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Env } from '../src/env'
@@ -93,7 +94,11 @@ describe('Cloudflare identity API', () => {
       )
     ).toMatch(/; HttpOnly; Secure; SameSite=Lax$/)
     const session = await request('/api/auth/session', undefined, sessionCookie)
-    expect(await session.json()).toMatchObject({
+    const sessionBody = (await session.json()) as {
+      gamePrincipal: string
+      user: { id: string }
+    }
+    expect(sessionBody).toMatchObject({
       authenticated: true,
       user: {
         displayName: 'Open Sky Player',
@@ -103,6 +108,9 @@ describe('Cloudflare identity API', () => {
       wallets: [],
       providers: { google: true }
     })
+    expect(sessionBody.gamePrincipal).toBe(
+      await deriveGamePrincipal(sessionBody.user.id)
+    )
 
     const identities = await env.AUTH_DB.prepare(
       "SELECT COUNT(*) AS count FROM auth_identities WHERE provider = 'google'"

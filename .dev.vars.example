@@ -7,3 +7,6 @@ SESSION_SIGNING_KEY=replace-with-at-least-32-random-characters
 # Google Auth Platform OAuth client with application type "Web application".
 GOOGLE_CLIENT_ID=replace-with-google-web-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
+
+# Shared only by the web/API gateway, matchmaker, match service, and game service.
+INTERNAL_AUTH_SECRET=replace-with-a-long-random-value

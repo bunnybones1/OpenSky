@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers'
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
@@ -51,6 +52,7 @@ describe('legacy player RPC compatibility', () => {
     expect(session.status).toBe(200)
     expect(await session.json()).toMatchObject({
       address: identityReference,
+      gamePrincipal: await deriveGamePrincipal(userId),
       account: {
         address: identityReference,
         name: 'Cloud Weasel Player',

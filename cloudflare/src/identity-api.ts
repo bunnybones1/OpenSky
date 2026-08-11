@@ -1,3 +1,5 @@
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
+
 import { base64UrlDecodeText, base64UrlEncode } from './encoding'
 import { clearCookie, readCookies, serializeCookie } from './cookies'
 import type { Env } from './env'
@@ -98,6 +100,7 @@ const sessionResponse = async (request: Request, env: Env): Promise<Response> =>
   return json({
     authenticated: true,
     user,
+    gamePrincipal: await deriveGamePrincipal(user.id),
     wallets: await identities.listWallets(user.id),
     providers: { google: configured }
   })

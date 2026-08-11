@@ -2,12 +2,14 @@ import { proxy } from 'valtio'
 
 export interface IAuthenticationState {
   userAddress?: string
+  gamePrincipal?: string
   sentryId?: string
   isInitializing: boolean
 }
 
 const DEFAULT_AUTHENTICATION_STATE: IAuthenticationState = {
   userAddress: undefined,
+  gamePrincipal: undefined,
   sentryId: undefined,
   isInitializing: true
 }

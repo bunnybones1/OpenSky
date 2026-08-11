@@ -9,6 +9,10 @@ declare global {
       ALLOWED_ORIGINS: string
       GOOGLE_CLIENT_ID: string
       GOOGLE_CLIENT_SECRET: string
+      INTERNAL_AUTH_SECRET: string
+      MATCHMAKER_SERVICE: Fetcher
+      GAME_SERVICE: Fetcher
+      MULTIPLAYER_RELEASE_VERSION: string
       TEST_MIGRATIONS: D1Migration[]
     }
   }

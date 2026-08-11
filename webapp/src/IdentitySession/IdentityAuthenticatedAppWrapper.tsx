@@ -79,8 +79,9 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
     if (!account) return
     GlobalQueryClient.setQueryData(getUseAccountKey(identityReference), account)
     updateAuthenticationState('userAddress', identityReference)
+    updateAuthenticationState('gamePrincipal', session.gamePrincipal)
     updateAuthenticationState('isInitializing', false)
-  }, [account, identityReference])
+  }, [account, identityReference, session.gamePrincipal])
 
   if (error) {
     return (

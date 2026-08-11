@@ -123,7 +123,10 @@ export async function initializeGame() {
   ) {
     // Fetch account if jwt found
     try {
-      if (window.localStorage.getItem(SKYWEAVER_JWT_KEY)) {
+      if (
+        window.localStorage.getItem(SKYWEAVER_JWT_KEY) ||
+        env.AUTH_MODE === 'google'
+      ) {
         const session = await apiClient.getSession()
 
         if (!session.account) {
@@ -131,6 +134,15 @@ export async function initializeGame() {
         }
 
         account = session.account
+        if (env.AUTH_MODE === 'google') {
+          const gamePrincipal = (
+            session as typeof session & { gamePrincipal?: string }
+          ).gamePrincipal
+          if (!gamePrincipal || !/^0x[0-9a-f]{40}$/.test(gamePrincipal)) {
+            throw new Error('No valid game principal found for this session.')
+          }
+          account = { ...account, address: gamePrincipal }
+        }
       } else {
         throw new Error('cannot find opensky JWT')
       }
@@ -530,8 +542,10 @@ export async function startGame() {
     if (!(gameMode in GameMode)) {
       throw new Error(`Invalid game mode ${gameMode}`)
     }
-    const authToken = window.localStorage.getItem(SKYWEAVER_JWT_KEY)
-    if (!authToken) {
+    const authToken =
+      window.localStorage.getItem(SKYWEAVER_JWT_KEY) ??
+      (env.AUTH_MODE === 'google' ? '' : null)
+    if (authToken === null) {
       throw new Error(`Authentication token missing`)
     }
     store.joinMatch(authToken)

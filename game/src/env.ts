@@ -25,6 +25,7 @@ export interface Environment {
   REMOTE_LOG_URL: string
   DIRECT_BALANCE_FETCH: boolean
   DEPLOY_ENV: string
+  AUTH_MODE: 'google' | 'legacy-wallet'
 }
 
 const assetsUrl = (url: string, version: string): string => {
@@ -95,7 +96,9 @@ const env: Environment = {
   WEBAPP_ANALYTICS_KEY: String(window.APP_CONFIG.WEBAPP_ANALYTICS_KEY || ''),
   REMOTE_LOG_URL: String(window.APP_CONFIG.REMOTE_LOG_URL || ''),
   DIRECT_BALANCE_FETCH: !!window.APP_CONFIG.DIRECT_BALANCE_FETCH,
-  DEPLOY_ENV: String(window.APP_CONFIG.DEPLOY_ENV || '')
+  DEPLOY_ENV: String(window.APP_CONFIG.DEPLOY_ENV || ''),
+  AUTH_MODE:
+    window.APP_CONFIG.AUTH_MODE === 'google' ? 'google' : 'legacy-wallet'
 }
 window.env = env
 

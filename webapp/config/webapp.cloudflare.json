@@ -10,7 +10,7 @@
   "WEB_WALLET_HOST": "https://sequence.app",
   "GAME_URL": "/game/",
   "WEBAPP_URL": "/",
-  "MATCHMAKER_URL": "/matchmaker/",
+  "MATCHMAKER_URL": "/api/matchmaker/",
   "ANALYTICS": false,
   "SEQUENCE_API_KEY": "",
   "SEQUENCE_API_HOST": "https://api.sequence.app",

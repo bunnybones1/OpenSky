@@ -4,7 +4,7 @@
   "ASSETS_URL": "https://assets.skyweaver.net",
   "ASSETS_VERSION_HASH": "",
   "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
-  "MATCHMAKER_URL": "/matchmaker/",
+  "MATCHMAKER_URL": "/api/matchmaker/",
   "ETHEREUM_HOST_PROVIDER": "",
   "WEBAPP_URL": "/",
   "GAME_BASE_URL_PATH": "/game/",
@@ -17,5 +17,6 @@
   "WEBAPP_ANALYTICS_KEY": "",
   "REMOTE_LOG_URL": "",
   "DIRECT_BALANCE_FETCH": false,
-  "DEPLOY_ENV": "cloudflare"
+  "DEPLOY_ENV": "cloudflare",
+  "AUTH_MODE": "google"
 }

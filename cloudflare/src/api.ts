@@ -1,4 +1,5 @@
 import type { AccountRegistration, DeckClass, ItemType } from '@opensky/proto'
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
 import { CookiePoliciesRepository } from './cookie-policies'
@@ -140,7 +141,13 @@ export const handleApiRequest = async (
           principal.kind === 'identity'
             ? await playerRpc.getAccount(principal.userId, address)
             : await accounts.findByAddress(address)
-        return json(request, env, { address, ...(account ? { account } : {}) })
+        return json(request, env, {
+          address,
+          ...(account ? { account } : {}),
+          ...(principal.kind === 'identity'
+            ? { gamePrincipal: await deriveGamePrincipal(principal.userId) }
+            : {})
+        })
       }
 
       case 'RegisterAccount': {

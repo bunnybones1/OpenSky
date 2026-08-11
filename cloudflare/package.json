@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@opensky/proto": "workspace:*",
+    "@opensky/shared": "workspace:*",
     "@skyweaver/state-browser-sys": "workspace:*"
   },
   "devDependencies": {

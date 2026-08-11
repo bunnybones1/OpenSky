@@ -11,19 +11,25 @@ import env from './env'
 import { gameMode, LocalGameMode } from './helpers/envGameModeHelpers'
 
 const apiFetch: Fetch = async (input: RequestInfo, init?: RequestInit) => {
-  // add auth header
   const jwt = window.localStorage.getItem(SKYWEAVER_JWT_KEY)
+  const headers = new Headers(init?.headers)
+  const requestInit: RequestInit = {
+    ...init,
+    credentials: 'same-origin',
+    headers
+  }
 
   if (jwt) {
-    init!.headers = { ...init!.headers, Authorization: `BEARER ${jwt}` }
+    headers.set('Authorization', `BEARER ${jwt}`)
   } else if (
+    env.AUTH_MODE !== 'google' &&
     gameMode !== LocalGameMode.REPLAY &&
     gameMode !== LocalGameMode.SPECTATE
   ) {
     throw new Error('No jwt found.')
   }
 
-  const response = await window.fetch(input, init)
+  const response = await window.fetch(input, requestInit)
 
   if (!response.ok) {
     const text = await response.text()

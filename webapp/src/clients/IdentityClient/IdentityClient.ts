@@ -69,6 +69,7 @@ export type IdentitySession =
   | {
       authenticated: true
       user: IdentityUser
+      gamePrincipal: string
       wallets: WalletConnection[]
       providers: { google: boolean }
     }

@@ -18,6 +18,12 @@
       "new_sqlite_classes": ["MatchmakerPool"]
     }
   ],
+  "services": [
+    {
+      "binding": "MATCH_SERVICE",
+      "service": "cloud-weasel-match-service"
+    }
+  ],
   "vars": {
     "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787",
     "MATCH_ACCEPTANCE_TIMEOUT_MS": "30000",
