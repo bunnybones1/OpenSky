@@ -29,11 +29,11 @@ const internalHeaders = {
   [INTERNAL_AUTH_HEADER]: 'game-server-test-secret'
 }
 
-const createMatch = () =>
+const createMatch = (fixture = createMatchFixture()) =>
   SELF.fetch('https://game.example/internal/matches', {
     method: 'POST',
     headers: internalHeaders,
-    body: JSON.stringify(createMatchFixture())
+    body: JSON.stringify(fixture)
   })
 
 const initializeMatch = async () => {
@@ -164,6 +164,11 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       body: JSON.stringify(createMatchFixture({ matchID: 43 }))
     })
     expect(conflict.status).toBe(409)
+
+    const mutated = await createMatch(
+      createMatchFixture({ replayID: 'different-replay' })
+    )
+    expect(mutated.status).toBe(409)
   })
 
   it('authenticates players at the gateway boundary and sends private reconnect state', async () => {
@@ -294,6 +299,88 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(await endedStatus.json()).toMatchObject({
       ended: true,
       state: { statusType: 'GameOver', winner: 1 }
+    })
+  })
+
+  it('restores a hibernated practice bot and applies one validated action per alarm', async () => {
+    const botProposalId = 'proposal-bot-test-1'
+    const practiceStub = () =>
+      runtimeEnv.GAME_MATCHES.getByName(`match:${botProposalId}`)
+    const created = await createMatch(
+      createMatchFixture({ botPlayer2: true, proposalId: botProposalId })
+    )
+    expect(created.status).toBe(200)
+    await created.json()
+
+    await runInDurableObject(
+      practiceStub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players = await state.storage.get<Record<string, Record<string, unknown>>>(
+          'match:players'
+        )
+        expect(players).toBeDefined()
+        players![PRINCIPAL_1] = {
+          ...players![PRINCIPAL_1],
+          connected: true,
+          joined: true,
+          loadingProgress: 1,
+          finishedLoadingAssets: true
+        }
+        await state.storage.put('match:players', players!)
+      }
+    )
+
+    let hasState = false
+    for (let attempt = 0; attempt < 6 && !hasState; attempt += 1) {
+      await runInDurableObject(
+        practiceStub() as DurableObjectStub,
+        async (_instance, state) => {
+          const timers =
+            (await state.storage.get<Record<string, unknown>>('match:timers')) ?? {}
+          await state.storage.put('match:timers', {
+            ...timers,
+            commitRevealAtMs: Date.now() - 1
+          })
+          await state.storage.setAlarm(Date.now() + 60_000)
+        }
+      )
+      expect(await runDurableObjectAlarm(practiceStub())).toBe(true)
+      const response = await practiceStub().fetch('https://match/internal/status', {
+        headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+      })
+      const body = (await response.json()) as {
+        state: { hasState: boolean }
+      }
+      hasState = body.state.hasState
+    }
+    expect(hasState).toBe(true)
+
+    await runInDurableObject(
+      practiceStub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers =
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ?? {}
+        expect(timers.botAtMs).toEqual(expect.any(Number))
+        await state.storage.put('match:timers', {
+          ...timers,
+          botAtMs: Date.now() - 1
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    await evictDurableObject(practiceStub())
+    expect(await runDurableObjectAlarm(practiceStub())).toBe(true)
+
+    const status = await practiceStub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      ended: false,
+      state: { hasState: true },
+      timers: {
+        botActionCount: 1,
+        botFailureCount: 0
+      }
     })
   })
 })

@@ -1,3 +1,4 @@
+import { WasmMatchBotOpponent } from '@opensky/bot'
 import {
   DUAL_PRISM_DECK_SIZE,
   SINGLE_PRISM_DECK_SIZE
@@ -163,6 +164,17 @@ export interface RuntimeStateInfo {
   currentPlayer?: Player
   statusType?: string
   winner?: Player
+  playersDoneCardSelection?: [boolean, boolean]
+}
+
+export interface BotPolicyState {
+  actionCount: number
+  playedManaVial: boolean
+}
+
+export interface BotActionResult {
+  diffs: string[]
+  policy: BotPolicyState
 }
 
 export class AuthoritativeMatchRuntime {
@@ -249,7 +261,69 @@ export class AuthoritativeMatchRuntime {
       moveCount: game?.moveCount,
       currentPlayer: game?.currentPlayer,
       statusType: status?.type,
-      winner: status?.type === 'GameOver' ? status.winner : undefined
+      winner: status?.type === 'GameOver' ? status.winner : undefined,
+      playersDoneCardSelection: game
+        ? [
+            game.players[0].doneCardSelection,
+            game.players[1].doneCardSelection
+          ]
+        : undefined
+    }
+  }
+
+  async createBotAction(
+    player: Player,
+    botPrivateKey: string,
+    difficulty: number,
+    policy: BotPolicyState
+  ): Promise<BotActionResult> {
+    const snapshot = this.serialize((player + 1) as 1 | 2)
+    const sign = createOwnerSigner(botPrivateKey)
+    const diffs: string[] = []
+    const botStore = bindings.WasmMatch.deserialize(
+      snapshot,
+      false,
+      () => undefined,
+      sign,
+      (diff: Uint8Array) => diffs.push(bytesToHex(diff)),
+      () => undefined,
+      secureRandom
+    )
+    try {
+      if (!botStore.hasState()) return { diffs, policy }
+      const bot = new WasmMatchBotOpponent<void>(
+        player,
+        () => [
+          botStore,
+          bindings.getValidActions,
+          bindings.validatePlayerAction,
+          CardLibrary,
+          () => undefined
+        ],
+        {
+          difficulty: Math.max(0, Math.min(1, difficulty)),
+          dispatchEvenIfSuperceded: false,
+          waitBetweenMoves: false,
+          logger: () => undefined
+        }
+      )
+      bot.thisTurn = {
+        actionCount: Math.max(0, Math.floor(policy.actionCount)),
+        playedManaVial: policy.playedManaVial === true
+      }
+      await bot.handleStateChange(
+        botStore.state as GameState<SkyWeaver>,
+        botStore.secret(player) as PlayerSecret<SkyWeaver>
+      )
+      return {
+        diffs,
+        policy: {
+          actionCount: bot.thisTurn.actionCount,
+          playedManaVial: bot.thisTurn.playedManaVial
+        }
+      }
+    } finally {
+      botStore.free()
     }
   }
 

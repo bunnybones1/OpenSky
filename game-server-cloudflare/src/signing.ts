@@ -12,7 +12,10 @@ utils.hmacSha256Sync = (key, ...messages) =>
 const privateKeyPattern = /^(?:0x)?[0-9a-f]{64}$/i
 
 export const assertOwnerPrivateKey = (privateKey: string) => {
-  if (!privateKeyPattern.test(privateKey) || !utils.isValidPrivateKey(privateKey)) {
+  const normalized = privateKey.startsWith('0x')
+    ? privateKey.slice(2)
+    : privateKey
+  if (!privateKeyPattern.test(privateKey) || !utils.isValidPrivateKey(normalized)) {
     throw new Error('MATCH_OWNER_PRIVATE_KEY must be a valid 32-byte secp256k1 key')
   }
 }

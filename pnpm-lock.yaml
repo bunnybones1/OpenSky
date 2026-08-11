@@ -529,6 +529,9 @@ importers:
       '@noble/secp256k1':
         specifier: 1.7.1
         version: 1.7.1
+      '@opensky/bot':
+        specifier: workspace:*
+        version: link:../bot
       '@opensky/proto':
         specifier: workspace:*
         version: link:../lib/proto

@@ -19,7 +19,6 @@ import { GameModeHeader } from '../shared/components/GameModeHeader/GameModeHead
 import { PlayPageBackground } from '../shared/components/PlayPageBackground'
 import { PlayPageInner } from '../shared/components/PlayPageInner'
 import { SharedPlayPageStyle } from '../shared/style/SharedPlayPageStyle.css'
-import { IdentityPracticeVsBotPage } from './components/IdentityPracticeVsBotPage'
 import { PracticeVsBotPage } from './components/PracticeVsBotPage'
 import { PracticeVsPlayerPage } from './components/PracticeVsPlayerPage'
 import { PracticeToggleButton } from './Practice.css'
@@ -121,9 +120,7 @@ export const Practice = memo(() => {
         <Routes>
           <Route
             path={ROUTES_CONFIG.routes.PLAY.routes.PRACTICE.routes.BOT.path}
-            element={
-              isIdentityMode ? <IdentityPracticeVsBotPage /> : <PracticeVsBotPage />
-            }
+            element={<PracticeVsBotPage />}
           />
           {isIdentityMode ? (
             <Route

@@ -33,6 +33,7 @@ describe('Cloudflare game proof primitives', () => {
     const recovery = signature[64] - 27
     const publicKey = recoverPublicKey(digest, signature.slice(0, 64), recovery)
     expect(verify(signature.slice(0, 64), digest, publicKey)).toBe(true)
+    expect(createOwnerSigner(`0x${PRIVATE_KEY}`)(message)).toHaveLength(65)
   })
 
   it('matches the ethers v5 signing format used by the source server', () => {
