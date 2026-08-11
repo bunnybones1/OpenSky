@@ -1,3 +1,5 @@
+import { GameMode } from '@opensky/proto'
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 
 import { buildMatch } from './match-builder'
@@ -21,6 +23,7 @@ export interface MatchServiceEnv {
   INTERNAL_AUTH_SECRET: string
   CURRENT_SEASON?: string
   TURN_TIMER_ENABLED?: string
+  ENABLED_GAME_MODES?: string
 }
 
 const json = (body: unknown, status = 200) =>
@@ -43,6 +46,91 @@ const season = (value: string | undefined) => {
 }
 
 const enabled = (value: string | undefined) => value?.toLowerCase() !== 'false'
+
+const DEFAULT_ENABLED_GAME_MODES = new Set<GameMode>([
+  GameMode.PRACTICE_BOT,
+  GameMode.WARM_UP,
+  GameMode.PRACTICE_PVP,
+  GameMode.RANKED_CONSTRUCTED,
+  GameMode.RANKED_DISCOVERY,
+  GameMode.CHALLENGE_CONSTRUCTED,
+  GameMode.CHALLENGE_DISCOVERY
+])
+
+const enabledGameModes = (value: string | undefined) => {
+  if (!value) return DEFAULT_ENABLED_GAME_MODES
+  const supported = new Set(Object.values(GameMode))
+  return new Set(
+    value
+      .split(',')
+      .map(mode => mode.trim())
+      .filter((mode): mode is GameMode => supported.has(mode as GameMode))
+  )
+}
+
+const authorized = (request: Request, env: MatchServiceEnv) =>
+  env.INTERNAL_AUTH_SECRET.length >= 16 &&
+  request.headers.get(INTERNAL_AUTH_HEADER) === env.INTERNAL_AUTH_SECRET
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const matchmakingProfile = async (
+  request: Request,
+  env: MatchServiceEnv
+): Promise<Response> => {
+  const declaredLength = Number(request.headers.get('content-length') ?? 0)
+  if (declaredLength > 4 * 1024) return json({ error: 'request too large' }, 413)
+
+  let body: unknown
+  try {
+    const text = await request.text()
+    if (new TextEncoder().encode(text).byteLength > 4 * 1024) {
+      return json({ error: 'request too large' }, 413)
+    }
+    body = JSON.parse(text)
+  } catch {
+    return json({ error: 'invalid profile request JSON' }, 400)
+  }
+
+  const modes = new Set(Object.values(GameMode))
+  if (
+    !record(body) ||
+    typeof body.userId !== 'string' ||
+    body.userId.length < 1 ||
+    body.userId.length > 256 ||
+    typeof body.principal !== 'string' ||
+    !/^0x[0-9a-f]{40}$/.test(body.principal) ||
+    !modes.has(body.mode as GameMode)
+  ) {
+    return json({ error: 'invalid profile request' }, 400)
+  }
+
+  if ((await deriveGamePrincipal(body.userId)) !== body.principal) {
+    return json({ error: 'identity principal mismatch' }, 403)
+  }
+
+  try {
+    const repository = new MatchRepository(env.AUTH_DB)
+    return json({
+      gameModeEnabled: enabledGameModes(env.ENABLED_GAME_MODES).has(
+        body.mode as GameMode
+      ),
+      profile: await repository.matchmakingProfile(
+        body.userId,
+        body.principal,
+        body.mode as GameMode,
+        season(env.CURRENT_SEASON)
+      )
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'player was not found') {
+      return json({ error: error.message }, 404)
+    }
+    console.error('matchmaking profile failed', error)
+    return json({ error: 'matchmaking profile failed' }, 500)
+  }
+}
 
 const dispatchToGame = async (
   request: CreateMatchRequest,
@@ -82,13 +170,17 @@ export default {
         protocolVersion: 1
       })
     }
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/internal/matchmaker/player-profile'
+    ) {
+      if (!authorized(request, env)) return json({ error: 'not found' }, 404)
+      return matchmakingProfile(request, env)
+    }
     if (request.method !== 'POST' || url.pathname !== '/internal/matches') {
       return json({ error: 'not found' }, 404)
     }
-    if (
-      env.INTERNAL_AUTH_SECRET.length < 16 ||
-      request.headers.get(INTERNAL_AUTH_HEADER) !== env.INTERNAL_AUTH_SECRET
-    ) {
+    if (!authorized(request, env)) {
       return json({ error: 'not found' }, 404)
     }
     const declaredLength = Number(request.headers.get('content-length') ?? 0)

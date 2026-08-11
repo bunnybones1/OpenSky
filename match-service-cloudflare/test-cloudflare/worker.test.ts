@@ -1,4 +1,5 @@
 import { GameMode } from '@opensky/proto'
+import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -71,9 +72,28 @@ const create = (body = dispatch(), secret = 'match-service-test-secret') =>
     body: JSON.stringify(body)
   })
 
+const profile = async (
+  mode: GameMode,
+  principal: string,
+  userId = USER_ID,
+  secret = 'match-service-test-secret'
+) =>
+  SELF.fetch(
+    'https://match-service.example/internal/matchmaker/player-profile',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [INTERNAL_AUTH_HEADER]: secret
+      },
+      body: JSON.stringify({ userId, principal, mode })
+    }
+  )
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
+    env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
     env.AUTH_DB.prepare('DELETE FROM game_accounts'),
     env.AUTH_DB.prepare('DELETE FROM player_card_unlocks'),
     env.AUTH_DB.prepare('DELETE FROM player_quests'),
@@ -89,6 +109,13 @@ beforeEach(async () => {
       `INSERT INTO users
          (id, display_name, primary_email, avatar_url, created_at, updated_at)
        VALUES (?, 'Cloud Player', 'player@example.com', NULL, ?, ?)`
+    ).bind(USER_ID, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_stats
+         (user_id, game_mode, season, score, player_rank, loss_streak,
+          player_rank_stage, created_at, updated_at)
+       VALUES (?, 'RANKED_CONSTRUCTED', 126, 1700, 'EXPERT', 1,
+               'STAGE_II', ?, ?)`
     ).bind(USER_ID, now, now),
     env.AUTH_DB.prepare(
       `INSERT INTO player_profiles
@@ -123,6 +150,61 @@ beforeEach(async () => {
 })
 
 describe('Cloud Weasel accepted-match service', () => {
+  it('resolves source matchmaking data and an existing match from D1', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, server_address, status, created_at, updated_at,
+            winner_player, result_json, ended_at)
+         VALUES ('profile-ended', 'profile-ended-replay', 'RANKED_CONSTRUCTED',
+                 'release-1', ?, ?, ?, NULL, '{}',
+                 'wss://match.example/ended', 'ended', ?, ?, 1, '{}', ?)`
+      ).bind(principal, PRINCIPAL, USER_ID, now, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, server_address, status, created_at, updated_at)
+         VALUES ('profile-active', 'profile-active-replay', 'PRACTICE_BOT',
+                 'release-1', ?, ?, ?, NULL, '{}',
+                 'wss://match.example/active', 'active', ?, ?)`
+      ).bind(principal, BOT_PLACEHOLDER, USER_ID, now, now)
+    ])
+
+    const response = await profile(GameMode.RANKED_CONSTRUCTED, principal)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      gameModeEnabled: true,
+      profile: {
+        score: 1600,
+        rank: 'EXPERT',
+        lostLastMatch: true,
+        cards: expect.arrayContaining([[6, 'base']]),
+        recentMatches: [{ opponentId: PRINCIPAL }],
+        activeMatch: {
+          mode: GameMode.PRACTICE_BOT,
+          serverAddress: 'wss://match.example/active'
+        }
+      }
+    })
+  })
+
+  it('disables unfinished conquest queues and rejects forged identity bindings', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const disabled = await profile(GameMode.CONQUEST_CONSTRUCTED, principal)
+    expect(await disabled.json()).toMatchObject({ gameModeEnabled: false })
+
+    const forged = await profile(GameMode.PRACTICE_BOT, PRINCIPAL)
+    expect(forged.status).toBe(403)
+    expect(await forged.json()).toEqual({
+      error: 'identity principal mismatch'
+    })
+  })
+
   it('builds an authoritative source-compatible practice match idempotently', async () => {
     const first = await create()
     expect(first.status).toBe(200)

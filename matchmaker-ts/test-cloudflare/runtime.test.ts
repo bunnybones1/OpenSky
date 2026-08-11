@@ -21,6 +21,7 @@ import {
 
 const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
+const PRINCIPAL_3 = '0x3333333333333333333333333333333333333333'
 
 const runtimeEnv = env as unknown as MatchmakerEnv
 const pool = () =>
@@ -176,6 +177,75 @@ describe('Cloudflare matchmaker Worker', () => {
       queuedPlayers: 0,
       activeProposals: 0,
       connectedSockets: 2
+    })
+  })
+
+  it('hydrates authoritative rank, score, cards and recent opponents before queueing', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(JSON.stringify(findCommand()))
+
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          {
+            headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+          }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const ticket = await state.storage.get<{
+          player: {
+            score: number
+            rank: string
+            lostLastMatch: boolean
+            cards: Array<[number, string]>
+            recentMatches: Array<{ opponentId: string }>
+          }
+        }>(`ticket:${PRINCIPAL_1}`)
+        expect(ticket?.player).toMatchObject({
+          score: 450,
+          rank: 'APPRENTICE',
+          lostLastMatch: true,
+          cards: [[6, 'base']],
+          recentMatches: [{ opponentId: PRINCIPAL_2 }]
+        })
+      }
+    )
+  })
+
+  it('reconnects an active player instead of creating a second queue ticket', async () => {
+    const [player] = track(await connect(PRINCIPAL_3, '192.0.2.3'))
+    const messages = collectMessages(player, 2)
+    player.send(JSON.stringify(findCommand(GameMode.PRACTICE_BOT)))
+    expect(await messages).toEqual([
+      {
+        type: 'match_made',
+        serverAddress: 'wss://match.example/v1/matches/existing'
+      },
+      { type: 'match_ready_to_start', mode: GameMode.PRACTICE_BOT }
+    ])
+
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('fails closed when an operationally disabled game mode is requested', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const error = nextMessage(player)
+    player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'GAME_MODE_DISABLED',
+      message: 'GAME_MODE_DISABLED',
+      level: 'server'
     })
   })
 

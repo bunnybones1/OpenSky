@@ -1,4 +1,4 @@
-import { ItemType, Quest } from '@opensky/proto'
+import { GameMode, ItemType, PlayerRank, Quest } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
 
 interface HumanProfileRow {
@@ -59,8 +59,172 @@ export interface NewMultiplayerMatch {
   createdAt: string
 }
 
+export interface MatchmakingProfile {
+  score: number
+  rank: PlayerRank
+  lostLastMatch: boolean
+  cards: Array<[number, 'base' | 'silver' | 'gold']>
+  recentMatches: Array<{ opponentId: string }>
+  activeMatch?: {
+    mode: GameMode
+    serverAddress: string
+  }
+}
+
+interface MatchmakingStatsRow {
+  score: number
+  player_rank: PlayerRank
+  loss_streak: number
+}
+
+interface MatchmakingItemRow {
+  card_id: number
+  item_type: ItemType
+}
+
+interface MatchmakingHistoryRow {
+  player1_principal: string
+  player2_principal: string
+}
+
+interface ActiveMatchRow {
+  mode: GameMode
+  server_address: string
+}
+
+const statsModeFor = (mode: GameMode): GameMode | undefined => {
+  switch (mode) {
+    case GameMode.PRACTICE_PVP:
+    case GameMode.RANKED_CONSTRUCTED:
+      return GameMode.RANKED_CONSTRUCTED
+    case GameMode.RANKED_DISCOVERY:
+      return GameMode.RANKED_DISCOVERY
+    case GameMode.CONQUEST_CONSTRUCTED:
+      return GameMode.CONQUEST_CONSTRUCTED
+    case GameMode.CONQUEST_DISCOVERY:
+      return GameMode.CONQUEST_DISCOVERY
+    default:
+      return undefined
+  }
+}
+
+const rarityPriority = {
+  base: 0,
+  silver: 1,
+  gold: 2
+} as const
+
+const rarityFor = (
+  itemType: ItemType
+): 'base' | 'silver' | 'gold' | undefined => {
+  switch (itemType) {
+    case ItemType.SW_BASE_CARDS:
+      return 'base'
+    case ItemType.SW_SILVER_CARDS:
+      return 'silver'
+    case ItemType.SW_GOLD_CARDS:
+      return 'gold'
+    default:
+      return undefined
+  }
+}
+
 export class MatchRepository {
   constructor(private readonly database: D1Database) {}
+
+  async matchmakingProfile(
+    userId: string,
+    principal: string,
+    mode: GameMode,
+    currentSeason: number
+  ): Promise<MatchmakingProfile> {
+    const statsMode = statsModeFor(mode)
+    const [user, stats, items, recent, active] = await Promise.all([
+      this.database
+        .prepare('SELECT 1 AS present FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ present: number }>(),
+      statsMode
+        ? this.database
+            .prepare(
+              `SELECT score, player_rank, loss_streak
+               FROM player_account_stats
+               WHERE user_id = ? AND game_mode = ? AND season = ?`
+            )
+            .bind(userId, statsMode, currentSeason)
+            .first<MatchmakingStatsRow>()
+        : Promise.resolve(null),
+      this.database
+        .prepare(
+          `SELECT card_id, item_type
+           FROM player_card_unlocks
+           WHERE user_id = ? AND item_type IN
+             ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
+        )
+        .bind(userId)
+        .all<MatchmakingItemRow>(),
+      this.database
+        .prepare(
+          `SELECT player1_principal, player2_principal
+           FROM multiplayer_matches
+           WHERE status = 'ended'
+             AND winner_player IS NOT NULL
+             AND (player1_principal = ? OR player2_principal = ?)
+           ORDER BY ended_at DESC, id DESC
+           LIMIT 1`
+        )
+        .bind(principal, principal)
+        .first<MatchmakingHistoryRow>(),
+      this.database
+        .prepare(
+          `SELECT mode, server_address
+           FROM multiplayer_matches
+           WHERE status = 'active' AND server_address IS NOT NULL
+             AND (player1_principal = ? OR player2_principal = ?)
+           ORDER BY updated_at DESC, id DESC
+           LIMIT 1`
+        )
+        .bind(principal, principal)
+        .first<ActiveMatchRow>()
+    ])
+    if (!user) throw new Error('player was not found')
+
+    const cards = new Map<number, 'base' | 'silver' | 'gold'>()
+    for (const item of items.results) {
+      const rarity = rarityFor(item.item_type)
+      if (!rarity) continue
+      const current = cards.get(item.card_id)
+      if (!current || rarityPriority[rarity] > rarityPriority[current]) {
+        cards.set(item.card_id, rarity)
+      }
+    }
+
+    const recentMatches = recent
+      ? [
+          {
+            opponentId:
+              recent.player1_principal === principal
+                ? recent.player2_principal
+                : recent.player1_principal
+          }
+        ]
+      : []
+    return {
+      score: Math.min(1600, stats?.score ?? 0),
+      rank: stats?.player_rank ?? PlayerRank.UNKNOWN,
+      lostLastMatch: (stats?.loss_streak ?? 0) > 0,
+      cards: [...cards.entries()].sort(([left], [right]) => left - right),
+      recentMatches,
+      ...(active
+        ? {
+            activeMatch: {
+              mode: active.mode,
+              serverAddress: active.server_address
+            }
+          }
+        : {})
+    }
+  }
 
   findByProposal(proposalId: string) {
     return this.database

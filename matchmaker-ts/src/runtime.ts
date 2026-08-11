@@ -106,6 +106,25 @@ interface RuntimeConfig {
   strictConquestMatching: boolean
 }
 
+interface MatchmakingProfile {
+  score: number
+  rank: PlayerRank
+  lostLastMatch: boolean
+  cards: Array<[number, Rarity]>
+  recentMatches: Array<{ opponentId: string }>
+  activeMatch?: {
+    mode: GameMode
+    serverAddress: string
+  }
+}
+
+const playerRanks = new Set(Object.values(PlayerRank))
+const gameModes = new Set(Object.values(GameMode))
+const rarities = new Set<Rarity>(['base', 'silver', 'gold'])
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
 const parsePositiveInteger = (
   value: string | undefined,
   fallback: number,
@@ -331,6 +350,19 @@ export class MatchmakerPool implements DurableObject {
       }
     }
 
+    const profile = await this.loadPlayerProfile(attachment, command.mode)
+    if (profile.activeMatch) {
+      this.sendToPrincipal(attachment.principal, {
+        type: 'match_made',
+        serverAddress: profile.activeMatch.serverAddress
+      })
+      this.sendToPrincipal(attachment.principal, {
+        type: 'match_ready_to_start',
+        mode: profile.activeMatch.mode
+      })
+      return
+    }
+
     const player = createPlayer({
       address: attachment.principal,
       mode: command.mode,
@@ -340,11 +372,11 @@ export class MatchmakerPool implements DurableObject {
       clientVersionHash: command.versionHash,
       ipAddress: attachment.clientIp,
       initTimestampMs: Date.now(),
-      // These fields are deliberately server defaults until the account profile
-      // resolver milestone. They are never accepted from the client message.
-      score: 0,
-      rank: PlayerRank.UNKNOWN,
-      lostLastMatch: false
+      score: profile.score,
+      rank: profile.rank,
+      lostLastMatch: profile.lostLastMatch,
+      cards: new Map(profile.cards),
+      recentMatches: profile.recentMatches
     })
     const ticket: StoredTicket = {
       player: serializePlayer(player),
@@ -359,6 +391,121 @@ export class MatchmakerPool implements DurableObject {
     console.log('matchmaker ticket accepted', command.mode)
     await this.attemptMatches(Date.now())
     await this.rescheduleAlarm(Date.now())
+  }
+
+  private async loadPlayerProfile(
+    attachment: SocketAttachment,
+    mode: GameMode
+  ): Promise<MatchmakingProfile> {
+    if (!this.env.MATCH_SERVICE) {
+      throw new ProtocolError('SERVER_ERROR', 'match service is unavailable')
+    }
+    let response: Response
+    try {
+      response = await this.env.MATCH_SERVICE.fetch(
+        new Request(
+          'https://cloud-weasel-match/internal/matchmaker/player-profile',
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+            },
+            body: JSON.stringify({
+              userId: attachment.userId,
+              principal: attachment.principal,
+              mode
+            })
+          }
+        )
+      )
+    } catch {
+      throw new ProtocolError('SERVER_ERROR', 'matchmaking profile failed')
+    }
+    if (response.status === 404) {
+      throw new ProtocolError('INVALID_ACCOUNT', 'player account was not found')
+    }
+    if (!response.ok) {
+      throw new ProtocolError('SERVER_ERROR', 'matchmaking profile failed')
+    }
+
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking profile')
+    }
+    if (!isRecord(body) || typeof body.gameModeEnabled !== 'boolean') {
+      throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking profile')
+    }
+    if (!body.gameModeEnabled) {
+      throw new ProtocolError('GAME_MODE_DISABLED', 'GAME_MODE_DISABLED')
+    }
+    const profile = body.profile
+    if (
+      !isRecord(profile) ||
+      !Number.isSafeInteger(profile.score) ||
+      Math.abs(profile.score as number) > 2_147_483_647 ||
+      !playerRanks.has(profile.rank as PlayerRank) ||
+      typeof profile.lostLastMatch !== 'boolean' ||
+      !Array.isArray(profile.cards) ||
+      profile.cards.length > 5_000 ||
+      !Array.isArray(profile.recentMatches) ||
+      profile.recentMatches.length > 20
+    ) {
+      throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking profile')
+    }
+
+    const cards = profile.cards.map(entry => {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        !Number.isSafeInteger(entry[0]) ||
+        (entry[0] as number) < 0 ||
+        !rarities.has(entry[1] as Rarity)
+      ) {
+        throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking cards')
+      }
+      return [entry[0] as number, entry[1] as Rarity] as [number, Rarity]
+    })
+    const recentMatches = profile.recentMatches.map(recent => {
+      if (
+        !isRecord(recent) ||
+        typeof recent.opponentId !== 'string' ||
+        !/^0x[0-9a-f]{40}$/.test(recent.opponentId)
+      ) {
+        throw new ProtocolError(
+          'SERVER_ERROR',
+          'invalid matchmaking history'
+        )
+      }
+      return { opponentId: recent.opponentId }
+    })
+
+    let activeMatch: MatchmakingProfile['activeMatch']
+    if (profile.activeMatch !== undefined) {
+      if (
+        !isRecord(profile.activeMatch) ||
+        !gameModes.has(profile.activeMatch.mode as GameMode) ||
+        typeof profile.activeMatch.serverAddress !== 'string' ||
+        !/^wss?:\/\//.test(profile.activeMatch.serverAddress)
+      ) {
+        throw new ProtocolError('SERVER_ERROR', 'invalid active match')
+      }
+      activeMatch = {
+        mode: profile.activeMatch.mode as GameMode,
+        serverAddress: profile.activeMatch.serverAddress
+      }
+    }
+
+    return {
+      score: profile.score as number,
+      rank: profile.rank as PlayerRank,
+      lostLastMatch: profile.lostLastMatch,
+      cards,
+      recentMatches,
+      ...(activeMatch ? { activeMatch } : {})
+    }
   }
 
   private async acceptMatch(principal: string) {

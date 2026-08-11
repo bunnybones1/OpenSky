@@ -16,7 +16,11 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - the existing join, reconnect, loading, gameplay, timer, emote, mute,
   timesync, disconnect, abandon, and match-ended messages;
 - WebSocket hibernation, duplicate-connection eviction, Durable Object alarms,
-  and restore-on-event behavior.
+  and restore-on-event behavior;
+- source bot decisions on durable alarms;
+- source quest evaluation with hibernation-safe runtime snapshots; and
+- idempotent quest progression, competitive counters, and match completion in
+  D1.
 
 The gateway, not the browser, is the identity authority. It validates the
 Google session, maps the user to the stable 20-byte game principal, then adds
@@ -25,11 +29,9 @@ fields remain on source-compatible client messages but are not trusted.
 
 ## Deliberately pending
 
-The original bot decision loop, spectator sessions, replay/match-log upload,
-quest progress, rewards, and API match-registry callbacks remain in `server/`
-and must be ported as later milestones before this service replaces the full
-production game-server fleet. Practice matchmaking can create a bot match in
-the current matchmaker, but the bot cannot yet take turns in this Worker.
+Spectator sessions, replay/match-log archival, full end-of-match rewards/rank
+transitions, and Conquest state remain in `server/` and must be ported as later
+milestones before this service replaces every production game-server behavior.
 
 ## Configuration
 

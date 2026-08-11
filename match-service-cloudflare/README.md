@@ -6,6 +6,12 @@ the authoritative game-server Durable Object. It preserves the source
 loads the authenticated player's account and unlocked cards, creates source-
 compatible bot participants, and dispatches an idempotent match creation call.
 
+It also exposes an internal, authenticated matchmaking-profile endpoint. That
+endpoint verifies the identity-to-game-principal binding and resolves current
+rank/MMR, card rarities, recent-match state, enabled modes, and active-match
+reconnection data from D1. Conquest modes are deliberately disabled until the
+Conquest state/reward port is complete.
+
 The endpoint is not public. `cloud-weasel-matchmaker` calls
 `POST /internal/matches` over a Cloudflare service binding. Both Workers must
 have the same `INTERNAL_AUTH_SECRET` Wrangler secret (at least 16 characters),

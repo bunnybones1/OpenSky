@@ -31,6 +31,13 @@ binding with the proposal ID as an idempotency key. A successful game-server
 allocation returns a WebSocket address; only then does the matchmaker send the
 existing `match_made` and `match_ready_to_start` messages.
 
+Before a queue ticket is written, the same internal binding resolves the
+source-authoritative player inputs from D1: current mode score/rank, highest
+owned card rarity, last opponent/loss state, operational game-mode status, and
+any active match. An active match is replayed to the browser instead of creating
+a competing ticket. Malformed, unavailable, or identity-mismatched profile data
+fails closed and is never replaced by client-provided values.
+
 ## Deployment gates
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
@@ -43,8 +50,8 @@ existing `match_made` and `match_ready_to_start` messages.
 
 ## Remaining source behavior
 
-The account profile resolver (MMR/rank/card ownership/recent opponents), game
-mode status, existing-match checks, captcha policy, refusal penalties, and
-match-info REST endpoint still need their API-backed Cloudflare adapters. Their
-absence is explicit; the runtime never accepts those authoritative values from
-the browser as a shortcut.
+Captcha policy, refusal penalties, shadow-ban state, and Conquest state still
+need Cloudflare adapters. The same-origin gateway already provides the source
+match-info response for reconnects. Conquest queues remain operationally
+disabled until their state and rewards are ported; the matchmaker does not
+pretend an incomplete mode is available.
