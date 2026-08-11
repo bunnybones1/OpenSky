@@ -47,6 +47,7 @@ import {
   LocalGameMode
 } from './helpers/envGameModeHelpers'
 import { getTimeMarker } from './helpers/timeMarker'
+import { fetchIdentityGamePrincipal } from './identitySession'
 import queryParams from './queryParams'
 import { matchEnded, store } from './state'
 import { statePlayer } from './state/StatePlayer'
@@ -135,12 +136,10 @@ export async function initializeGame() {
 
         account = session.account
         if (env.AUTH_MODE === 'google') {
-          const gamePrincipal = (
-            session as typeof session & { gamePrincipal?: string }
-          ).gamePrincipal
-          if (!gamePrincipal || !/^0x[0-9a-f]{40}$/.test(gamePrincipal)) {
-            throw new Error('No valid game principal found for this session.')
-          }
+          // Google identity metadata lives on the identity endpoint rather than
+          // the legacy generated RPC contract, which intentionally strips
+          // fields it does not know about.
+          const gamePrincipal = await fetchIdentityGamePrincipal(env.API_HOST)
           account = { ...account, address: gamePrincipal }
         }
       } else {
