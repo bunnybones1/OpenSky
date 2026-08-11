@@ -19,10 +19,12 @@ import {
   createBotPlayer,
   createPlayer,
   isBot,
+  isChallengeMatch,
   isConquestMatch,
   MatchmakerPlayer,
   Rarity
 } from './model'
+import { PenaltyTracker, readPenaltyConfig } from './penalties'
 import {
   errorMessage,
   FindMatchCommand,
@@ -45,6 +47,9 @@ export interface MatchmakerEnv {
   INTERNAL_AUTH_SECRET: string
   ALLOWED_ORIGINS?: string
   MATCH_ACCEPTANCE_TIMEOUT_MS?: string
+  MATCH_ACCEPTANCE_PENALTY_MS?: string
+  MATCH_REFUSAL_WINDOW_MS?: string
+  MATCH_REFUSAL_PENALTY_SECONDS?: string
   MATCH_TICK_MS?: string
   RELAX_MATCHING_INTERVAL_MS?: string
   ENABLE_RANKED_BOTS?: string
@@ -188,7 +193,7 @@ const prismMap: Record<string, CardClass> = {
 const prismsFromPrivateSeed = (privateSeed: Record<string, unknown>) => {
   const values = Array.isArray(privateSeed.prisms) ? privateSeed.prisms : []
   return values
-    .map((value) => (typeof value === 'string' ? prismMap[value] : undefined))
+    .map(value => (typeof value === 'string' ? prismMap[value] : undefined))
     .filter((value): value is CardClass => value !== undefined)
 }
 
@@ -204,23 +209,28 @@ const participantFromBot = (player: MatchmakerPlayer): StoredParticipant => ({
 
 const humanParticipants = (proposal: StoredProposal) =>
   proposal.participants.filter(
-    (participant) => !isBot(deserializePlayer(participant.player))
+    participant => !isBot(deserializePlayer(participant.player))
   )
 
 export class MatchmakerPool implements DurableObject {
   private readonly config: RuntimeConfig
+  private readonly penalties: PenaltyTracker
 
   constructor(
     private readonly state: DurableObjectState,
     private readonly env: MatchmakerEnv
   ) {
     this.config = readConfig(env)
+    this.penalties = new PenaltyTracker(state.storage, readPenaltyConfig(env))
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/internal/status') {
-      if (request.headers.get(INTERNAL_AUTH_HEADER) !== this.env.INTERNAL_AUTH_SECRET) {
+      if (
+        request.headers.get(INTERNAL_AUTH_HEADER) !==
+        this.env.INTERNAL_AUTH_SECRET
+      ) {
         return Response.json({ error: 'not found' }, { status: 404 })
       }
       const [tickets, proposals] = await Promise.all([
@@ -241,7 +251,8 @@ export class MatchmakerPool implements DurableObject {
     }
 
     const attachment = this.attachmentFromRequest(request)
-    if (!attachment) return new Response('Missing trusted identity', { status: 401 })
+    if (!attachment)
+      return new Response('Missing trusted identity', { status: 401 })
 
     const previousSockets = this.state.getWebSockets(attachment.principal)
     const pair = new WebSocketPair()
@@ -262,9 +273,13 @@ export class MatchmakerPool implements DurableObject {
   }
 
   async webSocketMessage(webSocket: WebSocket, raw: string | ArrayBuffer) {
-    const attachment = webSocket.deserializeAttachment() as SocketAttachment | null
+    const attachment =
+      webSocket.deserializeAttachment() as SocketAttachment | null
     if (!attachment) {
-      this.safeSend(webSocket, errorMessage('INVALID_OPERATION', 'missing identity'))
+      this.safeSend(
+        webSocket,
+        errorMessage('INVALID_OPERATION', 'missing identity')
+      )
       webSocket.close(1008, 'Missing identity')
       return
     }
@@ -290,7 +305,11 @@ export class MatchmakerPool implements DurableObject {
       }
     } catch (error) {
       if (error instanceof ProtocolError) {
-        console.warn('matchmaker protocol rejected', error.reason, error.message)
+        console.warn(
+          'matchmaker protocol rejected',
+          error.reason,
+          error.message
+        )
         this.safeSend(webSocket, errorMessage(error.reason, error.message))
       } else {
         console.error('matchmaker message failed', error)
@@ -317,20 +336,26 @@ export class MatchmakerPool implements DurableObject {
   private attachmentFromRequest(request: Request): SocketAttachment | null {
     const principal = request.headers.get(TRUSTED_PRINCIPAL_HEADER)
     const userId = request.headers.get(TRUSTED_USER_ID_HEADER)
-    if (!principal || !/^0x[0-9a-f]{40}$/.test(principal) || !userId) return null
+    if (!principal || !/^0x[0-9a-f]{40}$/.test(principal) || !userId)
+      return null
     return {
       principal,
       userId: userId.slice(0, 256),
-      displayName: (request.headers.get(TRUSTED_DISPLAY_NAME_HEADER) ?? '').slice(
+      displayName: (
+        request.headers.get(TRUSTED_DISPLAY_NAME_HEADER) ?? ''
+      ).slice(0, 256),
+      clientIp: (request.headers.get(TRUSTED_CLIENT_IP_HEADER) ?? '').slice(
         0,
-        256
+        128
       ),
-      clientIp: (request.headers.get(TRUSTED_CLIENT_IP_HEADER) ?? '').slice(0, 128),
       connectedAtMs: Date.now()
     }
   }
 
-  private async findMatch(attachment: SocketAttachment, command: FindMatchCommand) {
+  private async findMatch(
+    attachment: SocketAttachment,
+    command: FindMatchCommand
+  ) {
     const pendingProposalId = await this.state.storage.get<string>(
       pendingKey(attachment.principal)
     )
@@ -359,6 +384,18 @@ export class MatchmakerPool implements DurableObject {
       this.sendToPrincipal(attachment.principal, {
         type: 'match_ready_to_start',
         mode: profile.activeMatch.mode
+      })
+      return
+    }
+
+    const penaltyMs = await this.penalties.getPenaltyMs({
+      address: attachment.principal,
+      mode: command.mode
+    })
+    if (penaltyMs > 0) {
+      this.sendToPrincipal(attachment.principal, {
+        type: 'match_refusal_cooldown',
+        durationSeconds: Math.floor(penaltyMs / 1_000)
       })
       return
     }
@@ -474,10 +511,7 @@ export class MatchmakerPool implements DurableObject {
         typeof recent.opponentId !== 'string' ||
         !/^0x[0-9a-f]{40}$/.test(recent.opponentId)
       ) {
-        throw new ProtocolError(
-          'SERVER_ERROR',
-          'invalid matchmaking history'
-        )
+        throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking history')
       }
       return { opponentId: recent.opponentId }
     })
@@ -523,7 +557,9 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async recordAcceptance(proposal: StoredProposal, principal: string) {
-    const addresses = proposal.participants.map((participant) => participant.player.address)
+    const addresses = proposal.participants.map(
+      participant => participant.player.address
+    )
     if (!addresses.includes(principal)) {
       this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
       return
@@ -532,9 +568,12 @@ export class MatchmakerPool implements DurableObject {
 
     proposal.accepted.push(principal)
     await this.state.storage.put(proposalKey(proposal.id), proposal)
-    this.broadcastProposal(proposal, { type: 'accept_match', playerID: principal })
+    this.broadcastProposal(proposal, {
+      type: 'accept_match',
+      playerID: principal
+    })
 
-    if (addresses.every((address) => proposal.accepted.includes(address))) {
+    if (addresses.every(address => proposal.accepted.includes(address))) {
       proposal.status = 'ACCEPTED'
       proposal.nextDispatchAtMs = Date.now()
       await this.state.storage.put(proposalKey(proposal.id), proposal)
@@ -549,14 +588,20 @@ export class MatchmakerPool implements DurableObject {
       return
     }
     const player = proposal.participants.find(
-      (participant) => participant.player.address === principal
+      participant => participant.player.address === principal
     )
     if (player && isConquestMatch(deserializePlayer(player.player))) {
       this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
       return
     }
-    this.broadcastProposal(proposal, { type: 'decline_match', playerID: principal })
+    this.broadcastProposal(proposal, {
+      type: 'decline_match',
+      playerID: principal
+    })
     await this.deleteProposal(proposal)
+    if (player && !isChallengeMatch(deserializePlayer(player.player))) {
+      await this.penalties.setRefusalPenalty(deserializePlayer(player.player))
+    }
     await this.rescheduleAlarm(Date.now())
   }
 
@@ -564,17 +609,20 @@ export class MatchmakerPool implements DurableObject {
     const storedTickets = await this.state.storage.list<StoredTicket>({
       prefix: TICKET_PREFIX
     })
-    const tickets = [...storedTickets.values()].filter((ticket) =>
+    const tickets = [...storedTickets.values()].filter(ticket =>
       this.hasSocket(ticket.player.address)
     )
-    const byAddress = new Map(tickets.map((ticket) => [ticket.player.address, ticket]))
+    const byAddress = new Map(
+      tickets.map(ticket => [ticket.player.address, ticket])
+    )
 
     for (const ticket of tickets.filter(
-      (current) =>
+      current =>
         current.player.mode === GameMode.PRACTICE_BOT ||
         current.player.mode === GameMode.WARM_UP
     )) {
-      if (!(await this.state.storage.get(ticketKey(ticket.player.address)))) continue
+      if (!(await this.state.storage.get(ticketKey(ticket.player.address))))
+        continue
       const human = deserializePlayer(ticket.player)
       await this.createProposal(
         [human, createBotPlayer(human.mode, { prisms: human.prisms })],
@@ -593,9 +641,9 @@ export class MatchmakerPool implements DurableObject {
     ]
     for (const modes of groups) {
       const candidates = [...byAddress.values()]
-        .filter((ticket) => modes.includes(ticket.player.mode))
-        .filter((ticket) => storedTickets.has(ticketKey(ticket.player.address)))
-        .map((ticket) => deserializePlayer(ticket.player))
+        .filter(ticket => modes.includes(ticket.player.mode))
+        .filter(ticket => storedTickets.has(ticketKey(ticket.player.address)))
+        .map(ticket => deserializePlayer(ticket.player))
       await this.matchGroup(candidates, byAddress, now, modes)
     }
   }
@@ -608,8 +656,9 @@ export class MatchmakerPool implements DurableObject {
   ) {
     if (players.length === 0) return
     const rankedGroup = modes.some(
-      (mode) =>
-        mode === GameMode.RANKED_CONSTRUCTED || mode === GameMode.RANKED_DISCOVERY
+      mode =>
+        mode === GameMode.RANKED_CONSTRUCTED ||
+        mode === GameMode.RANKED_DISCOVERY
     )
     const candidates = [...players]
     if (rankedGroup && this.config.enableRankedBots) {
@@ -629,7 +678,11 @@ export class MatchmakerPool implements DurableObject {
       [100, 200, 300, 400],
       () => now
     )
-    const conquestWins = new WaitTimeScoreCalculator(interval, [0, 1, 2], () => now)
+    const conquestWins = new WaitTimeScoreCalculator(
+      interval,
+      [0, 1, 2],
+      () => now
+    )
     const conquestElo = new WaitTimeScoreCalculator(
       interval,
       [2, 5, 9, 14, Number.MAX_SAFE_INTEGER],
@@ -656,7 +709,7 @@ export class MatchmakerPool implements DurableObject {
       () => now
     )
     const proposals = processCombinations(combinations, {
-      createRegistered: (player) =>
+      createRegistered: player =>
         createBotPlayer(player.mode, { prisms: player.prisms })
     })
     for (const proposal of proposals) {
@@ -669,8 +722,10 @@ export class MatchmakerPool implements DurableObject {
     byAddress: Map<string, StoredTicket>,
     now: number
   ) {
-    const humanAddresses = players.filter((player) => !isBot(player)).map((p) => p.address)
-    if (humanAddresses.some((address) => !byAddress.has(address))) return
+    const humanAddresses = players
+      .filter(player => !isBot(player))
+      .map(p => p.address)
+    if (humanAddresses.some(address => !byAddress.has(address))) return
     for (const address of humanAddresses) {
       if (!(await this.state.storage.get(ticketKey(address)))) return
     }
@@ -679,9 +734,11 @@ export class MatchmakerPool implements DurableObject {
     const proposal: StoredProposal = {
       id: matchProposal.id,
       status: 'FOUND',
-      participants: players.map((player) => {
+      participants: players.map(player => {
         const ticket = byAddress.get(player.address)
-        return ticket ? participantFromTicket(ticket) : participantFromBot(player)
+        return ticket
+          ? participantFromTicket(ticket)
+          : participantFromBot(player)
       }),
       accepted: [],
       createdAtMs: now,
@@ -690,8 +747,11 @@ export class MatchmakerPool implements DurableObject {
       dispatchAttempts: 0
     }
 
-    const writes: Record<string, unknown> = { [proposalKey(proposal.id)]: proposal }
-    for (const principal of humanAddresses) writes[pendingKey(principal)] = proposal.id
+    const writes: Record<string, unknown> = {
+      [proposalKey(proposal.id)]: proposal
+    }
+    for (const principal of humanAddresses)
+      writes[pendingKey(principal)] = proposal.id
     await this.state.storage.put(writes)
     await this.state.storage.delete(humanAddresses.map(ticketKey))
     console.log(
@@ -703,14 +763,14 @@ export class MatchmakerPool implements DurableObject {
 
     for (const principal of humanAddresses) {
       const participant = proposal.participants.find(
-        (current) => current.player.address === principal
+        current => current.player.address === principal
       )
       if (!participant) continue
       this.sendToPrincipal(principal, {
         type: 'match_found',
         mode: participant.player.mode,
         timeoutMs: this.config.acceptanceTimeoutMs,
-        playerIDs: proposal.participants.map((current) => current.player.address)
+        playerIDs: proposal.participants.map(current => current.player.address)
       })
     }
   }
@@ -744,7 +804,9 @@ export class MatchmakerPool implements DurableObject {
     if (proposal.status !== 'FOUND') return
     const match = new MatchProposal(
       proposal.id,
-      proposal.participants.map((participant) => deserializePlayer(participant.player))
+      proposal.participants.map(participant =>
+        deserializePlayer(participant.player)
+      )
     )
     if (match.isConquest()) {
       for (const participant of proposal.participants) {
@@ -755,6 +817,15 @@ export class MatchmakerPool implements DurableObject {
       return
     }
     this.broadcastProposal(proposal, { type: 'timed_out' })
+    for (const participant of humanParticipants(proposal)) {
+      const player = deserializePlayer(participant.player)
+      if (
+        !proposal.accepted.includes(player.address) &&
+        !isChallengeMatch(player)
+      ) {
+        await this.penalties.setAcceptTimeoutPenalty(player)
+      }
+    }
     await this.deleteProposal(proposal)
   }
 
@@ -766,6 +837,17 @@ export class MatchmakerPool implements DurableObject {
     await this.state.storage.put(proposalKey(proposal.id), proposal)
 
     try {
+      if (
+        !proposal.participants.some(participant =>
+          isBot(deserializePlayer(participant.player))
+        )
+      ) {
+        for (const participant of humanParticipants(proposal)) {
+          await this.penalties.deleteRefusalPenalty(
+            deserializePlayer(participant.player)
+          )
+        }
+      }
       const response = await this.env.MATCH_SERVICE.fetch(
         new Request('https://cloud-weasel-match/internal/matches', {
           method: 'POST',
@@ -781,9 +863,13 @@ export class MatchmakerPool implements DurableObject {
           })
         })
       )
-      if (!response.ok) throw new Error(`match service returned ${response.status}`)
+      if (!response.ok)
+        throw new Error(`match service returned ${response.status}`)
       const result = (await response.json()) as { serverAddress?: unknown }
-      if (typeof result.serverAddress !== 'string' || result.serverAddress.length === 0) {
+      if (
+        typeof result.serverAddress !== 'string' ||
+        result.serverAddress.length === 0
+      ) {
         throw new Error('match service omitted serverAddress')
       }
       for (const participant of humanParticipants(proposal)) {
@@ -801,7 +887,8 @@ export class MatchmakerPool implements DurableObject {
       console.error('match dispatch failed', proposal.id, error)
       proposal.status = 'ACCEPTED'
       proposal.nextDispatchAtMs =
-        Date.now() + Math.min(30_000, 1_000 * 2 ** Math.min(proposal.dispatchAttempts, 5))
+        Date.now() +
+        Math.min(30_000, 1_000 * 2 ** Math.min(proposal.dispatchAttempts, 5))
       await this.state.storage.put(proposalKey(proposal.id), proposal)
     }
   }
@@ -816,7 +903,8 @@ export class MatchmakerPool implements DurableObject {
     for (const proposal of proposalValues) {
       if (proposal.status === 'FOUND') {
         candidates.push(proposal.expiresAtMs)
-        if (proposal.botAcceptAtMs !== undefined) candidates.push(proposal.botAcceptAtMs)
+        if (proposal.botAcceptAtMs !== undefined)
+          candidates.push(proposal.botAcceptAtMs)
       } else if (
         proposal.nextDispatchAtMs !== undefined &&
         this.env.MATCH_SERVICE !== undefined
@@ -824,11 +912,16 @@ export class MatchmakerPool implements DurableObject {
         candidates.push(proposal.nextDispatchAtMs)
       }
     }
-    if (tickets.size >= 2 || (tickets.size >= 1 && this.config.enableRankedBots)) {
+    if (
+      tickets.size >= 2 ||
+      (tickets.size >= 1 && this.config.enableRankedBots)
+    ) {
       candidates.push(now + this.config.tickMs)
     }
 
-    const next = candidates.filter((candidate) => candidate > now).sort((a, b) => a - b)[0]
+    const next = candidates
+      .filter(candidate => candidate > now)
+      .sort((a, b) => a - b)[0]
     if (next !== undefined) await this.state.storage.setAlarm(next)
     else await this.state.storage.deleteAlarm()
   }
@@ -842,7 +935,7 @@ export class MatchmakerPool implements DurableObject {
 
   private replayProposal(principal: string, proposal: StoredProposal) {
     const participant = proposal.participants.find(
-      (current) => current.player.address === principal
+      current => current.player.address === principal
     )
     if (!participant) return
     if (proposal.status === 'FOUND') {
@@ -850,18 +943,21 @@ export class MatchmakerPool implements DurableObject {
         type: 'match_found',
         mode: participant.player.mode,
         timeoutMs: Math.max(0, proposal.expiresAtMs - Date.now()),
-        playerIDs: proposal.participants.map((current) => current.player.address)
+        playerIDs: proposal.participants.map(current => current.player.address)
       })
     }
     for (const accepted of proposal.accepted) {
-      this.sendToPrincipal(principal, { type: 'accept_match', playerID: accepted })
+      this.sendToPrincipal(principal, {
+        type: 'accept_match',
+        playerID: accepted
+      })
     }
   }
 
   private async deleteProposal(proposal: StoredProposal) {
     await this.state.storage.delete([
       proposalKey(proposal.id),
-      ...humanParticipants(proposal).map((participant) =>
+      ...humanParticipants(proposal).map(participant =>
         pendingKey(participant.player.address)
       )
     ])
@@ -900,25 +996,35 @@ export class MatchmakerPool implements DurableObject {
   private hasSocket(principal: string) {
     return this.state
       .getWebSockets(principal)
-      .some((socket) => socket.readyState === WebSocket.OPEN)
+      .some(socket => socket.readyState === WebSocket.OPEN)
   }
 
   private async cleanupSocket(webSocket: WebSocket) {
-    const attachment = webSocket.deserializeAttachment() as SocketAttachment | null
+    const attachment =
+      webSocket.deserializeAttachment() as SocketAttachment | null
     if (!attachment) return
     if (this.hasSocket(attachment.principal)) return
     await this.state.storage.delete(ticketKey(attachment.principal))
     const proposal = await this.proposalForPrincipal(attachment.principal)
     if (proposal) {
       const participant = proposal.participants.find(
-        (current) => current.player.address === attachment.principal
+        current => current.player.address === attachment.principal
       )
-      if (!participant || !isConquestMatch(deserializePlayer(participant.player))) {
+      if (
+        !participant ||
+        !isConquestMatch(deserializePlayer(participant.player))
+      ) {
         this.broadcastProposal(proposal, {
           type: 'decline_match',
           playerID: attachment.principal
         })
         await this.deleteProposal(proposal)
+        if (participant) {
+          const player = deserializePlayer(participant.player)
+          if (!isChallengeMatch(player)) {
+            await this.penalties.setRefusalPenalty(player)
+          }
+        }
       }
     }
     await this.rescheduleAlarm(Date.now())

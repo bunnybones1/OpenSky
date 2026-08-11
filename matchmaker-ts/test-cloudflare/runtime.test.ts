@@ -28,17 +28,20 @@ const pool = () =>
   runtimeEnv.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME)
 
 const connect = async (principal: string, ip: string) => {
-  const response = await SELF.fetch('https://matchmaker.example/v1/matchmaker', {
-    headers: {
-      Upgrade: 'websocket',
-      Origin: 'https://opensky.example',
-      [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret',
-      [TRUSTED_PRINCIPAL_HEADER]: principal,
-      [TRUSTED_USER_ID_HEADER]: `user-${principal.slice(2, 6)}`,
-      [TRUSTED_DISPLAY_NAME_HEADER]: `Player ${principal.slice(2, 4)}`,
-      [TRUSTED_CLIENT_IP_HEADER]: ip
+  const response = await SELF.fetch(
+    'https://matchmaker.example/v1/matchmaker',
+    {
+      headers: {
+        Upgrade: 'websocket',
+        Origin: 'https://opensky.example',
+        [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret',
+        [TRUSTED_PRINCIPAL_HEADER]: principal,
+        [TRUSTED_USER_ID_HEADER]: `user-${principal.slice(2, 6)}`,
+        [TRUSTED_DISPLAY_NAME_HEADER]: `Player ${principal.slice(2, 4)}`,
+        [TRUSTED_CLIENT_IP_HEADER]: ip
+      }
     }
-  })
+  )
   expect(response.status).toBe(101)
   const webSocket = response.webSocket
   expect(webSocket).not.toBeNull()
@@ -48,10 +51,13 @@ const connect = async (principal: string, ip: string) => {
 
 const nextMessage = (webSocket: WebSocket) =>
   new Promise<Record<string, unknown>>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('timed out waiting for message')), 2_000)
+    const timeout = setTimeout(
+      () => reject(new Error('timed out waiting for message')),
+      2_000
+    )
     webSocket.addEventListener(
       'message',
-      (event) => {
+      event => {
         clearTimeout(timeout)
         resolve(JSON.parse(event.data as string))
       },
@@ -62,7 +68,10 @@ const nextMessage = (webSocket: WebSocket) =>
 const collectMessages = (webSocket: WebSocket, count: number) =>
   new Promise<Record<string, unknown>[]>((resolve, reject) => {
     const messages: Record<string, unknown>[] = []
-    const timeout = setTimeout(() => reject(new Error('timed out waiting for messages')), 2_000)
+    const timeout = setTimeout(
+      () => reject(new Error('timed out waiting for messages')),
+      2_000
+    )
     const listener = (event: MessageEvent) => {
       messages.push(JSON.parse(event.data as string))
       if (messages.length === count) {
@@ -74,7 +83,7 @@ const collectMessages = (webSocket: WebSocket, count: number) =>
     webSocket.addEventListener('message', listener)
   })
 
-const findCommand = (mode = GameMode.RANKED_CONSTRUCTED) => ({
+const findCommand = (mode = GameMode.RANKED_CONSTRUCTED, sessionID = '') => ({
   type: 'find_match',
   authToken: 'legacy-token-is-not-trusted',
   privateSeed: {
@@ -83,29 +92,34 @@ const findCommand = (mode = GameMode.RANKED_CONSTRUCTED) => ({
     cards: [],
     randomSeed: Array(16).fill(1)
   },
-  sessionID: '',
+  sessionID,
   mode,
   versionHash: 'release-1',
   playerSessionID: crypto.randomUUID()
 })
 
-const pairPlayers = async () => {
+const pairPlayers = async (mode = GameMode.RANKED_CONSTRUCTED) => {
   const first = await connect(PRINCIPAL_1, '192.0.2.1')
   const second = await connect(PRINCIPAL_2, '192.0.2.2')
-  first.send(JSON.stringify(findCommand()))
+  const sessionID =
+    mode === GameMode.CHALLENGE_CONSTRUCTED ||
+    mode === GameMode.CHALLENGE_DISCOVERY
+      ? 'CLOUD-WEASEL-CHALLENGE'
+      : ''
+  first.send(JSON.stringify(findCommand(mode, sessionID)))
   const firstFound = nextMessage(first)
   const secondFound = nextMessage(second)
-  second.send(JSON.stringify(findCommand()))
+  second.send(JSON.stringify(findCommand(mode, sessionID)))
   expect(await firstFound).toMatchObject({
     type: 'match_found',
-    mode: GameMode.RANKED_CONSTRUCTED,
+    mode,
     playerIDs: [PRINCIPAL_1, PRINCIPAL_2]
   })
   expect(await secondFound).toMatchObject({ type: 'match_found' })
   return { first, second }
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const socket of [
     ...((globalThis as { testSockets?: WebSocket[] }).testSockets ?? [])
   ]) {
@@ -116,6 +130,22 @@ afterEach(() => {
     }
   }
   ;(globalThis as { testSockets?: WebSocket[] }).testSockets = []
+  await expect
+    .poll(async () => {
+      const status = await pool().fetch(
+        'https://pool.example/internal/status',
+        {
+          headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+        }
+      )
+      return (await status.json<{ connectedSockets: number }>())
+        .connectedSockets
+    })
+    .toBe(0)
+  await runInDurableObject(
+    pool() as DurableObjectStub<MatchmakerPool>,
+    async (_instance, state) => state.storage.deleteAll()
+  )
 })
 
 const track = <T extends WebSocket>(...sockets: T[]) => {
@@ -132,9 +162,12 @@ describe('Cloudflare matchmaker Worker', () => {
       component: 'cloud-weasel-matchmaker'
     })
 
-    const denied = await SELF.fetch('https://matchmaker.example/v1/matchmaker', {
-      headers: { Upgrade: 'websocket', Origin: 'https://evil.example' }
-    })
+    const denied = await SELF.fetch(
+      'https://matchmaker.example/v1/matchmaker',
+      {
+        headers: { Upgrade: 'websocket', Origin: 'https://evil.example' }
+      }
+    )
     expect(denied.status).toBe(403)
   })
 
@@ -142,11 +175,34 @@ describe('Cloudflare matchmaker Worker', () => {
     const { first, second } = await pairPlayers()
     track(first, second)
 
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const expiresAtMs = Date.now() + 60_000
+        await state.storage.put({
+          [`penalty:refusal-count:${PRINCIPAL_1}:${GameMode.RANKED_CONSTRUCTED}`]:
+            {
+              count: 3,
+              expiresAtMs
+            },
+          [`penalty:refusal:${PRINCIPAL_1}:${GameMode.RANKED_CONSTRUCTED}`]: {
+            expiresAtMs
+          },
+          [`penalty:refusal-count:${PRINCIPAL_2}:${GameMode.RANKED_CONSTRUCTED}`]:
+            {
+              count: 3,
+              expiresAtMs
+            },
+          [`penalty:refusal:${PRINCIPAL_2}:${GameMode.RANKED_CONSTRUCTED}`]: {
+            expiresAtMs
+          }
+        })
+      }
+    )
+
     const firstSawAcceptance = nextMessage(first)
     const secondSawAcceptance = nextMessage(second)
-    first.send(
-      JSON.stringify({ type: 'accept_match', playerID: PRINCIPAL_2 })
-    )
+    first.send(JSON.stringify({ type: 'accept_match', playerID: PRINCIPAL_2 }))
     expect(await firstSawAcceptance).toEqual({
       type: 'accept_match',
       playerID: PRINCIPAL_1
@@ -178,6 +234,15 @@ describe('Cloudflare matchmaker Worker', () => {
       activeProposals: 0,
       connectedSockets: 2
     })
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const refusalState = await state.storage.list({
+          prefix: 'penalty:refusal'
+        })
+        expect(refusalState.size).toBe(0)
+      }
+    )
   })
 
   it('hydrates authoritative rank, score, cards and recent opponents before queueing', async () => {
@@ -305,7 +370,10 @@ describe('Cloudflare matchmaker Worker', () => {
           prefix: 'proposal:'
         })
         for (const [key, proposal] of proposals) {
-          await state.storage.put(key, { ...proposal, botAcceptAtMs: Date.now() - 1 })
+          await state.storage.put(key, {
+            ...proposal,
+            botAcceptAtMs: Date.now() - 1
+          })
         }
         await state.storage.setAlarm(Date.now() + 60_000)
       }
@@ -339,11 +407,64 @@ describe('Cloudflare matchmaker Worker', () => {
       type: 'decline_match',
       playerID: PRINCIPAL_1
     })
+
+    const cooldown = nextMessage(first)
+    first.send(JSON.stringify(findCommand()))
+    const cooldownMessage = await cooldown
+    expect(cooldownMessage).toMatchObject({ type: 'match_refusal_cooldown' })
+    expect(cooldownMessage.durationSeconds).toEqual(expect.any(Number))
+    expect(cooldownMessage.durationSeconds as number).toBeGreaterThanOrEqual(1)
+    expect(cooldownMessage.durationSeconds as number).toBeLessThanOrEqual(2)
+
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
   })
 
-  it('uses an alarm to time out unaccepted proposals', async () => {
+  it('preserves the source challenge-mode exemption from refusal penalties', async () => {
+    const { first, second } = await pairPlayers(GameMode.CHALLENGE_DISCOVERY)
+    track(first, second)
+    const firstDeclined = nextMessage(first)
+    const secondDeclined = nextMessage(second)
+    first.send(JSON.stringify({ type: 'decline_match', playerID: PRINCIPAL_2 }))
+    expect(await firstDeclined).toMatchObject({ type: 'decline_match' })
+    expect(await secondDeclined).toMatchObject({ type: 'decline_match' })
+
+    first.send(
+      JSON.stringify(
+        findCommand(GameMode.CHALLENGE_DISCOVERY, 'CLOUD-WEASEL-CHALLENGE')
+      )
+    )
+    const firstFound = nextMessage(first)
+    const secondFound = nextMessage(second)
+    second.send(
+      JSON.stringify(
+        findCommand(GameMode.CHALLENGE_DISCOVERY, 'CLOUD-WEASEL-CHALLENGE')
+      )
+    )
+    expect(await firstFound).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.CHALLENGE_DISCOVERY
+    })
+    expect(await secondFound).toMatchObject({ type: 'match_found' })
+  })
+
+  it('penalizes only the player who lets match acceptance time out', async () => {
     const { first, second } = await pairPlayers()
     track(first, second)
+    const firstAccepted = nextMessage(first)
+    const secondSawAcceptance = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match', playerID: PRINCIPAL_2 }))
+    expect(await firstAccepted).toEqual({
+      type: 'accept_match',
+      playerID: PRINCIPAL_1
+    })
+    expect(await secondSawAcceptance).toEqual({
+      type: 'accept_match',
+      playerID: PRINCIPAL_1
+    })
+
     await runInDurableObject(
       pool() as DurableObjectStub<MatchmakerPool>,
       async (_instance, state) => {
@@ -351,7 +472,10 @@ describe('Cloudflare matchmaker Worker', () => {
           prefix: 'proposal:'
         })
         for (const [key, proposal] of proposals) {
-          await state.storage.put(key, { ...proposal, expiresAtMs: Date.now() - 1 })
+          await state.storage.put(key, {
+            ...proposal,
+            expiresAtMs: Date.now() - 1
+          })
         }
         await state.storage.setAlarm(Date.now() + 60_000)
       }
@@ -361,5 +485,24 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await runDurableObjectAlarm(pool())).toBe(true)
     expect(await firstTimedOut).toEqual({ type: 'timed_out' })
     expect(await secondTimedOut).toEqual({ type: 'timed_out' })
+
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const cooldown = nextMessage(second)
+    second.send(JSON.stringify(findCommand()))
+    const cooldownMessage = await cooldown
+    expect(cooldownMessage).toMatchObject({ type: 'match_refusal_cooldown' })
+    expect(cooldownMessage.durationSeconds).toEqual(expect.any(Number))
+    expect(cooldownMessage.durationSeconds as number).toBeGreaterThanOrEqual(19)
+    expect(cooldownMessage.durationSeconds as number).toBeLessThanOrEqual(20)
   })
 })

@@ -11,12 +11,15 @@ the client wire contract or combining it with the game server.
 | `src/matcher.ts` | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go` |
 | `src/protocol.ts` | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts` |
 | `src/runtime.ts` | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
+| `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go` |
 | `src/worker.ts` | `matchmaker/lib/frontend/websocket_handler.go` |
 
 Tests intentionally reproduce boundary values from the corresponding Go tests.
 The Cloudflare integration suite additionally covers authenticated WebSocket
 upgrades, durable queue/proposal state, hibernation eviction, acceptance,
-decline, timeout alarms, and client-provided `playerID` forgery attempts.
+decline, progressive refusal cooldowns, acceptance-timeout penalties,
+successful-match penalty resets, timeout alarms, and client-provided `playerID`
+forgery attempts. Challenge matches retain the source penalty exemptions.
 
 ## Component boundary
 
@@ -50,8 +53,9 @@ fails closed and is never replaced by client-provided values.
 
 ## Remaining source behavior
 
-Captcha policy, refusal penalties, shadow-ban state, and Conquest state still
-need Cloudflare adapters. The same-origin gateway already provides the source
-match-info response for reconnects. Conquest queues remain operationally
-disabled until their state and rewards are ported; the matchmaker does not
-pretend an incomplete mode is available.
+Captcha policy, captcha-triggered shadow-ban state, the game-server abandon
+cooldown bridge, and Conquest state still need Cloudflare adapters. The
+same-origin gateway already provides the source match-info response for
+reconnects. Conquest queues remain operationally disabled until their state and
+rewards are ported; the matchmaker does not pretend an incomplete mode is
+available.

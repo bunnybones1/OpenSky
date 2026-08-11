@@ -23,7 +23,7 @@ const allowedOrigin = (request: Request, env: MatchmakerEnv) => {
   const allowed = new Set(
     (env.ALLOWED_ORIGINS ?? '')
       .split(',')
-      .map((origin) => origin.trim())
+      .map(origin => origin.trim())
       .filter(Boolean)
   )
   const origin = request.headers.get('Origin')
@@ -50,14 +50,16 @@ export default {
       return json({
         ok: true,
         component: 'cloud-weasel-matchmaker',
-        protocolVersion: 1
+        protocolVersion: 2
       })
     }
-    if (url.pathname !== MATCHMAKER_PATH) return json({ error: 'not found' }, 404)
+    if (url.pathname !== MATCHMAKER_PATH)
+      return json({ error: 'not found' }, 404)
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return json({ error: 'websocket upgrade required' }, 426)
     }
-    if (!allowedOrigin(request, env)) return json({ error: 'origin not allowed' }, 403)
+    if (!allowedOrigin(request, env))
+      return json({ error: 'origin not allowed' }, 403)
     if (!hasTrustedGatewayIdentity(request, env)) {
       return json({ error: 'authenticated gateway required' }, 401)
     }

@@ -52,6 +52,7 @@ export type MatchmakerServerMessage =
   | { type: 'decline_match'; playerID: string }
   | { type: 'match_made'; serverAddress: string }
   | { type: 'match_ready_to_start'; mode: GameMode }
+  | { type: 'match_refusal_cooldown'; durationSeconds: number }
   | { type: 'timed_out' }
   | MatchmakerErrorMessage
 
@@ -86,7 +87,10 @@ export const parseClientCommand = (
   raw: string | ArrayBuffer
 ): MatchmakerClientCommand => {
   if (typeof raw !== 'string') {
-    throw new ProtocolError('INVALID_OPERATION', 'binary messages are not supported')
+    throw new ProtocolError(
+      'INVALID_OPERATION',
+      'binary messages are not supported'
+    )
   }
   if (new TextEncoder().encode(raw).byteLength > MAX_CLIENT_MESSAGE_BYTES) {
     throw new ProtocolError('INVALID_OPERATION', 'message is too large')
@@ -114,15 +118,24 @@ export const parseClientCommand = (
       if (value.playerID !== undefined && !boundedString(value.playerID, 128)) {
         throw new ProtocolError('INVALID_OPERATION', 'invalid playerID')
       }
-      return { type: 'accept_match', playerID: value.playerID as string | undefined }
+      return {
+        type: 'accept_match',
+        playerID: value.playerID as string | undefined
+      }
     case 'decline_match':
       if (value.playerID !== undefined && !boundedString(value.playerID, 128)) {
         throw new ProtocolError('INVALID_OPERATION', 'invalid playerID')
       }
-      return { type: 'decline_match', playerID: value.playerID as string | undefined }
+      return {
+        type: 'decline_match',
+        playerID: value.playerID as string | undefined
+      }
     case 'find_match': {
       if (!isRecord(value.privateSeed)) {
-        throw new ProtocolError('INVALID_PRIVATE_SEED', 'privateSeed is required')
+        throw new ProtocolError(
+          'INVALID_PRIVATE_SEED',
+          'privateSeed is required'
+        )
       }
       if (!matchmakerModes.has(value.mode as GameMode)) {
         throw new ProtocolError('INVALID_OPERATION', 'unsupported game mode')
@@ -142,12 +155,17 @@ export const parseClientCommand = (
         value.playerSessionID.length === 0 ||
         value.playerSessionID.length > 128
       ) {
-        throw new ProtocolError('INVALID_OPERATION', 'playerSessionID is required')
+        throw new ProtocolError(
+          'INVALID_OPERATION',
+          'playerSessionID is required'
+        )
       }
       return {
         type: 'find_match',
         authToken:
-          typeof value.authToken === 'string' ? value.authToken.slice(0, 4096) : undefined,
+          typeof value.authToken === 'string'
+            ? value.authToken.slice(0, 4096)
+            : undefined,
         privateSeed: value.privateSeed,
         sessionID: value.sessionID.toUpperCase(),
         mode: value.mode as GameMode,
