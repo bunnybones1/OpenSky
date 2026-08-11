@@ -40,7 +40,7 @@ const AppLayout = memo(() => {
           {!isIdentityMode && <NetworkWarning />}
           {!isIdentityMode && <DeckViewer />}
           <NavBar />
-          {!isIdentityMode && <Widgets />}
+          <Widgets showWallet={!isIdentityMode} />
           {!isIdentityMode && <UseStateDisclaimerTrigger />}
           <PageLayout>
             <Outlet />
