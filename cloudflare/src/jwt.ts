@@ -40,6 +40,13 @@ export const verifySession = async (
   let claims: SessionClaims
 
   try {
+    if (
+      base64UrlEncode(base64UrlDecode(encodedHeader)) !== encodedHeader ||
+      base64UrlEncode(base64UrlDecode(encodedPayload)) !== encodedPayload ||
+      base64UrlEncode(base64UrlDecode(encodedSignature)) !== encodedSignature
+    ) {
+      throw unauthenticated()
+    }
     header = JSON.parse(base64UrlDecodeText(encodedHeader))
     claims = JSON.parse(base64UrlDecodeText(encodedPayload))
   } catch {
