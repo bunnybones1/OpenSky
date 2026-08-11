@@ -171,11 +171,13 @@ and progress are not migrated.
   match history, profile feed, competitive stats, and item summary reads.
 - Card and presentation assets still load from the configured external assets host.
 - Google authentication and identity sessions are native TypeScript Worker services.
+- The matchmaker includes the source captcha retry/cache policy and durable
+  shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
+  credentials are provisioned.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest state/rewards, captcha-triggered shadow bans, the cross-service game
-  abandon cooldown, social/invite APIs, marketplace writes, and administrative
-  APIs still require ports.
+- Conquest state/rewards, the cross-service game abandon cooldown, social/invite
+  APIs, marketplace writes, and administrative APIs still require ports.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
