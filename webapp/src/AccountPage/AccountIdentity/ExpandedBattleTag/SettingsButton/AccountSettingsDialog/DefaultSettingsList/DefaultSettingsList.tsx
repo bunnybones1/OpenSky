@@ -2,6 +2,7 @@ import { UserStorageKeys } from '@opensky/shared/constants'
 import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Box, FlexBox, Text } from '~/shared/components/Base'
 import { Checkbox } from '~/shared/components/Checkbox'
 import { useUpdateUserStorage } from '~/shared/mutations/useUpdateUserStorage'
@@ -22,7 +23,7 @@ interface DefaultSettingsListProps {
   setListMode: (mode: 'default' | 'art' | 'country' | 'title') => void
 }
 
-export const DefaultSettingsList = memo(
+const LegacyDefaultSettingsList = memo(
   ({ setListMode }: DefaultSettingsListProps) => {
     const { t } = useTranslation()
 
@@ -101,6 +102,26 @@ export const DefaultSettingsList = memo(
       </>
     )
   }
+)
+
+LegacyDefaultSettingsList.displayName = 'LegacyDefaultSettingsList'
+
+const IdentityDefaultSettingsList = memo(() => (
+  <>
+    <LocaleSettings />
+    <SoundSettings />
+    <GameCacheSettings />
+  </>
+))
+
+IdentityDefaultSettingsList.displayName = 'IdentityDefaultSettingsList'
+
+export const DefaultSettingsList = memo((props: DefaultSettingsListProps) =>
+  env.AUTH_MODE === 'google' ? (
+    <IdentityDefaultSettingsList />
+  ) : (
+    <LegacyDefaultSettingsList {...props} />
+  )
 )
 
 DefaultSettingsList.displayName = 'DefaultSettingsList'

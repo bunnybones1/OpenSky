@@ -3,6 +3,7 @@ import { FlagCodes } from '@opensky/shared/constants'
 import { memo } from 'react'
 
 import { RowArt } from '~/__deprecated__/RowArt'
+import env from '~/env'
 import { Box } from '~/shared/components/Base/Box'
 import { FlexBox } from '~/shared/components/Base/FlexBox'
 import { ExperienceBar } from '~/shared/components/ExperienceBar/ExperienceBar'
@@ -90,8 +91,8 @@ export const ExpandedBattleTag = memo(() => {
           </FlexBox>
         </BattleTagIdentityWrapper>
       </FlexBox>
-      <WalletInfo />
-      <SpectateInfo />
+      {env.AUTH_MODE !== 'google' && <WalletInfo />}
+      {env.AUTH_MODE !== 'google' && <SpectateInfo />}
     </>
   )
 })

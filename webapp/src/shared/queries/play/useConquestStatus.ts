@@ -33,13 +33,13 @@ export const conquestStatusFetcher = async () => {
   }
 }
 
-export const useConquestStatus = () => {
+export const useConquestStatus = (enabled = true) => {
   const { userAddress } = useSnapshot(authenticationState)
 
   return useQuery({
     queryFn: conquestStatusFetcher,
     queryKey: getConquestStatusKey(userAddress),
-    enabled: !!userAddress,
+    enabled: enabled && !!userAddress,
     staleTime: ONE_DAY
   })
 }

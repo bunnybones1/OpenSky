@@ -2,6 +2,8 @@ import styled from '@emotion/styled'
 import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { identityClient } from '~/clients/IdentityClient/IdentityClient'
+import env from '~/env'
 import { AuthenticationClient } from '~/shared/clients'
 import { FlexBox } from '~/shared/components/Base/FlexBox'
 import { Button } from '~/shared/components/Button'
@@ -29,8 +31,13 @@ export const AccountSettingsControls = memo(() => {
   const { t } = useTranslation()
   const { data: authedAccount } = useAuthedAccount()
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     closeDialog()
+    if (env.AUTH_MODE === 'google') {
+      await identityClient.signOut()
+      window.location.assign('/')
+      return
+    }
     AuthenticationClient.logout()
 
     trackSessionEnd('logout')
@@ -66,21 +73,25 @@ export const AccountSettingsControls = memo(() => {
               leftAdornment={{ icon: 'external' }}
             />
           )}
-          <Button
-            frameType="default"
-            colorType="default"
-            onClick={openCookieSettingsDialog}
-            text={t('general.cookies')}
-            leftAdornment={{ icon: 'eye' }}
-            className={Sprinkles({ marginX: '8px' })}
-          />
-          {(isUS || !!cat3State) && (
-            <Button
-              frameType="default"
-              colorType="default"
-              onClick={openStateConfirmationDialog}
-              text={t('general.location')}
-            />
+          {env.AUTH_MODE !== 'google' && (
+            <>
+              <Button
+                frameType="default"
+                colorType="default"
+                onClick={openCookieSettingsDialog}
+                text={t('general.cookies')}
+                leftAdornment={{ icon: 'eye' }}
+                className={Sprinkles({ marginX: '8px' })}
+              />
+              {(isUS || !!cat3State) && (
+                <Button
+                  frameType="default"
+                  colorType="default"
+                  onClick={openStateConfirmationDialog}
+                  text={t('general.location')}
+                />
+              )}
+            </>
           )}
         </FlexBox>
       </StyledAccountSettingsControls>
