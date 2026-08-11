@@ -65,6 +65,30 @@ const HERO_DECK_CLASS: Record<number, string> = {
   15: 'HRI'
 }
 
+const HEXBOUND_CARD_IDS = [
+  30, 98, 125, 140, 1047, 1100, 1101, 1125, 3004, 3101, 3125, 3135, 4004,
+  4027, 4101, 4124
+]
+
+const CARD_NAMES: Record<number, string> = {
+  30: 'Treefolk Goliath',
+  98: 'Mortal Blow',
+  125: 'Oreheart Brawler',
+  140: 'Stalwart Sentinel',
+  1047: 'Songrider',
+  1100: 'Disciple of Gusto',
+  1101: "Samya's Speed",
+  1125: 'Skyfire Master',
+  3004: 'Grimlord',
+  3101: "Bouran's Ethos",
+  3125: 'Eclipse Mummy',
+  3135: 'Royal Priestess',
+  4004: 'Frigid Blizzard',
+  4027: 'Mootichi',
+  4101: "Ari's Insight",
+  4124: 'Star Cetacean'
+}
+
 interface AccountRow {
   display_name: string
   user_created_at: string
@@ -159,6 +183,17 @@ interface SkypassRewardRow {
   gained_rewards: string | null
 }
 
+interface RawSkypassRewardRow {
+  id: number
+  level: number
+  season: number
+  tier: number
+  item_type: number
+  amount: number
+  is_starter: number
+  attributes: string | null
+}
+
 const prismClass = (prism: string): (typeof CARD_CLASSES)[number] => {
   const value = prism.slice(0, 3).toUpperCase()
   return CARD_CLASSES.includes(value as (typeof CARD_CLASSES)[number])
@@ -195,6 +230,40 @@ const parseAttributes = (value: string | null) => {
       : []
   }
 }
+
+const cardClassForId = (cardId: number): string => {
+  if (cardId >= 4000) return 'HRT'
+  if (cardId >= 3000) return 'WIS'
+  if (cardId >= 2000) return 'INT'
+  if (cardId >= 1000) return 'AGY'
+  return 'STR'
+}
+
+const rewardCard = (cardId: number, itemType: ItemType) => ({
+  accountID: 0,
+  type: 'CARD',
+  card: {
+    amount: 1,
+    card: {
+      id: cardId,
+      name: CARD_NAMES[cardId] || `Card ${cardId}`,
+      description: '',
+      asset: '',
+      class: cardClassForId(cardId),
+      element: 'UNKNOWN',
+      type: 'UNKNOWN',
+      manaCost: 0,
+      power: 0,
+      health: 0,
+      keywords: [],
+      status: 'PLAY',
+      set: 'UNKNOWN',
+      imageURL: { small: '', medium: '', large: '' },
+      itemType,
+      isNew: true
+    }
+  }
+})
 
 export class PlayerRpcRepository {
   constructor(private readonly database: D1Database) {}
@@ -797,6 +866,144 @@ export class PlayerRpcRepository {
           )
         }))
     }
+  }
+
+  private cardCandidates(attributes: ReturnType<typeof parseAttributes>): number[] {
+    const cardSets = new Set(attributes.cardSets)
+    const excludedSets = new Set(attributes.cardSetsExcluded)
+    if (cardSets.has('HEXBOUND_INVASION')) return HEXBOUND_CARD_IDS
+
+    const broadPool = Array.from({ length: 164 }, (_, index) => index + 1)
+    return excludedSets.has('HEXBOUND_INVASION')
+      ? broadPool.filter(cardId => !HEXBOUND_CARD_IDS.includes(cardId))
+      : [...broadPool, ...HEXBOUND_CARD_IDS]
+  }
+
+  private async applyBaseCardSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    statements: D1PreparedStatement[]
+  ): Promise<Array<Record<string, unknown>>> {
+    const ownedResult = await this.database
+      .prepare(`SELECT card_id FROM player_card_unlocks WHERE user_id = ?`)
+      .bind(userId)
+      .all<{ card_id: number }>()
+    const owned = new Set(ownedResult.results.map(row => row.card_id))
+    const attributes = parseAttributes(reward.attributes)
+    const requestedTokenIds = attributes.tokenIDs
+      .map(Number)
+      .filter(Number.isSafeInteger)
+    const amount = requestedTokenIds.length || reward.amount
+    const candidates = this.cardCandidates(attributes)
+    const granted: number[] = []
+
+    for (let index = 0; index < amount; index++) {
+      const requested = requestedTokenIds[index]
+      const cardId =
+        requested !== undefined && !owned.has(requested)
+          ? requested
+          : candidates.find(candidate => !owned.has(candidate))
+      if (cardId === undefined) continue
+
+      owned.add(cardId)
+      granted.push(cardId)
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_card_unlocks
+               (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
+                item_type, is_new)
+             VALUES (?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 1)`
+          )
+          .bind(
+            userId,
+            cardId,
+            CARD_NAMES[cardId] || `Card ${cardId}`,
+            cardClassForId(cardId),
+            `skypass:${reward.id}`,
+            new Date().toISOString()
+          )
+      )
+    }
+
+    return granted.map(cardId =>
+      rewardCard(cardId, 'SW_BASE_CARDS' as ItemType)
+    )
+  }
+
+  async claimSkypassRewards(
+    userId: string,
+    ids: number[]
+  ): Promise<Array<Record<string, unknown>>> {
+    const uniqueIds = [...new Set(ids)]
+    if (!uniqueIds.length) return []
+    const placeholders = uniqueIds.map(() => '?').join(',')
+    const rawResult = await this.database
+      .prepare(
+        `SELECT id, level, season, tier, item_type, amount, is_starter,
+                attributes
+         FROM skypass_rewards
+         WHERE id IN (${placeholders})`
+      )
+      .bind(...uniqueIds)
+      .all<RawSkypassRewardRow>()
+
+    const listedById = new Map<number, { reward: SkypassReward; earned: boolean }>()
+    for (const season of [...new Set(rawResult.results.map(row => row.season))]) {
+      const { levels } = await this.listSkypassRewards(userId, season)
+      for (const level of levels) {
+        for (const reward of level.rewards) {
+          listedById.set(reward.id, { reward, earned: level.earned })
+        }
+      }
+    }
+
+    const rawById = new Map(rawResult.results.map(row => [row.id, row]))
+    const gainedRewards: Array<Record<string, unknown>> = []
+    const statements: D1PreparedStatement[] = []
+    const now = new Date().toISOString()
+
+    for (const id of uniqueIds) {
+      const rawReward = rawById.get(id)
+      if (!rawReward) continue
+      const listed = listedById.get(id)
+      if (!listed) throw new Error(`reward ID ${id}: reward not listed`)
+      if (!listed.earned) throw new Error(`reward ID ${id}: reward not earned`)
+      if (!listed.reward.claimable) {
+        throw new Error(`reward ID ${id}: reward not claimable`)
+      }
+      if (listed.reward.claimed) {
+        gainedRewards.push(
+          ...((listed.reward.gainedRewards || []) as unknown as Array<
+            Record<string, unknown>
+          >)
+        )
+        continue
+      }
+
+      const itemType = ITEM_TYPE_BY_ID[rawReward.item_type]
+      if (itemType !== ('SW_BASE_CARDS' as ItemType)) {
+        throw new Error(`unsupported item type ${itemType || 'UNKNOWN'}`)
+      }
+      const applied = await this.applyBaseCardSkypassReward(
+        userId,
+        rawReward,
+        statements
+      )
+      gainedRewards.push(...applied)
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO player_skypass_claims
+               (user_id, reward_id, rewards, claimed_at)
+             VALUES (?, ?, ?, ?)`
+          )
+          .bind(userId, id, JSON.stringify(applied), now)
+      )
+    }
+
+    if (statements.length) await this.database.batch(statements)
+    return gainedRewards
   }
 
   async deckClassUnlockLevels(season: number): Promise<Record<string, number>> {

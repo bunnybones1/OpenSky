@@ -282,6 +282,112 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('claims the listed and earned starter SkyPass card reward', async () => {
+    const listed = await rpc('ListSkypassRewards', { season: 62 })
+    const levels = (
+      await listed.json<{
+        res: {
+          levels: Array<{
+            level: number
+            rewards: Array<{
+              id: number
+              itemType: string
+              isStarter: boolean
+              claimed: boolean
+            }>
+          }>
+        }
+      }>()
+    ).res.levels
+    const starterReward = levels
+      .find(level => level.level === 1)!
+      .rewards.find(reward => reward.isStarter)!
+    expect(starterReward).toMatchObject({
+      itemType: 'SW_BASE_CARDS',
+      claimed: false
+    })
+
+    const claimed = await rpc('ClaimSkypassRewards', {
+      ids: [starterReward.id]
+    })
+    expect(claimed.status).toBe(200)
+    expect(await claimed.json()).toMatchObject({
+      rewards: [
+        {
+          accountID: 0,
+          type: 'CARD',
+          card: {
+            amount: 1,
+            card: {
+              id: 140,
+              name: 'Stalwart Sentinel',
+              itemType: 'SW_BASE_CARDS',
+              isNew: true
+            }
+          }
+        }
+      ]
+    })
+
+    const ownership = await rpc('GetCardOwnership', {})
+    expect(
+      (await ownership.json<{ res: { unlockedCards: number } }>()).res
+        .unlockedCards
+    ).toBe(31)
+
+    const refreshed = await rpc('ListSkypassRewards', { season: 62 })
+    const refreshedReward = (
+      await refreshed.json<{
+        res: {
+          levels: Array<{
+            level: number
+            rewards: Array<{
+              id: number
+              claimed: boolean
+              gainedRewards?: unknown[]
+            }>
+          }>
+        }
+      }>()
+    ).res.levels
+      .find(level => level.level === 1)!
+      .rewards.find(reward => reward.id === starterReward.id)!
+    expect(refreshedReward).toMatchObject({
+      claimed: true,
+      gainedRewards: [expect.objectContaining({ type: 'CARD' })]
+    })
+
+    const claimedAgain = await rpc('ClaimSkypassRewards', {
+      ids: [starterReward.id]
+    })
+    expect(await claimedAgain.json()).toMatchObject({
+      rewards: [expect.objectContaining({ type: 'CARD' })]
+    })
+    const ownershipAgain = await rpc('GetCardOwnership', {})
+    expect(
+      (await ownershipAgain.json<{ res: { unlockedCards: number } }>()).res
+        .unlockedCards
+    ).toBe(31)
+  })
+
+  it('rejects SkyPass rewards that are unearned or replaced in the listing', async () => {
+    const unearned = await env.AUTH_DB.prepare(
+      `SELECT id FROM skypass_rewards
+       WHERE season = 62 AND level = 2 AND is_starter = 1`
+    ).first<{ id: number }>()
+    expect(
+      (await rpc('ClaimSkypassRewards', { ids: [unearned!.id] })).status
+    ).toBe(500)
+
+    const replaced = await env.AUTH_DB.prepare(
+      `SELECT id FROM skypass_rewards
+       WHERE season = 62 AND level = 1 AND tier = 1 AND is_starter = 0`
+    ).first<{ id: number }>()
+    expect(
+      (await rpc('ClaimSkypassRewards', { ids: [replaced!.id] })).status
+    ).toBe(500)
+  })
+
   it('requires identity auth for player-owned RPC methods', async () => {
     expect((await rpc('ListDecks', {}, false)).status).toBe(401)
     expect((await rpc('ListQuests', {}, false)).status).toBe(401)

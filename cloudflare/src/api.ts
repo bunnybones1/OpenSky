@@ -347,6 +347,18 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'ClaimSkypassRewards': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ ids?: number[] }>(request)
+        if (!Array.isArray(body.ids)) throw invalidArgument('ids is required')
+        return json(request, env, {
+          rewards: await playerRpc.claimSkypassRewards(
+            principal.userId,
+            body.ids
+          )
+        })
+      }
+
       default:
         return json(request, env, { code: 'webrpc.not_found', msg: 'RPC method not found' }, 404)
     }
