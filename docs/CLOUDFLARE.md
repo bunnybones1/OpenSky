@@ -178,6 +178,11 @@ and progress are not migrated.
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
   drift, and deck-string lookup preserves the source version-02 validation.
+- Public game-mode status comes from the separately deployed match service over
+  an authenticated Cloudflare service binding, so the UI and queue admission
+  agree that Conquest is still disabled. D1-backed Ping, server Clock, current
+  SkyPass hero-unlock levels, and the authenticated source XP-bonus read are
+  also ported.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
