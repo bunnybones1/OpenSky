@@ -207,6 +207,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
 
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 0.25 })
+    )
+
     for (const clientTime of [101, 102, 103, 104, 105]) {
       const response = nextMessage(first)
       first.send(JSON.stringify({ type: 'timesync', clientTime }))
