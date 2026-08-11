@@ -1,12 +1,21 @@
 import { WasmMatchBotOpponent } from '@opensky/bot'
+import { GameMode } from '@opensky/proto'
 import {
+  PlayerQuestManager,
+  PlayerQuestRuntimeState
+} from '@opensky/quests'
+import {
+  DECKCLASS_HEROES,
   DUAL_PRISM_DECK_SIZE,
   SINGLE_PRISM_DECK_SIZE
 } from '@opensky/shared/constants'
+import { prismsToDeckClass } from '@opensky/shared/helpers'
+import { MatchStartPlayerInfo } from '@opensky/shared/matchmaker-message-types'
 import * as StateBindings from '@skyweaver/state-browser-sys'
 import stateWasmModule from '@skyweaver/state-browser-sys/bindings_bg.wasm'
 import {
   BaseCard,
+  CardEvent,
   CardLibrary,
   GameParams,
   GameState,
@@ -154,6 +163,15 @@ export interface AuthoritativeMatchInit {
   player2Seed: PrivateSeed
   heroRarities: [Rarity, Rarity]
   ownerPrivateKey: string
+  participants?: [MatchStartPlayerInfo, MatchStartPlayerInfo]
+  questRuntimeState?: MatchQuestRuntimeState
+}
+
+export interface MatchQuestRuntimeState {
+  players: [
+    PlayerQuestRuntimeState | undefined,
+    PlayerQuestRuntimeState | undefined
+  ]
 }
 
 export interface RuntimeStateInfo {
@@ -183,9 +201,54 @@ export class AuthoritativeMatchRuntime {
   private constructor(
     private readonly store: StateBindings.WasmMatch,
     ownerPrivateKey: string,
-    private readonly emitted: { diffs: string[] }
+    private readonly emitted: { diffs: string[] },
+    private readonly questManagers: PlayerQuestManager[]
   ) {
     this.ownerSign = createOwnerSigner(ownerPrivateKey)
+  }
+
+  private static questManagers(
+    participants?: [MatchStartPlayerInfo, MatchStartPlayerInfo]
+  ) {
+    if (!participants) return []
+    const gameMode =
+      participants[0].gameMode === participants[1].gameMode
+        ? participants[0].gameMode
+        : GameMode.UNKNOWN
+    return participants.map(
+      (participant, player) =>
+        new PlayerQuestManager({
+          deck: participant.privateSeed.cards,
+          gameMode,
+          hero:
+            DECKCLASS_HEROES[
+              prismsToDeckClass(participant.privateSeed.prisms)
+            ],
+          player: player as Player,
+          quests: participant.quests
+        })
+    )
+  }
+
+  private static stateCallback(questManagers: PlayerQuestManager[]) {
+    return (
+      matchState: GameState<SkyWeaver>,
+      ...secrets: [PlayerSecret<SkyWeaver>, PlayerSecret<SkyWeaver>]
+    ) => {
+      for (const manager of questManagers) {
+        manager.onStateUpdated(
+          matchState,
+          secrets[manager.player],
+          secrets[(1 - manager.player) as Player]
+        )
+      }
+    }
+  }
+
+  private static eventCallback(questManagers: PlayerQuestManager[]) {
+    return (_target: Player | undefined, event: CardEvent<SkyWeaver>) => {
+      for (const manager of questManagers) manager.onProcessEvent(event)
+    }
   }
 
   static create(init: AuthoritativeMatchInit) {
@@ -193,6 +256,7 @@ export class AuthoritativeMatchRuntime {
     const ownerSign = createOwnerSigner(init.ownerPrivateKey)
     const player1Seed = normalizePrivateSeed(init.player1Seed)
     const player2Seed = normalizePrivateSeed(init.player2Seed)
+    const questManagers = this.questManagers(init.participants)
     const root = bindings.create_skyweaver_root_proof(
       ownerSign,
       [...numberToInt64Bytes(init.matchId)],
@@ -206,35 +270,63 @@ export class AuthoritativeMatchRuntime {
       root,
       [createSecret(player1Seed, 0), createSecret(player2Seed, 1)],
       false,
-      () => undefined,
+      this.stateCallback(questManagers),
       ownerSign,
       (diff: Uint8Array) => emitted.diffs.push(bytesToHex(diff)),
-      () => undefined,
+      this.eventCallback(questManagers),
       secureRandom
     )
+    for (const [player, manager] of questManagers.entries()) {
+      manager.restoreRuntimeState(init.questRuntimeState?.players[player])
+    }
     const runtime = new AuthoritativeMatchRuntime(
       store,
       init.ownerPrivateKey,
-      emitted
+      emitted,
+      questManagers
     )
     store.flush()
     return runtime
   }
 
-  static restore(snapshot: Uint8Array, ownerPrivateKey: string) {
+  static restore(
+    snapshot: Uint8Array,
+    ownerPrivateKey: string,
+    participants?: [MatchStartPlayerInfo, MatchStartPlayerInfo],
+    questRuntimeState?: MatchQuestRuntimeState
+  ) {
     initializeStateWasm()
     const ownerSign = createOwnerSigner(ownerPrivateKey)
     const emitted = { diffs: [] as string[] }
+    const questManagers = this.questManagers(participants)
     const store = bindings.WasmMatch.deserialize(
       snapshot,
       false,
-      () => undefined,
+      this.stateCallback(questManagers),
       ownerSign,
       (diff: Uint8Array) => emitted.diffs.push(bytesToHex(diff)),
-      () => undefined,
+      this.eventCallback(questManagers),
       secureRandom
     )
-    return new AuthoritativeMatchRuntime(store, ownerPrivateKey, emitted)
+    for (const [player, manager] of questManagers.entries()) {
+      manager.restoreRuntimeState(questRuntimeState?.players[player])
+    }
+    if (store.hasState()) {
+      const state = store.state as GameState<SkyWeaver>
+      for (const manager of questManagers) {
+        manager.onStateUpdated(
+          state,
+          store.secret(manager.player) as PlayerSecret<SkyWeaver>,
+          store.secret((1 - manager.player) as Player) as PlayerSecret<SkyWeaver>
+        )
+      }
+    }
+    return new AuthoritativeMatchRuntime(
+      store,
+      ownerPrivateKey,
+      emitted,
+      questManagers
+    )
   }
 
   serialize(secretKnowledge: 0 | 1 | 2 | 3) {
@@ -243,6 +335,22 @@ export class AuthoritativeMatchRuntime {
 
   snapshot() {
     return this.serialize(3)
+  }
+
+  questRuntimeState(): MatchQuestRuntimeState {
+    return {
+      players: [
+        this.questManagers[0]?.snapshotRuntimeState(),
+        this.questManagers[1]?.snapshotRuntimeState()
+      ]
+    }
+  }
+
+  questProgress(): [Record<number, number>, Record<number, number>] {
+    return [
+      this.questManagers[0]?.getProgressThisMatch() ?? {},
+      this.questManagers[1]?.getProgressThisMatch() ?? {}
+    ]
   }
 
   stateInfo(): RuntimeStateInfo {

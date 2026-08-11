@@ -14,6 +14,7 @@
     "@noble/secp256k1": "1.7.1",
     "@opensky/bot": "workspace:*",
     "@opensky/proto": "workspace:*",
+    "@opensky/quests": "workspace:*",
     "@opensky/shared": "workspace:*",
     "@skyweaver/state-browser-sys": "workspace:*",
     "@skyweaver/state-metadata": "workspace:*"

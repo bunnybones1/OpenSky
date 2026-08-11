@@ -639,7 +639,8 @@ export function getReconstructionEvents(
   }
   const instances: Array<[ExactCardLocation, MaybeCardWithAttachment]> = []
 
-  state.playerCards.forEach((playerCards, player: Player) => {
+  state.playerCards.forEach((playerCards, playerIndex) => {
+    const player = playerIndex as Player
     const isMyPlayer = player === myPlayer
     for (let i = 0; i < playerCards.deck; i++) {
       const location: ExactCardLocation = {

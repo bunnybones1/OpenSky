@@ -1,4 +1,4 @@
-import { GameMode } from '@opensky/proto'
+import { GameMode, ItemType, QuestPeriodicity, QuestType } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import { PrivateSeed } from '@skyweaver/state-metadata'
@@ -61,7 +61,21 @@ export const createMatchFixture = (
       playerSessionID: 'session-1',
       botSubkey: false,
       spectateCode: 'spectate-1',
-      quests: []
+      quests: [
+        {
+          id: 7001,
+          position: 1,
+          questType: QuestType.Strengthweaver,
+          progress: 0,
+          endProgress: 1,
+          reward: { itemType: ItemType.SW_XP, amount: 100 },
+          periodicity: QuestPeriodicity.DAILY,
+          isRerollable: false,
+          isClaimable: false,
+          isClaimed: false,
+          isNew: true
+        }
+      ]
     },
     player2: {
       privateSeed: seed(
@@ -76,7 +90,23 @@ export const createMatchFixture = (
       playerSessionID: 'session-2',
       botSubkey: overrides.botPlayer2 ? BOT_SUBKEY_PRIVATE_KEY : false,
       spectateCode: 'spectate-2',
-      quests: []
+      quests: !overrides.botPlayer2
+        ? [
+            {
+              id: 7002,
+              position: 1,
+              questType: QuestType.Strengthweaver,
+              progress: 0,
+              endProgress: 1,
+              reward: { itemType: ItemType.SW_XP, amount: 100 },
+              periodicity: QuestPeriodicity.DAILY,
+              isRerollable: false,
+              isClaimable: false,
+              isClaimed: false,
+              isNew: true
+            }
+          ]
+        : []
     },
     matchSettings: {
       turnTimer: true,

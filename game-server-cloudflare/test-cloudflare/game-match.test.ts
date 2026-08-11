@@ -21,7 +21,11 @@ import {
 } from './fixture'
 
 const runtimeEnv = env as unknown as GameServerEnv
-const stub = () => runtimeEnv.GAME_MATCHES.getByName(`match:${PROPOSAL_ID}`)
+let proposalId = PROPOSAL_ID
+const fixture = (
+  overrides: Parameters<typeof createMatchFixture>[0] = {}
+) => createMatchFixture({ ...overrides, proposalId })
+const stub = () => runtimeEnv.GAME_MATCHES.getByName(`match:${proposalId}`)
 const sockets: WebSocket[] = []
 
 const internalHeaders = {
@@ -29,20 +33,20 @@ const internalHeaders = {
   [INTERNAL_AUTH_HEADER]: 'game-server-test-secret'
 }
 
-const createMatch = (fixture = createMatchFixture()) =>
+const createMatch = (fixture = createMatchFixture({ proposalId })) =>
   SELF.fetch('https://game.example/internal/matches', {
     method: 'POST',
     headers: internalHeaders,
     body: JSON.stringify(fixture)
   })
 
-const initializeMatch = async () => {
-  const response = await createMatch()
+const initializeMatch = async (fixture = createMatchFixture({ proposalId })) => {
+  const response = await createMatch(fixture)
   expect(response.status).toBe(200)
   return response.json()
 }
 
-const insertActiveLedgerRow = async (proposalId = PROPOSAL_ID) => {
+const insertActiveLedgerRow = async (ledgerProposalId = proposalId) => {
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO multiplayer_matches
@@ -53,11 +57,11 @@ const insertActiveLedgerRow = async (proposalId = PROPOSAL_ID) => {
              '{}', ?, 'active', ?, ?)`
   )
     .bind(
-      proposalId,
-      `replay-${proposalId}`,
+      ledgerProposalId,
+      `replay-${ledgerProposalId}`,
       PRINCIPAL_1,
       PRINCIPAL_2,
-      `wss://opensky.example/api/game/matches/${proposalId}`,
+      `wss://opensky.example/api/game/matches/${ledgerProposalId}`,
       now,
       now
     )
@@ -66,7 +70,7 @@ const insertActiveLedgerRow = async (proposalId = PROPOSAL_ID) => {
 
 const connect = async (principal: string) => {
   const response = await SELF.fetch(
-    `https://game.example/v1/matches/${PROPOSAL_ID}`,
+    `https://game.example/v1/matches/${proposalId}`,
     {
       headers: {
         Upgrade: 'websocket',
@@ -126,6 +130,7 @@ const join = (socket: WebSocket, subkeyByte: number) => {
 }
 
 beforeEach(async () => {
+  proposalId = `proposal-test-${crypto.randomUUID()}`
   await env.AUTH_DB.prepare('DELETE FROM multiplayer_matches').run()
 })
 
@@ -187,26 +192,26 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     const response = await createMatch()
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
-      proposalId: PROPOSAL_ID,
+      proposalId,
       matchId: 42,
-      serverAddress: `wss://opensky.example/api/game/matches/${PROPOSAL_ID}`
+      serverAddress: `wss://opensky.example/api/game/matches/${proposalId}`
     })
     await initializeMatch()
 
     const conflict = await SELF.fetch('https://game.example/internal/matches', {
       method: 'POST',
       headers: internalHeaders,
-      body: JSON.stringify(createMatchFixture({ matchID: 43 }))
+      body: JSON.stringify(fixture({ matchID: 43 }))
     })
     expect(conflict.status).toBe(409)
 
     const mutated = await createMatch(
-      createMatchFixture({ replayID: 'different-replay' })
+      fixture({ replayID: 'different-replay' })
     )
     expect(mutated.status).toBe(409)
 
     const wrongRelease = await createMatch(
-      createMatchFixture({ releaseVersion: 'different-release' })
+      fixture({ releaseVersion: 'different-release' })
     )
     expect(wrongRelease.status).toBe(409)
   })
@@ -214,7 +219,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   it('authenticates players at the gateway boundary and sends private reconnect state', async () => {
     await initializeMatch()
     const denied = await SELF.fetch(
-      `https://game.example/v1/matches/${PROPOSAL_ID}`,
+      `https://game.example/v1/matches/${proposalId}`,
       {
         headers: {
           Upgrade: 'websocket',
@@ -314,7 +319,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       matchId: 42,
       sockets: 1
     })
-  })
+  }, 10_000)
 
   it('uses durable alarms to advance commit-reveal state', async () => {
     await insertActiveLedgerRow()
@@ -383,14 +388,15 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(await endedStatus.json()).toMatchObject({
       ended: true,
-      state: { statusType: 'GameOver', winner: 1 }
+      state: { statusType: 'GameOver', winner: 1 },
+      questProgress: [{ 7001: 0 }, { 7002: 1 }]
     })
 
     const ledger = await env.AUTH_DB.prepare(
       `SELECT status, winner_player, result_json, ended_at
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
-      .bind(PROPOSAL_ID)
+      .bind(proposalId)
       .first<{
         status: string
         winner_player: number

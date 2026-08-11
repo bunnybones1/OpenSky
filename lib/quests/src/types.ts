@@ -47,7 +47,9 @@ export interface QuestStateImpl<State> {
 
 export function instantOneTimeEvent(
   didFinish: (props: StateInfo) => boolean | number | void
-): QuestStateImpl<{ done: boolean }> {
+): QuestStateImpl<
+  { done: false; innerState: boolean } | { done: true }
+> {
   return oneTimeEvent({
     done: s => s,
     initState: () => false,
@@ -97,8 +99,8 @@ export function accumulated(
 
 /// Use two impls. It will emit when either emits
 export function implOr(
-  ...impls: Array<QuestStateImpl<unknown>>
-): QuestStateImpl<Array<unknown>> {
+  ...impls: Array<QuestStateImpl<any>>
+): QuestStateImpl<Array<any>> {
   return {
     initState: () => impls.map(impl => impl.initState()),
     modifyState: props => {
@@ -132,8 +134,11 @@ type BaseQuestImplementation = {
   constructedDeckFilter?: (bases: BaseCard[]) => boolean
 }
 
-export type QuestImplementation = BaseQuestImplementation &
-  QuestStateImpl<unknown>
+// Implementations deliberately carry different internal state shapes. `any`
+// is required here because function parameters are contravariant under strict
+// TypeScript settings; `unknown` incorrectly rejects every concrete state
+// implementation when this source package is consumed by another workspace.
+export type QuestImplementation = BaseQuestImplementation & QuestStateImpl<any>
 
 export type GameStateFilter = (
   player: Player,

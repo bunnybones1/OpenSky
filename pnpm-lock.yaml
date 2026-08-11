@@ -535,6 +535,9 @@ importers:
       '@opensky/proto':
         specifier: workspace:*
         version: link:../lib/proto
+      '@opensky/quests':
+        specifier: workspace:*
+        version: link:../lib/quests
       '@opensky/shared':
         specifier: workspace:*
         version: link:../lib/shared

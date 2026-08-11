@@ -21,6 +21,7 @@ import {
 } from './protocol'
 import {
   AuthoritativeMatchRuntime,
+  MatchQuestRuntimeState,
   normalizePrivateSeed
 } from './state-runtime'
 
@@ -29,6 +30,7 @@ const SNAPSHOT_KEY = 'match:snapshot'
 const PLAYERS_KEY = 'match:players'
 const TIMERS_KEY = 'match:timers'
 const PENDING_GAMEPLAY_KEY = 'match:pending-gameplay'
+const QUEST_RUNTIME_KEY = 'match:quest-runtime'
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
@@ -377,7 +379,8 @@ export class GameMatch implements DurableObject {
         heroRarity(input.match.player1),
         heroRarity(input.match.player2)
       ],
-      ownerPrivateKey: this.env.MATCH_OWNER_PRIVATE_KEY
+      ownerPrivateKey: this.env.MATCH_OWNER_PRIVATE_KEY,
+      participants: [input.match.player1, input.match.player2]
     })
     this.runtime = runtime
     const players: PlayerStateMap = {
@@ -391,7 +394,8 @@ export class GameMatch implements DurableObject {
       [SNAPSHOT_KEY]: runtime.snapshot(),
       [PLAYERS_KEY]: players,
       [TIMERS_KEY]: {} satisfies MatchTimers,
-      [PENDING_GAMEPLAY_KEY]: [] satisfies PendingGameplay[]
+      [PENDING_GAMEPLAY_KEY]: [] satisfies PendingGameplay[],
+      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState()
     })
     await this.afterStateChange(metadata, players, {}, Date.now())
     return this.creationResponse(metadata)
@@ -403,7 +407,8 @@ export class GameMatch implements DurableObject {
     const metadata = await this.metadata()
     if (!metadata) return Response.json({ initialized: false }, { status: 404 })
     const [players, timers] = await Promise.all([this.players(), this.timers()])
-    const stateInfo = (await this.ensureRuntime()).stateInfo()
+    const runtime = await this.ensureRuntime()
+    const stateInfo = runtime.stateInfo()
     return Response.json({
       initialized: true,
       proposalId: metadata.proposalId,
@@ -414,6 +419,7 @@ export class GameMatch implements DurableObject {
       players,
       timers,
       state: stateInfo,
+      questProgress: runtime.questProgress(),
       sockets: this.state.getWebSockets().length
     })
   }
@@ -790,7 +796,8 @@ export class GameMatch implements DurableObject {
       [METADATA_KEY]: metadata,
       [PLAYERS_KEY]: players,
       [TIMERS_KEY]: timers,
-      [SNAPSHOT_KEY]: runtime.snapshot()
+      [SNAPSHOT_KEY]: runtime.snapshot(),
+      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState()
     })
     await this.scheduleAlarm(players, timers, now)
     if (metadata.ended && !metadata.completionRecorded) {
@@ -937,11 +944,18 @@ export class GameMatch implements DurableObject {
 
   private async ensureRuntime() {
     if (this.runtime) return this.runtime
-    const snapshot = await this.state.storage.get<Uint8Array>(SNAPSHOT_KEY)
-    if (!snapshot) throw new Error('match runtime is not initialized')
+    const [snapshot, metadata, questRuntimeState] = await Promise.all([
+      this.state.storage.get<Uint8Array>(SNAPSHOT_KEY),
+      this.metadata(),
+      this.state.storage.get<MatchQuestRuntimeState>(QUEST_RUNTIME_KEY)
+    ])
+    if (!snapshot || !metadata)
+      throw new Error('match runtime is not initialized')
     this.runtime = AuthoritativeMatchRuntime.restore(
       snapshot,
-      this.env.MATCH_OWNER_PRIVATE_KEY
+      this.env.MATCH_OWNER_PRIVATE_KEY,
+      [metadata.match.player1, metadata.match.player2],
+      questRuntimeState
     )
     return this.runtime
   }
