@@ -49,6 +49,7 @@ describe('Cloudflare player API', () => {
     })
     expect(response.status).toBe(200)
     const body = await response.json<{
+      created: boolean
       player: {
         profile: { level: number }
         basicSkyPass: { level: number }
@@ -57,6 +58,7 @@ describe('Cloudflare player API', () => {
         decks: Array<{ name: string; cardCount: number }>
       }
     }>()
+    expect(body.created).toBe(true)
     expect(body.player.profile.level).toBe(1)
     expect(body.player.basicSkyPass.level).toBe(1)
     expect(body.player.quests).toHaveLength(3)
@@ -78,8 +80,12 @@ describe('Cloudflare player API', () => {
       method: 'POST',
       headers: { Origin: 'https://opensky.example' }
     }
-    expect((await request('/api/player/bootstrap', init)).status).toBe(200)
-    expect((await request('/api/player/bootstrap', init)).status).toBe(200)
+    const first = await request('/api/player/bootstrap', init)
+    const second = await request('/api/player/bootstrap', init)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(await first.json()).toMatchObject({ created: true })
+    expect(await second.json()).toMatchObject({ created: false })
 
     const [profiles, cards, decks, items] = await Promise.all([
       env.AUTH_DB.prepare(

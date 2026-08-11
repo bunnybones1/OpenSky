@@ -162,7 +162,7 @@ const InviteAFriendRewards = memo(() => {
       >
         {t('inviteFriends.progressHeaderTitle')}
       </Text>
-      {!stickerInfo || !normalizedStickers ? (
+      {stickers === undefined || points === undefined ? (
         <FlexBox
           height={200}
           width="100%"
@@ -171,7 +171,23 @@ const InviteAFriendRewards = memo(() => {
         >
           <Icon height="32px" color="purple8" type="spinner" />
         </FlexBox>
-      ) : (
+      ) : stickers.length === 0 ? (
+        <FlexBox
+          height={200}
+          width="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Text
+            color="purple9"
+            fontFamily="condensed"
+            fontSize={22}
+            fontWeight="bold"
+          >
+            {t('general.comingSoon')}
+          </Text>
+        </FlexBox>
+      ) : !stickerInfo || !normalizedStickers ? null : (
         <FlexBox width="100%" maxWidth={890}>
           <DynamicProgressWithRewards
             endProgress={stickerInfo.endProgress}

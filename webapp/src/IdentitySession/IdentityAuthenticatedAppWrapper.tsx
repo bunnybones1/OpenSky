@@ -48,6 +48,7 @@ const accountFor = (player: PlayerState, identityReference: string): Account => 
 const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
   const [player, setPlayer] = useState<PlayerState>()
   const [canonicalAccount, setCanonicalAccount] = useState<Account>()
+  const [isNewPlayer, setIsNewPlayer] = useState(false)
   const [error, setError] = useState<string>()
 
   const identityReference = useMemo(
@@ -59,7 +60,10 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
     setError(undefined)
     identityClient
       .bootstrapPlayer()
-      .then(setPlayer)
+      .then(({ player: nextPlayer, created }) => {
+        setPlayer(nextPlayer)
+        setIsNewPlayer(created)
+      })
       .catch((nextError) =>
         setError(
           nextError instanceof Error
@@ -93,6 +97,42 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
       cancelled = true
     }
   }, [identityReference, player])
+
+  useEffect(() => {
+    if (!isNewPlayer || !canonicalAccount || canonicalAccount.invitedBy) return
+    const invitedBy = new URLSearchParams(window.location.search).get('invitedBy')
+    if (!invitedBy?.startsWith('identity:') || invitedBy === identityReference) {
+      return
+    }
+
+    let cancelled = false
+    APIClient.opensky
+      .setInvitedBy({
+        req: { address: identityReference, invitedBy }
+      })
+      .then(() => {
+        if (cancelled) return
+        const nextAccount = { ...canonicalAccount, invitedBy }
+        setCanonicalAccount(nextAccount)
+        GlobalQueryClient.setQueryData(
+          getUseAccountKey(identityReference),
+          nextAccount
+        )
+        const url = new URL(window.location.href)
+        url.searchParams.delete('invitedBy')
+        window.history.replaceState(
+          null,
+          '',
+          `${url.pathname}${url.search}${url.hash}`
+        )
+      })
+      .catch(() => {
+        // Referral attribution must not block a new player from entering the app.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [canonicalAccount, identityReference, isNewPlayer])
 
   useEffect(() => {
     if (!account) return

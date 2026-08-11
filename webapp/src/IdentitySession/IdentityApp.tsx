@@ -6,6 +6,9 @@ import AppLayout from '~/AppLayout/AppLayout'
 import { CreateDeckPage } from '~/CreateDeckPage/CreateDeckPage'
 import { DeckBuilder } from '~/DeckBuilder/DeckBuilder'
 import HomePage from '~/HomePage/HomePage'
+import InviteFriendsPage from '~/InviteFriendsPage/InviteFriendsPage'
+import InviteAFriendRewards from '~/InviteFriendsPage/outlets/InviteAFriendRewards'
+import InvitedFriends from '~/InviteFriendsPage/outlets/InvitedFriends/InvitedFriends'
 import ItemsPage from '~/ItemsPage/ItemsPage'
 import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
@@ -34,6 +37,28 @@ export const IdentityApp = memo(() => (
         path={ROUTES_CONFIG.routes.DECK_BUILDER.path}
       />
       <Route element={<QuestsPage />} path={ROUTES_CONFIG.routes.QUESTS.path} />
+      <Route
+        element={<InviteFriendsPage />}
+        path={ROUTES_CONFIG.routes.INVITE_FRIENDS.path}
+      >
+        <Route
+          index
+          element={
+            <Navigate
+              to={ROUTES_CONFIG.routes.INVITE_FRIENDS.routes.REWARDS.directPath}
+              replace
+            />
+          }
+        />
+        <Route
+          element={<InviteAFriendRewards />}
+          path={ROUTES_CONFIG.routes.INVITE_FRIENDS.routes.REWARDS.path}
+        />
+        <Route
+          element={<InvitedFriends />}
+          path={ROUTES_CONFIG.routes.INVITE_FRIENDS.routes.INVITED.path}
+        />
+      </Route>
       <Route
         element={<SkyPassPage />}
         path={ROUTES_CONFIG.routes.SKY_PASS.directPath}

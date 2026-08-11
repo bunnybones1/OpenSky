@@ -102,7 +102,10 @@ class IdentityClient {
     )
   }
 
-  public bootstrapPlayer = async (): Promise<PlayerState> => {
+  public bootstrapPlayer = async (): Promise<{
+    player: PlayerState
+    created: boolean
+  }> => {
     const response = await fetch('/api/player/bootstrap', {
       method: 'POST',
       credentials: 'same-origin',
@@ -113,8 +116,7 @@ class IdentityClient {
         throw new Error('Your sign-in session has expired.')
       throw new Error('Unable to set up your Cloud Weasel player.')
     }
-    const body = (await response.json()) as { player: PlayerState }
-    return body.player
+    return response.json()
   }
 
   public signOut = async (): Promise<void> => {

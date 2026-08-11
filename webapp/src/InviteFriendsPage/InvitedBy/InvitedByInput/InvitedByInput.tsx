@@ -3,6 +3,7 @@ import { memo, useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Input, InputProps } from '~/__deprecated__/Input/Input'
+import env from '~/env'
 import { Account } from '~/lib/proto'
 import { APIClient } from '~/shared/clients'
 import { Box, FlexBox, Text } from '~/shared/components/Base'
@@ -92,7 +93,11 @@ export const InvitedByInput = memo(() => {
             value={value}
             height={36}
             onChange={onAddressChange}
-            placeholder={t('generic.walletAddress')}
+            placeholder={
+              env.AUTH_MODE === 'google'
+                ? 'Friend account reference'
+                : t('generic.walletAddress')
+            }
             isErrored={!!error}
             toolTip={error}
           />
@@ -106,16 +111,28 @@ export const InvitedByInput = memo(() => {
           disabled={!value || !!error}
         />
       </FlexBox>
-      <Text
-        fontWeight="medium"
-        fontSize={14}
-        lineHeight="18px"
-        mt={12}
-        color="white"
-        dangerouslySetInnerHTML={{
-          __html: t('inviteFriends.invitedByBody')
-        }}
-      />
+      {env.AUTH_MODE === 'google' ? (
+        <Text
+          fontWeight="medium"
+          fontSize={14}
+          lineHeight="18px"
+          mt={12}
+          color="white"
+        >
+          Paste the friend account reference from their invite link.
+        </Text>
+      ) : (
+        <Text
+          fontWeight="medium"
+          fontSize={14}
+          lineHeight="18px"
+          mt={12}
+          color="white"
+          dangerouslySetInnerHTML={{
+            __html: t('inviteFriends.invitedByBody')
+          }}
+        />
+      )}
       <Text fontWeight="medium" fontSize={12} lineHeight="16px" color="purple8">
         {t('inviteFriends.invitedByFooter')}
       </Text>
