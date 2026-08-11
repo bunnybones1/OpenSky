@@ -295,6 +295,17 @@ export const handleApiRequest = async (
         return json(request, env, result)
       }
 
+      case 'GetPrivateSpectateCode': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ reset?: boolean }>(request)
+        return json(request, env, {
+          code: await playerRpc.getPrivateSpectateCode(
+            principal.userId,
+            body.reset === true
+          )
+        })
+      }
+
       case 'ListLeaderboard': {
         const body = await requestBody<{
           page?: import('@opensky/proto').Page

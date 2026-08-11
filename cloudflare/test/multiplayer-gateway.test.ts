@@ -104,7 +104,7 @@ describe('same-origin multiplayer gateway', () => {
     })
   })
 
-  it('restores the source match-info contract for the authenticated principal', async () => {
+  it('restores the source match-info contract for the requested player', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const opponent = '0x3333333333333333333333333333333333333333'
     const now = new Date().toISOString()
@@ -139,8 +139,7 @@ describe('same-origin multiplayer gateway', () => {
     const headers = await authenticatedHeaders()
     delete (headers as { Upgrade?: string }).Upgrade
     const response = await gateway(
-      // The URL address is deliberately forged. Session identity is authoritative.
-      '/api/matchmaker/matchinfo/0xffffffffffffffffffffffffffffffffffffffff',
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
       headers
     )
     expect(response.status).toBe(200)
@@ -179,10 +178,64 @@ describe('same-origin multiplayer gateway', () => {
       .bind('gateway-proposal')
       .run()
     const afterCompletion = await gateway(
-      '/api/matchmaker/matchinfo/ignored',
+      `/api/matchmaker/matchinfo/${principal}`,
       headers
     )
     expect(await afterCompletion.json()).toEqual({ type: 'no_match_found' })
+  })
+
+  it('allows an authenticated spectator to query another player without leaking unknown targets', async () => {
+    const playerId = '33333333-3333-4333-8333-333333333333'
+    const playerPrincipal = await deriveGamePrincipal(playerId)
+    const opponent = '0x4444444444444444444444444444444444444444'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Spectated Player', 'spectated@example.com', NULL, ?, ?)`
+    )
+      .bind(playerId, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, created_at, updated_at)
+       VALUES ('spectated-proposal', 'spectated-replay', 'RANKED_CONSTRUCTED',
+               'spectated-release', ?, ?, ?, NULL, ?, ?, 'active', ?, ?)`
+    )
+      .bind(
+        playerPrincipal,
+        opponent,
+        playerId,
+        JSON.stringify({
+          match: {
+            player1: { account: { address: playerPrincipal } },
+            player2: { account: { address: opponent } }
+          }
+        }),
+        'wss://opensky.example/api/game/matches/spectated-proposal',
+        now,
+        now
+      )
+      .run()
+
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    const response = await gateway(
+      `/api/matchmaker/matchinfo/identity:${playerId}`,
+      headers
+    )
+    expect(await response.json()).toMatchObject({
+      type: 'in_progress_match_info',
+      matchInfo: { replayID: 'spectated-replay' }
+    })
+
+    const unknown = await gateway(
+      '/api/matchmaker/matchinfo/identity:unknown-player',
+      headers
+    )
+    expect(await unknown.json()).toEqual({ type: 'no_match_found' })
   })
 
   it('rejects missing sessions and malformed match IDs before service dispatch', async () => {

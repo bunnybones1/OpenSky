@@ -151,6 +151,24 @@ const matchInfo = async (env: Env, principal: string) => {
   }
 }
 
+const matchInfoPrincipal = async (
+  env: Env,
+  requestedTarget: string
+): Promise<string | undefined> => {
+  let target: string
+  try {
+    target = decodeURIComponent(requestedTarget)
+  } catch {
+    return
+  }
+  if (/^0x[0-9a-f]{40}$/i.test(target)) return target.toLowerCase()
+  if (!target.startsWith('identity:')) return
+  const userId = target.slice('identity:'.length)
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)) return
+  const user = await new IdentitiesRepository(env.AUTH_DB).findUserById(userId)
+  return user ? deriveGamePrincipal(userId) : undefined
+}
+
 export const handleMultiplayerGateway = async (
   request: Request,
   env: Env
@@ -160,7 +178,13 @@ export const handleMultiplayerGateway = async (
   const url = new URL(request.url)
 
   if (request.method === 'GET' && url.pathname.startsWith(MATCH_INFO_PREFIX)) {
-    return matchInfo(env, authenticated.principal)
+    const principal = await matchInfoPrincipal(
+      env,
+      url.pathname.slice(MATCH_INFO_PREFIX.length)
+    )
+    return principal
+      ? matchInfo(env, principal)
+      : json({ type: 'no_match_found' }, 200)
   }
   if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
     return json({ error: 'websocket upgrade required' }, 426)

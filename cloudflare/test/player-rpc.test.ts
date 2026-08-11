@@ -192,6 +192,46 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('creates, retains, and explicitly rotates source-compatible spectate codes', async () => {
+    const first = await rpc('GetPrivateSpectateCode', {})
+    expect(first.status).toBe(200)
+    const firstCode = (await first.json<{ code: string }>()).code
+    expect(firstCode).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    )
+
+    const retained = await rpc('GetPrivateSpectateCode', { reset: false })
+    expect(await retained.json()).toEqual({ code: firstCode })
+
+    const ownAccount = await rpc('GetAccount', { address: identityReference })
+    const ownBody = await ownAccount.json<{
+      account: {
+        settings: {
+          spectateCode: string
+          spectateCodeExpiresAt: string
+        }
+      }
+    }>()
+    expect(ownBody.account.settings.spectateCode).toBe(firstCode)
+    expect(
+      Date.parse(ownBody.account.settings.spectateCodeExpiresAt)
+    ).toBeGreaterThan(Date.now() + 59 * 24 * 60 * 60 * 1000)
+
+    const rotated = await rpc('GetPrivateSpectateCode', { reset: true })
+    const rotatedCode = (await rotated.json<{ code: string }>()).code
+    expect(rotatedCode).not.toBe(firstCode)
+
+    const publicAccount = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    const publicBody = await publicAccount.json<{
+      account: { settings?: unknown }
+    }>()
+    expect(publicBody.account.settings).toBeUndefined()
+  })
+
   it('returns source-shaped current and historical account stats', async () => {
     const season = seasonFromDate()
     const account = await rpc('GetAccount', { address: identityReference })

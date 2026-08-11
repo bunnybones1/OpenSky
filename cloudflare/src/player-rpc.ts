@@ -172,6 +172,8 @@ interface AccountRow {
   request_more_invites: number | null
   twitch_profile: string | null
   rename_locked_until: string | null
+  spectate_code: string | null
+  spectate_code_expires_at: string | null
   user_created_at: string
   profile_updated_at: string
   level: number
@@ -389,6 +391,8 @@ export class PlayerRpcRepository {
                 account.request_more_invites,
                 account.twitch_profile,
                 account.rename_locked_until,
+                account.spectate_code,
+                account.spectate_code_expires_at,
                 u.created_at AS user_created_at,
                 p.updated_at AS profile_updated_at,
                 p.level,
@@ -435,11 +439,69 @@ export class PlayerRpcRepository {
               ...(row.twitch_profile
                 ? { twitchProfile: row.twitch_profile }
                 : {}),
-              ...(row.title_id !== null ? { titleID: row.title_id } : {})
+              ...(row.title_id !== null ? { titleID: row.title_id } : {}),
+              ...(row.spectate_code
+                ? { spectateCode: row.spectate_code }
+                : {}),
+              ...(row.spectate_code_expires_at
+                ? { spectateCodeExpiresAt: row.spectate_code_expires_at }
+                : {})
             }
           }
         : {})
     }
+  }
+
+  async getPrivateSpectateCode(
+    userId: string,
+    forceReset: boolean
+  ): Promise<string> {
+    const current = await this.database
+      .prepare(
+        `SELECT spectate_code, spectate_code_expires_at
+         FROM player_account_settings
+         WHERE user_id = ?`
+      )
+      .bind(userId)
+      .first<{
+        spectate_code: string | null
+        spectate_code_expires_at: string | null
+      }>()
+    if (!current) throw new Error('player account settings are missing')
+
+    const activeMatch = await this.database
+      .prepare(
+        `SELECT 1 FROM multiplayer_matches
+         WHERE status = 'active'
+           AND (player1_user_id = ? OR player2_user_id = ?)
+         LIMIT 1`
+      )
+      .bind(userId, userId)
+      .first()
+    const expiresAt = current.spectate_code_expires_at
+      ? Date.parse(current.spectate_code_expires_at)
+      : Number.NaN
+    const expired = !Number.isFinite(expiresAt) || expiresAt <= Date.now()
+    const shouldReset =
+      forceReset ||
+      !current.spectate_code ||
+      (!activeMatch && expired)
+
+    if (!shouldReset) return current.spectate_code!
+
+    const code = crypto.randomUUID()
+    const expiry = new Date(
+      Date.now() + 60 * 24 * 60 * 60 * 1000
+    ).toISOString()
+    await this.database
+      .prepare(
+        `UPDATE player_account_settings
+         SET spectate_code = ?, spectate_code_expires_at = ?, updated_at = ?
+         WHERE user_id = ?`
+      )
+      .bind(code, expiry, new Date().toISOString(), userId)
+      .run()
+    return code
   }
 
   async accountReferenceExists(address: string): Promise<boolean> {
