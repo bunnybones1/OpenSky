@@ -87,10 +87,10 @@ interface DeckRow {
   is_starter: number
 }
 
-const STRENGTH_STARTER_DECK =
+export const STRENGTH_STARTER_DECK =
   'SWxSTR0224gSjisS9WiYTUwzdwyc7xYgw9eR2us1aSrgBNHNAnSpFH8P7Sb4RdUXCD8c7FjHgbLwCJXttb1C7upZe7'
 
-const STARTER_CARDS = [
+export const STARTER_CARDS = [
   [6, 'Stomp'],
   [68, 'Goblet of Armis'],
   [136, 'Scaredy Sentinel'],
@@ -123,27 +123,52 @@ const STARTER_CARDS = [
   [164, 'Power Infusion']
 ] as const
 
+export const STARTER_CARD_IDS = STARTER_CARDS.map(([id]) => id)
+
 const STARTER_QUESTS = [
   {
     key: 'practice-match',
-    title: 'Take a practice run',
-    description: 'Complete a match against the local practice bot.',
+    title: 'Welcome to OpenSky',
+    description:
+      'The opening assignment from the original starter quest chain.',
+    questType: 'WelcomeOpenSky',
+    epicType: 'starter2_test',
+    epicIndex: 1,
+    epicLength: 5,
+    position: 2,
+    progress: 1,
     target: 1,
-    rewardXp: 50
+    rewardXp: 300,
+    status: 'complete'
   },
   {
     key: 'explore-collection',
-    title: 'Meet your starter cards',
-    description: 'Open your collection and explore the basic cards already unlocked.',
+    title: "Hero's Journey",
+    description: 'The opening assignment from the original hero quest chain.',
+    questType: 'HerosJourney',
+    epicType: 'hero_test',
+    epicIndex: 1,
+    epicLength: 5,
+    position: 3,
+    progress: 0,
     target: 1,
-    rewardXp: 25
+    rewardXp: 500,
+    status: 'active'
   },
   {
     key: 'starter-deck',
-    title: 'Ready your first deck',
-    description: 'Review the starter deck prepared for practice mode.',
+    title: 'Strengthweaver',
+    description:
+      'The opening assignment from the original Strength quest chain.',
+    questType: 'Strengthweaver',
+    epicType: 'starter1_test',
+    epicIndex: 1,
+    epicLength: 3,
+    position: 1,
+    progress: 0,
     target: 1,
-    rewardXp: 25
+    rewardXp: 100,
+    status: 'active'
   }
 ] as const
 
@@ -171,10 +196,20 @@ export class PlayerRepository {
       this.database
         .prepare(
           `INSERT OR IGNORE INTO player_decks
-             (id, user_id, name, prism, deck_string, card_count, is_starter, created_at, updated_at)
-           VALUES (?, ?, 'Strength Starter', 'strength', ?, ?, 1, ?, ?)`
+             (id, user_id, name, prism, deck_string, card_count, is_starter,
+              created_at, updated_at, deck_class, card_ids, deck_type)
+           VALUES (?, ?, 'Strength Starter', 'strength', ?, ?, 1, ?, ?, 'STR', ?,
+                   'UNLOCKED_STARTER')`
         )
-        .bind(`${userId}:starter:strength`, userId, STRENGTH_STARTER_DECK, STARTER_CARDS.length, now, now)
+        .bind(
+          `${userId}:starter:strength`,
+          userId,
+          STRENGTH_STARTER_DECK,
+          STARTER_CARDS.length,
+          now,
+          now,
+          JSON.stringify(STARTER_CARD_IDS)
+        )
     ]
 
     for (const quest of STARTER_QUESTS) {
@@ -182,19 +217,27 @@ export class PlayerRepository {
         this.database
           .prepare(
             `INSERT OR IGNORE INTO player_quests
-               (user_id, quest_key, title, description, progress, target, reward_xp, status,
-                created_at, updated_at)
-             VALUES (?, ?, ?, ?, 0, ?, ?, 'active', ?, ?)`
+               (user_id, quest_key, title, description, progress, target, reward_xp,
+                status, created_at, updated_at, quest_type, epic_type, epic_index,
+                epic_length, position, periodicity, is_rerollable, is_new)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DAILY', 0, 1)`
           )
           .bind(
             userId,
             quest.key,
             quest.title,
             quest.description,
+            quest.progress,
             quest.target,
             quest.rewardXp,
+            quest.status,
             now,
-            now
+            now,
+            quest.questType,
+            quest.epicType,
+            quest.epicIndex,
+            quest.epicLength,
+            quest.position
           )
       )
     }
@@ -204,8 +247,9 @@ export class PlayerRepository {
         this.database
           .prepare(
             `INSERT OR IGNORE INTO player_card_unlocks
-               (user_id, card_id, card_name, prism, unlock_source, unlocked_at)
-             VALUES (?, ?, ?, 'strength', 'starter-deck', ?)`
+               (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
+                item_type, is_new)
+             VALUES (?, ?, ?, 'strength', 'starter-deck', ?, 'SW_BASE_CARDS', 1)`
           )
           .bind(userId, cardId, cardName, now)
       )

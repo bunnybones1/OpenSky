@@ -1,12 +1,21 @@
-import type { AccountRegistration } from '@opensky/proto'
+import type { AccountRegistration, ItemType } from '@opensky/proto'
 
 import { AccountsRepository } from './accounts'
 import { CookiePoliciesRepository } from './cookie-policies'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
-import { bearerToken, signSession, verifySession } from './jwt'
+import { signSession } from './jwt'
+import {
+  currentSeasonStart,
+  nextSeasonStart,
+  questAutoRerollTimes,
+  seasonFromDate,
+  seasonName
+} from './legacy-seasons'
+import { PlayerRpcRepository } from './player-rpc'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
+import { rpcPrincipal, type RpcPrincipal } from './rpc-principal'
 
 const RPC_PREFIX = '/api/rpc/SkyWeaverAPI/'
 
@@ -50,9 +59,26 @@ const requestBody = async <T>(request: Request): Promise<T> => {
   }
 }
 
-const sessionAddress = async (request: Request, env: Env): Promise<string> => {
-  const claims = await verifySession(bearerToken(request), env.SESSION_SIGNING_KEY)
-  return claims.account.toLowerCase()
+const walletPrincipal = async (
+  request: Request,
+  env: Env
+): Promise<Extract<RpcPrincipal, { kind: 'wallet' }>> => {
+  const principal = await rpcPrincipal(request, env)
+  if (principal.kind !== 'wallet') {
+    throw invalidArgument('this method requires a wallet session')
+  }
+  return principal
+}
+
+const identityPrincipal = async (
+  request: Request,
+  env: Env
+): Promise<Extract<RpcPrincipal, { kind: 'identity' }>> => {
+  const principal = await rpcPrincipal(request, env)
+  if (principal.kind !== 'identity') {
+    throw invalidArgument('this player method requires an identity session')
+  }
+  return principal
 }
 
 export const handleApiRequest = async (
@@ -78,6 +104,7 @@ export const handleApiRequest = async (
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
+  const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
 
   try {
     switch (method) {
@@ -107,13 +134,17 @@ export const handleApiRequest = async (
       }
 
       case 'GetSession': {
-        const address = await sessionAddress(request, env)
-        const account = await accounts.findByAddress(address)
+        const principal = await rpcPrincipal(request, env)
+        const address = principal.reference
+        const account =
+          principal.kind === 'identity'
+            ? await playerRpc.getAccount(principal.userId, address)
+            : await accounts.findByAddress(address)
         return json(request, env, { address, ...(account ? { account } : {}) })
       }
 
       case 'RegisterAccount': {
-        const address = await sessionAddress(request, env)
+        const { reference: address } = await walletPrincipal(request, env)
         const body = await requestBody<{ accountRegistration?: AccountRegistration }>(request)
         if (!body.accountRegistration) throw invalidArgument('accountRegistration is required')
         if (
@@ -127,6 +158,20 @@ export const handleApiRequest = async (
           address
         })
         return json(request, env, { status: true, account })
+      }
+
+      case 'GetAccount': {
+        const body = await requestBody<{ address?: string }>(request)
+        if (!body.address) throw invalidArgument('address is required')
+        if (body.address.startsWith('identity:')) {
+          const principal = await identityPrincipal(request, env)
+          return json(request, env, {
+            account: await playerRpc.getAccount(principal.userId, body.address)
+          })
+        }
+        return json(request, env, {
+          account: (await accounts.findByAddress(body.address)) || null
+        })
       }
 
       case 'AccountExists': {
@@ -144,18 +189,151 @@ export const handleApiRequest = async (
       }
 
       case 'GetCookiePolicy': {
-        const address = await sessionAddress(request, env)
-        return json(request, env, { res: await cookiePolicies.get(address) })
+        const principal = await rpcPrincipal(request, env)
+        return json(request, env, {
+          res: await cookiePolicies.get(principal.reference)
+        })
       }
 
       case 'SaveCookiePolicy': {
-        const address = await sessionAddress(request, env)
+        const principal = await rpcPrincipal(request, env)
         const body = await requestBody<{ cookieOptions?: Record<string, boolean> }>(request)
         if (!body.cookieOptions || typeof body.cookieOptions !== 'object') {
           throw invalidArgument('cookieOptions is required')
         }
-        await cookiePolicies.save(address, body.cookieOptions)
+        await cookiePolicies.save(principal.reference, body.cookieOptions)
         return json(request, env, { status: true })
+      }
+
+      case 'GetItemOwnershipByType': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ itemTypes?: ItemType[] }>(request)
+        return json(request, env, {
+          items: await playerRpc.listItems(principal.userId, body.itemTypes)
+        })
+      }
+
+      case 'MarkItemsNotNew': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          tokenIDs?: number[]
+          immediately?: boolean
+        }>(request)
+        if (!Array.isArray(body.tokenIDs)) {
+          throw invalidArgument('tokenIDs is required')
+        }
+        return json(request, env, {
+          ok: await playerRpc.markItemsNotNew(
+            principal.userId,
+            body.tokenIDs,
+            body.immediately === true
+          )
+        })
+      }
+
+      case 'GetCardOwnership': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          res: await playerRpc.cardOwnership(principal.userId)
+        })
+      }
+
+      case 'GetPendingCards': {
+        await identityPrincipal(request, env)
+        return json(request, env, { res: [] })
+      }
+
+      case 'ListDecks': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          page: { pageSize: 200 },
+          res: await playerRpc.listDecks(principal.userId)
+        })
+      }
+
+      case 'FavoriteDeck':
+      case 'UnfavoriteDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ uuid?: string }>(request)
+        if (!body.uuid) throw invalidArgument('uuid is required')
+        return json(request, env, {
+          ok: await playerRpc.setDeckFavorite(
+            principal.userId,
+            body.uuid,
+            method === 'FavoriteDeck'
+          )
+        })
+      }
+
+      case 'MarkDeckNotNew': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ uuid?: string }>(request)
+        if (!body.uuid) throw invalidArgument('uuid is required')
+        return json(request, env, {
+          ok: await playerRpc.markDeckNotNew(principal.userId, body.uuid)
+        })
+      }
+
+      case 'ListUnlockedDeckClasses': {
+        await identityPrincipal(request, env)
+        return json(request, env, { deckClass: ['STR'] })
+      }
+
+      case 'DeckClassUnlockLevels': {
+        return json(request, env, {
+          res: await playerRpc.deckClassUnlockLevels(seasonFromDate())
+        })
+      }
+
+      case 'ListQuests': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          quests: await playerRpc.listQuests(principal.userId),
+          rewards: []
+        })
+      }
+
+      case 'SetQuestsAsSeen': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ ids?: number[] }>(request)
+        if (!Array.isArray(body.ids)) throw invalidArgument('ids is required')
+        return json(request, env, {
+          status: await playerRpc.setQuestsSeen(principal.userId, body.ids)
+        })
+      }
+
+      case 'GetQuestsAutoRerollTime': {
+        return json(request, env, { res: questAutoRerollTimes() })
+      }
+
+      case 'GetCurrentSeason': {
+        return json(request, env, { res: seasonFromDate() })
+      }
+
+      case 'GetCurrentSeasonStartTime': {
+        return json(request, env, { res: currentSeasonStart().toISOString() })
+      }
+
+      case 'GetNextSeasonTime': {
+        return json(request, env, { res: nextSeasonStart().toISOString() })
+      }
+
+      case 'ListSkypassRewards': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ season?: number }>(request)
+        const season = body.season || seasonFromDate()
+        const { levels, hasPremium } = await playerRpc.listSkypassRewards(
+          principal.userId,
+          season
+        )
+        return json(request, env, {
+          res: {
+            levels,
+            seasonNumber: season,
+            seasonName: seasonName(season),
+            hasPremium
+          }
+        })
       }
 
       default:

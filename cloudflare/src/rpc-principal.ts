@@ -1,0 +1,40 @@
+import { readCookies } from './cookies'
+import type { Env } from './env'
+import { unauthenticated } from './errors'
+import {
+  IDENTITY_SESSION_COOKIE,
+  verifyIdentitySession
+} from './identity-session'
+import { bearerToken, verifySession } from './jwt'
+
+export type RpcPrincipal =
+  | {
+      kind: 'wallet'
+      reference: string
+    }
+  | {
+      kind: 'identity'
+      reference: string
+      userId: string
+    }
+
+export const identityReferenceFor = (userId: string) => `identity:${userId}`
+
+export const rpcPrincipal = async (
+  request: Request,
+  env: Env
+): Promise<RpcPrincipal> => {
+  if (request.headers.has('Authorization')) {
+    const claims = await verifySession(
+      bearerToken(request),
+      env.SESSION_SIGNING_KEY
+    )
+    return { kind: 'wallet', reference: claims.account.toLowerCase() }
+  }
+
+  const token = readCookies(request).get(IDENTITY_SESSION_COOKIE)
+  if (!token) throw unauthenticated()
+  const userId = await verifyIdentitySession(token, env.SESSION_SIGNING_KEY)
+  if (!userId) throw unauthenticated()
+  return { kind: 'identity', userId, reference: identityReferenceFor(userId) }
+}
