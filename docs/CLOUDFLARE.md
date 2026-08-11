@@ -208,8 +208,13 @@ and progress are not migrated.
 
 ## Suggested next slice
 
-Port Conquest as an isolated state-and-reward milestone before enabling its
-queues. WalletConnect can then be added independently in account settings:
-connect a wallet, sign a session-owned nonce, persist the verified address, and
-merge wallet contents at read boundaries without granting the wallet authority
-over the user's login session.
+Finish Conquest card selection and settlement before enabling its queues.
+WalletConnect can then be added independently in account settings: connect a
+wallet, sign a session-owned nonce, persist the verified address, and merge
+wallet contents at read boundaries without granting the wallet authority over
+the user's login session.
+
+The mechanically verified source-method inventory and prioritization live in
+[`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
+`pnpm check:cloudflare:rpcs` to reproduce it and guard the critical compatibility
+surface against regression.

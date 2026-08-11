@@ -14,6 +14,8 @@
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "clean": "pnpm dlx rimraf node_modules ./**/node_modules",
     "audit:fix": "pnpm dlx pnpm-audit-fix",
+    "audit:cloudflare:rpcs": "node ./utils/audit-cloudflare-rpcs.mjs",
+    "check:cloudflare:rpcs": "node --test ./utils/audit-cloudflare-rpcs.test.mjs && node ./utils/audit-cloudflare-rpcs.mjs --check",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",
     "deploy:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler deploy --config ../wrangler.jsonc",
