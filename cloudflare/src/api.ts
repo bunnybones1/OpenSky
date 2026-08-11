@@ -10,6 +10,7 @@ import { AccountsRepository } from './accounts'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
+import { ContentRepository } from './content'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
 import { signSession } from './jwt'
@@ -154,6 +155,7 @@ export const handleApiRequest = async (
   const accounts = new AccountsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const competitive = new CompetitiveRepository(env.AUTH_DB)
+  const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
@@ -516,6 +518,70 @@ export const handleApiRequest = async (
       case 'GetPendingCards': {
         await identityPrincipal(request, env)
         return json(request, env, { res: [] })
+      }
+
+      case 'GetBanners': {
+        return json(request, env, { banners: await content.listBanners() })
+      }
+
+      case 'GetFeaturedStreamers': {
+        return json(request, env, {
+          streamers: await content.listFeaturedStreamers()
+        })
+      }
+
+      case 'GetStickers': {
+        return json(request, env, {
+          stickers: await content.listStickers(seasonFromDate())
+        })
+      }
+
+      case 'GetStickersBySeason': {
+        const body = await requestBody<{ season?: number }>(request)
+        if (
+          !Number.isSafeInteger(body.season) ||
+          (body.season ?? -1) < 0 ||
+          (body.season ?? 65_536) > 65_535
+        ) {
+          throw invalidArgument('season must be an unsigned 16-bit integer')
+        }
+        return json(request, env, {
+          stickers: await content.listStickers(body.season!)
+        })
+      }
+
+      case 'GetStickerOwnership': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          res: await content.stickerOwnership(principal.userId)
+        })
+      }
+
+      case 'ListNotifications': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          notifications: await content.listNotifications(principal.userId)
+        })
+      }
+
+      case 'SetNotificationsAsSeen': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ notificationIDs?: number[] }>(request)
+        if (
+          !Array.isArray(body.notificationIDs) ||
+          body.notificationIDs.length < 1 ||
+          body.notificationIDs.length > 100 ||
+          body.notificationIDs.some(id => !Number.isSafeInteger(id) || id <= 0)
+        ) {
+          throw invalidArgument(
+            'notificationIDs must contain 1 to 100 positive integers'
+          )
+        }
+        return json(request, env, {
+          status: await content.setNotificationsSeen(principal.userId, [
+            ...new Set(body.notificationIDs)
+          ])
+        })
       }
 
       case 'ListDecks': {
