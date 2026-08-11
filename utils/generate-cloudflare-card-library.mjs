@@ -18,7 +18,9 @@ const cardElements = [
   'MIND',
   'METAL',
   'LIGHT',
-  'DARK'
+  'DARK',
+  // Token-only attachment rows use the database's historical sentinel value.
+  'UNKNOWN'
 ]
 const cardTypes = ['UNIT', 'SPELL']
 const cardSets = [
@@ -111,39 +113,48 @@ const keywords = value => {
   return inner ? inner.split(',').map(keyword => keyword.trim()) : []
 }
 
+const cardFromRow = row => {
+  if (row.length !== 18)
+    throw new Error(`expected 18 columns for card ${row[0]}, got ${row.length}`)
+  const id = Number(row[0])
+  return {
+    id,
+    name: row[1],
+    description: row[2],
+    asset: row[4],
+    class: requiredEnum(cardClasses, row[5], 'class', id),
+    element: requiredEnum(cardElements, row[6], 'element', id),
+    type: requiredEnum(cardTypes, row[7], 'type', id),
+    manaCost: Number(row[8]),
+    power: Number(row[9]),
+    health: Number(row[10]),
+    attachedSpellID: row[11] === null ? null : Number(row[11]),
+    keywords: keywords(row[12]),
+    status: 'PLAY',
+    set: requiredEnum(cardSets, row[16], 'set', id),
+    imageURL: {
+      small: `https://assets.skyweaver.net/latest/full-cards/en/2x/${id}.webp`,
+      medium: `https://assets.skyweaver.net/latest/full-cards/en/4x/${id}.webp`,
+      large: `https://assets.skyweaver.net/latest/full-cards/en/6x/${id}.webp`
+    },
+    itemType: 'UNKNOWN',
+    isNew: null,
+    silverCardTokenId: 65_536 + id,
+    goldCardTokenId: 131_072 + id
+  }
+}
+
+const currentCards = rows =>
+  rows.filter(row => row[13] === '0').map(cardFromRow)
+
 export const cardsFromRows = rows =>
-  rows
-    .filter(row => row[13] === '0' && Number(row[5]) <= 4)
-    .map(row => {
-      if (row.length !== 18)
-        throw new Error(`expected 18 columns for card ${row[0]}, got ${row.length}`)
-      const id = Number(row[0])
-      return {
-        id,
-        name: row[1],
-        description: row[2],
-        asset: row[4],
-        class: requiredEnum(cardClasses, row[5], 'class', id),
-        element: requiredEnum(cardElements, row[6], 'element', id),
-        type: requiredEnum(cardTypes, row[7], 'type', id),
-        manaCost: Number(row[8]),
-        power: Number(row[9]),
-        health: Number(row[10]),
-        attachedSpellID: row[11] === null ? null : Number(row[11]),
-        keywords: keywords(row[12]),
-        status: 'PLAY',
-        set: requiredEnum(cardSets, row[16], 'set', id),
-        imageURL: {
-          small: `https://assets.skyweaver.net/latest/full-cards/en/2x/${id}.webp`,
-          medium: `https://assets.skyweaver.net/latest/full-cards/en/4x/${id}.webp`,
-          large: `https://assets.skyweaver.net/latest/full-cards/en/6x/${id}.webp`
-        },
-        itemType: 'UNKNOWN',
-        isNew: null,
-        silverCardTokenId: 65_536 + id,
-        goldCardTokenId: 131_072 + id
-      }
-    })
+  currentCards(rows)
+    .filter(card => card.class !== 'TOK')
+    .sort((left, right) => left.id - right.id)
+
+export const searchTokensFromRows = rows =>
+  currentCards(rows)
+    .filter(card => card.class === 'TOK' && card.asset !== '')
     .sort((left, right) => left.id - right.id)
 
 const latestMigration = async () => {
@@ -157,14 +168,17 @@ const latestMigration = async () => {
 export const generatedCardLibrary = async () => {
   const sourcePath = await latestMigration()
   const sql = await readFile(sourcePath, 'utf8')
-  const cards = cardsFromRows(parseCardRows(sql))
+  const rows = parseCardRows(sql)
+  const cards = cardsFromRows(rows)
+  const searchTokens = searchTokensFromRows(rows)
   if (cards.length < 500)
     throw new Error(`refusing to generate an incomplete library of ${cards.length} cards`)
   return `${JSON.stringify(
     {
       source: relative(root, sourcePath),
       sourceSha256: createHash('sha256').update(sql).digest('hex'),
-      cards
+      cards,
+      searchTokens
     },
     null,
     2

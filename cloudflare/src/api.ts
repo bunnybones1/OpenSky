@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountRegistration,
+  CardSearchCriteria,
   DeckClass,
   FeedEventType,
   GameModesStatus,
@@ -15,7 +16,8 @@ import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import {
   allLibraryCards,
   libraryCardsByIds,
-  libraryCardsFromDeckString
+  libraryCardsFromDeckString,
+  searchLibraryCards
 } from './card-library'
 import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
@@ -309,6 +311,57 @@ export const handleApiRequest = async (
         return json(request, env, {
           cards: libraryCardsFromDeckString(body.deckString)
         })
+      }
+
+      case 'SearchCards': {
+        const body = await requestBody<{
+          page?: Page
+          req?: {
+            criteria?: CardSearchCriteria
+            includeUserBalances?: boolean
+            contractQuery?: boolean
+          }
+        }>(request)
+        if (!body.req || typeof body.req !== 'object') {
+          throw invalidArgument('req is required')
+        }
+        if (
+          body.req.criteria !== undefined &&
+          (typeof body.req.criteria !== 'object' || body.req.criteria === null)
+        ) {
+          throw invalidArgument('req.criteria is invalid')
+        }
+        const criteria = body.req.criteria || {}
+        const principal = await optionalRpcPrincipal(request, env)
+        let inventoryUserId =
+          principal?.kind === 'identity' ? principal.userId : undefined
+        if (criteria.accountAddress !== undefined) {
+          if (
+            typeof criteria.accountAddress !== 'string' ||
+            !criteria.accountAddress.startsWith('identity:')
+          ) {
+            throw invalidArgument('accountAddress is invalid')
+          }
+          const account = await playerRpc.getAccountByReference(
+            criteria.accountAddress
+          )
+          if (!account) throw new Error('find account failed')
+          inventoryUserId = criteria.accountAddress.slice('identity:'.length)
+        }
+        const inventory = inventoryUserId
+          ? await playerRpc.cardSearchInventory(inventoryUserId)
+          : []
+        return json(
+          request,
+          env,
+          searchLibraryCards(
+            criteria,
+            body.page,
+            inventory,
+            !!inventoryUserId,
+            body.req.includeUserBalances === true
+          )
+        )
       }
 
       case 'RegisterAccount': {

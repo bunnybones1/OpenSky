@@ -3,7 +3,8 @@ import test from 'node:test'
 
 import {
   cardsFromRows,
-  parseCardRows
+  parseCardRows,
+  searchTokensFromRows
 } from './generate-cloudflare-card-library.mjs'
 
 test('parses SQL apostrophes, commas, newlines, and nulls without changing source text', () => {
@@ -37,4 +38,8 @@ test('maps only source PLAY cards in active source classes', () => {
   assert.deepEqual(cards[0].keywords, ['GUARD'])
   assert.equal(cards[0].silverCardTokenId, 65_537)
   assert.equal(cards[0].goldCardTokenId, 131_073)
+
+  const tokens = searchTokensFromRows([active, blocked, token])
+  assert.deepEqual(tokens.map(card => card.id), [3])
+  assert.equal(tokens[0].class, 'TOK')
 })

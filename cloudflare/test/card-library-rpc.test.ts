@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
-import { cardLibrarySource } from '../src/card-library'
+import { cardLibrarySource, searchLibraryCards } from '../src/card-library'
 import type { Env } from '../src/env'
 
 const testEnv = env as unknown as Env
@@ -21,7 +21,9 @@ describe('source card-library RPC compatibility', () => {
   it('serves the complete active source library in numeric ID order', async () => {
     const response = await rpc('GetCardLibrary', { page: { pageSize: 1 } })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { cards: Array<Record<string, unknown>> }
+    const body = (await response.json()) as {
+      cards: Array<Record<string, unknown>>
+    }
     expect(body.cards).toHaveLength(cardLibrarySource.count)
     expect(cardLibrarySource.count).toBeGreaterThan(800)
     expect(body.cards[0]).toMatchObject({
@@ -67,5 +69,111 @@ describe('source card-library RPC compatibility', () => {
   it('validates ID request types at the transport boundary', async () => {
     expect((await rpc('GetCardsByID', { cardIDs: ['1'] })).status).toBe(400)
     expect((await rpc('GetCardsByID', { cardIDs: [1.5] })).status).toBe(400)
+  })
+
+  it('ports source card search filters, token inclusion, ordering, and pagination', async () => {
+    const filtered = await rpc('SearchCards', {
+      page: { pageSize: 2 },
+      req: {
+        criteria: { cardElement: ['EARTH'], searchText: 'Ston' },
+        includeUserBalances: false,
+        contractQuery: false
+      }
+    })
+    expect(filtered.status).toBe(200)
+    const filteredBody = await filtered.json<{
+      page: { pageSize: number }
+      res: Array<{ card: { id: number; name: string }; balance: string }>
+    }>()
+    expect(filteredBody.page.pageSize).toBe(2)
+    expect(filteredBody.res.map(item => item.card.id)).toEqual([16, 96])
+    expect(filteredBody.res[0]).toMatchObject({
+      card: { name: 'Stone Fist' },
+      balance: '0'
+    })
+
+    const hiddenToken = await rpc('SearchCards', {
+      req: { criteria: { ids: [20_000] } }
+    })
+    expect((await hiddenToken.json<{ res: unknown[] }>()).res).toHaveLength(0)
+    const includedToken = await rpc('SearchCards', {
+      req: { criteria: { ids: [20_000], includeTokens: true } }
+    })
+    expect(await includedToken.json()).toMatchObject({
+      res: [{ card: { id: 20_000, name: 'Songbird', class: 'TOK' } }]
+    })
+
+    const ordered = await rpc('SearchCards', {
+      req: { criteria: { ids: [191, 1] } }
+    })
+    expect(
+      (
+        (await ordered.json()) as { res: Array<{ card: { id: number } }> }
+      ).res.map(item => item.card.id)
+    ).toEqual([1, 191])
+
+    const first = await rpc('SearchCards', {
+      page: { pageSize: 1 },
+      req: { criteria: { ids: [1, 2] } }
+    })
+    const firstBody = await first.json<{
+      page: { before: string; hasBefore: boolean }
+      res: Array<{ card: { id: number } }>
+    }>()
+    expect(firstBody.page.hasBefore).toBe(true)
+    const second = await rpc('SearchCards', {
+      page: { pageSize: 1, before: firstBody.page.before },
+      req: { criteria: { ids: [1, 2] } }
+    })
+    expect(await second.json()).toMatchObject({
+      page: { hasAfter: true, hasBefore: false },
+      res: [{ card: { id: 2 } }]
+    })
+  })
+
+  it('applies source ownership frames and only includes balances when requested', () => {
+    const inventory = [
+      {
+        itemType: 'SW_BASE_CARDS',
+        tokenId: 1,
+        balance: 1,
+        isNew: false,
+        createdAt: '2026-01-01T00:00:00.000Z'
+      },
+      {
+        itemType: 'SW_SILVER_CARDS',
+        tokenId: 1,
+        balance: 2,
+        isNew: true,
+        createdAt: '2026-01-02T00:00:00.000Z'
+      }
+    ]
+    const hidden = searchLibraryCards(
+      { ids: [1], ownedCards: true },
+      {},
+      inventory,
+      true,
+      false
+    )
+    expect(hidden.res[0]).toMatchObject({ balance: '0', balanceByType: {} })
+
+    const included = searchLibraryCards(
+      { ids: [1], ownedCards: true },
+      {},
+      inventory,
+      true,
+      true
+    )
+    expect(included.res[0]).toMatchObject({
+      balance: '3',
+      balanceByType: {
+        SW_BASE_CARDS: { balance: '1' },
+        SW_SILVER_CARDS: { balance: '2', isNew: true }
+      },
+      createdAt: '2026-01-02T00:00:00.000Z'
+    })
+    expect(() =>
+      searchLibraryCards({ ownedCards: true }, {}, [], false)
+    ).toThrow('anonymous user')
   })
 })

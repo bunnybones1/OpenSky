@@ -1152,6 +1152,34 @@ export class PlayerRpcRepository {
       }))
   }
 
+  async cardSearchInventory(userId: string): Promise<
+    Array<{
+      itemType: string
+      tokenId: number
+      balance: number
+      isNew: boolean
+      createdAt: string
+    }>
+  > {
+    const result = await this.database
+      .prepare(
+        `SELECT item_type, token_id, balance, is_new, created_at
+         FROM player_items
+         WHERE user_id = ? AND balance > 0
+           AND item_type IN ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')
+         ORDER BY token_id ASC, item_type ASC`
+      )
+      .bind(userId)
+      .all<InventoryRow>()
+    return result.results.map(row => ({
+      itemType: row.item_type,
+      tokenId: row.token_id,
+      balance: row.balance,
+      isNew: row.is_new === 1,
+      createdAt: row.created_at
+    }))
+  }
+
   async itemSummary(
     userId: string,
     accountAddress: string

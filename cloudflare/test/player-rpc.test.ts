@@ -959,6 +959,30 @@ describe('legacy player RPC compatibility', () => {
       }
     })
 
+    const cardSearch = await rpc('SearchCards', {
+      req: {
+        criteria: {
+          ids: [42],
+          itemType: 'SW_SILVER_CARDS',
+          ownedCards: true
+        },
+        includeUserBalances: true,
+        contractQuery: false
+      }
+    })
+    expect(await cardSearch.json()).toMatchObject({
+      res: [
+        {
+          card: { id: 42 },
+          balance: '5',
+          balanceByType: {
+            SW_SILVER_CARDS: { balance: '2' },
+            SW_GOLD_CARDS: { balance: '3' }
+          }
+        }
+      ]
+    })
+
     const supply = await rpc('GetItemSupply', { tokenID: 42 }, false)
     expect(supply.status).toBe(200)
     expect(await supply.json()).toMatchObject({
