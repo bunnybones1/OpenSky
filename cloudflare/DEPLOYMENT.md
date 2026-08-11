@@ -51,3 +51,17 @@ Conquest card reward selection and settlement, seasonal invite-sticker
 redemption, marketplace writes, legacy data migration, and administrative RPCs
 remain pending. Conquest queues stay disabled until the remaining card rewards
 are transactionally connected to authoritative completion.
+
+## Latest verification
+
+- API Worker: 16 files, 89 tests
+- Match service: 8 tests
+- Game Worker: 24 unit and 24 Worker tests
+- Matchmaker: 26 unit and 12 Worker tests
+- API, match service, game Worker, matchmaker, and original webapp type-checks
+- Card-library generator, source-RPC inventory, and production Conquest gates
+- Live Worker version, original interface, Cloud Weasel metadata, mode status,
+  matchmaker/game protocol-v3 health, authentication boundaries, and the
+  source-compatible disabled-live-record response
+- Remote D1 Conquest tables: zero rows and `changed_db: false` after read-only
+  production verification
