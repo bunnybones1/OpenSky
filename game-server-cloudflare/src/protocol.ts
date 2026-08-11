@@ -12,6 +12,7 @@ export const MAX_GAME_MESSAGE_BYTES = 256 * 1024
 
 export interface CreateMatchRequest {
   proposalId: string
+  releaseVersion: string
   match: MatchmakerStartMatchMessage
 }
 
@@ -36,7 +37,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 export const parseClientMessage = (raw: string | ArrayBuffer) => {
-  if (typeof raw !== 'string') throw new GameProtocolError('binary messages are not supported')
+  if (typeof raw !== 'string')
+    throw new GameProtocolError('binary messages are not supported')
   if (new TextEncoder().encode(raw).byteLength > MAX_GAME_MESSAGE_BYTES) {
     throw new GameProtocolError('message is too large')
   }
@@ -58,7 +60,7 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
       if (
         !Array.isArray(subkey) ||
         subkey.length !== 20 ||
-        subkey.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)
+        subkey.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255)
       ) {
         throw new GameProtocolError('invalid subkey')
       }
@@ -78,7 +80,7 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
         value.data.length === 0 ||
         value.data.length > 64 ||
         value.data.some(
-          (diff) =>
+          diff =>
             typeof diff !== 'string' ||
             diff.length > MAX_GAME_MESSAGE_BYTES ||
             !/^0x(?:[0-9a-f]{2})+$/i.test(diff)
@@ -88,7 +90,10 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
       }
       return value as unknown as AcceptedClientMessage
     case 'timesync':
-      if (typeof value.clientTime !== 'number' || !Number.isFinite(value.clientTime)) {
+      if (
+        typeof value.clientTime !== 'number' ||
+        !Number.isFinite(value.clientTime)
+      ) {
         throw new GameProtocolError('invalid client time')
       }
       return value as unknown as AcceptedClientMessage
@@ -103,12 +108,14 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
       }
       return value as unknown as AcceptedClientMessage
     case 'mute_opponent':
-      if (typeof value.muted !== 'boolean') throw new GameProtocolError('invalid mute value')
+      if (typeof value.muted !== 'boolean')
+        throw new GameProtocolError('invalid mute value')
       return value as unknown as AcceptedClientMessage
     case 'emote':
       if (
         !(
-          (typeof value.emote === 'string' && Emotes.includes(value.emote as never)) ||
+          (typeof value.emote === 'string' &&
+            Emotes.includes(value.emote as never)) ||
           (typeof value.chat === 'string' && value.chat.length <= 500) ||
           (Number.isInteger(value.sticker) && (value.sticker as number) >= 0)
         )

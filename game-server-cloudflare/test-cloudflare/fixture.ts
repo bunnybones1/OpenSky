@@ -13,11 +13,7 @@ export const BOT_SUBKEY_PRIVATE_KEY =
   '0x2222222222222222222222222222222222222222222222222222222222222222'
 const BOT_SUBKEY_ADDRESS = '0x1563915e194d8cfba1943570603f7606a3115508'
 
-const seed = (
-  principal: string,
-  subkey: number | string,
-  randomByte: number
-) =>
+const seed = (principal: string, subkey: number | string, randomByte: number) =>
   ({
     player: [...hexToBytes(principal)],
     subkey:
@@ -42,12 +38,16 @@ const account = (id: number, address: string, name: string) =>
   }) as unknown as AccountWithPrismsAndCosmeticsInfo
 
 export const createMatchFixture = (
-  overrides: Partial<Pick<MatchmakerStartMatchMessage, 'matchID' | 'replayID'>> & {
+  overrides: Partial<
+    Pick<MatchmakerStartMatchMessage, 'matchID' | 'replayID'>
+  > & {
     botPlayer2?: boolean
     proposalId?: string
+    releaseVersion?: string
   } = {}
 ): CreateMatchRequest => ({
   proposalId: overrides.proposalId ?? PROPOSAL_ID,
+  releaseVersion: overrides.releaseVersion ?? 'test-release',
   match: {
     type: 'start_match',
     matchID: overrides.matchID ?? 42,

@@ -11,12 +11,14 @@ const USER_ID = '22222222-2222-4222-8222-222222222222'
 const service = (handler: (request: Request) => Response | Promise<Response>) =>
   ({ fetch: handler }) as unknown as Fetcher
 
-const namespace = (handler: (request: Request) => Response | Promise<Response>) =>
+const namespace = (
+  handler: (request: Request) => Response | Promise<Response>
+) =>
   ({ getByName: () => service(handler) }) as unknown as DurableObjectNamespace
 
 const testEnv = {
   ...(env as unknown as Env),
-  MATCHMAKER_POOLS: namespace((request) =>
+  MATCHMAKER_POOLS: namespace(request =>
     Response.json({
       target: new URL(request.url).pathname,
       search: new URL(request.url).search,
@@ -28,7 +30,7 @@ const testEnv = {
       cookie: request.headers.get('cookie')
     })
   ),
-  GAME_MATCHES: namespace((request) =>
+  GAME_MATCHES: namespace(request =>
     Response.json({
       target: new URL(request.url).pathname,
       principal: request.headers.get('x-cloud-weasel-principal'),
@@ -149,7 +151,7 @@ describe('same-origin multiplayer gateway', () => {
         replayID: 'gateway-replay',
         mode: 'PRACTICE_BOT',
         playerIDs: [principal, opponent],
-        version: 'cloud-weasel-test',
+        version: 'client-release',
         initialized: true
       },
       serverInfo: {
@@ -166,17 +168,17 @@ describe('same-origin multiplayer gateway', () => {
           maxCapacity: 1,
           completedMatches: 0
         },
-        releaseVersion: 'cloud-weasel-test'
+        releaseVersion: 'client-release'
       },
       disconnectTimeout: 180
     })
   })
 
   it('rejects missing sessions and malformed match IDs before service dispatch', async () => {
-    const unauthenticated = await gateway(
-      '/api/matchmaker',
-      { Upgrade: 'websocket', Origin: 'https://opensky.example' }
-    )
+    const unauthenticated = await gateway('/api/matchmaker', {
+      Upgrade: 'websocket',
+      Origin: 'https://opensky.example'
+    })
     expect(unauthenticated.status).toBe(401)
     await unauthenticated.json()
 

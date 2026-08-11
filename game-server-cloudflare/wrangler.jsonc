@@ -21,7 +21,6 @@
   "vars": {
     "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787",
     "PUBLIC_WS_BASE_URL": "wss://opensky-webapp.dysinski-tomasz.workers.dev/api/game/matches",
-    "RELEASE_VERSION": "cloud-weasel-dev",
     "TURN_EXPIRY_MS": "60000",
     "TURN_EXTENSION_MS": "5000",
     "COMMIT_REVEAL_EXPIRY_MS": "2000",

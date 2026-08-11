@@ -9,8 +9,8 @@ const USER_ID = '11111111-1111-4111-8111-111111111111'
 const PRINCIPAL = '0x1111111111111111111111111111111111111111'
 const PROPOSAL_ID = 'proposal-practice-1'
 const STARTER_CARD_IDS = [
-  6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149,
-  150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
+  6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
+  151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
 ]
 
 const privateSeed = (cards: number[] = STARTER_CARD_IDS) => ({
@@ -101,7 +101,7 @@ beforeEach(async () => {
           basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
        VALUES (?, 1, 0, 200, 0, ?, ?)`
     ).bind(USER_ID, now, now),
-    ...STARTER_CARD_IDS.map((cardId) =>
+    ...STARTER_CARD_IDS.map(cardId =>
       env.AUTH_DB.prepare(
         `INSERT INTO player_card_unlocks
            (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
@@ -132,13 +132,17 @@ describe('Cloud Weasel accepted-match service', () => {
       .first<{ match_payload_json: string; status: string }>()
     const payload = JSON.parse(row!.match_payload_json)
     expect(row!.status).toBe('active')
+    expect(payload.releaseVersion).toBe('release-1')
     expect(payload.match).toMatchObject({
       type: 'start_match',
       matchID: firstBody.matchId,
       player1: {
         gameMode: GameMode.PRACTICE_BOT,
         account: { address: PRINCIPAL, name: 'Cloud Player' },
-        privateSeed: { player: hexToBytes(PRINCIPAL), subkey: Array(20).fill(0x31) },
+        privateSeed: {
+          player: hexToBytes(PRINCIPAL),
+          subkey: Array(20).fill(0x31)
+        },
         botSubkey: false
       },
       player2: {
@@ -165,7 +169,9 @@ describe('Cloud Weasel accepted-match service', () => {
   it('overrides forged player bytes and rejects cards outside the account collection', async () => {
     const response = await create(dispatch([30]))
     expect(response.status).toBe(400)
-    expect(await response.json()).toMatchObject({ error: 'card 30 is not unlocked' })
+    expect(await response.json()).toMatchObject({
+      error: 'card 30 is not unlocked'
+    })
   })
 
   it('hides its internal endpoint and binds idempotency to the accepted proposal', async () => {

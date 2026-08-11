@@ -35,7 +35,6 @@
   },
   "vars": {
     "SEQUENCE_API_HOST": "https://api.sequence.app",
-    "MULTIPLAYER_RELEASE_VERSION": "cloud-weasel-dev",
     "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787"
   }
 }

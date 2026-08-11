@@ -22,11 +22,10 @@ export default defineConfig(async () => {
             SESSION_SIGNING_KEY: 'test-signing-key-at-least-32-characters-long',
             GOOGLE_CLIENT_ID: 'google-client-id.apps.googleusercontent.com',
             GOOGLE_CLIENT_SECRET: 'google-client-secret',
-            INTERNAL_AUTH_SECRET: 'multiplayer-gateway-test-secret',
-            MULTIPLAYER_RELEASE_VERSION: 'cloud-weasel-test'
+            INTERNAL_AUTH_SECRET: 'multiplayer-gateway-test-secret'
           },
           serviceBindings: {
-            MATCHMAKER_SERVICE: async (request) =>
+            MATCHMAKER_SERVICE: async request =>
               Response.json({
                 target: new URL(request.url).pathname,
                 search: new URL(request.url).search,
@@ -37,7 +36,7 @@ export default defineConfig(async () => {
                 internal: request.headers.get('x-cloud-weasel-internal-auth'),
                 cookie: request.headers.get('cookie')
               }),
-            GAME_SERVICE: async (request) =>
+            GAME_SERVICE: async request =>
               Response.json({
                 target: new URL(request.url).pathname,
                 principal: request.headers.get('x-cloud-weasel-principal'),

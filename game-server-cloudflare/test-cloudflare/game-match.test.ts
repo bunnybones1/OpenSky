@@ -66,7 +66,12 @@ const collectMessages = (socket: WebSocket, count: number) =>
   new Promise<Record<string, unknown>[]>((resolve, reject) => {
     const messages: Record<string, unknown>[] = []
     const timeout = setTimeout(
-      () => reject(new Error(`timed out waiting for messages: ${JSON.stringify(messages)}`)),
+      () =>
+        reject(
+          new Error(
+            `timed out waiting for messages: ${JSON.stringify(messages)}`
+          )
+        ),
       2_000
     )
     const listener = (event: MessageEvent) => {
@@ -80,7 +85,8 @@ const collectMessages = (socket: WebSocket, count: number) =>
     socket.addEventListener('message', listener)
   })
 
-const nextMessage = async (socket: WebSocket) => (await collectMessages(socket, 1))[0]
+const nextMessage = async (socket: WebSocket) =>
+  (await collectMessages(socket, 1))[0]
 
 const join = (socket: WebSocket, subkeyByte: number) => {
   socket.send(
@@ -142,9 +148,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
   it('can evict an initialized object without a connected socket', async () => {
     await initializeMatch()
-    await runInDurableObject(stub() as DurableObjectStub, async (_instance, state) => {
-      await state.storage.deleteAlarm()
-    })
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        await state.storage.deleteAlarm()
+      }
+    )
     await evictDurableObject(stub())
   })
 
@@ -169,6 +178,11 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       createMatchFixture({ replayID: 'different-replay' })
     )
     expect(mutated.status).toBe(409)
+
+    const wrongRelease = await createMatch(
+      createMatchFixture({ releaseVersion: 'different-release' })
+    )
+    expect(wrongRelease.status).toBe(409)
   })
 
   it('authenticates players at the gateway boundary and sends private reconnect state', async () => {
@@ -251,9 +265,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
     })
     await drained.json()
-    await runInDurableObject(stub() as DurableObjectStub, async (_instance, state) => {
-      await state.storage.deleteAlarm()
-    })
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        await state.storage.deleteAlarm()
+      }
+    )
     await evictDurableObject(stub())
     const timeSync = nextMessage(first)
     first.send(JSON.stringify({ type: 'timesync', clientTime: 1234 }))
@@ -296,9 +313,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       await runInDurableObject(
         stub() as DurableObjectStub,
         async (_instance, state) => {
-          const timers = (await state.storage.get<Record<string, unknown>>(
-            'match:timers'
-          )) ?? {}
+          const timers =
+            (await state.storage.get<Record<string, unknown>>(
+              'match:timers'
+            )) ?? {}
           await state.storage.put('match:timers', {
             ...timers,
             commitRevealAtMs: Date.now() - 1,
@@ -317,16 +335,19 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(hasState).toBe(true)
 
     await evictDurableObject(stub())
-    const statusAfterEviction = await stub().fetch('https://match/internal/status', {
-      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
-    })
+    const statusAfterEviction = await stub().fetch(
+      'https://match/internal/status',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+      }
+    )
     expect(await statusAfterEviction.json()).toMatchObject({
       state: { hasState: true }
     })
 
     const completionMessages = collectMessages(first, 2)
     first.send(JSON.stringify({ type: 'abandon_match' }))
-    expect((await completionMessages).map((message) => message.type)).toEqual([
+    expect((await completionMessages).map(message => message.type)).toEqual([
       'gameplay',
       'match_ended'
     ])
@@ -352,9 +373,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       practiceStub() as DurableObjectStub,
       async (_instance, state) => {
-        const players = await state.storage.get<Record<string, Record<string, unknown>>>(
-          'match:players'
-        )
+        const players =
+          await state.storage.get<Record<string, Record<string, unknown>>>(
+            'match:players'
+          )
         expect(players).toBeDefined()
         players![PRINCIPAL_1] = {
           ...players![PRINCIPAL_1],
@@ -373,7 +395,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         practiceStub() as DurableObjectStub,
         async (_instance, state) => {
           const timers =
-            (await state.storage.get<Record<string, unknown>>('match:timers')) ?? {}
+            (await state.storage.get<Record<string, unknown>>(
+              'match:timers'
+            )) ?? {}
           await state.storage.put('match:timers', {
             ...timers,
             commitRevealAtMs: Date.now() - 1
@@ -382,9 +406,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         }
       )
       expect(await runDurableObjectAlarm(practiceStub())).toBe(true)
-      const response = await practiceStub().fetch('https://match/internal/status', {
-        headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
-      })
+      const response = await practiceStub().fetch(
+        'https://match/internal/status',
+        {
+          headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+        }
+      )
       const body = (await response.json()) as {
         state: { hasState: boolean }
       }
@@ -396,7 +423,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       practiceStub() as DurableObjectStub,
       async (_instance, state) => {
         const timers =
-          (await state.storage.get<Record<string, unknown>>('match:timers')) ?? {}
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ??
+          {}
         expect(timers.botAtMs).toEqual(expect.any(Number))
         await state.storage.put('match:timers', {
           ...timers,

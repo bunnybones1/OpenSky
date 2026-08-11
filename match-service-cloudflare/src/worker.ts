@@ -11,6 +11,7 @@ import { MatchRepository } from './repository'
 
 interface CreateMatchRequest {
   proposalId: string
+  releaseVersion: string
   match: MatchmakerStartMatchMessage
 }
 
@@ -54,7 +55,10 @@ const dispatchToGame = async (
       body: JSON.stringify(request)
     })
   )
-  const body = (await response.json()) as { serverAddress?: unknown; error?: unknown }
+  const body = (await response.json()) as {
+    serverAddress?: unknown
+    error?: unknown
+  }
   if (!response.ok || typeof body.serverAddress !== 'string') {
     throw new Error(
       typeof body.error === 'string'
@@ -69,7 +73,11 @@ export default {
   async fetch(request: Request, env: MatchServiceEnv): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, component: 'cloud-weasel-match-service', protocolVersion: 1 })
+      return json({
+        ok: true,
+        component: 'cloud-weasel-match-service',
+        protocolVersion: 1
+      })
     }
     if (request.method !== 'POST' || url.pathname !== '/internal/matches') {
       return json({ error: 'not found' }, 404)
@@ -144,19 +152,36 @@ export default {
         )
         row = await repository.installPayloadIfMissing(
           dispatch.proposalId,
-          JSON.stringify({ proposalId: dispatch.proposalId, match: built.match })
+          JSON.stringify({
+            proposalId: dispatch.proposalId,
+            releaseVersion: row.version,
+            match: built.match
+          })
         )
       }
 
-      const createRequest = JSON.parse(row.match_payload_json) as CreateMatchRequest
+      const createRequest = JSON.parse(
+        row.match_payload_json
+      ) as CreateMatchRequest
       const serverAddress = await dispatchToGame(createRequest, env)
       await repository.activate(dispatch.proposalId, serverAddress)
-      return json({ proposalId: dispatch.proposalId, matchId: row.id, serverAddress })
+      return json({
+        proposalId: dispatch.proposalId,
+        matchId: row.id,
+        serverAddress
+      })
     } catch (error) {
       await repository.fail(dispatch.proposalId)
-      console.error('accepted match creation failed', dispatch.proposalId, error)
+      console.error(
+        'accepted match creation failed',
+        dispatch.proposalId,
+        error
+      )
       return json(
-        { error: error instanceof Error ? error.message : 'match creation failed' },
+        {
+          error:
+            error instanceof Error ? error.message : 'match creation failed'
+        },
         error instanceof DispatchProtocolError ? 400 : 502
       )
     }

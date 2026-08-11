@@ -20,23 +20,31 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations },
           serviceBindings: {
-            GAME_SERVICE: async (request) => {
+            GAME_SERVICE: async request => {
               if (
                 request.method !== 'POST' ||
                 request.headers.get('x-cloud-weasel-internal-auth') !==
                   'match-service-test-secret'
               ) {
-                return Response.json({ error: 'invalid game dispatch' }, { status: 400 })
+                return Response.json(
+                  { error: 'invalid game dispatch' },
+                  { status: 400 }
+                )
               }
               const body = (await request.json()) as {
                 proposalId?: unknown
+                releaseVersion?: unknown
                 match?: { matchID?: unknown }
               }
               if (
                 typeof body.proposalId !== 'string' ||
+                typeof body.releaseVersion !== 'string' ||
                 !Number.isSafeInteger(body.match?.matchID)
               ) {
-                return Response.json({ error: 'invalid start match' }, { status: 400 })
+                return Response.json(
+                  { error: 'invalid start match' },
+                  { status: 400 }
+                )
               }
               return Response.json({
                 proposalId: body.proposalId,

@@ -98,12 +98,14 @@ const matchInfo = async (env: Env, principal: string) => {
       payload.match?.player1?.account?.address,
       payload.match?.player2?.account?.address
     ]
-    if (playerIDs.some((address) => typeof address !== 'string')) {
+    if (playerIDs.some(address => typeof address !== 'string')) {
       throw new Error('match payload is missing player addresses')
     }
     const websocket = new URL(row.server_address)
-    const releaseVersion =
-      env.MULTIPLAYER_RELEASE_VERSION?.trim() || row.version || 'cloud-weasel'
+    // The immutable client release negotiated by the matcher is authoritative
+    // for reconnects. A deployment-wide override can point an older active
+    // match at assets built for a different state/protocol version.
+    const releaseVersion = row.version || 'cloud-weasel'
     return json(
       {
         type: 'in_progress_match_info',
@@ -120,9 +122,13 @@ const matchInfo = async (env: Env, principal: string) => {
           name: 'cloud-weasel-game-server',
           hostname: websocket.hostname,
           internalHostname: '',
-          port: Number(websocket.port) || (websocket.protocol === 'wss:' ? 443 : 80),
+          port:
+            Number(websocket.port) ||
+            (websocket.protocol === 'wss:' ? 443 : 80),
           ws: row.server_address,
-          http: row.server_address.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'),
+          http: row.server_address
+            .replace(/^wss:/, 'https:')
+            .replace(/^ws:/, 'http:'),
           internalHttp: '',
           load: {
             inProgressMatches: 1,
@@ -138,7 +144,10 @@ const matchInfo = async (env: Env, principal: string) => {
     )
   } catch (error) {
     console.error('invalid active match record', row.proposal_id, error)
-    return json({ type: 'error', level: 'server', message: 'Match record is invalid.' }, 500)
+    return json(
+      { type: 'error', level: 'server', message: 'Match record is invalid.' },
+      500
+    )
   }
 }
 
@@ -163,10 +172,13 @@ export const handleMultiplayerGateway = async (
     env
   ] as const
 
-  if (url.pathname === '/api/matchmaker' || url.pathname === '/api/matchmaker/') {
-    return env.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME).fetch(
-      trustedRequest(request, ...common)
-    )
+  if (
+    url.pathname === '/api/matchmaker' ||
+    url.pathname === '/api/matchmaker/'
+  ) {
+    return env.MATCHMAKER_POOLS.getByName(
+      CLOUDFLARE_MATCHMAKER_POOL_NAME
+    ).fetch(trustedRequest(request, ...common))
   }
   if (url.pathname.startsWith('/api/game/matches/')) {
     const proposal = url.pathname.slice('/api/game/matches/'.length)

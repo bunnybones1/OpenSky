@@ -12,7 +12,6 @@ declare global {
       INTERNAL_AUTH_SECRET: string
       MATCHMAKER_SERVICE: Fetcher
       GAME_SERVICE: Fetcher
-      MULTIPLAYER_RELEASE_VERSION: string
       TEST_MIGRATIONS: D1Migration[]
     }
   }
