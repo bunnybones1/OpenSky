@@ -63,7 +63,7 @@ describe('legacy player RPC compatibility', () => {
     const account = await rpc('GetAccount', { address: identityReference })
     expect(account.status).toBe(200)
     expect(await account.json()).toMatchObject({
-      account: { address: identityReference, experience: 0, levelUpXP: 100 }
+      account: { address: identityReference, experience: 0, levelUpXP: 200 }
     })
   })
 
@@ -169,6 +169,71 @@ describe('legacy player RPC compatibility', () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ isNew: false })])
     )
+  })
+
+  it('claims quest XP and advances the exact legacy epic chain', async () => {
+    const list = await rpc('ListQuests', {
+      accountAddress: identityReference
+    })
+    const welcome = (
+      await list.json<{
+        quests: Array<{ id: number; questType: string; isClaimable: boolean }>
+      }>()
+    ).quests.find(quest => quest.questType === 'WelcomeOpenSky')
+    expect(welcome).toMatchObject({ isClaimable: true })
+
+    const claimed = await rpc('ClaimQuestRewards', { ids: [welcome!.id] })
+    expect(claimed.status).toBe(200)
+    expect(await claimed.json()).toMatchObject({
+      quest: {
+        questType: 'AnEnemyApproaches',
+        epicType: 'starter2_test',
+        epicIndex: 2,
+        epicLength: 5,
+        progress: 0,
+        endProgress: 10,
+        reward: { itemType: 'SW_XP', amount: 200 }
+      },
+      rewards: [
+        {
+          accountID: 0,
+          type: 'EXP',
+          exp: {
+            amount: 300,
+            reason: 'RankUp',
+            currentLevel: 2,
+            requiredExp: 200,
+            beforeMatchExp: 0
+          }
+        }
+      ]
+    })
+
+    const account = await rpc('GetAccount', { address: identityReference })
+    expect(await account.json()).toMatchObject({
+      account: { level: 2, experience: 100, levelUpXP: 200, seasonLevel: 2 }
+    })
+
+    const refreshed = await rpc('ListQuests', {
+      accountAddress: identityReference
+    })
+    const questTypes = (
+      await refreshed.json<{ quests: Array<{ questType: string }> }>()
+    ).quests.map(quest => quest.questType)
+    expect(questTypes).not.toContain('WelcomeOpenSky')
+    expect(questTypes).toContain('AnEnemyApproaches')
+  })
+
+  it('rejects claims for quests that are not complete', async () => {
+    const list = await rpc('ListQuests', {})
+    const strength = (
+      await list.json<{
+        quests: Array<{ id: number; questType: string }>
+      }>()
+    ).quests.find(quest => quest.questType === 'Strengthweaver')
+
+    const response = await rpc('ClaimQuestRewards', { ids: [strength!.id] })
+    expect(response.status).toBe(500)
   })
 
   it('serves the legacy season and SkyPass reward data', async () => {

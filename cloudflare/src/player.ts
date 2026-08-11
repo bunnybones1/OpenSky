@@ -182,7 +182,7 @@ export class PlayerRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_profiles
              (user_id, level, xp, next_level_xp, created_at, updated_at)
-           VALUES (?, 1, 0, 100, ?, ?)`
+           VALUES (?, 1, 0, 200, ?, ?)`
         )
         .bind(userId, now, now),
       this.database
@@ -190,7 +190,7 @@ export class PlayerRepository {
           `INSERT OR IGNORE INTO player_progression
              (user_id, basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
               tutorial_completed, created_at, updated_at)
-           VALUES (?, 1, 0, 100, 0, ?, ?)`
+           VALUES (?, 1, 0, 200, 0, ?, ?)`
         )
         .bind(userId, now, now),
       this.database

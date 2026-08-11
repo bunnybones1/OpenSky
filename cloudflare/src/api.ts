@@ -302,6 +302,17 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'ClaimQuestRewards': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ ids?: number[] }>(request)
+        if (!Array.isArray(body.ids)) throw invalidArgument('ids is required')
+        return json(
+          request,
+          env,
+          await playerRpc.claimQuestRewards(principal.userId, body.ids)
+        )
+      }
+
       case 'GetQuestsAutoRerollTime': {
         return json(request, env, { res: questAutoRerollTimes() })
       }

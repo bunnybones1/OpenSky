@@ -115,6 +115,32 @@ interface QuestRow {
   status: 'active' | 'complete' | 'claimed'
 }
 
+interface QuestClaimRow extends QuestRow {
+  quest_key: string
+  active: number
+}
+
+interface QuestSpecRow {
+  spec_id: number
+  quest_type: Quest['questType']
+  epic_type: Quest['epicType']
+  epic_index: number
+  epic_length: number
+  start_progress: number
+  end_progress: number
+  reward_item_type: ItemType
+  reward_amount: number
+  periodicity: Quest['periodicity']
+  position: number
+  rerollable: number
+}
+
+interface ProfileProgressRow {
+  level: number
+  xp: number
+  basic_skypass_level: number
+}
+
 interface ProgressionRow {
   basic_skypass_level: number
 }
@@ -456,12 +482,16 @@ export class PlayerRpcRepository {
                 position, progress, target, reward_xp, periodicity,
                 is_rerollable, is_new, status
          FROM player_quests
-         WHERE user_id = ?
+         WHERE user_id = ? AND active = 1
          ORDER BY periodicity ASC, position ASC, rowid ASC`
       )
       .bind(userId)
       .all<QuestRow>()
-    return result.results.map(row => ({
+    return result.results.map(row => this.questFromRow(row))
+  }
+
+  private questFromRow(row: QuestRow): Quest {
+    return {
       id: row.row_id,
       position: row.position,
       questType: row.quest_type,
@@ -476,7 +506,206 @@ export class PlayerRpcRepository {
       isClaimable: row.status === 'complete',
       isClaimed: row.status === 'claimed',
       isNew: row.is_new === 1
-    }))
+    }
+  }
+
+  async claimQuestRewards(
+    userId: string,
+    ids: number[]
+  ): Promise<{ quest: Quest | null; rewards: Array<Record<string, unknown>> }> {
+    const uniqueIds = [...new Set(ids)]
+    if (!uniqueIds.length) return { quest: null, rewards: [] }
+
+    const placeholders = uniqueIds.map(() => '?').join(',')
+    const [assignmentsResult, progress] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                  epic_length, position, progress, target, reward_xp,
+                  periodicity, is_rerollable, is_new, status, active
+           FROM player_quests
+           WHERE user_id = ? AND rowid IN (${placeholders})`
+        )
+        .bind(userId, ...uniqueIds)
+        .all<QuestClaimRow>(),
+      this.database
+        .prepare(
+          `SELECT profile.level, profile.xp, progression.basic_skypass_level
+           FROM player_profiles profile
+           JOIN player_progression progression
+             ON progression.user_id = profile.user_id
+           WHERE profile.user_id = ?`
+        )
+        .bind(userId)
+        .first<ProfileProgressRow>()
+    ])
+    if (!progress) throw new Error('player progression is missing')
+
+    const assignmentsById = new Map(
+      assignmentsResult.results.map(assignment => [assignment.row_id, assignment])
+    )
+    const assignments = uniqueIds.flatMap(id => {
+      const assignment = assignmentsById.get(id)
+      return assignment ? [assignment] : []
+    })
+    if (assignments.some(assignment => assignment.status !== 'complete')) {
+      throw new Error('quest must be completed')
+    }
+
+    let level = progress.level
+    let xp = progress.xp
+    let nextQuest: Quest | null = null
+    const now = new Date().toISOString()
+    const rewards: Array<Record<string, unknown>> = []
+    const statements: D1PreparedStatement[] = []
+
+    for (const assignment of assignments) {
+      const beforeXP = xp
+      xp += assignment.reward_xp
+      while (xp >= 200) {
+        xp -= 200
+        level++
+      }
+
+      const reward = {
+        accountID: 0,
+        type: 'EXP',
+        exp: {
+          amount: assignment.reward_xp,
+          reason: 'RankUp',
+          currentLevel: level,
+          requiredExp: 200,
+          beforeMatchExp: beforeXP
+        }
+      }
+      rewards.push(reward)
+
+      let advancesEpic = false
+      if (
+        assignment.epic_type &&
+        assignment.epic_index !== null &&
+        assignment.epic_length !== null &&
+        assignment.epic_index < assignment.epic_length
+      ) {
+        const nextSpec = await this.database
+          .prepare(
+            `SELECT spec_id, quest_type, epic_type, epic_index, epic_length,
+                    start_progress, end_progress, reward_item_type,
+                    reward_amount, periodicity, position, rerollable
+             FROM player_quest_specs
+             WHERE epic_type = ? AND epic_index = ?`
+          )
+          .bind(assignment.epic_type, assignment.epic_index + 1)
+          .first<QuestSpecRow>()
+        if (!nextSpec) throw new Error('next quest has not been found')
+
+        advancesEpic = true
+        const nextStatus =
+          nextSpec.start_progress >= nextSpec.end_progress ? 'complete' : 'active'
+        const nextProgress = Math.min(
+          nextSpec.start_progress,
+          nextSpec.end_progress
+        )
+        statements.push(
+          this.database
+            .prepare(
+              `INSERT INTO player_quests
+                 (user_id, quest_key, title, description, progress, target,
+                  reward_xp, status, created_at, updated_at, quest_type,
+                  epic_type, epic_index, epic_length, position, periodicity,
+                  is_rerollable, is_new, active)
+               VALUES (?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`
+            )
+            .bind(
+              userId,
+              `spec:${nextSpec.spec_id}`,
+              nextProgress,
+              nextSpec.end_progress,
+              nextSpec.reward_amount,
+              nextStatus,
+              now,
+              now,
+              nextSpec.quest_type,
+              nextSpec.epic_type,
+              nextSpec.epic_index,
+              nextSpec.epic_length,
+              nextSpec.position,
+              nextSpec.periodicity,
+              nextSpec.rerollable
+            )
+        )
+        nextQuest = {
+          id: 0,
+          position: nextSpec.position,
+          questType: nextSpec.quest_type,
+          epicType: nextSpec.epic_type,
+          epicIndex: nextSpec.epic_index,
+          epicLength: nextSpec.epic_length,
+          progress: nextProgress,
+          endProgress: nextSpec.end_progress,
+          reward: {
+            itemType: nextSpec.reward_item_type,
+            amount: nextSpec.reward_amount
+          },
+          periodicity: nextSpec.periodicity,
+          isRerollable: nextSpec.rerollable === 1,
+          isClaimable: nextStatus === 'complete',
+          isClaimed: false,
+          isNew: true
+        }
+      }
+
+      statements.push(
+        this.database
+          .prepare(
+            `UPDATE player_quests
+             SET status = 'claimed', active = ?, claimed_at = ?, rewards = ?,
+                 updated_at = ?
+             WHERE user_id = ? AND rowid = ? AND status = 'complete'`
+          )
+          .bind(
+            advancesEpic ? 0 : assignment.active,
+            now,
+            JSON.stringify([reward]),
+            now,
+            userId,
+            assignment.row_id
+          )
+      )
+    }
+
+    statements.push(
+      this.database
+        .prepare(
+          `UPDATE player_profiles
+           SET level = ?, xp = ?, next_level_xp = 200, updated_at = ?
+           WHERE user_id = ?`
+        )
+        .bind(level, xp, now, userId),
+      this.database
+        .prepare(
+          `UPDATE player_progression
+           SET basic_skypass_level = MAX(basic_skypass_level, ?),
+               basic_skypass_xp = ?, basic_skypass_next_xp = 200,
+               updated_at = ?
+           WHERE user_id = ?`
+        )
+        .bind(level, xp, now, userId)
+    )
+    await this.database.batch(statements)
+
+    if (nextQuest) {
+      const row = await this.database
+        .prepare(
+          `SELECT rowid AS row_id FROM player_quests
+           WHERE user_id = ? AND active = 1 AND epic_type = ? AND epic_index = ?`
+        )
+        .bind(userId, nextQuest.epicType, nextQuest.epicIndex)
+        .first<{ row_id: number }>()
+      if (row) nextQuest.id = row.row_id
+    }
+
+    return { quest: nextQuest, rewards }
   }
 
   async setQuestsSeen(userId: string, ids: number[]): Promise<boolean> {
