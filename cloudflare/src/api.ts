@@ -3,6 +3,7 @@ import type {
   AccountRegistration,
   DeckClass,
   FeedEventType,
+  Hero,
   ItemType,
   Page
 } from '@opensky/proto'
@@ -12,6 +13,7 @@ import { AccountsRepository } from './accounts'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
+import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { ContentRepository } from './content'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
@@ -159,6 +161,7 @@ export const handleApiRequest = async (
   const accounts = new AccountsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const competitive = new CompetitiveRepository(env.AUTH_DB)
+  const conquest = new ConquestRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
@@ -335,6 +338,69 @@ export const handleApiRequest = async (
           env,
           await social.getPointsGifted(principal.userId)
         )
+      }
+
+      case 'EnterConquest': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ hero?: Hero }>(request)
+        if (!body.hero) throw invalidArgument('hero is required')
+        return json(request, env, {
+          status: await conquest.enter(principal.userId, body.hero)
+        })
+      }
+
+      case 'ConquestStatus': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, {
+          conquest: await conquest.status(principal.userId)
+        })
+      }
+
+      case 'ConquestStats': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, {
+          stats: await conquest.stats(principal.userId)
+        })
+      }
+
+      case 'ConquestRewards': {
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, { weeklyGolds: [] })
+      }
+
+      case 'ConquestPoints': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<Record<string, never>>(request)
+        const points = await conquest.points(principal.userId)
+        return json(request, env, { points: points.current, nedeed: 30 })
+      }
+
+      case 'ConquestV2Pool': {
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, { pool: { amount: 0, totalWeight: 0 } })
+      }
+
+      case 'ConquestV2Progress': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<Record<string, never>>(request)
+        const points = await conquest.points(principal.userId)
+        return json(request, env, {
+          progress: conquestTreasureProgress(points.current)
+        })
+      }
+
+      case 'ConquestTreasuresInfo': {
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, {
+          treasures: Object.fromEntries(
+            Array.from({ length: 11 }, (_, level) => [
+              level,
+              { amountSilver: 0, amountUSDC: 0 }
+            ])
+          )
+        })
       }
 
       case 'GetPrivateSpectateCode': {
