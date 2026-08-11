@@ -1,0 +1,2 @@
+# The web/API gateway and matchmaker Worker must use the same value.
+INTERNAL_AUTH_SECRET=replace-with-a-long-random-value

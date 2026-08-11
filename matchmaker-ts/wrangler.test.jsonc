@@ -1,0 +1,29 @@
+{
+  "name": "cloud-weasel-matchmaker-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-15",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MATCHMAKER_POOLS",
+        "class_name": "MatchmakerPool"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MatchmakerPool"]
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://opensky.example",
+    "INTERNAL_AUTH_SECRET": "matchmaker-test-secret",
+    "MATCH_ACCEPTANCE_TIMEOUT_MS": "30000",
+    "MATCH_TICK_MS": "2000",
+    "RELAX_MATCHING_INTERVAL_MS": "30000",
+    "ENABLE_RANKED_BOTS": "false",
+    "ALLOW_SAME_IP_MATCH": "false",
+    "STRICT_CONQUEST_MATCHING": "false"
+  }
+}

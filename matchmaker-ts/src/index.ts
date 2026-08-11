@@ -1,4 +1,7 @@
 export * from './criteria'
+export * from './identity'
 export * from './matcher'
 export * from './model'
+export * from './protocol'
 export * from './quality'
+export * from './runtime'

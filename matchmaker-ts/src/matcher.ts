@@ -176,7 +176,7 @@ export interface BotFactory {
 export const processCombinations = (
   combinations: PlayerCombinationMap,
   botFactory: BotFactory,
-  idGenerator: () => string = () => globalThis.crypto.randomUUID(),
+  idGenerator: () => string = () => crypto.randomUUID(),
   qualitySorter = sortByMatchQuality
 ): MatchProposal[] => {
   const proposals: MatchProposal[] = []

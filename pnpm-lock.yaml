@@ -744,12 +744,27 @@ importers:
         specifier: workspace:*
         version: link:../lib/proto
     devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: 0.21.0
+        version: 0.21.0(@cloudflare/workers-types@5.20260809.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@cloudflare/workers-types':
+        specifier: 5.20260809.1
+        version: 5.20260809.1
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       typescript:
         specifier: ^5.1.6
         version: 5.9.3
+      vite:
+        specifier: 8.2.1
+        version: 8.2.1(esbuild@0.28.1)
       vitest:
         specifier: 4.1.10
         version: 4.1.10(vite@8.2.1)
+      wrangler:
+        specifier: 4.110.0
+        version: 4.110.0(@cloudflare/workers-types@5.20260809.1)
 
   server:
     dependencies:
