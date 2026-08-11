@@ -1,4 +1,5 @@
 import { CardClass, GameMode, PlayerRank } from '@opensky/proto'
+import { CLOUDFLARE_MATCHMAKER_POOL_VERSION } from '@opensky/shared/cloudflare-multiplayer'
 
 import {
   botMatchValidator,
@@ -33,11 +34,6 @@ import {
 const TICKET_PREFIX = 'ticket:'
 const PROPOSAL_PREFIX = 'proposal:'
 const PENDING_PREFIX = 'pending:'
-// Bump this only when a deployed pool must not continue on a hibernated prior
-// runtime. The Worker and tests import the same value so rollout boundaries
-// cannot silently drift.
-export const POOL_VERSION = 3
-
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
 export const TRUSTED_DISPLAY_NAME_HEADER = 'x-cloud-weasel-display-name'
@@ -214,7 +210,7 @@ export class MatchmakerPool implements DurableObject {
       ])
       return Response.json({
         component: 'cloud-weasel-matchmaker-pool',
-        poolVersion: POOL_VERSION,
+        poolVersion: CLOUDFLARE_MATCHMAKER_POOL_VERSION,
         queuedPlayers: tickets.size,
         activeProposals: proposals.size,
         connectedSockets: this.state.getWebSockets().length

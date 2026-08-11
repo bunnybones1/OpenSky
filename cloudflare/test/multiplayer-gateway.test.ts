@@ -11,9 +11,12 @@ const USER_ID = '22222222-2222-4222-8222-222222222222'
 const service = (handler: (request: Request) => Response | Promise<Response>) =>
   ({ fetch: handler }) as unknown as Fetcher
 
+const namespace = (handler: (request: Request) => Response | Promise<Response>) =>
+  ({ getByName: () => service(handler) }) as unknown as DurableObjectNamespace
+
 const testEnv = {
   ...(env as unknown as Env),
-  MATCHMAKER_SERVICE: service((request) =>
+  MATCHMAKER_POOLS: namespace((request) =>
     Response.json({
       target: new URL(request.url).pathname,
       search: new URL(request.url).search,
@@ -25,7 +28,7 @@ const testEnv = {
       cookie: request.headers.get('cookie')
     })
   ),
-  GAME_SERVICE: service((request) =>
+  GAME_MATCHES: namespace((request) =>
     Response.json({
       target: new URL(request.url).pathname,
       principal: request.headers.get('x-cloud-weasel-principal'),

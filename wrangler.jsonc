@@ -19,16 +19,20 @@
       "migrations_dir": "./cloudflare/migrations"
     }
   ],
-  "services": [
-    {
-      "binding": "MATCHMAKER_SERVICE",
-      "service": "cloud-weasel-matchmaker"
-    },
-    {
-      "binding": "GAME_SERVICE",
-      "service": "cloud-weasel-game-server"
-    }
-  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MATCHMAKER_POOLS",
+        "class_name": "MatchmakerPool",
+        "script_name": "cloud-weasel-matchmaker"
+      },
+      {
+        "name": "GAME_MATCHES",
+        "class_name": "GameMatch",
+        "script_name": "cloud-weasel-game-server"
+      }
+    ]
+  },
   "vars": {
     "SEQUENCE_API_HOST": "https://api.sequence.app",
     "MULTIPLAYER_RELEASE_VERSION": "cloud-weasel-dev",

@@ -7,7 +7,7 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
   INTERNAL_AUTH_SECRET: string
-  MATCHMAKER_SERVICE: Fetcher
-  GAME_SERVICE: Fetcher
+  MATCHMAKER_POOLS: DurableObjectNamespace
+  GAME_MATCHES: DurableObjectNamespace
   MULTIPLAYER_RELEASE_VERSION?: string
 }

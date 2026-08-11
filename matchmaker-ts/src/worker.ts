@@ -1,10 +1,11 @@
+import { CLOUDFLARE_MATCHMAKER_POOL_NAME } from '@opensky/shared/cloudflare-multiplayer'
+
 import { isGamePrincipal } from './identity'
 import { MATCHMAKER_PATH } from './protocol'
 import {
   INTERNAL_AUTH_HEADER,
   MatchmakerEnv,
   MatchmakerPool,
-  POOL_VERSION,
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from './runtime'
@@ -64,7 +65,7 @@ export default {
     // A single durable pool preserves the original global queue semantics. The
     // matching core still separates incompatible sessions, versions and modes.
     // Sharding can be introduced later with an explicit compatibility contract.
-    const pool = env.MATCHMAKER_POOLS.getByName(`global-v${POOL_VERSION}`)
+    const pool = env.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME)
     return pool.fetch(request)
   }
 } satisfies ExportedHandler<MatchmakerEnv>

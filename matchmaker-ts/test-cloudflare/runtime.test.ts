@@ -1,4 +1,5 @@
 import { GameMode } from '@opensky/proto'
+import { CLOUDFLARE_MATCHMAKER_POOL_NAME } from '@opensky/shared/cloudflare-multiplayer'
 import {
   env,
   evictDurableObject,
@@ -12,7 +13,6 @@ import {
   INTERNAL_AUTH_HEADER,
   MatchmakerEnv,
   MatchmakerPool,
-  POOL_VERSION,
   TRUSTED_CLIENT_IP_HEADER,
   TRUSTED_DISPLAY_NAME_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
@@ -23,7 +23,8 @@ const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
 
 const runtimeEnv = env as unknown as MatchmakerEnv
-const pool = () => runtimeEnv.MATCHMAKER_POOLS.getByName(`global-v${POOL_VERSION}`)
+const pool = () =>
+  runtimeEnv.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME)
 
 const connect = async (principal: string, ip: string) => {
   const response = await SELF.fetch('https://matchmaker.example/v1/matchmaker', {

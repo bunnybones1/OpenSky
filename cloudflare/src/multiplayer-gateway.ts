@@ -1,4 +1,5 @@
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
+import { CLOUDFLARE_MATCHMAKER_POOL_NAME } from '@opensky/shared/cloudflare-multiplayer'
 
 import { readCookies } from './cookies'
 import type { Env } from './env'
@@ -163,7 +164,7 @@ export const handleMultiplayerGateway = async (
   if (url.pathname === '/api/matchmaker' || url.pathname === '/api/matchmaker/') {
     const target = new URL('https://cloud-weasel-matchmaker/v1/matchmaker')
     target.search = url.search
-    return env.MATCHMAKER_SERVICE.fetch(
+    return env.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME).fetch(
       trustedRequest(request, target.href, ...common)
     )
   }
@@ -173,7 +174,9 @@ export const handleMultiplayerGateway = async (
       return json({ error: 'invalid match ID' }, 400)
     }
     const target = `https://cloud-weasel-game/v1/matches/${encodeURIComponent(proposal)}`
-    return env.GAME_SERVICE.fetch(trustedRequest(request, target, ...common))
+    return env.GAME_MATCHES.getByName(`match:${proposal}`).fetch(
+      trustedRequest(request, target, ...common)
+    )
   }
   return json({ error: 'not found' }, 404)
 }
