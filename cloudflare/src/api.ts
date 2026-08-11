@@ -17,6 +17,7 @@ import { PlayerRpcRepository } from './player-rpc'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import { rpcPrincipal, type RpcPrincipal } from './rpc-principal'
+import { UserStorageRepository } from './user-storage'
 
 const RPC_PREFIX = '/api/rpc/SkyWeaverAPI/'
 
@@ -82,6 +83,24 @@ const identityPrincipal = async (
   return principal
 }
 
+const userStorageKey = (value: unknown): string => {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 128) {
+    throw invalidArgument('user storage key must contain 1 to 128 characters')
+  }
+  return value.toLowerCase()
+}
+
+const userStorageJson = (value: unknown): string => {
+  const jsonValue = JSON.stringify(value)
+  if (
+    jsonValue === undefined ||
+    new TextEncoder().encode(jsonValue).byteLength > 256 * 1024
+  ) {
+    throw invalidArgument('user storage object is invalid or too large')
+  }
+  return jsonValue
+}
+
 export const handleApiRequest = async (
   request: Request,
   env: Env,
@@ -106,6 +125,7 @@ export const handleApiRequest = async (
   const accounts = new AccountsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
+  const userStorage = new UserStorageRepository(env.AUTH_DB)
 
   try {
     switch (method) {
@@ -210,6 +230,65 @@ export const handleApiRequest = async (
         }
         await cookiePolicies.save(principal.reference, body.cookieOptions)
         return json(request, env, { status: true })
+      }
+
+      case 'UserStorageFetch': {
+        const principal = await rpcPrincipal(request, env)
+        const body = await requestBody<{ key?: unknown }>(request)
+        return json(request, env, {
+          object: await userStorage.fetch(
+            principal.reference,
+            userStorageKey(body.key)
+          )
+        })
+      }
+
+      case 'UserStorageSave': {
+        const principal = await rpcPrincipal(request, env)
+        const body = await requestBody<{ key?: unknown; object?: unknown }>(
+          request
+        )
+        if (!Object.prototype.hasOwnProperty.call(body, 'object')) {
+          throw invalidArgument('user storage object is required')
+        }
+        await userStorage.save(
+          principal.reference,
+          userStorageKey(body.key),
+          userStorageJson(body.object)
+        )
+        return json(request, env, { ok: true })
+      }
+
+      case 'UserStorageDelete': {
+        const principal = await rpcPrincipal(request, env)
+        const body = await requestBody<{ key?: unknown }>(request)
+        await userStorage.delete(
+          principal.reference,
+          userStorageKey(body.key)
+        )
+        return json(request, env, { ok: true })
+      }
+
+      case 'UserStorageFetchAll': {
+        const principal = await rpcPrincipal(request, env)
+        const body = await requestBody<{ keys?: unknown }>(request)
+        if (
+          body.keys !== undefined &&
+          (!Array.isArray(body.keys) || body.keys.length > 128)
+        ) {
+          throw invalidArgument(
+            'user storage keys must be an array of at most 128 keys'
+          )
+        }
+        const keys = Array.isArray(body.keys)
+          ? [...new Set(body.keys.map(userStorageKey))]
+          : []
+        const entries = await userStorage.fetchAll(principal.reference, keys)
+        return json(request, env, {
+          objects: Object.fromEntries(
+            entries.map(entry => [entry.key, entry.object])
+          )
+        })
       }
 
       case 'GetItemOwnershipByType': {
