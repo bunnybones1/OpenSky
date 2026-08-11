@@ -174,6 +174,10 @@ and progress are not migrated.
 - D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
   match history, profile feed, competitive stats, item summary reads, and
   write-once social referrals with friend-point accrual.
+- The public card-library and card-lookup RPCs now serve all 856 active cards
+  from a stripped build artifact generated from the source API's latest card
+  migration. `pnpm check:cloudflare:cards` detects source or generated-data
+  drift, and deck-string lookup preserves the source version-02 validation.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
