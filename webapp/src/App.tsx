@@ -23,6 +23,7 @@ import { useAnalytics } from './hooks/useAnalytics.js'
 import { useAppDialogs } from './hooks/useAppDialogs/useAppDialogs.js'
 import { useUpdatePageOffsets } from './hooks/useUpdatePageOffset.js'
 import { useUserPilot } from './hooks/useUserPilot.js'
+import { IdentityApp } from './IdentitySession/IdentityApp'
 import ItemsPage from './ItemsPage/ItemsPage'
 import { LeaderboardPage } from './LeaderboardPage/LeaderboardPage'
 import { MarketPage } from './MarketPage/MarketPage.js'
@@ -62,15 +63,11 @@ const AdminQueues = lazy(
 )
 const AdminStreamers = lazy(
   () =>
-    import(
-      './AdminPage/outlets/AdminComunity/outlets/AdminStreamers/AdminStreamers.js'
-    )
+    import('./AdminPage/outlets/AdminComunity/outlets/AdminStreamers/AdminStreamers.js')
 )
 const AdminNotifications = lazy(
   () =>
-    import(
-      './AdminPage/outlets/AdminComunity/outlets/AdminNotifications/AdminNotifications.js'
-    )
+    import('./AdminPage/outlets/AdminComunity/outlets/AdminNotifications/AdminNotifications.js')
 )
 const AdminUsers = lazy(() => import('./AdminPage/outlets/AdminUsers/AdminUsers.js'))
 const AdminUser = lazy(() => import('./AdminPage/outlets/AdminUser/AdminUser.js'))
@@ -94,7 +91,7 @@ if (!!env.USER_PILOT_TOKEN) {
   Userpilot.initialize(env.USER_PILOT_TOKEN)
 }
 
-const App = memo(() => {
+const LegacyApp = memo(() => {
   const { data: authedAccount } = useAuthedAccount()
   const isAdjustInitializedRef = useRef<boolean>(false)
   const { isInitializing, userAddress } = useSnapshot(authenticationState)
@@ -367,6 +364,10 @@ const App = memo(() => {
   )
 })
 
-export default App
+LegacyApp.displayName = 'LegacyApp'
+
+const App = memo(() => (env.AUTH_MODE === 'google' ? <IdentityApp /> : <LegacyApp />))
 
 App.displayName = 'App'
+
+export default App
