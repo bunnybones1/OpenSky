@@ -5,6 +5,7 @@ import type {
   DeckEquipment,
   FeedEvent,
   Item,
+  ItemSummary,
   ItemType,
   Page,
   Quest,
@@ -90,6 +91,26 @@ const ITEM_TYPE_BY_TOKEN_CODE: Record<number, ItemType> = {
   10: 'SW_XP' as ItemType,
   254: 'SW_CONQUEST_TICKET' as ItemType
 }
+
+const SUMMARY_ITEM_TYPES = new Set<ItemType>([
+  'SW_SILVER_DUST' as ItemType,
+  'SW_SILVER_CARDS' as ItemType,
+  'SW_GOLD_CARDS' as ItemType,
+  'SW_CONQUEST_TICKET' as ItemType,
+  'SW_CRYSTALS' as ItemType,
+  'SW_STICKERS' as ItemType,
+  'SW_HERO_SKINS' as ItemType,
+  'SW_CARD_BACKS' as ItemType
+])
+
+const SUPPLY_ITEM_TYPES = new Set<ItemType>([
+  'SW_SILVER_CARDS' as ItemType,
+  'SW_GOLD_CARDS' as ItemType,
+  'SW_CRYSTALS' as ItemType,
+  'SW_STICKERS' as ItemType,
+  'SW_HERO_SKINS' as ItemType,
+  'SW_CARD_BACKS' as ItemType
+])
 
 const HERO_DECK_CLASS: Record<number, string> = {
   1: 'STR',
@@ -201,6 +222,14 @@ interface InventoryRow {
   created_at: string
   updated_at: string
   is_new: number
+}
+
+interface InventorySummaryRow {
+  id: number
+  item_type: ItemType
+  total_balance: number
+  created_at: string
+  updated_at: string
 }
 
 interface DeckRow {
@@ -1093,6 +1122,82 @@ export class PlayerRpcRepository {
         updatedAt: row.updated_at,
         isNew: row.is_new === 1
       }))
+  }
+
+  async itemSummary(
+    userId: string,
+    accountAddress: string
+  ): Promise<Record<string, ItemSummary>> {
+    if (accountAddress !== identityReferenceFor(userId)) {
+      throw permissionDenied('you can only view your own item summary')
+    }
+    await this.applyDeferredItemUpdates(userId)
+    const result = await this.database
+      .prepare(
+        `SELECT MIN(id) AS id, item_type, SUM(balance) AS total_balance,
+                MIN(created_at) AS created_at, MAX(updated_at) AS updated_at
+         FROM player_items
+         WHERE user_id = ? AND balance > 0
+         GROUP BY item_type
+         ORDER BY item_type ASC`
+      )
+      .bind(userId)
+      .all<InventorySummaryRow>()
+    const summary: Record<string, ItemSummary> = {}
+    for (const row of result.results) {
+      if (!SUMMARY_ITEM_TYPES.has(row.item_type)) continue
+      summary[row.item_type] = {
+        id: row.id,
+        itemType: row.item_type,
+        totalBalance: String(row.total_balance),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }
+    }
+
+    // Wallet balances are an optional future merge at this boundary. Preserve
+    // the source key while reporting no connected-wallet USDC today.
+    const now = new Date().toISOString()
+    summary.USDC = {
+      id: 0,
+      itemType: 'USDC' as ItemType,
+      totalBalance: '0',
+      createdAt: now,
+      updatedAt: now
+    }
+    return summary
+  }
+
+  async itemSupply(itemId: number): Promise<Record<string, Item>> {
+    if (!Number.isSafeInteger(itemId) || itemId < 0) {
+      throw invalidArgument('tokenID is invalid')
+    }
+    const tokenId = itemId & 0x00ffff
+    const result = await this.database
+      .prepare(
+        `SELECT MIN(id) AS id, item_type, SUM(balance) AS total_balance,
+                MIN(created_at) AS created_at, MAX(updated_at) AS updated_at
+         FROM player_items
+         WHERE token_id = ? AND balance > 0
+         GROUP BY item_type
+         ORDER BY item_type ASC`
+      )
+      .bind(tokenId)
+      .all<InventorySummaryRow>()
+    const supply: Record<string, Item> = {}
+    for (const row of result.results) {
+      if (!SUPPLY_ITEM_TYPES.has(row.item_type)) continue
+      supply[row.item_type] = {
+        id: row.id,
+        itemType: row.item_type,
+        tokenID: tokenId,
+        balance: String(row.total_balance),
+        lastUpdateID: 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }
+    }
+    return supply
   }
 
   private async ownedItem(

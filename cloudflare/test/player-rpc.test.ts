@@ -760,6 +760,76 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('summarizes identity inventory and public Cloud Weasel item supply', async () => {
+    const now = new Date().toISOString()
+    const otherUserId = 'item-supply-peer'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Supply Peer', 'supply-peer@example.com', ?, ?)`
+    )
+      .bind(otherUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(otherUserId)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', 42, 2, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 42, 3, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_CONQUEST_TICKET', 1, 4, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', 42, 5, 0, 'test', ?, ?)`
+      ).bind(otherUserId, now, now)
+    ])
+
+    const summary = await rpc('GetItemSummary', {
+      accountAddress: identityReference
+    })
+    expect(await summary.json()).toMatchObject({
+      summary: {
+        USDC: { itemType: 'USDC', totalBalance: '0' },
+        SW_SILVER_CARDS: { totalBalance: '2' },
+        SW_GOLD_CARDS: { totalBalance: '3' },
+        SW_CONQUEST_TICKET: { totalBalance: '4' }
+      }
+    })
+
+    const supply = await rpc('GetItemSupply', { tokenID: 42 }, false)
+    expect(supply.status).toBe(200)
+    expect(await supply.json()).toMatchObject({
+      summary: {
+        SW_SILVER_CARDS: { tokenID: 42, balance: '7' },
+        SW_GOLD_CARDS: { tokenID: 42, balance: '3' }
+      }
+    })
+
+    expect(
+      (
+        await rpc('GetItemSummary', {
+          accountAddress: `identity:${otherUserId}`
+        })
+      ).status
+    ).toBe(403)
+    expect((await rpc('GetItemSupply', { tokenID: -1 }, false)).status).toBe(
+      400
+    )
+  })
+
   it('faithfully equips owned stickers and card backs for game decks', async () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([

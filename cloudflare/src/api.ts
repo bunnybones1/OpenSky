@@ -475,6 +475,33 @@ export const handleApiRequest = async (
         )
       }
 
+      case 'GetItemSummary': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          accountAddress?: string
+          contractQuery?: boolean
+        }>(request)
+        if (!body.accountAddress) {
+          throw invalidArgument('accountAddress is required')
+        }
+        return json(request, env, {
+          summary: await playerRpc.itemSummary(
+            principal.userId,
+            body.accountAddress
+          )
+        })
+      }
+
+      case 'GetItemSupply': {
+        const body = await requestBody<{ tokenID?: number }>(request)
+        if (body.tokenID === undefined) {
+          throw invalidArgument('tokenID is required')
+        }
+        return json(request, env, {
+          summary: await playerRpc.itemSupply(body.tokenID)
+        })
+      }
+
       case 'GetItemOwnershipByType': {
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ itemTypes?: ItemType[] }>(request)
