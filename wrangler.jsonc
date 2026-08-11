@@ -1,5 +1,6 @@
 {
   "name": "opensky-webapp",
+  "account_id": "528badc1c29c30196335df252a73c5a6",
   "compatibility_date": "2026-07-15",
   "main": "./cloudflare/src/index.ts",
   "workers_dev": true,
