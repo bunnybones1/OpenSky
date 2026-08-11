@@ -50,7 +50,7 @@ export default {
       return json({
         ok: true,
         component: 'cloud-weasel-matchmaker',
-        protocolVersion: 2
+        protocolVersion: 3
       })
     }
     if (url.pathname !== MATCHMAKER_PATH)

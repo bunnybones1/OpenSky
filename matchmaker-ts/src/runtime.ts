@@ -13,6 +13,7 @@ import {
   versionValidator,
   WaitTimeScoreCalculator
 } from './criteria'
+import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
   BOT_PLAYER_ADDRESS,
@@ -55,6 +56,12 @@ export interface MatchmakerEnv {
   ENABLE_RANKED_BOTS?: string
   ALLOW_SAME_IP_MATCH?: string
   STRICT_CONQUEST_MATCHING?: string
+  HCAPTCHA_DISABLED?: string
+  HCAPTCHA_SITE_KEY?: string
+  HCAPTCHA_SECRET?: string
+  HCAPTCHA_LOCAL?: string
+  HCAPTCHA_VERIFY_URL?: string
+  HCAPTCHA_HOST?: string
   MATCH_SERVICE?: Fetcher
 }
 
@@ -215,6 +222,7 @@ const humanParticipants = (proposal: StoredProposal) =>
 export class MatchmakerPool implements DurableObject {
   private readonly config: RuntimeConfig
   private readonly penalties: PenaltyTracker
+  private readonly captcha: CaptchaGuard
 
   constructor(
     private readonly state: DurableObjectState,
@@ -222,6 +230,7 @@ export class MatchmakerPool implements DurableObject {
   ) {
     this.config = readConfig(env)
     this.penalties = new PenaltyTracker(state.storage, readPenaltyConfig(env))
+    this.captcha = new CaptchaGuard(state.storage, readCaptchaConfig(env))
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -374,6 +383,22 @@ export class MatchmakerPool implements DurableObject {
         await this.state.storage.delete(pendingKey(attachment.principal))
       }
     }
+
+    let captchaValid: boolean
+    try {
+      captchaValid = await this.captcha.validate(
+        {
+          address: attachment.principal,
+          ipAddress: attachment.clientIp
+        },
+        command.verifyToken
+      )
+    } catch (error) {
+      console.error('matchmaker captcha configuration failed', error)
+      throw new ProtocolError('SERVER_ERROR', 'captcha is unavailable')
+    }
+    if (!captchaValid) return
+    if (!(await this.captcha.canMatch(attachment.principal))) return
 
     const profile = await this.loadPlayerProfile(attachment, command.mode)
     if (profile.activeMatch) {

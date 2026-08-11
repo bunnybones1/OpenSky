@@ -3,16 +3,17 @@
 This package ports behavior from the Go `matchmaker` component without changing
 the client wire contract or combining it with the game server.
 
-| TypeScript module | Go source oracle |
-| --- | --- |
-| `src/model.ts` | `matchmaker/lib/player`, `matchmaker/lib/mappings` |
-| `src/quality.ts` | `matchmaker/lib/matchmaker/matching/matchers/matchquality` |
-| `src/criteria.ts` | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators` |
-| `src/matcher.ts` | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go` |
-| `src/protocol.ts` | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts` |
-| `src/runtime.ts` | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
-| `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go` |
-| `src/worker.ts` | `matchmaker/lib/frontend/websocket_handler.go` |
+| TypeScript module  | Go source oracle                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `src/model.ts`     | `matchmaker/lib/player`, `matchmaker/lib/mappings`                                          |
+| `src/quality.ts`   | `matchmaker/lib/matchmaker/matching/matchers/matchquality`                                  |
+| `src/criteria.ts`  | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators`                               |
+| `src/matcher.ts`   | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go`                         |
+| `src/protocol.ts`  | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts`                     |
+| `src/runtime.ts`   | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
+| `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go`                                                  |
+| `src/captcha.ts`   | `frontend/findmatch/validators/captcha.go`, `matching/matchers/player_validator.go`         |
+| `src/worker.ts`    | `matchmaker/lib/frontend/websocket_handler.go`                                              |
 
 Tests intentionally reproduce boundary values from the corresponding Go tests.
 The Cloudflare integration suite additionally covers authenticated WebSocket
@@ -20,6 +21,13 @@ upgrades, durable queue/proposal state, hibernation eviction, acceptance,
 decline, progressive refusal cooldowns, acceptance-timeout penalties,
 successful-match penalty resets, timeout alarms, and client-provided `playerID`
 forgery attempts. Challenge matches retain the source penalty exemptions.
+
+Captcha validation is opt-in with `HCAPTCHA_DISABLED=false`; it requires
+`HCAPTCHA_SITE_KEY` plus the secret `HCAPTCHA_SECRET`. The port preserves the
+source provider retry/fail-open policy, one-hour pass cache, tested score
+comparison, silent randomized shadow-ban duration, and 40% expired-ban release
+chance. Shadow bans are durable per authenticated principal, fixing the Go
+path's ineffective transient player mutation without changing client messages.
 
 ## Component boundary
 
@@ -53,9 +61,9 @@ fails closed and is never replaced by client-provided values.
 
 ## Remaining source behavior
 
-Captcha policy, captcha-triggered shadow-ban state, the game-server abandon
-cooldown bridge, and Conquest state still need Cloudflare adapters. The
-same-origin gateway already provides the source match-info response for
-reconnects. Conquest queues remain operationally disabled until their state and
-rewards are ported; the matchmaker does not pretend an incomplete mode is
-available.
+The game-server abandon cooldown bridge and Conquest state still need
+Cloudflare adapters. The same-origin gateway already provides the source
+match-info response for reconnects. Conquest queues remain operationally
+disabled until their state and rewards are ported; the matchmaker does not
+pretend an incomplete mode is available. Captcha remains disabled in production
+until a Cloud Weasel hCaptcha site is configured and its secret provisioned.

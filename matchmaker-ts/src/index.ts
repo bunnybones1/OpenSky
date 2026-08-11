@@ -1,4 +1,5 @@
 export * from './criteria'
+export * from './captcha'
 export * from './identity'
 export * from './matcher'
 export * from './model'
