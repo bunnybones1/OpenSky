@@ -14,6 +14,7 @@ import {
   readAbandonPenaltyConfig,
   recordAbandonPenalty
 } from './abandon-penalties'
+import { applyConquestPoints } from './conquest-points'
 import {
   applyConquestProgress,
   applyMatchExperience,
@@ -1105,6 +1106,14 @@ export class GameMatch implements DurableObject {
         questProgress,
         endedAt
       )
+      const conquestPoints = await applyConquestPoints(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        metadata.result?.winner,
+        metadata.result?.status ?? MatchStatus.COMPLETED,
+        metadata.result?.turnCount ?? 0,
+        endedAt
+      )
       await applyConquestProgress(
         this.env.AUTH_DB,
         metadata.proposalId,
@@ -1162,8 +1171,16 @@ export class GameMatch implements DurableObject {
             ...(metadata.result ?? {}),
             questProgress: progression.questProgress,
             rewards: [
-              [...stats.rewards[0], ...experience.rewards[0]],
-              [...stats.rewards[1], ...experience.rewards[1]]
+              [
+                ...conquestPoints.rewards[0],
+                ...stats.rewards[0],
+                ...experience.rewards[0]
+              ],
+              [
+                ...conquestPoints.rewards[1],
+                ...stats.rewards[1],
+                ...experience.rewards[1]
+              ]
             ]
           }),
           endedAt,
@@ -1180,6 +1197,7 @@ export class GameMatch implements DurableObject {
           type: 'rewards',
           data: [
             ...progression.rewards[player],
+            ...conquestPoints.rewards[player],
             ...stats.rewards[player],
             ...experience.rewards[player]
           ] as never[]

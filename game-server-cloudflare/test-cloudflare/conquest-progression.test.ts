@@ -2,11 +2,14 @@ import { env } from 'cloudflare:test'
 import {
   ConquestMatchResult,
   ConquestStatus,
-  GameMode
+  GameMode,
+  MatchStatus,
+  RewardType
 } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { applyConquestProgress } from '../src/progression'
+import { applyConquestPoints } from '../src/conquest-points'
 
 const USER_1 = 'conquest-progress-user-1'
 const USER_2 = 'conquest-progress-user-2'
@@ -31,6 +34,12 @@ const setup = async (
          (id, display_name, primary_email, created_at, updated_at)
        VALUES (?, 'Conquest Two', 'conquest-two@example.com', ?, ?)`
     ).bind(USER_2, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO game_accounts (id, user_id, created_at) VALUES (1, ?, ?)`
+    ).bind(USER_1, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO game_accounts (id, user_id, created_at) VALUES (2, ?, ?)`
+    ).bind(USER_2, now),
     env.AUTH_DB.prepare(
       `INSERT INTO multiplayer_matches
          (proposal_id, replay_id, mode, version, player1_principal,
@@ -73,7 +82,9 @@ const conquests = () =>
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_points'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_progress'),
+    env.AUTH_DB.prepare('DELETE FROM player_conquest_points'),
     env.AUTH_DB.prepare('DELETE FROM player_conquests'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM users')
@@ -81,6 +92,114 @@ beforeEach(async () => {
 })
 
 describe('source Conquest authoritative match progression', () => {
+  it('awards source match, owned-card, and hero-skin points exactly once', async () => {
+    const proposalId = 'conquest-points-completed'
+    await setup(proposalId)
+    const now = '2026-08-11T12:00:30.000Z'
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches SET match_payload_json = ?
+         WHERE proposal_id = ?`
+      ).bind(
+        JSON.stringify({
+          match: {
+            player1: { privateSeed: { cards: [10, 11, 10] } },
+            player2: { privateSeed: { cards: [] } }
+          }
+        }),
+        proposalId
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', 10, 1, 0, 'test', ?, ?)`
+      ).bind(USER_1, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 11, 1, 0, 'test', ?, ?)`
+      ).bind(USER_1, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO_SKINS', 1, 1, 0, 'test', ?, ?)`
+      ).bind(USER_1, now, now)
+    ])
+
+    const first = await applyConquestPoints(
+      env.AUTH_DB,
+      proposalId,
+      0,
+      MatchStatus.COMPLETED,
+      5,
+      now
+    )
+    expect(first.applied).toBe(true)
+    expect(first.points).toEqual([10, 4])
+    expect(first.rewards[0][0]).toMatchObject({
+      accountID: 1,
+      type: RewardType.CONQUEST_POINTS,
+      conquestV2TreasureProgress: {
+        beforeMatch: {
+          treasureLevel: 0,
+          treasurePoints: 0,
+          treasurePointsRequired: 250
+        },
+        afterMatch: {
+          treasureLevel: 0,
+          treasurePoints: 10,
+          treasurePointsRequired: 240
+        }
+      }
+    })
+    expect(first.rewards[1][0].accountID).toBe(2)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT user_id, event_id, current_points, total_points
+         FROM player_conquest_points ORDER BY user_id`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { user_id: USER_1, event_id: 2, current_points: 10, total_points: 10 },
+        { user_id: USER_2, event_id: 2, current_points: 4, total_points: 4 }
+      ]
+    })
+
+    const retry = await applyConquestPoints(
+      env.AUTH_DB,
+      proposalId,
+      1,
+      MatchStatus.ABANDONED,
+      9,
+      '2026-08-11T12:01:30.000Z'
+    )
+    expect(retry).toEqual({ ...first, applied: false })
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT SUM(current_points) AS points FROM player_conquest_points'
+      ).first<{ points: number }>()
+    ).toEqual({ points: 14 })
+  })
+
+  it('only awards a short abandoned match to its winner', async () => {
+    const proposalId = 'conquest-points-short-abandon'
+    await setup(proposalId)
+    const receipt = await applyConquestPoints(
+      env.AUTH_DB,
+      proposalId,
+      0,
+      MatchStatus.ABANDONED,
+      7,
+      '2026-08-11T12:01:45.000Z'
+    )
+
+    expect(receipt.points).toEqual([4, 0])
+    expect(receipt.rewards.map(rewards => rewards.length)).toEqual([1, 0])
+  })
+
   it('records a win and zero-win completion exactly once', async () => {
     const proposalId = 'conquest-progress-first-win'
     const match = await setup(proposalId)
