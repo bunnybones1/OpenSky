@@ -13,6 +13,54 @@ export interface WalletConnection {
   verifiedAt: string
 }
 
+export interface PlayerQuest {
+  key: string
+  title: string
+  description: string
+  progress: number
+  target: number
+  rewardXp: number
+  status: 'active' | 'complete' | 'claimed'
+}
+
+export interface PlayerCardUnlock {
+  id: number
+  name: string
+  prism: string
+  unlockSource: string
+  unlockedAt: string
+}
+
+export interface PlayerDeck {
+  id: string
+  name: string
+  prism: string
+  deckString: string
+  cardCount: number
+  isStarter: boolean
+}
+
+export interface PlayerState {
+  profile: {
+    level: number
+    xp: number
+    nextLevelXp: number
+    createdAt: string
+  }
+  basicSkyPass: {
+    level: number
+    xp: number
+    nextLevelXp: number
+  }
+  tutorialCompleted: boolean
+  quests: PlayerQuest[]
+  collection: {
+    basicCards: PlayerCardUnlock[]
+    basicCardCount: number
+  }
+  decks: PlayerDeck[]
+}
+
 export type IdentitySession =
   | {
       authenticated: false
@@ -45,6 +93,21 @@ class IdentityClient {
     window.location.assign(
       `/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`
     )
+  }
+
+  public bootstrapPlayer = async (): Promise<PlayerState> => {
+    const response = await fetch('/api/player/bootstrap', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    })
+    if (!response.ok) {
+      if (response.status === 401)
+        throw new Error('Your sign-in session has expired.')
+      throw new Error('Unable to set up your Cloud Weasel player.')
+    }
+    const body = (await response.json()) as { player: PlayerState }
+    return body.player
   }
 
   public signOut = async (): Promise<void> => {
