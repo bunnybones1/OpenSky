@@ -1,14 +1,27 @@
 import {
   GameMode,
+  MatchStatus,
   PlayerRank,
   PlayerRankStage,
   Reward,
+  RewardExpReason,
   RewardType
 } from '@opensky/proto'
+import {
+  hasUnlockedRanked,
+  INITIAL_RANK_STATE_JSON
+} from '@opensky/shared/ranked-progression'
 
+import {
+  addExperience,
+  awardMatchExperience,
+  experienceReward,
+  type MatchExperiencePlayer
+} from './experience'
 import {
   applySourceRankProtections,
   lookupRankByScore,
+  rankStageIncreased,
   nextRankPoints,
   parseRankState,
   serializeRankState,
@@ -26,6 +39,11 @@ interface MatchStatsRow extends MatchPlayersRow {
   mode: string
 }
 
+interface MatchExperienceRow extends MatchPlayersRow {
+  player1_principal: string
+  player2_principal: string
+}
+
 interface AccountStatsRow {
   user_id: string
   account_id: number | null
@@ -33,12 +51,26 @@ interface AccountStatsRow {
   player_rank: PlayerRank
   player_rank_stage: PlayerRankStage
   player_rank_state: string
+  level: number | null
+  xp: number | null
+  basic_skypass_level: number | null
 }
 
 interface MatchStatsReceiptRow {
   player1_rewards_json: string
   player2_rewards_json: string
   processed_at: string
+}
+
+interface MatchExperienceReceiptRow extends MatchStatsReceiptRow {}
+
+interface PlayerExperienceRow {
+  account_id: number | null
+  level: number
+  xp: number
+  basic_skypass_level: number
+  hero_count: number
+  ranked_constructed_rank: PlayerRank
 }
 
 interface QuestProgressRow {
@@ -67,6 +99,8 @@ export interface MatchStatsReceipt {
   rewards: [Reward[], Reward[]]
   processedAt: string
 }
+
+export interface MatchExperienceReceipt extends MatchStatsReceipt {}
 
 const parseReceipt = (row: ProgressionReceiptRow): MatchProgressionReceipt => ({
   questProgress: [
@@ -131,6 +165,55 @@ const statsReceipt = async (
     processedAt: row.processed_at
   }
 }
+
+const experienceReceipt = async (
+  database: D1Database,
+  proposalId: string,
+  applied: boolean
+): Promise<MatchExperienceReceipt | undefined> => {
+  const row = await database
+    .prepare(
+      `SELECT player1_rewards_json, player2_rewards_json, processed_at
+       FROM multiplayer_match_experience WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<MatchExperienceReceiptRow>()
+  if (!row) return undefined
+  return {
+    applied,
+    rewards: [
+      parseRewardList(row.player1_rewards_json),
+      parseRewardList(row.player2_rewards_json)
+    ],
+    processedAt: row.processed_at
+  }
+}
+
+const rankedUnlockReward = (accountID: number): Reward => ({
+  accountID,
+  type: RewardType.RANK,
+  gameMode: GameMode.RANKED_CONSTRUCTED,
+  rank: {
+    beforeMatch: {
+      rank: PlayerRank.UNRANKED,
+      rankStage: PlayerRankStage.STAGE_I,
+      requiredRankPoints: 0,
+      rankPosition: 0,
+      score: 0,
+      scoreAbove: 0,
+      scoreBelow: 0
+    },
+    afterMatch: {
+      rank: PlayerRank.WANDERER,
+      rankStage: PlayerRankStage.STAGE_I,
+      requiredRankPoints: 100,
+      rankPosition: 0,
+      score: 0,
+      scoreAbove: 0,
+      scoreBelow: 0
+    }
+  }
+})
 
 /**
  * Applies the source quest engine's trusted deltas once per accepted match.
@@ -242,6 +325,196 @@ export const applyMatchProgression = async (
 }
 
 /**
+ * Applies the Go source match XP awarder and linear level-up behavior once.
+ * The reward payload and every profile mutation share a durable D1 receipt.
+ */
+export const applyMatchExperience = async (
+  database: D1Database,
+  proposalId: string,
+  season: number,
+  gameModes: [GameMode, GameMode],
+  winner: 0 | 1 | undefined,
+  status: MatchStatus,
+  turnCount: number,
+  processedAt: string,
+  priorRewards: [Reward[], Reward[]] = [[], []]
+): Promise<MatchExperienceReceipt> => {
+  const existing = await experienceReceipt(database, proposalId, false)
+  if (existing) return existing
+  if (!Number.isSafeInteger(season) || season < 1 || season > 10_000) {
+    throw new Error('match season is invalid')
+  }
+  if (
+    !Number.isSafeInteger(turnCount) ||
+    turnCount < 0 ||
+    turnCount > 4_294_967_295
+  ) {
+    throw new Error('match turn count is invalid')
+  }
+
+  const match = await database
+    .prepare(
+      `SELECT player1_user_id, player2_user_id, player1_principal,
+              player2_principal
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<MatchExperienceRow>()
+  if (!match) throw new Error('match ledger row was not found')
+
+  const userIds = [match.player1_user_id, match.player2_user_id] as const
+  const principals = [match.player1_principal, match.player2_principal] as const
+  const rows = await Promise.all(
+    userIds.map(userId =>
+      userId
+        ? database
+            .prepare(
+              `SELECT account.id AS account_id, profile.level, profile.xp,
+                      progression.basic_skypass_level,
+                      (SELECT COUNT(*) FROM player_items item
+                       WHERE item.user_id = profile.user_id
+                         AND item.item_type = 'SW_HERO' AND item.balance > 0)
+                        AS hero_count,
+                      COALESCE(
+                        (SELECT stats.player_rank FROM player_account_stats stats
+                         WHERE stats.user_id = profile.user_id
+                           AND stats.game_mode = 'RANKED_CONSTRUCTED'
+                           AND stats.season = ?),
+                        'UNRANKED'
+                      ) AS ranked_constructed_rank
+               FROM player_profiles profile
+               JOIN player_progression progression
+                 ON progression.user_id = profile.user_id
+               LEFT JOIN game_accounts account ON account.user_id = profile.user_id
+               WHERE profile.user_id = ?`
+            )
+            .bind(season, userId)
+            .first<PlayerExperienceRow>()
+        : Promise.resolve(null)
+    )
+  )
+  const players = rows.map((row, index) =>
+    row
+      ? ({
+          accountID: row.account_id ?? 0,
+          principal: principals[index],
+          gameMode: gameModes[index],
+          level: row.level,
+          experience: row.xp,
+          seasonLevel: row.basic_skypass_level,
+          heroCount: row.hero_count
+        } satisfies MatchExperiencePlayer)
+      : undefined
+  ) as [MatchExperiencePlayer | undefined, MatchExperiencePlayer | undefined]
+  const rewards = awardMatchExperience({
+    players,
+    winner,
+    status,
+    turnCount
+  })
+  const statements: D1PreparedStatement[] = []
+
+  for (const player of [0, 1] as const) {
+    const userId = userIds[player]
+    const row = rows[player]
+    if (!userId || !row) continue
+    const experienceGain = [...priorRewards[player], ...rewards[player]].reduce(
+      (total, reward) => total + (reward.exp?.amount ?? 0),
+      0
+    )
+    if (experienceGain <= 0) continue
+
+    const rankedWasUnlocked = hasUnlockedRanked(row.level, row.xp)
+    const next = addExperience(row.level, row.xp, experienceGain)
+    statements.push(
+      database
+        .prepare(
+          `UPDATE player_profiles
+           SET level = ?, xp = ?, next_level_xp = 200, updated_at = ?
+           WHERE user_id = ? AND NOT EXISTS (
+             SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
+           )`
+        )
+        .bind(next.level, next.experience, processedAt, userId, proposalId),
+      database
+        .prepare(
+          `UPDATE player_progression
+           SET basic_skypass_level = MAX(basic_skypass_level, ?),
+               basic_skypass_xp = ?, basic_skypass_next_xp = 200,
+               updated_at = ?
+           WHERE user_id = ? AND NOT EXISTS (
+             SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
+           )`
+        )
+        .bind(next.level, next.experience, processedAt, userId, proposalId)
+    )
+
+    if (!rankedWasUnlocked && hasUnlockedRanked(next.level, next.experience)) {
+      for (const mode of [
+        GameMode.RANKED_CONSTRUCTED,
+        GameMode.RANKED_DISCOVERY
+      ]) {
+        statements.push(
+          database
+            .prepare(
+              `INSERT OR IGNORE INTO player_account_stats
+                 (user_id, game_mode, season, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)`
+            )
+            .bind(userId, mode, season, processedAt, processedAt),
+          database
+            .prepare(
+              `UPDATE player_account_stats
+               SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+                   score = 0, player_rank_state = ?, updated_at = ?
+               WHERE user_id = ? AND game_mode = ? AND season = ?
+                 AND player_rank = 'UNRANKED'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM multiplayer_match_experience
+                   WHERE proposal_id = ?
+                 )`
+            )
+            .bind(
+              INITIAL_RANK_STATE_JSON,
+              processedAt,
+              userId,
+              mode,
+              season,
+              proposalId
+            )
+        )
+      }
+      if (row.ranked_constructed_rank === PlayerRank.UNRANKED) {
+        rewards[player].push(rankedUnlockReward(row.account_id ?? 0))
+      }
+    }
+  }
+
+  statements.push(
+    database
+      .prepare(
+        `INSERT INTO multiplayer_match_experience
+           (proposal_id, player1_rewards_json, player2_rewards_json, processed_at)
+         SELECT ?, ?, ?, ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
+         )`
+      )
+      .bind(
+        proposalId,
+        JSON.stringify(rewards[0]),
+        JSON.stringify(rewards[1]),
+        processedAt,
+        proposalId
+      )
+  )
+  await database.batch(statements)
+  const stored = await experienceReceipt(database, proposalId, true)
+  if (!stored) throw new Error('match experience receipt was not persisted')
+  return stored
+}
+
+/**
  * Applies the source match counters once. The guard row and every counter
  * mutation share one D1 batch so Durable Object/alarm retries cannot count a
  * completed match twice.
@@ -315,9 +588,13 @@ export const applyMatchStats = async (
             .prepare(
               `SELECT stats.user_id, account.id AS account_id, stats.score,
                       stats.player_rank, stats.player_rank_stage,
-                      stats.player_rank_state
+                      stats.player_rank_state, profile.level, profile.xp,
+                      progression.basic_skypass_level
                FROM player_account_stats stats
                LEFT JOIN game_accounts account ON account.user_id = stats.user_id
+               LEFT JOIN player_profiles profile ON profile.user_id = stats.user_id
+               LEFT JOIN player_progression progression
+                 ON progression.user_id = stats.user_id
                WHERE stats.user_id = ? AND stats.game_mode = ? AND stats.season = ?`
             )
             .bind(userId, match.mode, season)
@@ -327,11 +604,7 @@ export const applyMatchStats = async (
   )
 
   const outcomes: [RankingOutcome, RankingOutcome] =
-    winner === undefined
-      ? [0.5, 0.5]
-      : winner === 0
-        ? [1, 0]
-        : [0, 1]
+    winner === undefined ? [0.5, 0.5] : winner === 0 ? [1, 0] : [0, 1]
   const oldStates = accountStats.map(stats =>
     stats ? parseRankState(stats.player_rank_state, stats.score) : undefined
   )
@@ -371,6 +644,59 @@ export const applyMatchStats = async (
       playerRank = protectedResult.rank.rank
       playerRankStage = protectedResult.rank.stage
       playerRankState = serializeRankState(protectedResult.state)
+
+      if (
+        outcomes[player] === 1 &&
+        rankStageIncreased(protectedResult.rank, currentDefinition) &&
+        protectedResult.rank.experienceReward > 0 &&
+        stats.level !== null &&
+        stats.xp !== null &&
+        stats.basic_skypass_level !== null
+      ) {
+        const alreadyAwarded = await database
+          .prepare(
+            `SELECT 1 FROM player_rank_up_rewards
+             WHERE user_id = ? AND game_mode = ? AND season = ?
+               AND player_rank = ? AND player_rank_stage = ?`
+          )
+          .bind(userId, match.mode, season, playerRank, playerRankStage)
+          .first()
+        if (!alreadyAwarded) {
+          rewards[player].push(
+            experienceReward(
+              {
+                accountID: stats.account_id ?? 0,
+                principal: '',
+                gameMode: match.mode as GameMode,
+                level: stats.level,
+                experience: stats.xp,
+                seasonLevel: stats.basic_skypass_level,
+                heroCount: 0
+              },
+              protectedResult.rank.experienceReward,
+              RewardExpReason.RankUp
+            )
+          )
+          statements.push(
+            database
+              .prepare(
+                `INSERT OR IGNORE INTO player_rank_up_rewards
+                   (user_id, game_mode, season, player_rank,
+                    player_rank_stage, proposal_id, awarded_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+              )
+              .bind(
+                userId,
+                match.mode,
+                season,
+                playerRank,
+                playerRankStage,
+                proposalId,
+                processedAt
+              )
+          )
+        }
+      }
       rewards[player].push({
         accountID: stats.account_id ?? 0,
         type: RewardType.RANK,

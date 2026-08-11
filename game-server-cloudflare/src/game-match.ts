@@ -1,4 +1,4 @@
-import { GameMode } from '@opensky/proto'
+import { GameMode, MatchStatus } from '@opensky/proto'
 import {
   EmoteMessage,
   GameServerMessage,
@@ -9,7 +9,11 @@ import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
-import { applyMatchProgression, applyMatchStats } from './progression'
+import {
+  applyMatchExperience,
+  applyMatchProgression,
+  applyMatchStats
+} from './progression'
 import {
   AcceptedClientMessage,
   CreateMatchRequest,
@@ -65,6 +69,7 @@ interface MatchResult {
   winner?: Player
   turnCount?: number
   moveCount?: number
+  status?: MatchStatus
 }
 
 interface PlayerRuntimeState {
@@ -743,7 +748,13 @@ export class GameMatch implements DurableObject {
       metadata.result ??= {
         winner: info.winner,
         turnCount: info.turnCount,
-        moveCount: info.moveCount
+        moveCount: info.moveCount,
+        status:
+          info.lastActionType === 'Abandon'
+            ? MatchStatus.ABANDONED
+            : info.lastActionType === 'Concede'
+              ? MatchStatus.FORFEITED
+              : MatchStatus.COMPLETED
       }
       timers.commitRevealAtMs = undefined
       timers.turnAtMs = undefined
@@ -837,6 +848,17 @@ export class GameMatch implements DurableObject {
         metadata.result?.winner,
         endedAt
       )
+      const experience = await applyMatchExperience(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        metadata.match.matchSettings.season,
+        [metadata.match.player1.gameMode, metadata.match.player2.gameMode],
+        metadata.result?.winner,
+        metadata.result?.status ?? MatchStatus.COMPLETED,
+        metadata.result?.turnCount ?? 0,
+        endedAt,
+        stats.rewards
+      )
       const result = await this.env.AUTH_DB.prepare(
         `UPDATE multiplayer_matches
          SET status = 'ended', winner_player = ?, result_json = ?,
@@ -848,7 +870,10 @@ export class GameMatch implements DurableObject {
           JSON.stringify({
             ...(metadata.result ?? {}),
             questProgress: progression.questProgress,
-            rewards: stats.rewards
+            rewards: [
+              [...stats.rewards[0], ...experience.rewards[0]],
+              [...stats.rewards[1], ...experience.rewards[1]]
+            ]
           }),
           endedAt,
           endedAt,
@@ -864,7 +889,8 @@ export class GameMatch implements DurableObject {
           type: 'rewards',
           data: [
             ...progression.rewards[player],
-            ...stats.rewards[player]
+            ...stats.rewards[player],
+            ...experience.rewards[player]
           ] as never[]
         })
       }

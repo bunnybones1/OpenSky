@@ -1,9 +1,6 @@
 import { WasmMatchBotOpponent } from '@opensky/bot'
 import { GameMode } from '@opensky/proto'
-import {
-  PlayerQuestManager,
-  PlayerQuestRuntimeState
-} from '@opensky/quests'
+import { PlayerQuestManager, PlayerQuestRuntimeState } from '@opensky/quests'
 import {
   DECKCLASS_HEROES,
   DUAL_PRISM_DECK_SIZE,
@@ -66,7 +63,7 @@ const normalizeCardRarities = (value: unknown): Map<BaseCard, Rarity> => {
 
 export const normalizePrivateSeed = (seed: PrivateSeed): PrivateSeed => ({
   ...seed,
-  cards: seed.cards.filter((card) => CardLibrary.has(card)),
+  cards: seed.cards.filter(card => CardLibrary.has(card)),
   cardRarities: new Map(
     [...normalizeCardRarities(seed.cardRarities).entries()].filter(([card]) =>
       CardLibrary.has(card)
@@ -182,7 +179,15 @@ export interface RuntimeStateInfo {
   currentPlayer?: Player
   statusType?: string
   winner?: Player
+  lastActionPlayer?: Player
+  lastActionType?: string
   playersDoneCardSelection?: [boolean, boolean]
+}
+
+interface RuntimeCapture {
+  diffs: string[]
+  lastActionPlayer?: Player
+  lastActionType?: string
 }
 
 export interface BotPolicyState {
@@ -201,7 +206,7 @@ export class AuthoritativeMatchRuntime {
   private constructor(
     private readonly store: StateBindings.WasmMatch,
     ownerPrivateKey: string,
-    private readonly emitted: { diffs: string[] },
+    private readonly emitted: RuntimeCapture,
     private readonly questManagers: PlayerQuestManager[]
   ) {
     this.ownerSign = createOwnerSigner(ownerPrivateKey)
@@ -220,10 +225,9 @@ export class AuthoritativeMatchRuntime {
         new PlayerQuestManager({
           deck: participant.privateSeed.cards,
           gameMode,
-          hero:
-            DECKCLASS_HEROES[
-              prismsToDeckClass(participant.privateSeed.prisms)
-            ],
+          hero: DECKCLASS_HEROES[
+            prismsToDeckClass(participant.privateSeed.prisms)
+          ],
           player: player as Player,
           quests: participant.quests
         })
@@ -245,8 +249,18 @@ export class AuthoritativeMatchRuntime {
     }
   }
 
-  private static eventCallback(questManagers: PlayerQuestManager[]) {
+  private static eventCallback(
+    questManagers: PlayerQuestManager[],
+    emitted: RuntimeCapture
+  ) {
     return (_target: Player | undefined, event: CardEvent<SkyWeaver>) => {
+      if (
+        event.type === 'GameEvent' &&
+        event.payload.event.type === 'EnterPlayerAction'
+      ) {
+        emitted.lastActionPlayer = event.payload.event.payload[0]
+        emitted.lastActionType = event.payload.event.payload[1].type
+      }
       for (const manager of questManagers) manager.onProcessEvent(event)
     }
   }
@@ -273,7 +287,7 @@ export class AuthoritativeMatchRuntime {
       this.stateCallback(questManagers),
       ownerSign,
       (diff: Uint8Array) => emitted.diffs.push(bytesToHex(diff)),
-      this.eventCallback(questManagers),
+      this.eventCallback(questManagers, emitted),
       secureRandom
     )
     for (const [player, manager] of questManagers.entries()) {
@@ -305,7 +319,7 @@ export class AuthoritativeMatchRuntime {
       this.stateCallback(questManagers),
       ownerSign,
       (diff: Uint8Array) => emitted.diffs.push(bytesToHex(diff)),
-      this.eventCallback(questManagers),
+      this.eventCallback(questManagers, emitted),
       secureRandom
     )
     for (const [player, manager] of questManagers.entries()) {
@@ -317,7 +331,9 @@ export class AuthoritativeMatchRuntime {
         manager.onStateUpdated(
           state,
           store.secret(manager.player) as PlayerSecret<SkyWeaver>,
-          store.secret((1 - manager.player) as Player) as PlayerSecret<SkyWeaver>
+          store.secret(
+            (1 - manager.player) as Player
+          ) as PlayerSecret<SkyWeaver>
         )
       }
     }
@@ -370,11 +386,10 @@ export class AuthoritativeMatchRuntime {
       currentPlayer: game?.currentPlayer,
       statusType: status?.type,
       winner: status?.type === 'GameOver' ? status.winner : undefined,
+      lastActionPlayer: this.emitted.lastActionPlayer,
+      lastActionType: this.emitted.lastActionType,
       playersDoneCardSelection: game
-        ? [
-            game.players[0].doneCardSelection,
-            game.players[1].doneCardSelection
-          ]
+        ? [game.players[0].doneCardSelection, game.players[1].doneCardSelection]
         : undefined
     }
   }
@@ -445,7 +460,9 @@ export class AuthoritativeMatchRuntime {
       this.store.dispatchApprove(
         player,
         subkey,
-        bytesToHex(this.ownerSign(bindings.WasmMatch.getApproval(player, subkey)))
+        bytesToHex(
+          this.ownerSign(bindings.WasmMatch.getApproval(player, subkey))
+        )
       )
     })
   }

@@ -6,6 +6,7 @@ import {
   SELF
 } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { GameMode, MatchStatus } from '@opensky/proto'
 
 import { GameMatch, GameServerEnv } from '../src/game-match'
 import {
@@ -13,7 +14,11 @@ import {
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from '../src/protocol'
-import { applyMatchProgression, applyMatchStats } from '../src/progression'
+import {
+  applyMatchExperience,
+  applyMatchProgression,
+  applyMatchStats
+} from '../src/progression'
 import {
   createMatchFixture,
   PRINCIPAL_1,
@@ -131,6 +136,52 @@ const insertQuestPlayers = async () => {
   ])
 }
 
+const insertExperiencePlayers = async () => {
+  const now = new Date().toISOString()
+  const statements: D1PreparedStatement[] = []
+  for (const [index, userId] of [USER_ID_1, USER_ID_2].entries()) {
+    statements.push(
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, avatar_url, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, ?)`
+      ).bind(
+        userId,
+        `XP Player ${index + 1}`,
+        `xp${index + 1}@example.com`,
+        now,
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO game_accounts (id, user_id, created_at)
+         VALUES (?, ?, ?)`
+      ).bind(index + 1, userId, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_profiles
+           (user_id, level, xp, next_level_xp, created_at, updated_at)
+         VALUES (?, 1, ?, 200, ?, ?)`
+      ).bind(userId, index === 0 ? 170 : 0, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_progression
+           (user_id, basic_skypass_level, basic_skypass_xp,
+            basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+         VALUES (?, 1, ?, 200, 0, ?, ?)`
+      ).bind(userId, index === 0 ? 170 : 0, now, now)
+    )
+    for (const heroId of [1, 2, 3]) {
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_HERO', ?, 1, 0, 'test', ?, ?)`
+        ).bind(userId, heroId, now, now)
+      )
+    }
+  }
+  await env.AUTH_DB.batch(statements)
+}
+
 const connect = async (principal: string) => {
   const response = await SELF.fetch(
     `https://game.example/v1/matches/${proposalId}`,
@@ -196,7 +247,9 @@ beforeEach(async () => {
   proposalId = `proposal-test-${crypto.randomUUID()}`
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_experience'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_rank_up_rewards'),
     env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM player_quests'),
@@ -215,6 +268,207 @@ afterEach(() => {
 })
 
 describe('Cloudflare authoritative game Match Durable Object', () => {
+  it('applies source match XP, level-up, and ranked unlock only once', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const processedAt = new Date().toISOString()
+
+    const first = await applyMatchExperience(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+      0,
+      MatchStatus.COMPLETED,
+      10,
+      processedAt
+    )
+    expect(first).toMatchObject({
+      applied: true,
+      rewards: [
+        [
+          { type: 'EXP', exp: { amount: 30, reason: 'MatchPlayed' } },
+          { type: 'EXP', exp: { amount: 20, reason: 'Victory' } },
+          {
+            type: 'RANK',
+            gameMode: 'RANKED_CONSTRUCTED',
+            rank: {
+              beforeMatch: { rank: 'UNRANKED' },
+              afterMatch: { rank: 'WANDERER', rankStage: 'STAGE_I' }
+            }
+          }
+        ],
+        [{ type: 'EXP', exp: { amount: 30, reason: 'MatchPlayed' } }]
+      ]
+    })
+
+    const profiles = await env.AUTH_DB.prepare(
+      `SELECT user_id, level, xp FROM player_profiles ORDER BY user_id`
+    ).all<{ user_id: string; level: number; xp: number }>()
+    expect(profiles.results).toEqual([
+      { user_id: USER_ID_1, level: 2, xp: 20 },
+      { user_id: USER_ID_2, level: 1, xp: 30 }
+    ])
+    const ranks = await env.AUTH_DB.prepare(
+      `SELECT user_id, game_mode, player_rank, player_rank_stage
+       FROM player_account_stats ORDER BY user_id, game_mode`
+    ).all<{
+      user_id: string
+      game_mode: string
+      player_rank: string
+      player_rank_stage: string
+    }>()
+    expect(ranks.results).toEqual([
+      {
+        user_id: USER_ID_1,
+        game_mode: 'RANKED_CONSTRUCTED',
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I'
+      },
+      {
+        user_id: USER_ID_1,
+        game_mode: 'RANKED_DISCOVERY',
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I'
+      }
+    ])
+
+    const retry = await applyMatchExperience(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+      1,
+      MatchStatus.ABANDONED,
+      1,
+      new Date(Date.now() + 1_000).toISOString()
+    )
+    expect(retry).toMatchObject({ applied: false, rewards: first.rewards })
+    const profilesAfterRetry = await env.AUTH_DB.prepare(
+      `SELECT user_id, level, xp FROM player_profiles ORDER BY user_id`
+    ).all<{ user_id: string; level: number; xp: number }>()
+    expect(profilesAfterRetry.results).toEqual(profiles.results)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM multiplayer_match_experience
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(1)
+  })
+
+  it('adds a source rank-up bonus to match XP once per season and stage', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const processedAt = new Date().toISOString()
+    await env.AUTH_DB.batch(
+      [USER_ID_1, USER_ID_2].map(userId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, player_rank_state, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', 126, 90, 'WANDERER',
+                   'STAGE_I', '[1,1750,350,90]', ?, ?)`
+        ).bind(userId, processedAt, processedAt)
+      )
+    )
+
+    const stats = await applyMatchStats(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      0,
+      processedAt
+    )
+    expect(stats.rewards[0]).toEqual([
+      expect.objectContaining({
+        type: 'EXP',
+        exp: expect.objectContaining({ amount: 100, reason: 'RankUp' })
+      }),
+      expect.objectContaining({
+        type: 'RANK',
+        rank: expect.objectContaining({
+          beforeMatch: expect.objectContaining({ rankStage: 'STAGE_I' }),
+          afterMatch: expect.objectContaining({ rankStage: 'STAGE_II' })
+        })
+      })
+    ])
+
+    const experience = await applyMatchExperience(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+      0,
+      MatchStatus.COMPLETED,
+      10,
+      processedAt,
+      stats.rewards
+    )
+    expect(experience.rewards[0]).toEqual([
+      expect.objectContaining({ exp: expect.objectContaining({ amount: 30 }) }),
+      expect.objectContaining({ exp: expect.objectContaining({ amount: 20 }) })
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first()
+    ).toEqual({ level: 2, xp: 120 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_rank_up_rewards
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = 126 AND player_rank = 'WANDERER'
+           AND player_rank_stage = 'STAGE_II'`
+      )
+        .bind(USER_ID_1)
+        .first('count')
+    ).toBe(1)
+
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        1,
+        new Date(Date.now() + 1_000).toISOString()
+      )
+    ).toMatchObject({ applied: false, rewards: stats.rewards })
+
+    const secondProposalId = `${proposalId}-rank-reentry`
+    await insertActiveLedgerRow(secondProposalId, [USER_ID_1, USER_ID_2])
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 90, player_rank = 'WANDERER',
+           player_rank_stage = 'STAGE_I',
+           player_rank_state = '[1,1750,350,90]'
+       WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126`
+    ).run()
+    const repeatedStage = await applyMatchStats(
+      env.AUTH_DB,
+      secondProposalId,
+      126,
+      0,
+      new Date(Date.now() + 2_000).toISOString()
+    )
+    expect(repeatedStage.rewards[0].map(reward => reward.type)).toEqual([
+      'RANK'
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_rank_up_rewards
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = 126 AND player_rank = 'WANDERER'
+           AND player_rank_stage = 'STAGE_II'`
+      )
+        .bind(USER_ID_1)
+        .first('count')
+    ).toBe(1)
+  })
+
   it('enforces public gateway and request-boundary safeties', async () => {
     const health = await SELF.fetch('https://game.example/health')
     expect(await health.json()).toEqual({
@@ -503,7 +757,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       winner_player: 1,
       ended_at: expect.any(String)
     })
-    expect(JSON.parse(ledger!.result_json)).toMatchObject({ winner: 1 })
+    expect(JSON.parse(ledger!.result_json)).toMatchObject({
+      winner: 1,
+      status: 'ABANDONED'
+    })
 
     const stats = await env.AUTH_DB.prepare(
       `SELECT user_id, win_count, loss_count, tie_count, win_streak,
@@ -550,8 +807,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         score: 43,
         player_rank: 'WANDERER',
         player_rank_stage: 'STAGE_I',
-        player_rank_state:
-          '[1,1882.1627313643605,350,43]'
+        player_rank_state: '[1,1882.1627313643605,350,43]'
       }
     ])
     expect(
