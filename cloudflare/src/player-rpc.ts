@@ -3,8 +3,10 @@ import type {
   CardOwnershipResponse,
   Deck,
   DeckEquipment,
+  FeedEvent,
   Item,
   ItemType,
+  Page,
   Quest,
   SkypassLevel,
   SkypassReward
@@ -284,6 +286,85 @@ interface RawSkypassRewardRow {
   attributes: string | null
 }
 
+interface RankFeedRow {
+  row_id: number
+  game_mode: string
+  season: number
+  player_rank: string
+  player_rank_stage: string
+  awarded_at: string
+}
+
+interface SkypassFeedRow {
+  row_id: number
+  rewards: string
+  claimed_at: string
+}
+
+const FEED_PAGE_SIZE = 50
+const MAX_FEED_PAGE_SIZE = 100
+
+const feedPageSize = (page?: Page) =>
+  Math.min(
+    MAX_FEED_PAGE_SIZE,
+    Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+      ? page!.pageSize!
+      : FEED_PAGE_SIZE
+  )
+
+const feedCursor = (cursor?: string) => {
+  if (!cursor) return 0
+  try {
+    const decoded = JSON.parse(atob(cursor)) as { offset?: unknown }
+    if (
+      Number.isSafeInteger(decoded.offset) &&
+      (decoded.offset as number) >= 0
+    ) {
+      return decoded.offset as number
+    }
+  } catch {
+    // Fall through to the source-compatible invalid page error.
+  }
+  throw invalidArgument('page cursor is invalid')
+}
+
+const feedCursorFor = (offset: number) => btoa(JSON.stringify({ offset }))
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const parseJsonArray = (value: string): unknown[] => {
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const rewardTokenIds = (value: string) => {
+  const rewards = parseJsonArray(value)
+  const tokenIds: number[] = []
+  let unlockedStarterDeck = false
+  for (const reward of rewards) {
+    if (!isRecord(reward) || typeof reward.type !== 'string') continue
+    if (reward.type === 'DECK') unlockedStarterDeck = true
+    if (reward.type !== 'CARD' || !isRecord(reward.card)) continue
+    const quantity = reward.card
+    if (!isRecord(quantity.card)) continue
+    const card = quantity.card
+    if (!Number.isSafeInteger(card.id)) continue
+    const typeCode =
+      card.itemType === 'SW_SILVER_CARDS'
+        ? 0x01
+        : card.itemType === 'SW_GOLD_CARDS'
+          ? 0x02
+          : 0xff
+    tokenIds.push((typeCode << 16) + (Number(card.id) & 0x00ffff))
+  }
+  return { tokenIds, unlockedStarterDeck }
+}
+
 const prismClass = (prism: string): (typeof CARD_CLASSES)[number] => {
   const value = prism.slice(0, 3).toUpperCase()
   return CARD_CLASSES.includes(value as (typeof CARD_CLASSES)[number])
@@ -373,6 +454,104 @@ export class PlayerRpcRepository {
     return this.getIdentityAccount(userId, viewerUserId === userId)
   }
 
+  async feed(
+    accountAddress: string,
+    page?: Page,
+    types?: Array<FeedEvent['type']>
+  ): Promise<{ page: Page; res: FeedEvent[] }> {
+    if (!accountAddress.startsWith('identity:')) {
+      throw invalidArgument('account_address is invalid')
+    }
+    const userId = accountAddress.slice('identity:'.length)
+    if (!userId) throw invalidArgument('account_address is invalid')
+    const account = await this.database
+      .prepare('SELECT 1 FROM users WHERE id = ?')
+      .bind(userId)
+      .first()
+    if (!account) throw notFound('account was not found')
+
+    const [rankRows, skypassRows] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT rowid AS row_id, game_mode, season, player_rank,
+                  player_rank_stage, awarded_at
+           FROM player_rank_up_rewards
+           WHERE user_id = ?`
+        )
+        .bind(userId)
+        .all<RankFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT rowid AS row_id, rewards, claimed_at
+           FROM player_skypass_claims
+           WHERE user_id = ?`
+        )
+        .bind(userId)
+        .all<SkypassFeedRow>()
+    ])
+
+    // The generated client type marks `match` as required, but the source Go
+    // pointer is absent for every non-MATCH event returned by this endpoint.
+    const events: FeedEvent[] = rankRows.results.map(
+      row =>
+        ({
+          id: row.row_id * 2,
+          type: 'RANKUP',
+          createdAt: row.awarded_at,
+          playerRank: row.player_rank,
+          playerRankStage: row.player_rank_stage,
+          season: row.season,
+          gameMode: row.game_mode,
+          cards: [],
+          heroes: []
+        }) as unknown as FeedEvent
+    )
+    for (const row of skypassRows.results) {
+      const { tokenIds, unlockedStarterDeck } = rewardTokenIds(row.rewards)
+      if (tokenIds.length > 0) {
+        events.push({
+          id: row.row_id * 2 + 1,
+          type: 'REWARD',
+          createdAt: row.claimed_at,
+          tokenIds,
+          cards: [],
+          heroes: []
+        } as unknown as FeedEvent)
+      } else if (unlockedStarterDeck) {
+        events.push({
+          id: row.row_id * 2 + 1,
+          type: 'STARTED_DECK_UNLOCK',
+          createdAt: row.claimed_at,
+          cards: [],
+          heroes: []
+        } as unknown as FeedEvent)
+      }
+    }
+
+    const requestedTypes = types?.length ? new Set(types) : undefined
+    const filtered = events
+      .filter(event => !requestedTypes || requestedTypes.has(event.type))
+      .sort((left, right) => {
+        const time = Date.parse(right.createdAt) - Date.parse(left.createdAt)
+        return time || right.id - left.id
+      })
+    const size = feedPageSize(page)
+    const offset = feedCursor(page?.before)
+    const res = filtered.slice(offset, offset + size)
+    const nextOffset = offset + res.length
+    return {
+      page: {
+        pageSize: size,
+        hasBefore: nextOffset < filtered.length,
+        ...(nextOffset < filtered.length
+          ? { after: feedCursorFor(nextOffset) }
+          : {}),
+        hasAfter: offset > 0
+      },
+      res
+    }
+  }
+
   private async getIdentityAccount(
     userId: string,
     includePrivateSettings: boolean
@@ -440,9 +619,7 @@ export class PlayerRpcRepository {
                 ? { twitchProfile: row.twitch_profile }
                 : {}),
               ...(row.title_id !== null ? { titleID: row.title_id } : {}),
-              ...(row.spectate_code
-                ? { spectateCode: row.spectate_code }
-                : {}),
+              ...(row.spectate_code ? { spectateCode: row.spectate_code } : {}),
               ...(row.spectate_code_expires_at
                 ? { spectateCodeExpiresAt: row.spectate_code_expires_at }
                 : {})
@@ -483,16 +660,12 @@ export class PlayerRpcRepository {
       : Number.NaN
     const expired = !Number.isFinite(expiresAt) || expiresAt <= Date.now()
     const shouldReset =
-      forceReset ||
-      !current.spectate_code ||
-      (!activeMatch && expired)
+      forceReset || !current.spectate_code || (!activeMatch && expired)
 
     if (!shouldReset) return current.spectate_code!
 
     const code = crypto.randomUUID()
-    const expiry = new Date(
-      Date.now() + 60 * 24 * 60 * 60 * 1000
-    ).toISOString()
+    const expiry = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
     await this.database
       .prepare(
         `UPDATE player_account_settings

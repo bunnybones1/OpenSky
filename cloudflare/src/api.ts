@@ -2,7 +2,9 @@ import type {
   Account,
   AccountRegistration,
   DeckClass,
-  ItemType
+  FeedEventType,
+  ItemType,
+  Page
 } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
@@ -448,6 +450,29 @@ export const handleApiRequest = async (
             entries.map(entry => [entry.key, entry.object])
           )
         })
+      }
+
+      case 'GetFeed': {
+        await identityPrincipal(request, env)
+        const body = await requestBody<{
+          page?: Page
+          req?: {
+            accountAddress?: string
+            types?: FeedEventType[]
+          }
+        }>(request)
+        if (!body.req?.accountAddress) {
+          throw invalidArgument('account_address is required')
+        }
+        return json(
+          request,
+          env,
+          await playerRpc.feed(
+            body.req.accountAddress,
+            body.page,
+            body.req.types
+          )
+        )
       }
 
       case 'GetItemOwnershipByType': {

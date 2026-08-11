@@ -477,6 +477,100 @@ describe('legacy player RPC compatibility', () => {
     ).toBe(403)
   })
 
+  it('rebuilds the source profile feed from durable reward and rank receipts', async () => {
+    const skypassReward = await env.AUTH_DB.prepare(
+      `SELECT id FROM skypass_rewards
+       WHERE item_type = 300
+       ORDER BY id ASC LIMIT 1`
+    ).first<{ id: number }>()
+    expect(skypassReward).not.toBeNull()
+    const older = '2026-08-10T10:00:00.000Z'
+    const newer = '2026-08-10T11:00:00.000Z'
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_rank_up_rewards
+           (user_id, game_mode, season, player_rank, player_rank_stage,
+            proposal_id, awarded_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', 62, 'APPRENTICE', 'STAGE_II',
+                 'feed-rank-proposal', ?)`
+      ).bind(userId, older),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_skypass_claims
+           (user_id, reward_id, rewards, claimed_at)
+         VALUES (?, ?, ?, ?)`
+      ).bind(
+        userId,
+        skypassReward!.id,
+        JSON.stringify([
+          {
+            type: 'CARD',
+            card: {
+              card: { id: 42, itemType: 'SW_BASE_CARDS' }
+            }
+          }
+        ]),
+        newer
+      )
+    ])
+
+    const first = await rpc('GetFeed', {
+      page: { pageSize: 1 },
+      req: { accountAddress: identityReference }
+    })
+    expect(first.status).toBe(200)
+    const firstPage = await first.json<{
+      page: { hasBefore: boolean; after: string }
+      res: Array<{ type: string; tokenIds?: number[] }>
+    }>()
+    expect(firstPage).toMatchObject({
+      page: { hasBefore: true },
+      res: [{ type: 'REWARD', tokenIds: [(0xff << 16) + 42] }]
+    })
+
+    const second = await rpc('GetFeed', {
+      page: { pageSize: 1, before: firstPage.page.after },
+      req: { accountAddress: identityReference }
+    })
+    expect(await second.json()).toMatchObject({
+      page: { hasAfter: true, hasBefore: false },
+      res: [
+        {
+          type: 'RANKUP',
+          playerRank: 'APPRENTICE',
+          playerRankStage: 'STAGE_II',
+          gameMode: 'RANKED_CONSTRUCTED'
+        }
+      ]
+    })
+
+    const filtered = await rpc('GetFeed', {
+      req: {
+        accountAddress: identityReference,
+        types: ['RANKUP']
+      }
+    })
+    expect(await filtered.json()).toMatchObject({
+      res: [{ type: 'RANKUP' }]
+    })
+    expect(
+      (
+        await rpc('GetFeed', {
+          page: { before: 'not-a-cursor' },
+          req: { accountAddress: identityReference }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc(
+          'GetFeed',
+          { req: { accountAddress: identityReference } },
+          false
+        )
+      ).status
+    ).toBe(401)
+  })
+
   it('enforces profile ownership, username uniqueness, and title ownership', async () => {
     const now = new Date().toISOString()
     const otherUserId = 'other-profile-user'
