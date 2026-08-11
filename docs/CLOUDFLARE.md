@@ -181,6 +181,9 @@ and progress are not migrated.
   durable match ID and performs the source first-loss/third-win transition with
   a per-proposal retry receipt. Zero-win losses complete immediately; earned
   card bundles remain reward-pending.
+- Conquest matches also award the source event-2 treasure points exactly once:
+  four base points, owned Silver/Gold deck-card points, the rounded-up hero-skin
+  bonus, the source abandon eligibility rule, and the 13,750-point cap.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker
@@ -197,10 +200,10 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest card reward settlement and deck-based treasure-point awards,
-  seasonal invite-sticker redemption, marketplace writes, and administrative
-  APIs still require ports. Conquest matchmaking remains disabled until
-  authoritative completion can settle those remaining rewards transactionally.
+- Conquest random card selection/settlement, seasonal invite-sticker redemption,
+  marketplace writes, and administrative APIs still require ports. Conquest
+  matchmaking remains disabled until authoritative completion can settle the
+  remaining card rewards transactionally.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice

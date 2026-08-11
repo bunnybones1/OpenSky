@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`f3663c8b-76a9-45cc-84ae-1ffd08dd4c40`)
+- API/web Worker: `opensky-webapp` (`a270e4c0-6e82-4e9b-957b-f50a8e5e4fbf`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`3c6e42be-d092-4fb7-a5dd-9b52e7467cce`)
-- Game Worker: `cloud-weasel-game-server` (`f953e554-360b-4e94-a716-da09df44e7ed`)
-- Deployed component commits: web/API `216f30d`; game `8a2dd6f`; matchmaker and
+- Game Worker: `cloud-weasel-game-server` (`dc82be9f-5cd1-48f5-bb46-ab346a1f1b7e`)
+- Deployed component commits: web/API `2cbc309`; game `c7a7f00`; matchmaker and
   match service `c9e2201`
 - Deployed: 2026-08-11
-- Applied D1 migrations: `0001` through `0025`
+- Applied D1 migrations: `0001` through `0026`
 
 ## Verified scope
 
@@ -23,6 +23,7 @@
 - Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads
 - Durable Conquest entry, status, statistics, points, and source treasure thresholds
 - Retry-safe authoritative Conquest win/loss/draw and terminal-state progression
+- Source Conquest treasure points from matches, owned deck cards, and hero skins
 - Write-once identity referrals, top-five friend points, inviter gifts, and the
   original Invite Friends screens
 - Profile reward/rank feed and competitive match history
@@ -36,7 +37,7 @@
 
 WalletConnect remains an optional future integration. Captcha is deployed but
 remains disabled until Cloud Weasel hCaptcha credentials are provisioned.
-Conquest card reward settlement, treasure-point award calculation, seasonal
-invite-sticker redemption, marketplace writes, legacy data migration, and
-administrative RPCs remain pending. Conquest queues stay disabled until the
-remaining rewards are transactionally connected to authoritative completion.
+Conquest card reward selection and settlement, seasonal invite-sticker
+redemption, marketplace writes, legacy data migration, and administrative RPCs
+remain pending. Conquest queues stay disabled until the remaining card rewards
+are transactionally connected to authoritative completion.
