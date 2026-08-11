@@ -177,7 +177,9 @@ and progress are not migrated.
   also preserves the source's trimmed, case-insensitive username behavior while
   keeping identity settings owner-only. Deck favorite toggling is a single
   owner-scoped D1 update with the source boolean result and concurrent-toggle
-  atomicity.
+  atomicity. Private deck search preserves the source name/class/deck-string
+  filters and cursor limits; deck checks preserve partial-deck normalization,
+  card ownership, and hero/class unlock behavior.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
@@ -206,6 +208,12 @@ and progress are not migrated.
 - Conquest matches also award the source event-2 treasure points exactly once:
   four base points, owned Silver/Gold deck-card points, the rounded-up hero-skin
   bonus, the source abandon eligibility rule, and the 13,750-point cap.
+- Match lookup preserves the source visibility boundary: participants receive
+  replay capabilities for their matches, while other signed-in users can only
+  inspect ranked/Conquest records with the replay ID redacted. Practice and
+  challenge records remain private.
+- Epic quest-chain reads combine claimed assignment history, the active step,
+  and zero-ID previews derived from the exact generated source quest specs.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker
@@ -234,7 +242,11 @@ Finish Conquest card selection and settlement before enabling its queues.
 WalletConnect can then be added independently in account settings: connect a
 wallet, sign a session-owned nonce, persist the verified address, and merge
 wallet contents at read boundaries without granting the wallet authority over
-the user's login session.
+the user's login session. The next safe compatibility reads are deck-rank
+history once its aggregate storage is designed, and leaderboard reward timing
+once Cloud Weasel has an explicit UTC weekday/time configuration; the original
+deployment's reward schedule is not present in this repository and must not be
+invented.
 
 The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
