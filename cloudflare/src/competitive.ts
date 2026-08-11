@@ -12,7 +12,7 @@ import type {
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { encodeDeckString } from './deck-codec'
-import { invalidArgument, permissionDenied } from './errors'
+import { invalidArgument, notFound, permissionDenied } from './errors'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
 
@@ -27,6 +27,12 @@ const HISTORY_MODES = new Set<GameMode>([
   'CONQUEST_DISCOVERY' as GameMode,
   'CHALLENGE_CONSTRUCTED' as GameMode,
   'CHALLENGE_DISCOVERY' as GameMode
+])
+const PUBLIC_MATCH_MODES = new Set<GameMode>([
+  'RANKED_CONSTRUCTED' as GameMode,
+  'RANKED_DISCOVERY' as GameMode,
+  'CONQUEST_CONSTRUCTED' as GameMode,
+  'CONQUEST_DISCOVERY' as GameMode
 ])
 const RANK_ORDER: Record<string, number> = {
   UNKNOWN: 0,
@@ -607,6 +613,32 @@ export class CompetitiveRepository {
       } satisfies Page,
       res: matches
     }
+  }
+
+  async getMatch(userId: string, matchId: number): Promise<Match> {
+    if (!Number.isSafeInteger(matchId) || matchId <= 0) {
+      throw invalidArgument('matchID is invalid')
+    }
+    const row = await this.database
+      .prepare(
+        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+                player2_user_id, match_payload_json, winner_player,
+                result_json, created_at, updated_at, ended_at
+         FROM multiplayer_matches
+         WHERE id = ?`
+      )
+      .bind(matchId)
+      .first<MatchRow>()
+    if (!row) throw notFound('match not found')
+
+    const participant =
+      row.player1_user_id === userId || row.player2_user_id === userId
+    if (!participant && !PUBLIC_MATCH_MODES.has(row.mode)) {
+      throw notFound('match is private')
+    }
+    const match = matchFromRow(row)
+    if (!match) throw notFound('match not found')
+    return participant ? match : { ...match, replayID: '' }
   }
 
   async matchByReplay(matchId: number, replayId: string) {

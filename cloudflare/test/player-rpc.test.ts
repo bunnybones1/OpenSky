@@ -626,6 +626,53 @@ describe('legacy player RPC compatibility', () => {
         })
       ).status
     ).toBe(403)
+
+    const rankedRow = await env.AUTH_DB.prepare(
+      `SELECT id FROM multiplayer_matches WHERE proposal_id = 'ranked-history'`
+    ).first<{ id: number }>()
+    const practiceRow = await env.AUTH_DB.prepare(
+      `SELECT id FROM multiplayer_matches WHERE proposal_id = 'practice-hidden'`
+    ).first<{ id: number }>()
+    expect(
+      await (await rpc('GetMatch', { matchID: rankedRow!.id })).json()
+    ).toMatchObject({
+      match: {
+        id: rankedRow!.id,
+        player1: { address: identityReference },
+        replayID: 'ranked-history-replay'
+      }
+    })
+    expect(
+      await (await rpc('GetMatch', { matchID: practiceRow!.id })).json()
+    ).toMatchObject({
+      match: {
+        id: practiceRow!.id,
+        replayID: 'practice-hidden-replay'
+      }
+    })
+    const outsiderId = 'match-history-outsider'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'History Outsider', 'outsider@example.com', ?, ?)`
+    )
+      .bind(outsiderId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(outsiderId)
+    expect(
+      await (
+        await rpcAs(outsiderId, 'GetMatch', { matchID: rankedRow!.id })
+      ).json()
+    ).toMatchObject({ match: { id: rankedRow!.id, replayID: '' } })
+    expect(
+      (
+        await rpcAs(outsiderId, 'GetMatch', { matchID: practiceRow!.id })
+      ).status
+    ).toBe(404)
+    expect((await rpc('GetMatch', { matchID: 0 })).status).toBe(400)
+    expect((await rpc('GetMatch', { matchID: 999999 })).status).toBe(404)
+    expect(
+      (await rpc('GetMatch', { matchID: rankedRow!.id }, false)).status
+    ).toBe(401)
   })
 
   it('rebuilds the source profile feed from durable reward and rank receipts', async () => {

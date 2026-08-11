@@ -651,6 +651,14 @@ export const handleApiRequest = async (
         )
       }
 
+      case 'GetMatch': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ matchID?: number }>(request)
+        return json(request, env, {
+          match: await competitive.getMatch(principal.userId, body.matchID ?? 0)
+        })
+      }
+
       case 'GetMatchArchiveRecordsURI': {
         const body = await requestBody<{
           matchID?: number
