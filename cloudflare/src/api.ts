@@ -673,6 +673,19 @@ export const handleApiRequest = async (
         )
       }
 
+      case 'ReRollQuest': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ id?: number }>(request)
+        if (!Number.isSafeInteger(body.id) || (body.id || 0) <= 0) {
+          throw invalidArgument('id must be a positive integer')
+        }
+        return json(
+          request,
+          env,
+          await playerRpc.rerollQuest(principal.userId, body.id!)
+        )
+      }
+
       case 'GetQuestsAutoRerollTime': {
         return json(request, env, { res: questAutoRerollTimes() })
       }

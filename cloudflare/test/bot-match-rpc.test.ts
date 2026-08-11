@@ -91,7 +91,7 @@ describe('legacy BotMatchEnd compatibility', () => {
   it('returns the original receipt and applies quest progress only once on retry', async () => {
     const quest = await env.AUTH_DB.prepare(
       `SELECT rowid AS id FROM player_quests
-       WHERE user_id = ? AND quest_type = 'Strengthweaver'`
+       WHERE user_id = ? AND quest_type = 'OntheRoadAgain'`
     )
       .bind(userId)
       .first<{ id: number }>()

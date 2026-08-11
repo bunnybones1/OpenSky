@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers'
+import { QuestPeriodicity } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -10,6 +11,7 @@ import {
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
+import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
 
 const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
@@ -777,7 +779,7 @@ describe('legacy player RPC compatibility', () => {
     expect(
       body.quests.map(({ questType, position }) => ({ questType, position }))
     ).toEqual([
-      { questType: 'Strengthweaver', position: 1 },
+      { questType: 'OntheRoadAgain', position: 1 },
       { questType: 'WelcomeOpenSky', position: 2 },
       { questType: 'HerosJourney', position: 3 }
     ])
@@ -890,14 +892,175 @@ describe('legacy player RPC compatibility', () => {
 
   it('rejects claims for quests that are not complete', async () => {
     const list = await rpc('ListQuests', {})
-    const strength = (
+    const road = (
       await list.json<{
         quests: Array<{ id: number; questType: string }>
       }>()
-    ).quests.find(quest => quest.questType === 'Strengthweaver')
+    ).quests.find(quest => quest.questType === 'OntheRoadAgain')
 
-    const response = await rpc('ClaimQuestRewards', { ids: [strength!.id] })
+    const response = await rpc('ClaimQuestRewards', { ids: [road!.id] })
     expect(response.status).toBe(500)
+  })
+
+  it('fills eligible source quest slots and shares one manual daily reroll', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests SET active = 0, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId)
+    ])
+
+    const listed = await rpc('ListQuests', {})
+    expect(listed.status).toBe(200)
+    const quests = (
+      await listed.json<{
+        quests: Array<{
+          id: number
+          position: number
+          questType: string
+          periodicity: string
+          isRerollable: boolean
+        }>
+      }>()
+    ).quests
+    expect(quests).toHaveLength(3)
+    expect(quests.map(quest => quest.periodicity)).toEqual([
+      'DAILY',
+      'DAILY',
+      'DAILY'
+    ])
+    expect(quests.map(quest => quest.position)).toEqual([1, 2, 3])
+    expect(quests.every(quest => quest.isRerollable)).toBe(true)
+
+    const ownedCards = new Set<number>(STARTER_CARD_IDS)
+    for (const quest of quests) {
+      const spec = sourceQuestSpec(
+        quest.questType as Parameters<typeof sourceQuestSpec>[0]
+      )
+      expect(spec).toBeDefined()
+      expect(spec!.requiredHero === null || spec!.requiredHero === 'ADA').toBe(
+        true
+      )
+      expect(spec!.requiredCards.every(card => ownedCards.has(card))).toBe(true)
+    }
+
+    const previous = quests[0]
+    const rerolled = await rpc('ReRollQuest', { id: previous.id })
+    expect(rerolled.status).toBe(200)
+    const rerollBody = await rerolled.json<{
+      quest: {
+        id: number
+        position: number
+        questType: string
+        periodicity: string
+        isRerollable: boolean
+      }
+      rewards: unknown[]
+    }>()
+    expect(rerollBody).toMatchObject({
+      quest: {
+        position: previous.position,
+        periodicity: 'DAILY',
+        isRerollable: false
+      },
+      rewards: []
+    })
+    expect(rerollBody.quest.questType).not.toBe(previous.questType)
+
+    const refreshed = await rpc('ListQuests', {})
+    const refreshedQuests = (
+      await refreshed.json<{
+        quests: Array<{ id: number; isRerollable: boolean }>
+      }>()
+    ).quests
+    expect(refreshedQuests.every(quest => !quest.isRerollable)).toBe(true)
+    expect(
+      (await rpc('ReRollQuest', { id: refreshedQuests[0].id })).status
+    ).toBe(500)
+
+    const history = await env.AUTH_DB.prepare(
+      `SELECT active, rerolls FROM player_quests
+       WHERE user_id = ? AND periodicity = 'DAILY' AND period > 0`
+    )
+      .bind(userId)
+      .all<{ active: number; rerolls: number }>()
+    expect(history.results.some(row => row.active === 0)).toBe(true)
+    expect(history.results.every(row => row.rerolls === 1)).toBe(true)
+  })
+
+  it('copies unfinished starter quests and replaces expired rerollable quests', async () => {
+    const initial = await rpc('ListQuests', {})
+    const starter = (
+      await initial.json<{
+        quests: Array<{ id: number; questType: string; isNew: boolean }>
+      }>()
+    ).quests.find(quest => quest.questType === 'OntheRoadAgain')
+    expect(starter).toBeDefined()
+
+    const currentPeriod = questPeriodAt(QuestPeriodicity.DAILY)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_quests SET period = ?, is_new = 0
+       WHERE user_id = ? AND rowid = ?`
+    )
+      .bind(currentPeriod - 1, userId, starter!.id)
+      .run()
+
+    const copied = await rpc('ListQuests', {})
+    const copiedStarter = (
+      await copied.json<{
+        quests: Array<{ id: number; questType: string; isNew: boolean }>
+      }>()
+    ).quests.find(quest => quest.questType === 'OntheRoadAgain')
+    expect(copiedStarter).toMatchObject({ isNew: false })
+    expect(copiedStarter!.id).not.toBe(starter!.id)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT active, period FROM player_quests WHERE rowid = ?`
+      )
+        .bind(starter!.id)
+        .first()
+    ).toEqual({ active: 0, period: currentPeriod - 1 })
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests SET active = 0, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId)
+    ])
+    const normal = await rpc('ListQuests', {})
+    const previous = (
+      await normal.json<{
+        quests: Array<{ id: number; position: number; questType: string }>
+      }>()
+    ).quests[0]
+    await env.AUTH_DB.prepare(
+      `UPDATE player_quests SET period = ? WHERE user_id = ? AND rowid = ?`
+    )
+      .bind(currentPeriod - 1, userId, previous.id)
+      .run()
+
+    const rerolled = await rpc('ListQuests', {})
+    const replacement = (
+      await rerolled.json<{
+        quests: Array<{ id: number; position: number; questType: string }>
+      }>()
+    ).quests.find(quest => quest.position === previous.position)
+    expect(replacement).toBeDefined()
+    expect(replacement!.id).not.toBe(previous.id)
+    expect(replacement!.questType).not.toBe(previous.questType)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT active FROM player_quests WHERE rowid = ?`
+      )
+        .bind(previous.id)
+        .first()
+    ).toEqual({ active: 0 })
   })
 
   it('serves the legacy season and SkyPass reward data', async () => {

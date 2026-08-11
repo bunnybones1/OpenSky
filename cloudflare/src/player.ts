@@ -141,9 +141,8 @@ export const STARTER_CARD_IDS = STARTER_CARDS.map(([id]) => id)
 const STARTER_QUESTS = [
   {
     key: 'practice-match',
-    title: 'Welcome to OpenSky',
-    description:
-      'The opening assignment from the original starter quest chain.',
+    title: 'Welcome OpenSky!',
+    description: 'Play your first game',
     questType: 'WelcomeOpenSky',
     epicType: 'starter2_test',
     epicIndex: 1,
@@ -157,7 +156,7 @@ const STARTER_QUESTS = [
   {
     key: 'explore-collection',
     title: "Hero's Journey",
-    description: 'The opening assignment from the original hero quest chain.',
+    description: 'Play a game with Ada',
     questType: 'HerosJourney',
     epicType: 'hero_test',
     epicIndex: 1,
@@ -170,10 +169,9 @@ const STARTER_QUESTS = [
   },
   {
     key: 'starter-deck',
-    title: 'Strengthweaver',
-    description:
-      'The opening assignment from the original Strength quest chain.',
-    questType: 'Strengthweaver',
+    title: 'On the Road Again',
+    description: 'Play a game',
+    questType: 'OntheRoadAgain',
     epicType: 'starter1_test',
     epicIndex: 1,
     epicLength: 3,

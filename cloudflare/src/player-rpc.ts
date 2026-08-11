@@ -27,6 +27,14 @@ import {
   permissionDenied
 } from './errors'
 import { seasonFromDate } from './legacy-seasons'
+import {
+  nextSourceEpicSpec,
+  questPeriodAt,
+  randomSourceQuestSpec,
+  sourceQuestCandidates,
+  sourceQuestSpec,
+  type SourceQuestSpec
+} from './quest-library'
 import { identityReferenceFor } from './rpc-principal'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
 
@@ -208,6 +216,7 @@ interface DeckRow {
 
 interface QuestRow {
   row_id: number
+  quest_key: string
   quest_type: Quest['questType']
   epic_type: Quest['epicType'] | null
   epic_index: number | null
@@ -220,32 +229,23 @@ interface QuestRow {
   is_rerollable: number
   is_new: number
   status: 'active' | 'complete' | 'claimed'
-}
-
-interface QuestClaimRow extends QuestRow {
-  quest_key: string
   active: number
+  period: number
+  rerolls: number
 }
 
-interface QuestSpecRow {
-  spec_id: number
-  quest_type: Quest['questType']
-  epic_type: Quest['epicType']
-  epic_index: number
-  epic_length: number
-  start_progress: number
-  end_progress: number
-  reward_item_type: ItemType
-  reward_amount: number
-  periodicity: Quest['periodicity']
-  position: number
-  rerollable: number
-}
+type QuestClaimRow = QuestRow
 
 interface ProfileProgressRow {
   level: number
   xp: number
   basic_skypass_level: number
+}
+
+interface QuestEligibility {
+  level: number
+  ownedHeroes: Set<string>
+  ownedCards: Set<number>
 }
 
 interface RankedStatusRow {
@@ -1133,19 +1133,392 @@ export class PlayerRpcRepository {
     }
   }
 
-  async listQuests(userId: string): Promise<Quest[]> {
+  private async backfillQuestPeriods(userId: string): Promise<void> {
+    const statements = (
+      ['DAILY', 'WEEKLY', 'SEASONAL'] as Quest['periodicity'][]
+    ).map(periodicity =>
+      this.database
+        .prepare(
+          `UPDATE player_quests SET period = ?, updated_at = ?
+           WHERE user_id = ? AND periodicity = ? AND period = 0`
+        )
+        .bind(
+          questPeriodAt(periodicity),
+          new Date().toISOString(),
+          userId,
+          periodicity
+        )
+    )
+    await this.database.batch(statements)
+  }
+
+  private async questRows(userId: string): Promise<QuestRow[]> {
     const result = await this.database
       .prepare(
-        `SELECT rowid AS row_id, quest_type, epic_type, epic_index, epic_length,
-                position, progress, target, reward_xp, periodicity,
-                is_rerollable, is_new, status
+        `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                epic_length, position, progress, target, reward_xp, periodicity,
+                is_rerollable, is_new, status, active, period, rerolls
          FROM player_quests
          WHERE user_id = ? AND active = 1
          ORDER BY periodicity ASC, position ASC, rowid ASC`
       )
       .bind(userId)
       .all<QuestRow>()
-    return result.results.map(row => this.questFromRow(row))
+    return result.results
+  }
+
+  private async questEligibility(userId: string): Promise<QuestEligibility> {
+    const [profile, items] = await Promise.all([
+      this.database
+        .prepare(`SELECT level FROM player_profiles WHERE user_id = ?`)
+        .bind(userId)
+        .first<{ level: number }>(),
+      this.database
+        .prepare(
+          `SELECT item_type, token_id FROM player_items
+           WHERE user_id = ? AND balance > 0
+             AND item_type IN ('SW_HERO', 'SW_BASE_CARDS',
+                               'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
+        )
+        .bind(userId)
+        .all<{ item_type: ItemType; token_id: number }>()
+    ])
+    if (!profile) throw new Error('player profile is missing')
+    const ownedHeroes = new Set<string>()
+    const ownedCards = new Set<number>()
+    for (const item of items.results) {
+      if (item.item_type === ('SW_HERO' as ItemType)) {
+        const hero = HERO_BY_ID[item.token_id]
+        if (hero) ownedHeroes.add(hero)
+      } else {
+        ownedCards.add(item.token_id)
+      }
+    }
+    return { level: profile.level, ownedHeroes, ownedCards }
+  }
+
+  private async latestQuestRerolls(
+    userId: string,
+    periodicity: Quest['periodicity'],
+    period: number
+  ): Promise<number> {
+    const row = await this.database
+      .prepare(
+        `SELECT rerolls FROM player_quests
+         WHERE user_id = ? AND periodicity = ? AND period = ?
+         ORDER BY rowid DESC LIMIT 1`
+      )
+      .bind(userId, periodicity, period)
+      .first<{ rerolls: number }>()
+    return row?.rerolls || 0
+  }
+
+  private async chooseQuestSpec(
+    userId: string,
+    periodicity: Quest['periodicity'],
+    position: 1 | 2 | 3,
+    eligibility: QuestEligibility,
+    previousSpec?: SourceQuestSpec,
+    retryWithoutPrevious = false
+  ): Promise<SourceQuestSpec | undefined> {
+    const period = questPeriodAt(periodicity)
+    const used = await this.database
+      .prepare(
+        `SELECT quest_type FROM player_quests
+         WHERE user_id = ? AND periodicity = ? AND period = ?`
+      )
+      .bind(userId, periodicity, period)
+      .all<{ quest_type: Quest['questType'] }>()
+    const usedInPeriod = new Set(used.results.map(row => row.quest_type))
+    const exclusionsWithPrevious = new Set(usedInPeriod)
+    if (previousSpec) exclusionsWithPrevious.add(previousSpec.questType)
+
+    let candidates = sourceQuestCandidates({
+      periodicity,
+      position,
+      level: eligibility.level,
+      ownedHeroes: eligibility.ownedHeroes,
+      ownedCards: eligibility.ownedCards,
+      excludedQuestTypes: exclusionsWithPrevious,
+      previousSpec
+    })
+    if (!candidates.length && previousSpec && retryWithoutPrevious) {
+      candidates = sourceQuestCandidates({
+        periodicity,
+        position,
+        level: eligibility.level,
+        ownedHeroes: eligibility.ownedHeroes,
+        ownedCards: eligibility.ownedCards,
+        excludedQuestTypes: usedInPeriod
+      })
+    }
+    return randomSourceQuestSpec(candidates)
+  }
+
+  private newQuestStatement(
+    userId: string,
+    spec: SourceQuestSpec,
+    period: number,
+    rerolls: number,
+    options: {
+      progress?: number
+      status?: QuestRow['status']
+      isNew?: number
+      questKey?: string
+      position?: 1 | 2 | 3
+      periodicity?: Quest['periodicity']
+    } = {}
+  ): { questKey: string; statement: D1PreparedStatement } {
+    const questKey =
+      options.questKey ||
+      `source:${spec.numericalID}:${period}:${crypto.randomUUID()}`
+    const progress = Math.min(
+      options.progress ?? spec.startProgress,
+      spec.endProgress
+    )
+    const status =
+      options.status ||
+      (spec.startProgress >= spec.endProgress ? 'complete' : 'active')
+    const now = new Date().toISOString()
+    return {
+      questKey,
+      statement: this.database
+        .prepare(
+          `INSERT INTO player_quests
+             (user_id, quest_key, title, description, progress, target,
+              reward_xp, status, created_at, updated_at, quest_type, epic_type,
+              epic_index, epic_length, position, periodicity, is_rerollable,
+              is_new, active, period, rerolls)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+        )
+        .bind(
+          userId,
+          questKey,
+          spec.name,
+          spec.description,
+          progress,
+          spec.endProgress,
+          spec.rewardXp,
+          status,
+          now,
+          now,
+          spec.questType,
+          spec.epicType || null,
+          spec.epicIndex ?? null,
+          spec.epicLength ?? null,
+          options.position ?? spec.position,
+          options.periodicity ?? spec.periodicity,
+          spec.rerollable && rerolls < 1 ? 1 : 0,
+          options.isNew ?? 1,
+          period,
+          rerolls
+        )
+    }
+  }
+
+  private async ensureQuestLayout(userId: string): Promise<void> {
+    await this.backfillQuestPeriods(userId)
+    const eligibility = await this.questEligibility(userId)
+    const active = await this.questRows(userId)
+
+    for (const assignment of active) {
+      const currentPeriod = questPeriodAt(assignment.periodicity)
+      if (assignment.period >= currentPeriod) continue
+      const spec = sourceQuestSpec(assignment.quest_type)
+      if (!spec) continue
+
+      const unfinishedEpic =
+        spec.epicType &&
+        spec.epicIndex !== undefined &&
+        spec.epicLength !== undefined &&
+        spec.epicIndex < spec.epicLength
+      const dueToAutoReroll =
+        assignment.status !== 'complete' &&
+        (spec.rerollable || (assignment.status !== 'active' && !unfinishedEpic))
+      const dueToCopy = !spec.rerollable && assignment.status === 'active'
+      if (!dueToAutoReroll && !dueToCopy) continue
+
+      const now = new Date().toISOString()
+      if (dueToCopy) {
+        const rerolls = await this.latestQuestRerolls(
+          userId,
+          assignment.periodicity,
+          currentPeriod
+        )
+        const replacement = this.newQuestStatement(
+          userId,
+          spec,
+          currentPeriod,
+          rerolls,
+          {
+            progress: assignment.progress,
+            status: assignment.status,
+            isNew: assignment.is_new
+          }
+        )
+        await this.database.batch([
+          this.database
+            .prepare(
+              `UPDATE player_quests SET active = 0, updated_at = ?
+               WHERE user_id = ? AND rowid = ? AND active = 1`
+            )
+            .bind(now, userId, assignment.row_id),
+          replacement.statement
+        ])
+        continue
+      }
+
+      const replacementSpec = await this.chooseQuestSpec(
+        userId,
+        assignment.periodicity,
+        assignment.position as 1 | 2 | 3,
+        eligibility,
+        spec,
+        true
+      )
+      const statements = [
+        this.database
+          .prepare(
+            `UPDATE player_quests SET active = 0, updated_at = ?
+             WHERE user_id = ? AND rowid = ? AND active = 1`
+          )
+          .bind(now, userId, assignment.row_id)
+      ]
+      if (replacementSpec) {
+        const rerolls = await this.latestQuestRerolls(
+          userId,
+          assignment.periodicity,
+          currentPeriod
+        )
+        statements.push(
+          this.newQuestStatement(
+            userId,
+            replacementSpec,
+            currentPeriod,
+            rerolls
+          ).statement
+        )
+      }
+      await this.database.batch(statements)
+    }
+
+    const occupied = new Set(
+      (await this.questRows(userId)).map(
+        row => `${row.periodicity}:${row.position}`
+      )
+    )
+    for (const periodicity of [
+      'DAILY',
+      'WEEKLY',
+      'SEASONAL'
+    ] as Quest['periodicity'][]) {
+      for (const position of [1, 2, 3] as const) {
+        if (occupied.has(`${periodicity}:${position}`)) continue
+        const spec = await this.chooseQuestSpec(
+          userId,
+          periodicity,
+          position,
+          eligibility
+        )
+        if (!spec) continue
+        const period = questPeriodAt(periodicity)
+        const rerolls = await this.latestQuestRerolls(
+          userId,
+          periodicity,
+          period
+        )
+        await this.newQuestStatement(
+          userId,
+          spec,
+          period,
+          rerolls
+        ).statement.run()
+        occupied.add(`${periodicity}:${position}`)
+      }
+    }
+  }
+
+  async listQuests(userId: string): Promise<Quest[]> {
+    await this.ensureQuestLayout(userId)
+    return (await this.questRows(userId)).map(row => this.questFromRow(row))
+  }
+
+  async rerollQuest(
+    userId: string,
+    id: number
+  ): Promise<{ quest: Quest; rewards: Array<Record<string, unknown>> }> {
+    await this.ensureQuestLayout(userId)
+    const assignment = await this.database
+      .prepare(
+        `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                epic_length, position, progress, target, reward_xp, periodicity,
+                is_rerollable, is_new, status, active, period, rerolls
+         FROM player_quests
+         WHERE user_id = ? AND rowid = ? AND active = 1`
+      )
+      .bind(userId, id)
+      .first<QuestRow>()
+    if (!assignment)
+      throw new Error(`quest assignment does not exist, ID: ${id}`)
+    const previousSpec = sourceQuestSpec(assignment.quest_type)
+    if (
+      !previousSpec?.rerollable ||
+      assignment.rerolls >= 1 ||
+      assignment.status !== 'active'
+    ) {
+      throw new Error('no available re-roll')
+    }
+
+    const eligibility = await this.questEligibility(userId)
+    const replacementSpec = await this.chooseQuestSpec(
+      userId,
+      assignment.periodicity,
+      assignment.position as 1 | 2 | 3,
+      eligibility,
+      previousSpec
+    )
+    if (!replacementSpec) throw new Error('no replacement quest is available')
+
+    const replacement = this.newQuestStatement(
+      userId,
+      replacementSpec,
+      assignment.period,
+      assignment.rerolls + 1
+    )
+    const now = new Date().toISOString()
+    await this.database.batch([
+      this.database
+        .prepare(
+          `UPDATE player_quests SET active = 0, updated_at = ?
+           WHERE user_id = ? AND rowid = ? AND active = 1`
+        )
+        .bind(now, userId, assignment.row_id),
+      this.database
+        .prepare(
+          `UPDATE player_quests
+           SET rerolls = rerolls + 1, is_rerollable = 0, updated_at = ?
+           WHERE user_id = ? AND period = ? AND periodicity = ? AND rerolls = ?`
+        )
+        .bind(
+          now,
+          userId,
+          assignment.period,
+          assignment.periodicity,
+          assignment.rerolls
+        ),
+      replacement.statement
+    ])
+    const row = await this.database
+      .prepare(
+        `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                epic_length, position, progress, target, reward_xp, periodicity,
+                is_rerollable, is_new, status, active, period, rerolls
+         FROM player_quests WHERE user_id = ? AND quest_key = ?`
+      )
+      .bind(userId, replacement.questKey)
+      .first<QuestRow>()
+    if (!row) throw new Error('replacement quest was not created')
+    return { quest: this.questFromRow(row), rewards: [] }
   }
 
   private questFromRow(row: QuestRow): Quest {
@@ -1171,6 +1544,7 @@ export class PlayerRpcRepository {
     userId: string,
     ids: number[]
   ): Promise<{ quest: Quest | null; rewards: Array<Record<string, unknown>> }> {
+    await this.backfillQuestPeriods(userId)
     const uniqueIds = [...new Set(ids)]
     if (!uniqueIds.length) return { quest: null, rewards: [] }
 
@@ -1181,7 +1555,8 @@ export class PlayerRpcRepository {
         .prepare(
           `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
                   epic_length, position, progress, target, reward_xp,
-                  periodicity, is_rerollable, is_new, status, active
+                  periodicity, is_rerollable, is_new, status, active, period,
+                  rerolls
            FROM player_quests
            WHERE user_id = ? AND rowid IN (${placeholders})`
         )
@@ -1227,6 +1602,7 @@ export class PlayerRpcRepository {
     let xp = progress.xp
     const rankedWasUnlocked = hasUnlockedRanked(level, xp)
     let nextQuest: Quest | null = null
+    let nextQuestKey: string | null = null
     const now = new Date().toISOString()
     const rewards: Array<Record<string, unknown>> = []
     const statements: D1PreparedStatement[] = []
@@ -1252,100 +1628,97 @@ export class PlayerRpcRepository {
       }
       rewards.push(reward)
 
-      let advancesEpic = false
       if (
         assignment.epic_type &&
         assignment.epic_index !== null &&
         assignment.epic_length !== null &&
         assignment.epic_index < assignment.epic_length
       ) {
-        const nextSpec = await this.database
-          .prepare(
-            `SELECT spec_id, quest_type, epic_type, epic_index, epic_length,
-                    start_progress, end_progress, reward_item_type,
-                    reward_amount, periodicity, position, rerollable
-             FROM player_quest_specs
-             WHERE epic_type = ? AND epic_index = ?`
-          )
-          .bind(assignment.epic_type, assignment.epic_index + 1)
-          .first<QuestSpecRow>()
+        const currentSpec = sourceQuestSpec(assignment.quest_type)
+        const nextSpec = currentSpec
+          ? nextSourceEpicSpec(currentSpec)
+          : undefined
         if (!nextSpec) throw new Error('next quest has not been found')
 
-        advancesEpic = true
         const nextStatus =
-          nextSpec.start_progress >= nextSpec.end_progress
-            ? 'complete'
-            : 'active'
+          nextSpec.startProgress >= nextSpec.endProgress ? 'complete' : 'active'
         const nextProgress = Math.min(
-          nextSpec.start_progress,
-          nextSpec.end_progress
+          nextSpec.startProgress,
+          nextSpec.endProgress
         )
-        statements.push(
-          this.database
-            .prepare(
-              `INSERT INTO player_quests
-                 (user_id, quest_key, title, description, progress, target,
-                  reward_xp, status, created_at, updated_at, quest_type,
-                  epic_type, epic_index, epic_length, position, periodicity,
-                  is_rerollable, is_new, active)
-               VALUES (?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`
-            )
-            .bind(
-              userId,
-              `spec:${nextSpec.spec_id}`,
-              nextProgress,
-              nextSpec.end_progress,
-              nextSpec.reward_amount,
-              nextStatus,
-              now,
-              now,
-              nextSpec.quest_type,
-              nextSpec.epic_type,
-              nextSpec.epic_index,
-              nextSpec.epic_length,
-              nextSpec.position,
-              nextSpec.periodicity,
-              nextSpec.rerollable
-            )
+        const insertion = this.newQuestStatement(
+          userId,
+          nextSpec,
+          assignment.period,
+          assignment.rerolls,
+          {
+            progress: nextProgress,
+            status: nextStatus,
+            position: assignment.position as 1 | 2 | 3,
+            periodicity: assignment.periodicity
+          }
         )
+        nextQuestKey = insertion.questKey
         nextQuest = {
           id: 0,
-          position: nextSpec.position,
-          questType: nextSpec.quest_type,
-          epicType: nextSpec.epic_type,
-          epicIndex: nextSpec.epic_index,
-          epicLength: nextSpec.epic_length,
+          position: assignment.position,
+          questType: nextSpec.questType,
+          ...(nextSpec.epicType ? { epicType: nextSpec.epicType } : {}),
+          ...(nextSpec.epicIndex !== undefined
+            ? { epicIndex: nextSpec.epicIndex }
+            : {}),
+          ...(nextSpec.epicLength !== undefined
+            ? { epicLength: nextSpec.epicLength }
+            : {}),
           progress: nextProgress,
-          endProgress: nextSpec.end_progress,
+          endProgress: nextSpec.endProgress,
           reward: {
-            itemType: nextSpec.reward_item_type,
-            amount: nextSpec.reward_amount
+            itemType: 'SW_XP' as ItemType,
+            amount: nextSpec.rewardXp
           },
-          periodicity: nextSpec.periodicity,
-          isRerollable: nextSpec.rerollable === 1,
+          periodicity: assignment.periodicity,
+          isRerollable: nextSpec.rerollable && assignment.rerolls < 1,
           isClaimable: nextStatus === 'complete',
           isClaimed: false,
           isNew: true
         }
-      }
 
-      statements.push(
-        this.database
-          .prepare(
-            `UPDATE player_quests
-             SET status = 'claimed', active = ?, claimed_at = ?, rewards = ?,
-                 updated_at = ?
-             WHERE user_id = ? AND rowid = ? AND status = 'complete'`
-          )
-          .bind(
-            advancesEpic ? 0 : assignment.active,
-            now,
-            JSON.stringify([reward]),
-            now,
-            userId,
-            assignment.row_id
-          )
-      )
+        statements.push(
+          this.database
+            .prepare(
+              `UPDATE player_quests
+               SET status = 'claimed', active = 0, claimed_at = ?, rewards = ?,
+                   updated_at = ?
+               WHERE user_id = ? AND rowid = ? AND status = 'complete'`
+            )
+            .bind(
+              now,
+              JSON.stringify([reward]),
+              now,
+              userId,
+              assignment.row_id
+            ),
+          insertion.statement
+        )
+      } else {
+        statements.push(
+          this.database
+            .prepare(
+              `UPDATE player_quests
+               SET status = 'claimed', active = ?, claimed_at = ?, rewards = ?,
+                   updated_at = ?
+               WHERE user_id = ? AND rowid = ? AND status = 'complete'`
+            )
+            .bind(
+              assignment.active,
+              now,
+              JSON.stringify([reward]),
+              now,
+              userId,
+              assignment.row_id
+            )
+        )
+      }
     }
 
     statements.push(
@@ -1427,13 +1800,13 @@ export class PlayerRpcRepository {
     }
     await this.database.batch(statements)
 
-    if (nextQuest) {
+    if (nextQuest && nextQuestKey) {
       const row = await this.database
         .prepare(
           `SELECT rowid AS row_id FROM player_quests
-           WHERE user_id = ? AND active = 1 AND epic_type = ? AND epic_index = ?`
+           WHERE user_id = ? AND active = 1 AND quest_key = ?`
         )
-        .bind(userId, nextQuest.epicType, nextQuest.epicIndex)
+        .bind(userId, nextQuestKey)
         .first<{ row_id: number }>()
       if (row) nextQuest.id = row.row_id
     }
