@@ -77,7 +77,7 @@ describe('same-origin multiplayer gateway', () => {
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
-      target: '/v1/matchmaker',
+      target: '/api/matchmaker',
       search: '?release=release-1',
       principal: await deriveGamePrincipal(USER_ID),
       userId: USER_ID,
@@ -94,7 +94,7 @@ describe('same-origin multiplayer gateway', () => {
       await authenticatedHeaders()
     )
     expect(await response.json()).toEqual({
-      target: '/v1/matches/proposal_123',
+      target: '/api/game/matches/proposal_123',
       principal: await deriveGamePrincipal(USER_ID),
       userId: USER_ID,
       internal: 'multiplayer-gateway-test-secret',

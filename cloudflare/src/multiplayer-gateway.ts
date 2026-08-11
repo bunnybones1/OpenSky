@@ -47,7 +47,6 @@ const identity = async (request: Request, env: Env) => {
 
 const trustedRequest = (
   request: Request,
-  target: string,
   userId: string,
   displayName: string,
   principal: string,
@@ -64,7 +63,10 @@ const trustedRequest = (
     TRUSTED_CLIENT_IP_HEADER,
     (request.headers.get('CF-Connecting-IP') ?? '').slice(0, 128)
   )
-  return new Request(target, { method: request.method, headers })
+  // Preserve Cloudflare's internal WebSocket upgrade metadata. Rebuilding the
+  // request from a URL retains visible headers but can detach the response-side
+  // socket when the request crosses into a Durable Object namespace.
+  return new Request(request, { headers })
 }
 
 const activeMatchFor = (env: Env, principal: string) =>
@@ -162,10 +164,8 @@ export const handleMultiplayerGateway = async (
   ] as const
 
   if (url.pathname === '/api/matchmaker' || url.pathname === '/api/matchmaker/') {
-    const target = new URL('https://cloud-weasel-matchmaker/v1/matchmaker')
-    target.search = url.search
     return env.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME).fetch(
-      trustedRequest(request, target.href, ...common)
+      trustedRequest(request, ...common)
     )
   }
   if (url.pathname.startsWith('/api/game/matches/')) {
@@ -173,9 +173,8 @@ export const handleMultiplayerGateway = async (
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(proposal)) {
       return json({ error: 'invalid match ID' }, 400)
     }
-    const target = `https://cloud-weasel-game/v1/matches/${encodeURIComponent(proposal)}`
     return env.GAME_MATCHES.getByName(`match:${proposal}`).fetch(
-      trustedRequest(request, target, ...common)
+      trustedRequest(request, ...common)
     )
   }
   return json({ error: 'not found' }, 404)
