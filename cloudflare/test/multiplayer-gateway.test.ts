@@ -172,6 +172,17 @@ describe('same-origin multiplayer gateway', () => {
       },
       disconnectTimeout: 180
     })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended' WHERE proposal_id = ?`
+    )
+      .bind('gateway-proposal')
+      .run()
+    const afterCompletion = await gateway(
+      '/api/matchmaker/matchinfo/ignored',
+      headers
+    )
+    expect(await afterCompletion.json()).toEqual({ type: 'no_match_found' })
   })
 
   it('rejects missing sessions and malformed match IDs before service dispatch', async () => {

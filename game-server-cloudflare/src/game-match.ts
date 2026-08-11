@@ -32,6 +32,7 @@ const PENDING_GAMEPLAY_KEY = 'match:pending-gameplay'
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
+  AUTH_DB: D1Database
   INTERNAL_AUTH_SECRET: string
   MATCH_OWNER_PRIVATE_KEY: string
   ALLOWED_ORIGINS?: string
@@ -51,6 +52,15 @@ interface MatchMetadata {
   createdAtMs: number
   started: boolean
   ended: boolean
+  endedAtMs?: number
+  result?: MatchResult
+  completionRecorded?: boolean
+}
+
+interface MatchResult {
+  winner?: Player
+  turnCount?: number
+  moveCount?: number
 }
 
 interface PlayerRuntimeState {
@@ -283,7 +293,13 @@ export class GameMatch implements DurableObject {
   async alarm() {
     try {
       const metadata = await this.metadata()
-      if (!metadata || metadata.ended) return
+      if (!metadata) return
+      if (metadata.ended) {
+        if (!metadata.completionRecorded) {
+          await this.recordCompletionWithRetry(metadata, Date.now())
+        }
+        return
+      }
       const [players, timers] = await Promise.all([
         this.players(),
         this.timers()
@@ -710,6 +726,12 @@ export class GameMatch implements DurableObject {
     const info = runtime.stateInfo()
     if (info.statusType === 'GameOver') {
       metadata.ended = true
+      metadata.endedAtMs ??= now
+      metadata.result ??= {
+        winner: info.winner,
+        turnCount: info.turnCount,
+        moveCount: info.moveCount
+      }
       timers.commitRevealAtMs = undefined
       timers.turnAtMs = undefined
       timers.botAtMs = undefined
@@ -771,6 +793,44 @@ export class GameMatch implements DurableObject {
       [SNAPSHOT_KEY]: runtime.snapshot()
     })
     await this.scheduleAlarm(players, timers, now)
+    if (metadata.ended && !metadata.completionRecorded) {
+      await this.recordCompletionWithRetry(metadata, now)
+    }
+  }
+
+  private async recordCompletionWithRetry(
+    metadata: MatchMetadata,
+    now: number
+  ) {
+    try {
+      const endedAt = new Date(metadata.endedAtMs ?? now).toISOString()
+      const result = await this.env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches
+         SET status = 'ended', winner_player = ?, result_json = ?,
+             ended_at = ?, updated_at = ?
+         WHERE proposal_id = ? AND status IN ('active', 'ended')`
+      )
+        .bind(
+          metadata.result?.winner ?? null,
+          JSON.stringify(metadata.result ?? {}),
+          endedAt,
+          endedAt,
+          metadata.proposalId
+        )
+        .run()
+      if ((result.meta.changes ?? 0) < 1) {
+        throw new Error('active match ledger row was not found')
+      }
+      metadata.completionRecorded = true
+      await this.state.storage.put(METADATA_KEY, metadata)
+    } catch (error) {
+      console.error(
+        'match completion recording failed',
+        metadata.proposalId,
+        error
+      )
+      await this.state.storage.setAlarm(now + 10_000)
+    }
   }
 
   private async scheduleAlarm(

@@ -5,7 +5,7 @@ import {
   runInDurableObject,
   SELF
 } from 'cloudflare:test'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { GameMatch, GameServerEnv } from '../src/game-match'
 import {
@@ -40,6 +40,28 @@ const initializeMatch = async () => {
   const response = await createMatch()
   expect(response.status).toBe(200)
   return response.json()
+}
+
+const insertActiveLedgerRow = async (proposalId = PROPOSAL_ID) => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_matches
+       (proposal_id, replay_id, mode, version, player1_principal,
+        player2_principal, player1_user_id, player2_user_id,
+        match_payload_json, server_address, status, created_at, updated_at)
+     VALUES (?, ?, 'RANKED_CONSTRUCTED', 'test-release', ?, ?, NULL, NULL,
+             '{}', ?, 'active', ?, ?)`
+  )
+    .bind(
+      proposalId,
+      `replay-${proposalId}`,
+      PRINCIPAL_1,
+      PRINCIPAL_2,
+      `wss://opensky.example/api/game/matches/${proposalId}`,
+      now,
+      now
+    )
+    .run()
 }
 
 const connect = async (principal: string) => {
@@ -102,6 +124,10 @@ const join = (socket: WebSocket, subkeyByte: number) => {
     })
   )
 }
+
+beforeEach(async () => {
+  await env.AUTH_DB.prepare('DELETE FROM multiplayer_matches').run()
+})
 
 afterEach(() => {
   for (const socket of sockets.splice(0)) {
@@ -291,6 +317,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   })
 
   it('uses durable alarms to advance commit-reveal state', async () => {
+    await insertActiveLedgerRow()
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
     const second = await connect(PRINCIPAL_2)
@@ -358,6 +385,24 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       ended: true,
       state: { statusType: 'GameOver', winner: 1 }
     })
+
+    const ledger = await env.AUTH_DB.prepare(
+      `SELECT status, winner_player, result_json, ended_at
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{
+        status: string
+        winner_player: number
+        result_json: string
+        ended_at: string
+      }>()
+    expect(ledger).toMatchObject({
+      status: 'ended',
+      winner_player: 1,
+      ended_at: expect.any(String)
+    })
+    expect(JSON.parse(ledger!.result_json)).toMatchObject({ winner: 1 })
   })
 
   it('restores a hibernated practice bot and applies one validated action per alarm', async () => {
