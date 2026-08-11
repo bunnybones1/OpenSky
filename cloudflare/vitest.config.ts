@@ -19,7 +19,9 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
-            SESSION_SIGNING_KEY: 'test-signing-key-at-least-32-characters-long'
+            SESSION_SIGNING_KEY: 'test-signing-key-at-least-32-characters-long',
+            GOOGLE_CLIENT_ID: 'google-client-id.apps.googleusercontent.com',
+            GOOGLE_CLIENT_SECRET: 'google-client-secret'
           }
         }
       })
