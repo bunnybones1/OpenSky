@@ -19,7 +19,6 @@
     }
   ],
   "vars": {
-    "CURRENT_SEASON": "126",
     "TURN_TIMER_ENABLED": "true"
   }
 }

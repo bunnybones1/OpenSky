@@ -36,7 +36,10 @@ const season = (value: string | undefined) => {
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed > 0 && parsed < 10_000
     ? parsed
-    : 126
+    : Math.floor(
+        (Date.now() - Date.UTC(2021, 10, 22, 14, 0, 0)) /
+          (4 * 7 * 24 * 60 * 60 * 1000)
+      ) + 1
 }
 
 const enabled = (value: string | undefined) => value?.toLowerCase() !== 'false'

@@ -14,6 +14,7 @@ import {
   encodeDeckString,
   validateDeckClass
 } from './deck-codec'
+import { CompetitiveRepository } from './competitive'
 import { alreadyExists, invalidArgument, permissionDenied } from './errors'
 import { identityReferenceFor } from './rpc-principal'
 
@@ -302,6 +303,8 @@ export class PlayerRpcRepository {
     userId: string,
     includePrivateSettings: boolean
   ): Promise<Account | null> {
+    const competitive = new CompetitiveRepository(this.database)
+    const stats = await competitive.currentStats(userId)
     const row = await this.database
       .prepare(
         `SELECT u.display_name,
@@ -342,6 +345,7 @@ export class PlayerRpcRepository {
       level: row.level,
       seasonLevel: row.basic_skypass_level,
       levelUpXP: row.next_level_xp,
+      stats,
       isBurnerWallet: false,
       ...(row.region ? { region: row.region } : {}),
       ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),

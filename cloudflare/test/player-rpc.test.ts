@@ -158,6 +158,251 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('returns source-shaped current and historical account stats', async () => {
+    const season = seasonFromDate()
+    const account = await rpc('GetAccount', { address: identityReference })
+    expect(await account.json()).toMatchObject({
+      account: {
+        stats: {
+          rankedConstructed: {
+            gameMode: 'RANKED_CONSTRUCTED',
+            gamesPlayed: 0,
+            playerRank: 'UNRANKED',
+            playerRankStage: 'STAGE_NONE',
+            season
+          },
+          rankedDiscovery: {
+            gameMode: 'RANKED_DISCOVERY',
+            gamesPlayed: 0,
+            season
+          }
+        }
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET win_count = 3, loss_count = 1, score = 42,
+           player_rank = 'WANDERER', player_rank_stage = 'STAGE_I'
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+         AND season = ?`
+    )
+      .bind(userId, season)
+      .run()
+    const response = await rpc(
+      'GetAccountStats',
+      { address: identityReference, seasons: [1, season] },
+      false
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json<{
+      constructedStats: Array<{
+        season: number
+        gamesPlayed: number
+        winRatio: number
+        score: number
+      }>
+      discoveryStats: Array<{ season: number; gamesPlayed: number }>
+    }>()
+    expect(body.constructedStats).toHaveLength(2)
+    expect(body.discoveryStats).toHaveLength(2)
+    expect(body.constructedStats[0]).toMatchObject({
+      season: 1,
+      gamesPlayed: 0,
+      score: 0
+    })
+    expect(body.constructedStats[1]).toMatchObject({
+      season,
+      gamesPlayed: 4,
+      winRatio: 0.75,
+      score: 42
+    })
+  })
+
+  it('lists and centers the source player leaderboard with stable paging', async () => {
+    const season = seasonFromDate()
+    const otherUsers = [
+      ['leaderboard-a', 'Alpha.Weasel'],
+      ['leaderboard-b', 'Beta.Weasel']
+    ] as const
+    const now = new Date().toISOString()
+    for (const [id, name] of otherUsers) {
+      await env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(id, name, `${id}@example.com`, now, now)
+        .run()
+      await new PlayerRepository(env.AUTH_DB).bootstrap(id)
+    }
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats SET score = 20, player_rank = 'WANDERER',
+             player_rank_stage = 'STAGE_I', updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      ).bind(now, 'leaderboard-a', season),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats SET score = 10, player_rank = 'WANDERER',
+             player_rank_stage = 'STAGE_I', updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      ).bind(now, 'leaderboard-b', season)
+    ])
+
+    const first = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 1 },
+        req: { gameMode: 'RANKED_CONSTRUCTED', season }
+      },
+      false
+    )
+    expect(first.status).toBe(200)
+    const firstBody = await first.json<{
+      page: { hasBefore: boolean; after: string }
+      res: Array<{ account: { name: string }; rank: number }>
+    }>()
+    expect(firstBody.res).toEqual([
+      expect.objectContaining({
+        account: expect.objectContaining({ name: 'Alpha.Weasel' }),
+        rank: 1
+      })
+    ])
+    expect(firstBody.page.hasBefore).toBe(true)
+
+    const next = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 1, before: firstBody.page.after },
+        req: { gameMode: 'RANKED_CONSTRUCTED', season }
+      },
+      false
+    )
+    expect(await next.json()).toMatchObject({
+      res: [
+        {
+          account: { name: 'Beta.Weasel' },
+          rank: 2,
+          accountStat: { score: 10 }
+        }
+      ]
+    })
+
+    const centered = await rpc('AccountLeaderboard', {
+      page: { pageSize: 3 },
+      req: {
+        accountAddress: identityReference,
+        gameMode: 'RANKED_CONSTRUCTED',
+        season
+      }
+    })
+    expect(centered.status).toBe(200)
+    expect(
+      (
+        await centered.json<{ res: Array<{ account: { address: string } }> }>()
+      ).res.map(entry => entry.account.address)
+    ).toContain(identityReference)
+  })
+
+  it('lists only the signed-in player source-visible match history', async () => {
+    const otherUserId = 'match-history-opponent'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'History Opponent', 'history@example.com', ?, ?)`
+    )
+      .bind(otherUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(otherUserId)
+    const payload = JSON.stringify({
+      match: {
+        player1: {
+          privateSeed: { cards: ['6'], prisms: ['str'] },
+          gameMode: 'RANKED_CONSTRUCTED',
+          account: {
+            id: 1,
+            address: '0x1111111111111111111111111111111111111111',
+            name: 'Cloud Weasel Player'
+          },
+          playerSessionID: 'p1',
+          botSubkey: false
+        },
+        player2: {
+          privateSeed: { cards: ['6'], prisms: ['str'] },
+          gameMode: 'RANKED_CONSTRUCTED',
+          account: {
+            id: 2,
+            address: '0x2222222222222222222222222222222222222222',
+            name: 'History Opponent'
+          },
+          playerSessionID: 'p2',
+          botSubkey: false
+        }
+      }
+    })
+    for (const [proposal, mode] of [
+      ['ranked-history', 'RANKED_CONSTRUCTED'],
+      ['practice-hidden', 'PRACTICE_BOT']
+    ]) {
+      await env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, server_address, status, created_at, updated_at,
+            winner_player, result_json, ended_at)
+         VALUES (?, ?, ?, 'test', ?, ?, ?, ?, ?, NULL, 'ended', ?, ?, 0, ?, ?)`
+      )
+        .bind(
+          proposal,
+          `${proposal}-replay`,
+          mode,
+          '0x1111111111111111111111111111111111111111',
+          '0x2222222222222222222222222222222222222222',
+          userId,
+          otherUserId,
+          payload,
+          now,
+          now,
+          JSON.stringify({ winner: 0, turnCount: 4, moveCount: 8 }),
+          now
+        )
+        .run()
+    }
+
+    const response = await rpc('ListMatches', {
+      page: { pageSize: 5 },
+      req: { accountAddress: identityReference }
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      res: [
+        {
+          status: 'COMPLETED',
+          player1: {
+            address: identityReference,
+            name: 'Cloud Weasel Player',
+            deckClass: 'STR',
+            isBot: false
+          },
+          player2: {
+            address: `identity:${otherUserId}`,
+            name: 'History Opponent'
+          },
+          winningPlayer: 1,
+          turnNonce: 4,
+          replayID: 'ranked-history-replay'
+        }
+      ]
+    })
+    expect(
+      (
+        await rpc('ListMatches', {
+          req: { accountAddress: `identity:${otherUserId}` }
+        })
+      ).status
+    ).toBe(403)
+  })
+
   it('enforces profile ownership, username uniqueness, and title ownership', async () => {
     const now = new Date().toISOString()
     const otherUserId = 'other-profile-user'

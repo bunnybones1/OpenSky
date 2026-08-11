@@ -9,6 +9,7 @@ import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { AccountsRepository } from './accounts'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import { CookiePoliciesRepository } from './cookie-policies'
+import { CompetitiveRepository } from './competitive'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
 import { signSession } from './jwt'
@@ -23,6 +24,7 @@ import { PlayerRpcRepository } from './player-rpc'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import {
+  identityReferenceFor,
   optionalRpcPrincipal,
   rpcPrincipal,
   type RpcPrincipal
@@ -151,6 +153,7 @@ export const handleApiRequest = async (
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
+  const competitive = new CompetitiveRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
@@ -274,6 +277,71 @@ export const handleApiRequest = async (
             address: body.account.address
           })
         })
+      }
+
+      case 'GetAccountStats': {
+        const body = await requestBody<{
+          address?: string
+          seasons?: number[]
+        }>(request)
+        if (!body.address) throw invalidArgument('address is required')
+        const result = await competitive.accountStats(
+          body.address,
+          body.seasons
+        )
+        if (!result) throw invalidArgument('account was not found')
+        return json(request, env, result)
+      }
+
+      case 'ListLeaderboard': {
+        const body = await requestBody<{
+          page?: import('@opensky/proto').Page
+          req?: import('./competitive').LeaderboardRequest
+        }>(request)
+        if (!body.req) throw invalidArgument('req is required')
+        return json(
+          request,
+          env,
+          await competitive.listLeaderboard(body.page, body.req)
+        )
+      }
+
+      case 'AccountLeaderboard': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          page?: import('@opensky/proto').Page
+          req?: import('./competitive').LeaderboardRequest & {
+            accountAddress?: string
+          }
+        }>(request)
+        if (!body.req) throw invalidArgument('req is required')
+        const accountAddress =
+          body.req.accountAddress || identityReferenceFor(principal.userId)
+        return json(
+          request,
+          env,
+          await competitive.accountLeaderboard(body.page, {
+            ...body.req,
+            accountAddress
+          })
+        )
+      }
+
+      case 'ListMatches': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          page?: import('@opensky/proto').Page
+          req?: { accountAddress?: string }
+        }>(request)
+        return json(
+          request,
+          env,
+          await competitive.listMatches(
+            principal.userId,
+            body.page,
+            body.req?.accountAddress
+          )
+        )
       }
 
       case 'GetCookiePolicy': {

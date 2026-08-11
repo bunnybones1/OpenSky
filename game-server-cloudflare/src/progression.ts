@@ -3,6 +3,10 @@ interface MatchPlayersRow {
   player2_user_id: string | null
 }
 
+interface MatchStatsRow extends MatchPlayersRow {
+  mode: string
+}
+
 interface QuestProgressRow {
   row_id: number
   progress: number
@@ -102,7 +106,10 @@ export const applyMatchProgression = async (
     for (const [questId, delta] of requested) {
       const quest = byId.get(questId)
       if (!quest || quest.active !== 1 || quest.status !== 'active') continue
-      const actualDelta = Math.min(delta, Math.max(0, quest.target - quest.progress))
+      const actualDelta = Math.min(
+        delta,
+        Math.max(0, quest.target - quest.progress)
+      )
       if (actualDelta <= 0) continue
       applied[player][questId] = actualDelta
       statements.push(
@@ -160,4 +167,99 @@ export const applyMatchProgression = async (
   const stored = await receipt(database, proposalId)
   if (!stored) throw new Error('match progression receipt was not persisted')
   return parseReceipt(stored)
+}
+
+/**
+ * Applies the source match counters once. The guard row and every counter
+ * mutation share one D1 batch so Durable Object/alarm retries cannot count a
+ * completed match twice.
+ */
+export const applyMatchStats = async (
+  database: D1Database,
+  proposalId: string,
+  season: number,
+  winner: 0 | 1 | undefined,
+  processedAt: string
+): Promise<boolean> => {
+  const match = await database
+    .prepare(
+      `SELECT mode, player1_user_id, player2_user_id
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<MatchStatsRow>()
+  if (!match) throw new Error('match ledger row was not found')
+  if (!['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].includes(match.mode)) {
+    return false
+  }
+  if (!Number.isSafeInteger(season) || season < 1 || season > 10_000) {
+    throw new Error('match season is invalid')
+  }
+
+  const exists = await database
+    .prepare(
+      'SELECT 1 FROM multiplayer_match_stats_applied WHERE proposal_id = ?'
+    )
+    .bind(proposalId)
+    .first()
+  if (exists) return false
+
+  const statements: D1PreparedStatement[] = []
+  const userIds = [match.player1_user_id, match.player2_user_id] as const
+  for (const player of [0, 1] as const) {
+    const userId = userIds[player]
+    if (!userId) continue
+    const won = winner === player ? 1 : 0
+    const tied = winner === undefined ? 1 : 0
+    const lost = winner !== undefined && winner !== player ? 1 : 0
+    statements.push(
+      database
+        .prepare(
+          `INSERT OR IGNORE INTO player_account_stats
+             (user_id, game_mode, season, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(userId, match.mode, season, processedAt, processedAt),
+      database
+        .prepare(
+          `UPDATE player_account_stats
+           SET win_count = win_count + ?,
+               loss_count = loss_count + ?,
+               tie_count = tie_count + ?,
+               win_streak = CASE WHEN ? = 1 THEN win_streak + 1 ELSE 0 END,
+               loss_streak = CASE WHEN ? = 1 THEN loss_streak + 1 ELSE 0 END,
+               updated_at = ?
+           WHERE user_id = ? AND game_mode = ? AND season = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM multiplayer_match_stats_applied
+               WHERE proposal_id = ?
+             )`
+        )
+        .bind(
+          won,
+          lost,
+          tied,
+          won,
+          lost,
+          processedAt,
+          userId,
+          match.mode,
+          season,
+          proposalId
+        )
+    )
+  }
+  statements.push(
+    database
+      .prepare(
+        `INSERT INTO multiplayer_match_stats_applied (proposal_id, processed_at)
+         SELECT ?, ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_stats_applied WHERE proposal_id = ?
+         )`
+      )
+      .bind(proposalId, processedAt, proposalId)
+  )
+  await database.batch(statements)
+  return true
 }

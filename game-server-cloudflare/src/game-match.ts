@@ -9,7 +9,7 @@ import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
-import { applyMatchProgression } from './progression'
+import { applyMatchProgression, applyMatchStats } from './progression'
 import {
   AcceptedClientMessage,
   CreateMatchRequest,
@@ -828,6 +828,13 @@ export class GameMatch implements DurableObject {
         this.env.AUTH_DB,
         metadata.proposalId,
         questProgress,
+        endedAt
+      )
+      await applyMatchStats(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        metadata.match.matchSettings.season,
+        metadata.result?.winner,
         endedAt
       )
       const result = await this.env.AUTH_DB.prepare(

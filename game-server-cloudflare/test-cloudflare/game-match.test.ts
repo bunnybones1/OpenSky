@@ -13,7 +13,7 @@ import {
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from '../src/protocol'
-import { applyMatchProgression } from '../src/progression'
+import { applyMatchProgression, applyMatchStats } from '../src/progression'
 import {
   createMatchFixture,
   PRINCIPAL_1,
@@ -23,9 +23,8 @@ import {
 
 const runtimeEnv = env as unknown as GameServerEnv
 let proposalId = PROPOSAL_ID
-const fixture = (
-  overrides: Parameters<typeof createMatchFixture>[0] = {}
-) => createMatchFixture({ ...overrides, proposalId })
+const fixture = (overrides: Parameters<typeof createMatchFixture>[0] = {}) =>
+  createMatchFixture({ ...overrides, proposalId })
 const stub = () => runtimeEnv.GAME_MATCHES.getByName(`match:${proposalId}`)
 const sockets: WebSocket[] = []
 
@@ -43,7 +42,9 @@ const createMatch = (fixture = createMatchFixture({ proposalId })) =>
     body: JSON.stringify(fixture)
   })
 
-const initializeMatch = async (fixture = createMatchFixture({ proposalId })) => {
+const initializeMatch = async (
+  fixture = createMatchFixture({ proposalId })
+) => {
   const response = await createMatch(fixture)
   expect(response.status).toBe(200)
   return response.json()
@@ -173,6 +174,8 @@ beforeEach(async () => {
   proposalId = `proposal-test-${crypto.randomUUID()}`
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM player_quests'),
     env.AUTH_DB.prepare('DELETE FROM users')
@@ -250,9 +253,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(conflict.status).toBe(409)
 
-    const mutated = await createMatch(
-      fixture({ replayID: 'different-replay' })
-    )
+    const mutated = await createMatch(fixture({ replayID: 'different-replay' }))
     expect(mutated.status).toBe(409)
 
     const wrongRelease = await createMatch(
@@ -456,6 +457,59 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       ended_at: expect.any(String)
     })
     expect(JSON.parse(ledger!.result_json)).toMatchObject({ winner: 1 })
+
+    const stats = await env.AUTH_DB.prepare(
+      `SELECT user_id, win_count, loss_count, tie_count, win_streak,
+              loss_streak, season
+       FROM player_account_stats
+       WHERE game_mode = 'RANKED_CONSTRUCTED'
+       ORDER BY user_id`
+    ).all<{
+      user_id: string
+      win_count: number
+      loss_count: number
+      tie_count: number
+      win_streak: number
+      loss_streak: number
+      season: number
+    }>()
+    expect(stats.results).toEqual([
+      {
+        user_id: USER_ID_1,
+        win_count: 0,
+        loss_count: 1,
+        tie_count: 0,
+        win_streak: 0,
+        loss_streak: 1,
+        season: 126
+      },
+      {
+        user_id: USER_ID_2,
+        win_count: 1,
+        loss_count: 0,
+        tie_count: 0,
+        win_streak: 1,
+        loss_streak: 0,
+        season: 126
+      }
+    ])
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        0,
+        new Date(Date.now() + 1_000).toISOString()
+      )
+    ).toBe(false)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM multiplayer_match_stats_applied
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(1)
 
     const quests = await env.AUTH_DB.prepare(
       `SELECT rowid AS id, progress, status FROM player_quests ORDER BY rowid`

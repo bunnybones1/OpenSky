@@ -269,6 +269,22 @@ export class PlayerRepository {
     }
 
     await this.database.batch(statements)
+    const season =
+      Math.floor(
+        (Date.now() - Date.UTC(2021, 10, 22, 14, 0, 0)) /
+          (4 * 7 * 24 * 60 * 60 * 1000)
+      ) + 1
+    await this.database.batch(
+      ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_account_stats
+               (user_id, game_mode, season, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`
+          )
+          .bind(userId, mode, season, now, now)
+      )
+    )
     const state = await this.getState(userId)
     if (!state) throw new Error('player bootstrap did not persist a profile')
     return state
