@@ -173,7 +173,9 @@ and progress are not migrated.
   rewards, and replay archives.
 - D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
   match history, profile feed, competitive stats, item summary reads, and
-  write-once social referrals with friend-point accrual.
+  write-once social referrals with friend-point accrual. Public account lookup
+  also preserves the source's trimmed, case-insensitive username behavior while
+  keeping identity settings owner-only.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
