@@ -25,6 +25,10 @@ describe('matchmaker protocol boundary', () => {
     })
   })
 
+  it('accepts the original browser heartbeat without inventing a response type', () => {
+    expect(parseClientCommand('PING')).toEqual({ type: 'ping' })
+  })
+
   it('rejects unsupported modes, binary messages and oversized input', () => {
     expect(() =>
       parseClientCommand(JSON.stringify({ ...findMatch, mode: GameMode.TUTORIAL }))

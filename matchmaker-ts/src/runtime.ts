@@ -255,7 +255,8 @@ export class MatchmakerPool implements DurableObject {
       const command = parseClientCommand(raw)
       switch (command.type) {
         case 'ping':
-          webSocket.send(JSON.stringify({ type: 'pong' }))
+          // Source matcher heartbeats are one-way. Sending a new message type
+          // would make the preserved browser client attempt to parse it.
           return
         case 'find_match':
           await this.findMatch(attachment, command)
@@ -271,6 +272,7 @@ export class MatchmakerPool implements DurableObject {
       }
     } catch (error) {
       if (error instanceof ProtocolError) {
+        console.warn('matchmaker protocol rejected', error.reason, error.message)
         this.safeSend(webSocket, errorMessage(error.reason, error.message))
       } else {
         console.error('matchmaker message failed', error)
@@ -355,6 +357,7 @@ export class MatchmakerPool implements DurableObject {
       }
     }
     await this.state.storage.put(ticketKey(attachment.principal), ticket)
+    console.log('matchmaker ticket accepted', command.mode)
     await this.attemptMatches(Date.now())
     await this.rescheduleAlarm(Date.now())
   }
@@ -545,6 +548,12 @@ export class MatchmakerPool implements DurableObject {
     for (const principal of humanAddresses) writes[pendingKey(principal)] = proposal.id
     await this.state.storage.put(writes)
     await this.state.storage.delete(humanAddresses.map(ticketKey))
+    console.log(
+      'matchmaker proposal created',
+      proposal.id,
+      humanAddresses.length,
+      players.some(isBot)
+    )
 
     for (const principal of humanAddresses) {
       const participant = proposal.participants.find(

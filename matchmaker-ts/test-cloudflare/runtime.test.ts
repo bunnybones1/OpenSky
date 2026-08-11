@@ -215,6 +215,10 @@ describe('Cloudflare matchmaker Worker', () => {
   it('creates a practice proposal and auto-accepts its bot through an alarm', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const found = nextMessage(player)
+    // Preserve the literal heartbeat used by the original WebSocket client.
+    // If it generates an error response, this assertion receives that error
+    // instead of the expected match proposal.
+    player.send('PING')
     player.send(JSON.stringify(findCommand(GameMode.PRACTICE_BOT)))
     expect(await found).toMatchObject({
       type: 'match_found',

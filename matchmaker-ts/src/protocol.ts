@@ -92,6 +92,11 @@ export const parseClientCommand = (
     throw new ProtocolError('INVALID_OPERATION', 'message is too large')
   }
 
+  // The original browser client has always sent this literal heartbeat. The Go
+  // matcher rewrites it to {"type":"ping"} before decoding, so preserve that
+  // wire compatibility instead of treating a healthy client as malformed.
+  if (raw === 'PING') return { type: 'ping' }
+
   let value: unknown
   try {
     value = JSON.parse(raw)
