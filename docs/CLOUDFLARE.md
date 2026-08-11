@@ -177,6 +177,10 @@ and progress are not migrated.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
+- The authoritative game Worker now records Conquest win/loss/draw results by
+  durable match ID and performs the source first-loss/third-win transition with
+  a per-proposal retry receipt. Zero-win losses complete immediately; earned
+  card bundles remain reward-pending.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker
@@ -193,10 +197,10 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest match-end progression and reward settlement, seasonal invite-sticker
-  redemption, marketplace writes, and administrative APIs still require ports.
-  Conquest matchmaking remains disabled until authoritative match completion
-  can settle the run and rewards transactionally.
+- Conquest card reward settlement and deck-based treasure-point awards,
+  seasonal invite-sticker redemption, marketplace writes, and administrative
+  APIs still require ports. Conquest matchmaking remains disabled until
+  authoritative completion can settle those remaining rewards transactionally.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
