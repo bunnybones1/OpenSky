@@ -3,11 +3,11 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`c4ada2d4-e98b-42e5-9ac9-ccccddfb1dc1`)
+- API/web Worker: `opensky-webapp` (`16b161c4-f844-4a9a-9cac-8b1774b08159`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`dc2b0617-e805-4564-b6b7-dd582021a114`)
 - Game Worker: `cloud-weasel-game-server` (`dc82be9f-5cd1-48f5-bb46-ab346a1f1b7e`)
-- Deployed component commits: web/API `7dde601`; game `c7a7f00`; matchmaker
+- Deployed component commits: web/API `f4f6eb6`; game `c7a7f00`; matchmaker
   `c9e2201`; match service `dbd4ea2`
 - Deployed: 2026-08-11
 - Applied D1 migrations: `0001` through `0026`
@@ -18,6 +18,7 @@
 - Original OpenSky webapp shell, navigation, profile, and item views
 - Wallet-free starter collection and legacy read RPC compatibility
 - Public trimmed, case-insensitive username account lookup with owner-only settings
+- Source card search, including attached spells, token rows, ownership filters, and balances
 - Starter quest claims and the original quest progression chain
 - Basic SkyPass card claims for the ported season data
 - Legacy deck listing, creation, update, deletion, and deck-string encoding

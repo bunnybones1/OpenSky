@@ -180,6 +180,10 @@ and progress are not migrated.
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
   drift, and deck-string lookup preserves the source version-02 validation.
+  Source card search also preserves library/ownership filters, attached-spell
+  text and element matching, negative-mana ordering, pagination, optional
+  balance projection, and 96 search-only token rows without adding tokens to
+  the normal card library.
 - Public game-mode status comes from the separately deployed match service over
   an authenticated Cloudflare service binding, so the UI and queue admission
   agree that Conquest is still disabled. D1-backed Ping, server Clock, current
