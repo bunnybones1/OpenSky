@@ -36,7 +36,7 @@ const PENDING_PREFIX = 'pending:'
 // Bump this only when a deployed pool must not continue on a hibernated prior
 // runtime. The Worker and tests import the same value so rollout boundaries
 // cannot silently drift.
-export const POOL_VERSION = 2
+export const POOL_VERSION = 3
 
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
@@ -734,7 +734,13 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private sendToPrincipal(principal: string, message: object) {
-    for (const socket of this.state.getWebSockets(principal)) {
+    const sockets = this.state.getWebSockets(principal)
+    console.log(
+      'matchmaker message delivery',
+      (message as { type?: unknown }).type,
+      sockets.length
+    )
+    for (const socket of sockets) {
       this.safeSend(socket, message)
     }
   }
@@ -742,7 +748,8 @@ export class MatchmakerPool implements DurableObject {
   private safeSend(socket: WebSocket, message: object) {
     try {
       socket.send(JSON.stringify(message))
-    } catch {
+    } catch (error) {
+      console.error('matchmaker socket send failed', error)
       // Close/error handlers perform durable cleanup.
     }
   }
