@@ -83,6 +83,19 @@ pnpm --dir cloudflare exec wrangler secret put GOOGLE_CLIENT_ID --config ../wran
 pnpm --dir cloudflare exec wrangler secret put GOOGLE_CLIENT_SECRET --config ../wrangler.jsonc
 ```
 
+The multiplayer Workers additionally share an internal service credential, and the
+game server needs a stable match-owner signing key. After all multiplayer Workers
+have been created, provision both without printing their values:
+
+```bash
+pnpm provision:cloudflare:multiplayer-secrets
+```
+
+The command is repeat-safe. It preserves an existing match-owner key and refuses a
+partially configured internal credential instead of generating mismatched secrets.
+To intentionally rotate the shared credential on all four Workers, set
+`CLOUD_WEASEL_ROTATE_INTERNAL_AUTH_SECRET=1` for that invocation.
+
 The client ID is public by design, but binding both OAuth values through Wrangler keeps deployment
 configuration together and avoids committing environment-specific identifiers.
 
