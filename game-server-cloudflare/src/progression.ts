@@ -71,6 +71,7 @@ interface PlayerExperienceRow {
   basic_skypass_level: number
   hero_count: number
   ranked_constructed_rank: PlayerRank
+  inviter_user_id: string | null
 }
 
 interface QuestProgressRow {
@@ -381,7 +382,10 @@ export const applyMatchExperience = async (
                            AND stats.game_mode = 'RANKED_CONSTRUCTED'
                            AND stats.season = ?),
                         'UNRANKED'
-                      ) AS ranked_constructed_rank
+                      ) AS ranked_constructed_rank,
+                      (SELECT invite.inviter_user_id FROM player_invites invite
+                       WHERE invite.invitee_user_id = profile.user_id)
+                        AS inviter_user_id
                FROM player_profiles profile
                JOIN player_progression progression
                  ON progression.user_id = profile.user_id
@@ -448,6 +452,57 @@ export const applyMatchExperience = async (
         )
         .bind(next.level, next.experience, processedAt, userId, proposalId)
     )
+
+    const levelsGained = next.level - row.level
+    if (levelsGained > 0 && row.inviter_user_id) {
+      statements.push(
+        database
+          .prepare(
+            `INSERT INTO player_friend_points
+               (invitee_user_id, inviter_user_id, season, levels,
+                points_carried, points_spent, updated_at)
+             SELECT ?, ?, ?, ?, 0, 0, ?
+             WHERE NOT EXISTS (
+               SELECT 1 FROM multiplayer_match_experience
+               WHERE proposal_id = ?
+             )
+             ON CONFLICT(invitee_user_id, inviter_user_id, season)
+             DO UPDATE SET
+               levels = player_friend_points.levels + excluded.levels,
+               updated_at = excluded.updated_at`
+          )
+          .bind(
+            userId,
+            row.inviter_user_id,
+            season,
+            levelsGained,
+            processedAt,
+            proposalId
+          ),
+        database
+          .prepare(
+            `INSERT INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             SELECT ?, 'SW_STICKER_POINTS', 0, ?, 0, 'friend-level', ?, ?
+             WHERE NOT EXISTS (
+               SELECT 1 FROM multiplayer_match_experience
+               WHERE proposal_id = ?
+             )
+             ON CONFLICT(user_id, item_type, token_id)
+             DO UPDATE SET
+               balance = player_items.balance + excluded.balance,
+               updated_at = excluded.updated_at`
+          )
+          .bind(
+            row.inviter_user_id,
+            levelsGained,
+            processedAt,
+            processedAt,
+            proposalId
+          )
+      )
+    }
 
     if (!rankedWasUnlocked && hasUnlockedRanked(next.level, next.experience)) {
       for (const mode of [

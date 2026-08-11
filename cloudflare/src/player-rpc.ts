@@ -203,6 +203,7 @@ interface AccountRow {
   xp: number
   next_level_xp: number
   basic_skypass_level: number
+  inviter_user_id: string | null
 }
 
 interface CardRow {
@@ -606,11 +607,13 @@ export class PlayerRpcRepository {
                 p.level,
                 p.xp,
                 p.next_level_xp,
-                g.basic_skypass_level
+                g.basic_skypass_level,
+                invite.inviter_user_id
          FROM users u
          JOIN player_profiles p ON p.user_id = u.id
          JOIN player_progression g ON g.user_id = u.id
          LEFT JOIN player_account_settings account ON account.user_id = u.id
+         LEFT JOIN player_invites invite ON invite.invitee_user_id = u.id
          WHERE u.id = ?`
       )
       .bind(userId)
@@ -631,6 +634,9 @@ export class PlayerRpcRepository {
       levelUpXP: row.next_level_xp,
       stats,
       isBurnerWallet: false,
+      ...(row.inviter_user_id
+        ? { invitedBy: identityReferenceFor(row.inviter_user_id) }
+        : {}),
       ...(row.region ? { region: row.region } : {}),
       ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
       ...(row.title_id !== null ? { titleID: row.title_id } : {}),

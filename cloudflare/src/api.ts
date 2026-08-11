@@ -25,6 +25,7 @@ import {
 } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
 import { replayArchive } from './replays'
+import { SocialRepository } from './social'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import {
@@ -162,6 +163,7 @@ export const handleApiRequest = async (
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
+  const social = new SocialRepository(env.AUTH_DB)
 
   try {
     switch (method) {
@@ -296,6 +298,43 @@ export const handleApiRequest = async (
         )
         if (!result) throw invalidArgument('account was not found')
         return json(request, env, result)
+      }
+
+      case 'SetInvitedBy': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: { address?: string; invitedBy?: string }
+        }>(request)
+        if (!body.req?.address || !body.req.invitedBy) {
+          throw invalidArgument('req.address and req.invitedBy are required')
+        }
+        return json(request, env, {
+          ok: await social.setInvitedBy(
+            principal.userId,
+            body.req.address,
+            body.req.invitedBy
+          )
+        })
+      }
+
+      case 'GetFriendPoints': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<{ address?: string }>(request)
+        return json(
+          request,
+          env,
+          await social.getFriendPoints(principal.userId)
+        )
+      }
+
+      case 'GetPointsGifted': {
+        const principal = await identityPrincipal(request, env)
+        await requestBody<{ address?: string }>(request)
+        return json(
+          request,
+          env,
+          await social.getPointsGifted(principal.userId)
+        )
       }
 
       case 'GetPrivateSpectateCode': {

@@ -387,6 +387,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await insertExperiencePlayers()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     const processedAt = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_invites
+         (invitee_user_id, inviter_user_id, created_at)
+       VALUES (?, ?, ?)`
+    )
+      .bind(USER_ID_1, USER_ID_2, processedAt)
+      .run()
 
     const first = await applyMatchExperience(
       env.AUTH_DB,
@@ -424,6 +431,22 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       { user_id: USER_ID_1, level: 2, xp: 20 },
       { user_id: USER_ID_2, level: 1, xp: 30 }
     ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = 126`
+      )
+        .bind(USER_ID_1, USER_ID_2)
+        .first('levels')
+    ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(USER_ID_2)
+        .first('balance')
+    ).toBe(1)
     const ranks = await env.AUTH_DB.prepare(
       `SELECT user_id, game_mode, player_rank, player_rank_stage
        FROM player_account_stats ORDER BY user_id, game_mode`
@@ -463,6 +486,22 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       `SELECT user_id, level, xp FROM player_profiles ORDER BY user_id`
     ).all<{ user_id: string; level: number; xp: number }>()
     expect(profilesAfterRetry.results).toEqual(profiles.results)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = 126`
+      )
+        .bind(USER_ID_1, USER_ID_2)
+        .first('levels')
+    ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(USER_ID_2)
+        .first('balance')
+    ).toBe(1)
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM multiplayer_match_experience

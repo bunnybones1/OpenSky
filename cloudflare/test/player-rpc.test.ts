@@ -17,11 +17,16 @@ const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
 const identityReference = `identity:${userId}`
 
-const rpc = async (method: string, body: object, signedIn = true) => {
+const rpcAs = async (
+  sessionUserId: string,
+  method: string,
+  body: object,
+  signedIn = true
+) => {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (signedIn) {
     const token = await createIdentitySession(
-      userId,
+      sessionUserId,
       testEnv.SESSION_SIGNING_KEY
     )
     headers.set('Cookie', `${IDENTITY_SESSION_COOKIE}=${token}`)
@@ -35,6 +40,9 @@ const rpc = async (method: string, body: object, signedIn = true) => {
     testEnv
   )
 }
+
+const rpc = (method: string, body: object, signedIn = true) =>
+  rpcAs(userId, method, body, signedIn)
 
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DELETE FROM users').run()
@@ -124,6 +132,99 @@ describe('legacy player RPC compatibility', () => {
       locale: 'pt-BR',
       region: 'CA',
       tagArtID: 'bg-fire-01'
+    })
+  })
+
+  it('ports write-once invite attribution and source friend-point reads', async () => {
+    const inviterUserId = 'rpc-inviter-user-id'
+    const inviterReference = `identity:${inviterUserId}`
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Inviting Weasel', 'inviter@example.com', ?, ?)`
+    )
+      .bind(inviterUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(inviterUserId)
+
+    const self = await rpc('SetInvitedBy', {
+      req: { address: identityReference, invitedBy: identityReference }
+    })
+    expect(self.status).toBe(400)
+
+    // Preserve the source's successful no-op for a syntactically invalid
+    // inviter address.
+    const invalid = await rpc('SetInvitedBy', {
+      req: { address: identityReference, invitedBy: 'not-an-account' }
+    })
+    expect(await invalid.json()).toEqual({ ok: true })
+
+    const set = await rpc('SetInvitedBy', {
+      req: { address: identityReference, invitedBy: inviterReference }
+    })
+    expect(set.status).toBe(200)
+    expect(await set.json()).toEqual({ ok: true })
+
+    const account = await rpc('GetAccount', { address: identityReference })
+    expect(await account.json()).toMatchObject({
+      account: { invitedBy: inviterReference }
+    })
+    const repeated = await rpc('SetInvitedBy', {
+      req: { address: identityReference, invitedBy: inviterReference }
+    })
+    expect(repeated.status).toBe(403)
+
+    const season = seasonFromDate()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_friend_points
+           (invitee_user_id, inviter_user_id, season, levels,
+            points_carried, points_spent, updated_at)
+         VALUES (?, ?, ?, 3, 4, 1, ?), (?, ?, ?, 2, 0, 0, ?)`
+      ).bind(
+        userId,
+        inviterUserId,
+        season,
+        now,
+        userId,
+        inviterUserId,
+        season - 1,
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKER_POINTS', 0, 7, 0, 'friend-level', ?, ?)`
+      ).bind(inviterUserId, now, now)
+    ])
+
+    const gifted = await rpc('GetPointsGifted', {
+      address: identityReference
+    })
+    expect(await gifted.json()).toMatchObject({
+      total: 5,
+      inviter: { address: inviterReference, name: 'Inviting Weasel' }
+    })
+
+    const friends = await rpcAs(inviterUserId, 'GetFriendPoints', {
+      address: inviterReference
+    })
+    expect(await friends.json()).toMatchObject({
+      total: 7,
+      friends: [
+        {
+          account: {
+            address: identityReference,
+            invitedBy: inviterReference
+          },
+          season,
+          levels: 3,
+          points: 7,
+          pointsSpent: 1
+        }
+      ]
     })
   })
 
