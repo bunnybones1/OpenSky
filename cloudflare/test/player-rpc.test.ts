@@ -1459,6 +1459,28 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('claims quest XP and advances the exact legacy epic chain', async () => {
+    const initialChain = await rpc('GetEpicQuestChain', {
+      epicType: 'starter2_test'
+    })
+    expect(initialChain.status).toBe(200)
+    const initialQuests = (
+      await initialChain.json<{
+        quests: Array<{
+          id: number
+          epicIndex: number
+          isClaimed: boolean
+          isClaimable: boolean
+        }>
+      }>()
+    ).quests
+    expect(initialQuests.map(quest => quest.epicIndex)).toEqual([1, 2, 3, 4, 5])
+    expect(initialQuests[0]).toMatchObject({
+      id: expect.any(Number),
+      isClaimable: true,
+      isClaimed: false
+    })
+    expect(initialQuests.slice(1).every(quest => quest.id === 0)).toBe(true)
+
     const list = await rpc('ListQuests', {
       accountAddress: identityReference
     })
@@ -1511,6 +1533,20 @@ describe('legacy player RPC compatibility', () => {
             }
           }
         }
+      ]
+    })
+
+    expect(
+      await (
+        await rpc('GetEpicQuestChain', { epicType: 'starter2_test' })
+      ).json()
+    ).toMatchObject({
+      quests: [
+        { epicIndex: 1, isClaimed: true },
+        { epicIndex: 2, isClaimed: false, id: expect.any(Number) },
+        { epicIndex: 3, id: 0 },
+        { epicIndex: 4, id: 0 },
+        { epicIndex: 5, id: 0 }
       ]
     })
 
@@ -1967,6 +2003,15 @@ describe('legacy player RPC compatibility', () => {
   it('requires identity auth for player-owned RPC methods', async () => {
     expect((await rpc('ListDecks', {}, false)).status).toBe(401)
     expect((await rpc('ListQuests', {}, false)).status).toBe(401)
+    expect(
+      (
+        await rpc(
+          'GetEpicQuestChain',
+          { epicType: 'starter2_test' },
+          false
+        )
+      ).status
+    ).toBe(401)
     expect((await rpc('ListSkypassRewards', {}, false)).status).toBe(401)
   })
 })

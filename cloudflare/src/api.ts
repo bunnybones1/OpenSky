@@ -3,6 +3,7 @@ import type {
   AccountRegistration,
   CardSearchCriteria,
   DeckClass,
+  EpicType,
   FeedEventType,
   GameModesStatus,
   Hero,
@@ -1204,6 +1205,20 @@ export const handleApiRequest = async (
 
       case 'GetQuestsAutoRerollTime': {
         return json(request, env, { res: questAutoRerollTimes() })
+      }
+
+      case 'GetEpicQuestChain': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ epicType?: EpicType }>(request)
+        if (body.epicType === undefined) {
+          throw new Error('epic type cannot be nil')
+        }
+        return json(request, env, {
+          quests: await playerRpc.epicQuestChain(
+            principal.userId,
+            body.epicType
+          )
+        })
       }
 
       case 'GetCurrentSeason': {

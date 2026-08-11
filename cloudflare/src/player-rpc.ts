@@ -3,6 +3,7 @@ import type {
   CardOwnershipResponse,
   Deck,
   DeckEquipment,
+  EpicType,
   FeedEvent,
   Item,
   ItemSupply,
@@ -36,6 +37,7 @@ import {
   nextSourceEpicSpec,
   questPeriodAt,
   randomSourceQuestSpec,
+  SOURCE_QUEST_SPECS,
   sourceQuestCandidates,
   sourceQuestSpec,
   type SourceQuestSpec
@@ -2061,6 +2063,60 @@ export class PlayerRpcRepository {
   async listQuests(userId: string): Promise<Quest[]> {
     await this.ensureQuestLayout(userId)
     return (await this.questRows(userId)).map(row => this.questFromRow(row))
+  }
+
+  async epicQuestChain(userId: string, epicType: EpicType): Promise<Quest[]> {
+    if (epicType === ('UNKNOWN' as EpicType)) {
+      throw new Error('epic type cannot be unknown')
+    }
+    const specs = SOURCE_QUEST_SPECS.filter(
+      spec => spec.epicType === epicType
+    ).sort(
+      (left, right) => (left.epicIndex ?? 0) - (right.epicIndex ?? 0)
+    )
+    if (!specs.length) return []
+
+    const assignments = await this.database
+      .prepare(
+        `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                epic_length, position, progress, target, reward_xp, periodicity,
+                is_rerollable, is_new, status, active, period, rerolls
+         FROM player_quests
+         WHERE user_id = ? AND epic_type = ?
+         ORDER BY rowid DESC`
+      )
+      .bind(userId, epicType)
+      .all<QuestRow>()
+    const active = assignments.results.find(row => row.active === 1)
+    const activeIndex = active?.epic_index ?? null
+
+    return specs.map(spec => {
+      const assignment =
+        activeIndex !== null && spec.epicIndex === activeIndex
+          ? active
+          : activeIndex !== null && (spec.epicIndex ?? 0) < activeIndex
+            ? assignments.results.find(row => row.quest_type === spec.questType)
+            : undefined
+      if (assignment) return this.questFromRow(assignment)
+      return {
+        id: 0,
+        position: spec.position,
+        questType: spec.questType,
+        ...(spec.epicType ? { epicType: spec.epicType } : {}),
+        ...(spec.epicIndex !== undefined ? { epicIndex: spec.epicIndex } : {}),
+        ...(spec.epicLength !== undefined
+          ? { epicLength: spec.epicLength }
+          : {}),
+        progress: 0,
+        endProgress: spec.endProgress,
+        reward: { itemType: 'SW_XP' as ItemType, amount: spec.rewardXp },
+        periodicity: spec.periodicity,
+        isRerollable: spec.rerollable,
+        isClaimable: false,
+        isClaimed: false,
+        isNew: false
+      }
+    })
   }
 
   async rerollQuest(
