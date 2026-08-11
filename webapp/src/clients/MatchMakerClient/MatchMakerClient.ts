@@ -45,6 +45,11 @@ export class _MatchMakerClient_DONT_USE_DIRECTLY {
       return
     }
 
+    // Message type only: useful at the WebSocket/UI boundary without logging
+    // match seeds, account data, or credentials.
+    // eslint-disable-next-line no-console
+    console.log('MatchMakerClient received', data.type)
+
     const message = data as MatchmakerMessage
 
     switch (message.type) {

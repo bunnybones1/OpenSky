@@ -16,7 +16,7 @@ import { MATCH_FOUND_DIALOG_ID } from '~/shared/constants/play'
 import { controlDialog } from '~/shared/hooks/useDialog/control-dialog'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { useStoredMatchInfo } from '~/shared/queries/play/useStoredMatchInfo'
-import { authenticationState } from '~/shared/state/authentication-state'
+import { getAuthenticatedGameAddress } from '~/shared/state/authentication-state'
 import { playState, updatePlayState } from '~/shared/state/play-state'
 import { FullWidthButtonStyle } from '~/shared/style/FullWidthButtonStyle.css'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
@@ -89,20 +89,22 @@ export const MatchFoundDialog = memo(() => {
       return
     }
 
-    if (!!authenticationState.userAddress) {
+    const playerID = getAuthenticatedGameAddress()
+    if (playerID) {
       MatchMakerClient.ws.send({
         type: 'decline_match',
-        playerID: authenticationState.userAddress
+        playerID
       })
       closeDialog()
     }
   }, [acceptOnly])
 
   const onAccept = useCallback(() => {
-    if (!!authenticationState.userAddress) {
+    const playerID = getAuthenticatedGameAddress()
+    if (playerID) {
       MatchMakerClient.ws.send({
         type: 'accept_match',
-        playerID: authenticationState.userAddress
+        playerID
       })
       closeDialog()
     }

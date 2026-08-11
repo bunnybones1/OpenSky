@@ -16,6 +16,9 @@ const DEFAULT_AUTHENTICATION_STATE: IAuthenticationState = {
 
 export const authenticationState = proxy(DEFAULT_AUTHENTICATION_STATE)
 
+export const getAuthenticatedGameAddress = () =>
+  authenticationState.gamePrincipal ?? authenticationState.userAddress
+
 export const updateAuthenticationState = <T extends keyof IAuthenticationState>(
   key: T,
   value: IAuthenticationState[T]
