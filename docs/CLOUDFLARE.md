@@ -170,6 +170,9 @@ and progress are not migrated.
 - D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
   match history, profile feed, competitive stats, item summary reads, and
   write-once social referrals with friend-point accrual.
+- D1 now also backs the source Conquest entry/status/statistics foundation. It
+  spends the original non-tradable ticket atomically, enforces one active run,
+  and exposes the original treasure thresholds without inventing a reward pool.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker
@@ -186,8 +189,10 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest state/rewards, seasonal invite-sticker redemption, marketplace
-  writes, and administrative APIs still require ports.
+- Conquest match-end progression and reward settlement, seasonal invite-sticker
+  redemption, marketplace writes, and administrative APIs still require ports.
+  Conquest matchmaking remains disabled until authoritative match completion
+  can settle the run and rewards transactionally.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
