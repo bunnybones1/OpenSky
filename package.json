@@ -18,6 +18,7 @@
     "check:cloudflare:rpcs": "node --test ./utils/audit-cloudflare-rpcs.test.mjs && node ./utils/audit-cloudflare-rpcs.mjs --check",
     "generate:cloudflare:cards": "node ./utils/generate-cloudflare-card-library.mjs",
     "check:cloudflare:cards": "node --test ./utils/generate-cloudflare-card-library.test.mjs && node ./utils/generate-cloudflare-card-library.mjs --check",
+    "check:cloudflare:conquest-gate": "node --test ./utils/check-cloudflare-conquest-gate.test.mjs && node ./utils/check-cloudflare-conquest-gate.mjs",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",
     "deploy:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler deploy --config ../wrangler.jsonc",

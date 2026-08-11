@@ -78,6 +78,11 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Conquest mode flags remain false until all checks pass against the deployed
   Worker version and an explicit pool configuration.
 
+Run `pnpm check:cloudflare:conquest-gate` in deployment checks. It reads the
+actual production match-service config and fails if either Conquest mode is
+enabled. Removing that guard is an explicit part of the settlement rollout,
+not a configuration-only change.
+
 WalletConnect is not part of this gate. Card contents belong to the Google
 identity inventory first; a later optional wallet link can merge or export
 wallet-held contents without becoming login authority.
