@@ -89,4 +89,14 @@ describe('source system and progression RPC compatibility', () => {
       res: 0
     })
   })
+
+  it('preserves the source disabled live-record endpoint', async () => {
+    const response = await rpc('GetMatchLiveRecordsURI')
+    expect(response.status).toBe(501)
+    expect(await response.json()).toEqual({
+      code: 'webrpc.unimplemented',
+      msg: 'unimplemented',
+      status: 501
+    })
+  })
 })

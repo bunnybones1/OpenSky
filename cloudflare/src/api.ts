@@ -30,7 +30,7 @@ import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { ContentRepository } from './content'
 import type { Env } from './env'
-import { invalidArgument, notFound, RpcError } from './errors'
+import { invalidArgument, notFound, RpcError, unimplemented } from './errors'
 import { signSession } from './jwt'
 import {
   currentSeasonStart,
@@ -675,6 +675,11 @@ export const handleApiRequest = async (
             body.replayID ?? ''
           )
         )
+      }
+
+      case 'GetMatchLiveRecordsURI': {
+        await requestBody<{ matchID?: number }>(request)
+        throw unimplemented()
       }
 
       case 'GetCookiePolicy': {

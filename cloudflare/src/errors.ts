@@ -22,3 +22,6 @@ export const notFound = (message: string) =>
 
 export const unauthenticated = (message = 'unauthorized') =>
   new RpcError(401, 'webrpc.unauthenticated', message)
+
+export const unimplemented = (message = 'unimplemented') =>
+  new RpcError(501, 'webrpc.unimplemented', message)
