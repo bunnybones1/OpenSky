@@ -7,6 +7,7 @@ import { CreateDeckPage } from '~/CreateDeckPage/CreateDeckPage'
 import { DeckBuilder } from '~/DeckBuilder/DeckBuilder'
 import HomePage from '~/HomePage/HomePage'
 import ItemsPage from '~/ItemsPage/ItemsPage'
+import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
 import { QuestsPage } from '~/QuestsPage/QuestsPage'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
@@ -40,13 +41,7 @@ export const IdentityApp = memo(() => (
       <Route element={<AccountPage />} path={ROUTES_CONFIG.routes.ACCOUNT.path} />
       <Route
         path={ROUTES_CONFIG.routes.LEADERBOARD.path}
-        element={
-          <IdentityCapabilityPage
-            title="Ranks"
-            description="The original leaderboard is preserved here while its account and match APIs are ported."
-            icon="leaderboard"
-          />
-        }
+        element={<LeaderboardPage />}
       />
       <Route
         path={ROUTES_CONFIG.routes.MARKET.path}

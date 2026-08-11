@@ -10,7 +10,7 @@ import {
   type PlayerState
 } from '~/clients/IdentityClient/IdentityClient'
 import type { Account } from '~/lib/proto'
-import { GlobalQueryClient } from '~/shared/clients'
+import { APIClient, GlobalQueryClient } from '~/shared/clients'
 import { AuthenticatedPageLoader } from '~/shared/components/AuthenticatedPageLoader'
 import { Button } from '~/shared/components/Button'
 import { Text } from '~/shared/components/Text'
@@ -47,7 +47,13 @@ const accountFor = (player: PlayerState, identityReference: string): Account => 
 
 const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
   const [player, setPlayer] = useState<PlayerState>()
+  const [canonicalAccount, setCanonicalAccount] = useState<Account>()
   const [error, setError] = useState<string>()
+
+  const identityReference = useMemo(
+    () => identityReferenceFor(session.user.id),
+    [session.user.id]
+  )
 
   const loadPlayer = useCallback(() => {
     setError(undefined)
@@ -65,14 +71,28 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
 
   useEffect(loadPlayer, [loadPlayer])
 
-  const identityReference = useMemo(
-    () => identityReferenceFor(session.user.id),
-    [session.user.id]
-  )
-  const account = useMemo(
+  const fallbackAccount = useMemo(
     () => (player ? accountFor(player, identityReference) : undefined),
     [identityReference, player]
   )
+  const account = canonicalAccount ?? fallbackAccount
+
+  useEffect(() => {
+    if (!player) return
+    let cancelled = false
+    APIClient.opensky
+      .getAccount({ address: identityReference })
+      .then(({ account: nextAccount }) => {
+        if (!cancelled && nextAccount) setCanonicalAccount(nextAccount)
+      })
+      .catch(() => {
+        // The bootstrap account remains a safe fallback during transient RPC
+        // failures; the query layer can retry the canonical request later.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [identityReference, player])
 
   useEffect(() => {
     if (!account) return
