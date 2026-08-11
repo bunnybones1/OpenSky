@@ -20,10 +20,10 @@ export type RpcPrincipal =
 
 export const identityReferenceFor = (userId: string) => `identity:${userId}`
 
-export const rpcPrincipal = async (
+export const optionalRpcPrincipal = async (
   request: Request,
   env: Env
-): Promise<RpcPrincipal> => {
+): Promise<RpcPrincipal | null> => {
   if (request.headers.has('Authorization')) {
     const claims = await verifySession(
       bearerToken(request),
@@ -33,8 +33,17 @@ export const rpcPrincipal = async (
   }
 
   const token = readCookies(request).get(IDENTITY_SESSION_COOKIE)
-  if (!token) throw unauthenticated()
+  if (!token) return null
   const userId = await verifyIdentitySession(token, env.SESSION_SIGNING_KEY)
   if (!userId) throw unauthenticated()
   return { kind: 'identity', userId, reference: identityReferenceFor(userId) }
+}
+
+export const rpcPrincipal = async (
+  request: Request,
+  env: Env
+): Promise<RpcPrincipal> => {
+  const principal = await optionalRpcPrincipal(request, env)
+  if (!principal) throw unauthenticated()
+  return principal
 }

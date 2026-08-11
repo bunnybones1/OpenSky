@@ -1,4 +1,9 @@
-import type { AccountRegistration, DeckClass, ItemType } from '@opensky/proto'
+import type {
+  Account,
+  AccountRegistration,
+  DeckClass,
+  ItemType
+} from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
@@ -17,7 +22,11 @@ import {
 import { PlayerRpcRepository } from './player-rpc'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
-import { rpcPrincipal, type RpcPrincipal } from './rpc-principal'
+import {
+  optionalRpcPrincipal,
+  rpcPrincipal,
+  type RpcPrincipal
+} from './rpc-principal'
 import { UserStorageRepository } from './user-storage'
 
 const RPC_PREFIX = '/api/rpc/SkyWeaverAPI/'
@@ -214,9 +223,12 @@ export const handleApiRequest = async (
         const body = await requestBody<{ address?: string }>(request)
         if (!body.address) throw invalidArgument('address is required')
         if (body.address.startsWith('identity:')) {
-          const principal = await identityPrincipal(request, env)
+          const principal = await optionalRpcPrincipal(request, env)
           return json(request, env, {
-            account: await playerRpc.getAccount(principal.userId, body.address)
+            account: await playerRpc.getAccountByReference(
+              body.address,
+              principal?.kind === 'identity' ? principal.userId : undefined
+            )
           })
         }
         return json(request, env, {
@@ -227,9 +239,11 @@ export const handleApiRequest = async (
       case 'AccountExists': {
         const body = await requestBody<{ address?: string }>(request)
         if (!body.address) throw invalidArgument('address is required')
-        const account = await accounts.findByAddress(body.address)
+        const exists = body.address.startsWith('identity:')
+          ? await playerRpc.accountReferenceExists(body.address)
+          : !!(await accounts.findByAddress(body.address))
         return json(request, env, {
-          exists: !!account,
+          exists,
           pending_migration: false
         })
       }
@@ -237,10 +251,28 @@ export const handleApiRequest = async (
       case 'AccountExistsByName': {
         const body = await requestBody<{ name?: string }>(request)
         if (!body.name) throw invalidArgument('name is required')
-        const account = await accounts.findByName(body.name)
+        const exists =
+          !!(await accounts.findByName(body.name)) ||
+          (await playerRpc.accountNameExists(body.name))
         return json(request, env, {
-          exists: !!account,
+          exists,
           pending_migration: false
+        })
+      }
+
+      case 'UpdateAccount': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          account?: Partial<Account> & { address?: string }
+        }>(request)
+        if (!body.account?.address) {
+          throw invalidArgument('account.address is required')
+        }
+        return json(request, env, {
+          account: await playerRpc.updateAccount(principal.userId, {
+            ...body.account,
+            address: body.account.address
+          })
         })
       }
 

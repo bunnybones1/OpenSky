@@ -27,10 +27,16 @@ export interface PlayerDeck {
 
 export interface PlayerState {
   profile: {
+    name: string
+    locale: string
+    region?: string
+    tagArtID?: string
+    titleID?: number
     level: number
     xp: number
     nextLevelXp: number
     createdAt: string
+    updatedAt: string
   }
   basicSkyPass: {
     level: number
@@ -47,10 +53,16 @@ export interface PlayerState {
 }
 
 interface ProfileRow {
+  name: string
+  locale: string
+  region: string | null
+  tag_art_id: string | null
+  title_id: number | null
   level: number
   xp: number
   next_level_xp: number
   created_at: string
+  updated_at: string
 }
 
 interface ProgressionRow {
@@ -177,6 +189,7 @@ export class PlayerRepository {
 
   async bootstrap(userId: string): Promise<PlayerState> {
     const now = new Date().toISOString()
+    await this.ensureAccountSettings(userId, now)
     const statements = [
       this.database
         .prepare(
@@ -262,50 +275,57 @@ export class PlayerRepository {
   }
 
   async getState(userId: string): Promise<PlayerState | undefined> {
-    const [profile, progression, questsResult, cardsResult, decksResult] = await Promise.all([
-      this.database
-        .prepare(
-          `SELECT level, xp, next_level_xp, created_at
-           FROM player_profiles WHERE user_id = ?`
-        )
-        .bind(userId)
-        .first<ProfileRow>(),
-      this.database
-        .prepare(
-          `SELECT basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
+    const [profile, progression, questsResult, cardsResult, decksResult] =
+      await Promise.all([
+        this.database
+          .prepare(
+            `SELECT account.name, account.locale, account.region,
+                  account.tag_art_id, account.title_id,
+                  profile.level, profile.xp, profile.next_level_xp,
+                  profile.created_at, account.updated_at
+           FROM player_profiles profile
+           JOIN player_account_settings account
+             ON account.user_id = profile.user_id
+           WHERE profile.user_id = ?`
+          )
+          .bind(userId)
+          .first<ProfileRow>(),
+        this.database
+          .prepare(
+            `SELECT basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
                   tutorial_completed
            FROM player_progression WHERE user_id = ?`
-        )
-        .bind(userId)
-        .first<ProgressionRow>(),
-      this.database
-        .prepare(
-          `SELECT quest_key, title, description, progress, target, reward_xp, status
+          )
+          .bind(userId)
+          .first<ProgressionRow>(),
+        this.database
+          .prepare(
+            `SELECT quest_key, title, description, progress, target, reward_xp, status
            FROM player_quests WHERE user_id = ?
            ORDER BY created_at ASC, quest_key ASC`
-        )
-        .bind(userId)
-        .all<QuestRow>(),
-      this.database
-        .prepare(
-          `SELECT card_id, card_name, prism, unlock_source, unlocked_at
+          )
+          .bind(userId)
+          .all<QuestRow>(),
+        this.database
+          .prepare(
+            `SELECT card_id, card_name, prism, unlock_source, unlocked_at
            FROM player_card_unlocks WHERE user_id = ?
            ORDER BY card_id ASC`
-        )
-        .bind(userId)
-        .all<CardRow>(),
-      this.database
-        .prepare(
-          `SELECT id, name, prism, deck_string, card_count, is_starter
+          )
+          .bind(userId)
+          .all<CardRow>(),
+        this.database
+          .prepare(
+            `SELECT id, name, prism, deck_string, card_count, is_starter
            FROM player_decks WHERE user_id = ?
            ORDER BY is_starter DESC, created_at ASC`
-        )
-        .bind(userId)
-        .all<DeckRow>()
-    ])
+          )
+          .bind(userId)
+          .all<DeckRow>()
+      ])
 
     if (!profile || !progression) return
-    const basicCards = cardsResult.results.map((row) => ({
+    const basicCards = cardsResult.results.map(row => ({
       id: row.card_id,
       name: row.card_name,
       prism: row.prism,
@@ -315,10 +335,16 @@ export class PlayerRepository {
 
     return {
       profile: {
+        name: profile.name,
+        locale: profile.locale,
+        ...(profile.region ? { region: profile.region } : {}),
+        ...(profile.tag_art_id ? { tagArtID: profile.tag_art_id } : {}),
+        ...(profile.title_id !== null ? { titleID: profile.title_id } : {}),
         level: profile.level,
         xp: profile.xp,
         nextLevelXp: profile.next_level_xp,
-        createdAt: profile.created_at
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at
       },
       basicSkyPass: {
         level: progression.basic_skypass_level,
@@ -326,7 +352,7 @@ export class PlayerRepository {
         nextLevelXp: progression.basic_skypass_next_xp
       },
       tutorialCompleted: progression.tutorial_completed === 1,
-      quests: questsResult.results.map((row) => ({
+      quests: questsResult.results.map(row => ({
         key: row.quest_key,
         title: row.title,
         description: row.description,
@@ -336,7 +362,7 @@ export class PlayerRepository {
         status: row.status
       })),
       collection: { basicCards, basicCardCount: basicCards.length },
-      decks: decksResult.results.map((row) => ({
+      decks: decksResult.results.map(row => ({
         id: row.id,
         name: row.name,
         prism: row.prism,
@@ -345,5 +371,55 @@ export class PlayerRepository {
         isStarter: row.is_starter === 1
       }))
     }
+  }
+
+  private async ensureAccountSettings(
+    userId: string,
+    now: string
+  ): Promise<void> {
+    const existing = await this.database
+      .prepare('SELECT 1 FROM player_account_settings WHERE user_id = ?')
+      .bind(userId)
+      .first()
+    if (existing) return
+
+    const user = await this.database
+      .prepare('SELECT display_name FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ display_name: string }>()
+    if (!user) throw new Error('identity user is missing')
+
+    const originalName = user.display_name.trim().slice(0, 64)
+    const safeStem = user.display_name
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .replace(/\s+/g, '.')
+      .replace(/[^\w.-]/g, '')
+    const generatedName =
+      safeStem.length >= 4
+        ? safeStem.slice(0, 20)
+        : `Weasel.${userId.replace(/[^a-z0-9]/gi, '').slice(0, 12)}`
+    const candidates = [
+      originalName || generatedName,
+      `${generatedName.slice(0, 13)}.${userId.replace(/-/g, '').slice(0, 6)}`
+    ]
+
+    for (const name of candidates) {
+      try {
+        await this.database
+          .prepare(
+            `INSERT INTO player_account_settings
+               (user_id, name, locale, created_at, updated_at)
+             VALUES (?, ?, 'en', ?, ?)`
+          )
+          .bind(userId, name, now, now)
+          .run()
+        return
+      } catch (error) {
+        if (!String(error).toLowerCase().includes('unique')) throw error
+      }
+    }
+    throw new Error('unable to assign a unique player name')
   }
 }

@@ -42,10 +42,16 @@ export interface PlayerDeck {
 
 export interface PlayerState {
   profile: {
+    name: string
+    locale: string
+    region?: string
+    tagArtID?: string
+    titleID?: number
     level: number
     xp: number
     nextLevelXp: number
     createdAt: string
+    updatedAt: string
   }
   basicSkyPass: {
     level: number

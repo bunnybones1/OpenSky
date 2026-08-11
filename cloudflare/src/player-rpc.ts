@@ -14,6 +14,7 @@ import {
   encodeDeckString,
   validateDeckClass
 } from './deck-codec'
+import { alreadyExists, invalidArgument, permissionDenied } from './errors'
 import { identityReferenceFor } from './rpc-principal'
 
 const CARD_FRAMES = [
@@ -71,8 +72,8 @@ const HERO_DECK_CLASS: Record<number, string> = {
 }
 
 const HEXBOUND_CARD_IDS = [
-  30, 98, 125, 140, 1047, 1100, 1101, 1125, 3004, 3101, 3125, 3135, 4004,
-  4027, 4101, 4124
+  30, 98, 125, 140, 1047, 1100, 1101, 1125, 3004, 3101, 3125, 3135, 4004, 4027,
+  4101, 4124
 ]
 
 const CARD_NAMES: Record<number, string> = {
@@ -96,6 +97,15 @@ const CARD_NAMES: Record<number, string> = {
 
 interface AccountRow {
   display_name: string
+  account_name: string | null
+  locale: string | null
+  region: string | null
+  tag_art_id: string | null
+  title_id: number | null
+  hide_player_names: number | null
+  request_more_invites: number | null
+  twitch_profile: string | null
+  rename_locked_until: string | null
   user_created_at: string
   profile_updated_at: string
   level: number
@@ -275,9 +285,35 @@ export class PlayerRpcRepository {
 
   async getAccount(userId: string, address: string): Promise<Account | null> {
     if (address !== identityReferenceFor(userId)) return null
+    return this.getIdentityAccount(userId, true)
+  }
+
+  async getAccountByReference(
+    address: string,
+    viewerUserId?: string
+  ): Promise<Account | null> {
+    if (!address.startsWith('identity:')) return null
+    const userId = address.slice('identity:'.length)
+    if (!userId) return null
+    return this.getIdentityAccount(userId, viewerUserId === userId)
+  }
+
+  private async getIdentityAccount(
+    userId: string,
+    includePrivateSettings: boolean
+  ): Promise<Account | null> {
     const row = await this.database
       .prepare(
         `SELECT u.display_name,
+                account.name AS account_name,
+                account.locale,
+                account.region,
+                account.tag_art_id,
+                account.title_id,
+                account.hide_player_names,
+                account.request_more_invites,
+                account.twitch_profile,
+                account.rename_locked_until,
                 u.created_at AS user_created_at,
                 p.updated_at AS profile_updated_at,
                 p.level,
@@ -287,6 +323,7 @@ export class PlayerRpcRepository {
          FROM users u
          JOIN player_profiles p ON p.user_id = u.id
          JOIN player_progression g ON g.user_id = u.id
+         LEFT JOIN player_account_settings account ON account.user_id = u.id
          WHERE u.id = ?`
       )
       .bind(userId)
@@ -295,9 +332,9 @@ export class PlayerRpcRepository {
 
     return {
       id: 0,
-      address,
-      name: row.display_name,
-      locale: 'en',
+      address: identityReferenceFor(userId),
+      name: row.account_name || row.display_name,
+      locale: row.locale || 'en',
       createdAt: row.user_created_at,
       updatedAt: row.profile_updated_at,
       experience: row.xp,
@@ -305,8 +342,186 @@ export class PlayerRpcRepository {
       level: row.level,
       seasonLevel: row.basic_skypass_level,
       levelUpXP: row.next_level_xp,
-      isBurnerWallet: false
+      isBurnerWallet: false,
+      ...(row.region ? { region: row.region } : {}),
+      ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
+      ...(row.title_id !== null ? { titleID: row.title_id } : {}),
+      ...(includePrivateSettings
+        ? {
+            settings: {
+              hidePlayerNames: row.hide_player_names === 1,
+              suspended: false,
+              requestMoreInvites: row.request_more_invites === 1,
+              starterDeckV2Migration: true,
+              ...(row.rename_locked_until
+                ? { renameLockedUntil: row.rename_locked_until }
+                : {}),
+              ...(row.twitch_profile
+                ? { twitchProfile: row.twitch_profile }
+                : {}),
+              ...(row.title_id !== null ? { titleID: row.title_id } : {})
+            }
+          }
+        : {})
     }
+  }
+
+  async accountReferenceExists(address: string): Promise<boolean> {
+    if (!address.startsWith('identity:')) return false
+    const userId = address.slice('identity:'.length)
+    if (!userId) return false
+    const row = await this.database
+      .prepare('SELECT 1 FROM users WHERE id = ?')
+      .bind(userId)
+      .first()
+    return !!row
+  }
+
+  async accountNameExists(name: string): Promise<boolean> {
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM player_account_settings
+         WHERE name = ? COLLATE NOCASE`
+      )
+      .bind(name.trim())
+      .first()
+    return !!row
+  }
+
+  async updateAccount(
+    userId: string,
+    request: Partial<Account> & { address: string }
+  ): Promise<Account> {
+    if (request.address !== identityReferenceFor(userId)) {
+      throw invalidArgument('address is invalid')
+    }
+    const current = await this.database
+      .prepare(
+        `SELECT name, locale, region, tag_art_id, title_id,
+                hide_player_names, request_more_invites, twitch_profile,
+                rename_locked_until
+         FROM player_account_settings WHERE user_id = ?`
+      )
+      .bind(userId)
+      .first<{
+        name: string
+        locale: string
+        region: string | null
+        tag_art_id: string | null
+        title_id: number | null
+        hide_player_names: number
+        request_more_invites: number
+        twitch_profile: string | null
+        rename_locked_until: string | null
+      }>()
+    if (!current) throw new Error('player account settings are missing')
+
+    const name = request.name?.trim() ?? ''
+    if (!name) throw invalidArgument('name is required')
+    if (name.toLowerCase() !== current.name.toLowerCase()) {
+      if (current.rename_locked_until) {
+        const lockedUntil = Date.parse(current.rename_locked_until)
+        if (Number.isFinite(lockedUntil) && lockedUntil > Date.now()) {
+          throw permissionDenied(
+            `account name change locked until ${current.rename_locked_until}`
+          )
+        }
+      }
+      if (name.length < 4 || name.length > 20 || !/^[\w.-]+$/.test(name)) {
+        throw invalidArgument(
+          'name must be 4-20 letters, digits, dots, dashes, or underscores'
+        )
+      }
+      const walletName = await this.database
+        .prepare('SELECT 1 FROM accounts WHERE name = ? COLLATE NOCASE')
+        .bind(name)
+        .first()
+      if (walletName) throw alreadyExists('duplicated account name')
+    }
+
+    const locale = (request.locale ?? current.locale).trim()
+    if (!locale || locale.length > 16)
+      throw invalidArgument('locale is invalid')
+    const region = request.region
+      ? request.region.trim().toUpperCase().slice(0, 16)
+      : current.region
+    const tagArtID = request.tagArtID?.trim() || null
+    if (tagArtID && (!/^[\w-]+$/.test(tagArtID) || tagArtID.length > 20)) {
+      throw invalidArgument('account art is invalid')
+    }
+
+    const titleID = request.titleID || null
+    if (titleID !== null) {
+      if (!Number.isSafeInteger(titleID) || titleID <= 0) {
+        throw invalidArgument('titleID is invalid')
+      }
+      const owned = await this.database
+        .prepare(
+          `SELECT 1 FROM player_card_unlocks
+           WHERE user_id = ? AND item_type = 'SW_TITLES' AND card_id = ?`
+        )
+        .bind(userId, titleID)
+        .first()
+      if (!owned) throw invalidArgument(`title ${titleID} is not owned`)
+    }
+
+    const settings = request.settings
+    const hidePlayerNames =
+      settings?.hidePlayerNames === undefined
+        ? current.hide_player_names
+        : settings.hidePlayerNames
+          ? 1
+          : 0
+    const requestMoreInvites =
+      settings?.requestMoreInvites === undefined
+        ? current.request_more_invites
+        : settings.requestMoreInvites
+          ? 1
+          : 0
+    const twitchProfile =
+      settings?.twitchProfile === undefined
+        ? current.twitch_profile
+        : settings.twitchProfile.trim().slice(0, 64) || null
+    const now = new Date().toISOString()
+
+    try {
+      await this.database.batch([
+        this.database
+          .prepare(
+            `UPDATE player_account_settings
+             SET name = ?, locale = ?, region = ?, tag_art_id = ?,
+                 title_id = ?, hide_player_names = ?,
+                 request_more_invites = ?, twitch_profile = ?, updated_at = ?
+             WHERE user_id = ?`
+          )
+          .bind(
+            name,
+            locale,
+            region,
+            tagArtID,
+            titleID,
+            hidePlayerNames,
+            requestMoreInvites,
+            twitchProfile,
+            now,
+            userId
+          ),
+        this.database
+          .prepare(
+            `UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?`
+          )
+          .bind(name, now, userId)
+      ])
+    } catch (error) {
+      if (String(error).toLowerCase().includes('unique')) {
+        throw alreadyExists('duplicated account name')
+      }
+      throw error
+    }
+
+    const account = await this.getAccount(userId, request.address)
+    if (!account) throw new Error('updated player account was not found')
+    return account
   }
 
   async listDecks(userId: string): Promise<Deck[]> {
@@ -741,7 +956,10 @@ export class PlayerRpcRepository {
     if (!progress) throw new Error('player progression is missing')
 
     const assignmentsById = new Map(
-      assignmentsResult.results.map(assignment => [assignment.row_id, assignment])
+      assignmentsResult.results.map(assignment => [
+        assignment.row_id,
+        assignment
+      ])
     )
     const assignments = uniqueIds.flatMap(id => {
       const assignment = assignmentsById.get(id)
@@ -800,7 +1018,9 @@ export class PlayerRpcRepository {
 
         advancesEpic = true
         const nextStatus =
-          nextSpec.start_progress >= nextSpec.end_progress ? 'complete' : 'active'
+          nextSpec.start_progress >= nextSpec.end_progress
+            ? 'complete'
+            : 'active'
         const nextProgress = Math.min(
           nextSpec.start_progress,
           nextSpec.end_progress
@@ -998,7 +1218,9 @@ export class PlayerRpcRepository {
     }
   }
 
-  private cardCandidates(attributes: ReturnType<typeof parseAttributes>): number[] {
+  private cardCandidates(
+    attributes: ReturnType<typeof parseAttributes>
+  ): number[] {
     const cardSets = new Set(attributes.cardSets)
     const excludedSets = new Set(attributes.cardSetsExcluded)
     if (cardSets.has('HEXBOUND_INVASION')) return HEXBOUND_CARD_IDS
@@ -1078,8 +1300,13 @@ export class PlayerRpcRepository {
       .bind(...uniqueIds)
       .all<RawSkypassRewardRow>()
 
-    const listedById = new Map<number, { reward: SkypassReward; earned: boolean }>()
-    for (const season of [...new Set(rawResult.results.map(row => row.season))]) {
+    const listedById = new Map<
+      number,
+      { reward: SkypassReward; earned: boolean }
+    >()
+    for (const season of [
+      ...new Set(rawResult.results.map(row => row.season))
+    ]) {
       const { levels } = await this.listSkypassRewards(userId, season)
       for (const level of levels) {
         for (const reward of level.rewards) {

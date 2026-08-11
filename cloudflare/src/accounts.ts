@@ -66,18 +66,33 @@ export class AccountsRepository {
     return row ? toAccount(row) : undefined
   }
 
-  async register(address: string, registration: AccountRegistration): Promise<Account> {
+  async register(
+    address: string,
+    registration: AccountRegistration
+  ): Promise<Account> {
     const normalizedAddress = address.toLowerCase()
-    if (!ADDRESS_PATTERN.test(normalizedAddress)) throw invalidArgument('invalid wallet address')
+    if (!ADDRESS_PATTERN.test(normalizedAddress))
+      throw invalidArgument('invalid wallet address')
 
     const existing = await this.findByAddress(normalizedAddress)
     if (existing) return existing
 
-    const name = registration.name?.trim() || (await this.generateName(normalizedAddress))
+    const name =
+      registration.name?.trim() || (await this.generateName(normalizedAddress))
     if (name.length < 4 || name.length > 20 || !NAME_PATTERN.test(name)) {
-      throw invalidArgument('account name must be 4-20 letters, digits, dots, dashes, or underscores')
+      throw invalidArgument(
+        'account name must be 4-20 letters, digits, dots, dashes, or underscores'
+      )
     }
-    if (await this.findByName(name)) throw invalidArgument('account username is taken')
+    if (await this.findByName(name))
+      throw invalidArgument('account username is taken')
+    const identityName = await this.database
+      .prepare(
+        `SELECT 1 FROM player_account_settings WHERE name = ? COLLATE NOCASE`
+      )
+      .bind(name)
+      .first()
+    if (identityName) throw invalidArgument('account username is taken')
 
     const locale = registration.locale?.trim().slice(0, 16) || 'en'
     const tagArtID = registration.tagArtID?.trim() || null

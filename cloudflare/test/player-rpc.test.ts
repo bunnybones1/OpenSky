@@ -69,6 +69,153 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('persists source-compatible identity profile updates', async () => {
+    const transitional = await rpc('UpdateAccount', {
+      account: {
+        address: identityReference,
+        name: 'Cloud Weasel Player',
+        locale: 'pt-BR',
+        region: 'ca',
+        tagArtID: 'bg-fire-01'
+      }
+    })
+    expect(transitional.status).toBe(200)
+    expect(await transitional.json()).toMatchObject({
+      account: {
+        name: 'Cloud Weasel Player',
+        locale: 'pt-BR',
+        region: 'CA',
+        tagArtID: 'bg-fire-01'
+      }
+    })
+
+    const renamed = await rpc('UpdateAccount', {
+      account: {
+        address: identityReference,
+        name: 'Cloud.Weasel',
+        locale: 'pt-BR',
+        region: 'CA',
+        tagArtID: 'bg-fire-01',
+        settings: { hidePlayerNames: true }
+      }
+    })
+    expect(renamed.status).toBe(200)
+    expect(await renamed.json()).toMatchObject({
+      account: {
+        name: 'Cloud.Weasel',
+        settings: { hidePlayerNames: true }
+      }
+    })
+
+    const session = await rpc('GetSession', {})
+    expect(await session.json()).toMatchObject({
+      account: {
+        name: 'Cloud.Weasel',
+        locale: 'pt-BR',
+        region: 'CA',
+        tagArtID: 'bg-fire-01'
+      }
+    })
+    const state = await new PlayerRepository(env.AUTH_DB).getState(userId)
+    expect(state?.profile).toMatchObject({
+      name: 'Cloud.Weasel',
+      locale: 'pt-BR',
+      region: 'CA',
+      tagArtID: 'bg-fire-01'
+    })
+  })
+
+  it('exposes identity accounts publicly without private settings', async () => {
+    const account = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    expect(account.status).toBe(200)
+    const body = await account.json<{
+      account: { name: string; settings?: unknown }
+    }>()
+    expect(body.account.name).toBe('Cloud Weasel Player')
+    expect(body.account.settings).toBeUndefined()
+
+    const exists = await rpc(
+      'AccountExists',
+      { address: identityReference },
+      false
+    )
+    expect(await exists.json()).toEqual({
+      exists: true,
+      pending_migration: false
+    })
+    const named = await rpc(
+      'AccountExistsByName',
+      { name: 'cloud weasel player' },
+      false
+    )
+    expect(await named.json()).toEqual({
+      exists: true,
+      pending_migration: false
+    })
+  })
+
+  it('enforces profile ownership, username uniqueness, and title ownership', async () => {
+    const now = new Date().toISOString()
+    const otherUserId = 'other-profile-user'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Taken.Name', 'taken@example.com', ?, ?)`
+    )
+      .bind(otherUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(otherUserId)
+
+    expect(
+      (
+        await rpc('UpdateAccount', {
+          account: {
+            address: identityReference,
+            name: 'taken.name',
+            locale: 'en'
+          }
+        })
+      ).status
+    ).toBe(409)
+    expect(
+      (
+        await rpc('UpdateAccount', {
+          account: {
+            address: `identity:${otherUserId}`,
+            name: 'Valid.Name',
+            locale: 'en'
+          }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc('UpdateAccount', {
+          account: {
+            address: identityReference,
+            name: 'bad name',
+            locale: 'en'
+          }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc('UpdateAccount', {
+          account: {
+            address: identityReference,
+            name: 'Valid.Name',
+            locale: 'en',
+            titleID: 999
+          }
+        })
+      ).status
+    ).toBe(400)
+  })
+
   it('returns the starter deck with the existing ListDecks shape', async () => {
     const response = await rpc('ListDecks', {})
     expect(response.status).toBe(200)
@@ -105,7 +252,12 @@ describe('legacy player RPC compatibility', () => {
     expect(createdResponse.status).toBe(200)
     const created = (
       await createdResponse.json<{
-        res: { uuid: string; name: string; deckString: string; deckType: string }
+        res: {
+          uuid: string
+          name: string
+          deckString: string
+          deckType: string
+        }
       }>()
     ).res
     expect(created).toMatchObject({

@@ -27,22 +27,21 @@ interface Props {
   session: Extract<IdentitySession, { authenticated: true }>
 }
 
-const accountFor = (
-  session: Props['session'],
-  player: PlayerState,
-  identityReference: string
-): Account => ({
+const accountFor = (player: PlayerState, identityReference: string): Account => ({
   id: 0,
   address: identityReference,
-  name: session.user.displayName,
-  locale: 'en',
+  name: player.profile.name,
+  locale: player.profile.locale,
   createdAt: player.profile.createdAt,
-  updatedAt: player.profile.createdAt,
+  updatedAt: player.profile.updatedAt,
   experience: player.profile.xp,
   warmUps: 0,
   level: player.profile.level,
   seasonLevel: player.basicSkyPass.level,
   levelUpXP: player.profile.nextLevelXp,
+  region: player.profile.region,
+  tagArtID: player.profile.tagArtID,
+  titleID: player.profile.titleID,
   isBurnerWallet: false
 })
 
@@ -71,8 +70,8 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
     [session.user.id]
   )
   const account = useMemo(
-    () => (player ? accountFor(session, player, identityReference) : undefined),
-    [identityReference, player, session]
+    () => (player ? accountFor(player, identityReference) : undefined),
+    [identityReference, player]
   )
 
   useEffect(() => {
