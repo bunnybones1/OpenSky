@@ -2,6 +2,7 @@ import type { AccountRegistration, DeckClass, ItemType } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
+import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import { CookiePoliciesRepository } from './cookie-policies'
 import type { Env } from './env'
 import { invalidArgument, RpcError } from './errors'
@@ -32,7 +33,11 @@ export interface AuthServices {
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
 
 const allowedOrigins = (env: Env) =>
-  new Set(env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean))
+  new Set(
+    env.ALLOWED_ORIGINS.split(',')
+      .map(origin => origin.trim())
+      .filter(Boolean)
+  )
 
 const responseHeaders = (request: Request, env: Env): Headers => {
   const headers = new Headers({
@@ -108,17 +113,30 @@ export const handleApiRequest = async (
 ): Promise<Response> => {
   const url = new URL(request.url)
   if (!url.pathname.startsWith(RPC_PREFIX)) {
-    return json(request, env, { code: 'webrpc.not_found', msg: 'RPC method not found' }, 404)
+    return json(
+      request,
+      env,
+      { code: 'webrpc.not_found', msg: 'RPC method not found' },
+      404
+    )
   }
 
   if (request.method === 'OPTIONS') {
     const headers = responseHeaders(request, env)
-    headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Release')
+    headers.set(
+      'Access-Control-Allow-Headers',
+      'Authorization, Content-Type, Release'
+    )
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
     return new Response(null, { status: 204, headers })
   }
   if (request.method !== 'POST') {
-    return json(request, env, { code: 'webrpc.method_not_allowed', msg: 'POST required' }, 405)
+    return json(
+      request,
+      env,
+      { code: 'webrpc.method_not_allowed', msg: 'POST required' },
+      405
+    )
   }
 
   const method = url.pathname.slice(RPC_PREFIX.length)
@@ -126,12 +144,14 @@ export const handleApiRequest = async (
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
+  const botMatches = new BotMatchRepository(env.AUTH_DB)
 
   try {
     switch (method) {
       case 'GetAuthToken': {
         const body = await requestBody<{ ethAuthProofString?: string }>(request)
-        if (!body.ethAuthProofString) throw invalidArgument('ethAuthProofString is required')
+        if (!body.ethAuthProofString)
+          throw invalidArgument('ethAuthProofString is required')
         const proof = await services.verifyProof(
           body.ethAuthProofString,
           request.headers.get('Origin'),
@@ -172,8 +192,11 @@ export const handleApiRequest = async (
 
       case 'RegisterAccount': {
         const { reference: address } = await walletPrincipal(request, env)
-        const body = await requestBody<{ accountRegistration?: AccountRegistration }>(request)
-        if (!body.accountRegistration) throw invalidArgument('accountRegistration is required')
+        const body = await requestBody<{
+          accountRegistration?: AccountRegistration
+        }>(request)
+        if (!body.accountRegistration)
+          throw invalidArgument('accountRegistration is required')
         if (
           body.accountRegistration.address &&
           body.accountRegistration.address.toLowerCase() !== address
@@ -205,14 +228,20 @@ export const handleApiRequest = async (
         const body = await requestBody<{ address?: string }>(request)
         if (!body.address) throw invalidArgument('address is required')
         const account = await accounts.findByAddress(body.address)
-        return json(request, env, { exists: !!account, pending_migration: false })
+        return json(request, env, {
+          exists: !!account,
+          pending_migration: false
+        })
       }
 
       case 'AccountExistsByName': {
         const body = await requestBody<{ name?: string }>(request)
         if (!body.name) throw invalidArgument('name is required')
         const account = await accounts.findByName(body.name)
-        return json(request, env, { exists: !!account, pending_migration: false })
+        return json(request, env, {
+          exists: !!account,
+          pending_migration: false
+        })
       }
 
       case 'GetCookiePolicy': {
@@ -224,7 +253,9 @@ export const handleApiRequest = async (
 
       case 'SaveCookiePolicy': {
         const principal = await rpcPrincipal(request, env)
-        const body = await requestBody<{ cookieOptions?: Record<string, boolean> }>(request)
+        const body = await requestBody<{
+          cookieOptions?: Record<string, boolean>
+        }>(request)
         if (!body.cookieOptions || typeof body.cookieOptions !== 'object') {
           throw invalidArgument('cookieOptions is required')
         }
@@ -262,10 +293,7 @@ export const handleApiRequest = async (
       case 'UserStorageDelete': {
         const principal = await rpcPrincipal(request, env)
         const body = await requestBody<{ key?: unknown }>(request)
-        await userStorage.delete(
-          principal.reference,
-          userStorageKey(body.key)
-        )
+        await userStorage.delete(principal.reference, userStorageKey(body.key))
         return json(request, env, { ok: true })
       }
 
@@ -391,7 +419,9 @@ export const handleApiRequest = async (
           !body.req.deck.class ||
           (!body.req.uuid && !body.req.deckString)
         ) {
-          throw invalidArgument('a selector and complete deck update are required')
+          throw invalidArgument(
+            'a selector and complete deck update are required'
+          )
         }
         return json(request, env, {
           res: await playerRpc.updateDeck(
@@ -528,12 +558,31 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'BotMatchEnd': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ req?: BotMatchEndRequest }>(request)
+        if (!body.req) throw invalidArgument('req is required')
+        return json(request, env, {
+          rewards: await botMatches.endTutorial(principal.userId, body.req)
+        })
+      }
+
       default:
-        return json(request, env, { code: 'webrpc.not_found', msg: 'RPC method not found' }, 404)
+        return json(
+          request,
+          env,
+          { code: 'webrpc.not_found', msg: 'RPC method not found' },
+          404
+        )
     }
   } catch (error) {
     if (error instanceof RpcError) {
-      return json(request, env, { code: error.code, msg: error.message, status: error.status }, error.status)
+      return json(
+        request,
+        env,
+        { code: error.code, msg: error.message, status: error.status },
+        error.status
+      )
     }
     console.error('Cloudflare auth RPC error', error)
     return json(
