@@ -125,6 +125,38 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('heals eligible pre-port accounts into the source Wanderer rank', async () => {
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, xp = 0 WHERE user_id = ?`
+      ).bind(userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET player_rank = 'UNRANKED', player_rank_stage = 'STAGE_NONE',
+             player_rank_state = ''
+         WHERE user_id = ?`
+      ).bind(userId)
+    ])
+
+    const account = await rpc('GetAccount', { address: identityReference })
+    expect(await account.json()).toMatchObject({
+      account: {
+        stats: {
+          rankedConstructed: {
+            playerRank: 'WANDERER',
+            playerRankStage: 'STAGE_I',
+            playerRankState: '[-1,1750,350,0]'
+          },
+          rankedDiscovery: {
+            playerRank: 'WANDERER',
+            playerRankStage: 'STAGE_I',
+            playerRankState: '[-1,1750,350,0]'
+          }
+        }
+      }
+    })
+  })
+
   it('exposes identity accounts publicly without private settings', async () => {
     const account = await rpc(
       'GetAccount',
@@ -660,13 +692,48 @@ describe('legacy player RPC compatibility', () => {
             requiredExp: 200,
             beforeMatchExp: 0
           }
+        },
+        {
+          accountID: 0,
+          type: 'RANK',
+          gameMode: 'RANKED_CONSTRUCTED',
+          rank: {
+            beforeMatch: {
+              rank: 'UNRANKED',
+              rankStage: 'STAGE_I',
+              score: 0
+            },
+            afterMatch: {
+              rank: 'WANDERER',
+              rankStage: 'STAGE_I',
+              score: 0,
+              requiredRankPoints: 100
+            }
+          }
         }
       ]
     })
 
     const account = await rpc('GetAccount', { address: identityReference })
     expect(await account.json()).toMatchObject({
-      account: { level: 2, experience: 100, levelUpXP: 200, seasonLevel: 2 }
+      account: {
+        level: 2,
+        experience: 100,
+        levelUpXP: 200,
+        seasonLevel: 2,
+        stats: {
+          rankedConstructed: {
+            playerRank: 'WANDERER',
+            playerRankStage: 'STAGE_I',
+            score: 0
+          },
+          rankedDiscovery: {
+            playerRank: 'WANDERER',
+            playerRankStage: 'STAGE_I',
+            score: 0
+          }
+        }
+      }
     })
 
     const refreshed = await rpc('ListQuests', {

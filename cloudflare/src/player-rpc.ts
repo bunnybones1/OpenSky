@@ -8,6 +8,10 @@ import type {
   SkypassLevel,
   SkypassReward
 } from '@opensky/proto'
+import {
+  hasUnlockedRanked,
+  INITIAL_RANK_STATE_JSON
+} from '@opensky/shared/ranked-progression'
 
 import {
   decodeDeckString,
@@ -16,6 +20,7 @@ import {
 } from './deck-codec'
 import { CompetitiveRepository } from './competitive'
 import { alreadyExists, invalidArgument, permissionDenied } from './errors'
+import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
 
 const CARD_FRAMES = [
@@ -179,6 +184,11 @@ interface ProfileProgressRow {
   level: number
   xp: number
   basic_skypass_level: number
+}
+
+interface RankedStatusRow {
+  game_mode: string
+  player_rank: string
 }
 
 interface ProgressionRow {
@@ -935,7 +945,8 @@ export class PlayerRpcRepository {
     if (!uniqueIds.length) return { quest: null, rewards: [] }
 
     const placeholders = uniqueIds.map(() => '?').join(',')
-    const [assignmentsResult, progress] = await Promise.all([
+    const currentSeason = seasonFromDate()
+    const [assignmentsResult, progress, rankedStatuses] = await Promise.all([
       this.database
         .prepare(
           `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
@@ -955,7 +966,16 @@ export class PlayerRpcRepository {
            WHERE profile.user_id = ?`
         )
         .bind(userId)
-        .first<ProfileProgressRow>()
+        .first<ProfileProgressRow>(),
+      this.database
+        .prepare(
+          `SELECT game_mode, player_rank FROM player_account_stats
+           WHERE user_id = ?
+             AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
+             AND season = ?`
+        )
+        .bind(userId, currentSeason)
+        .all<RankedStatusRow>()
     ])
     if (!progress) throw new Error('player progression is missing')
 
@@ -975,6 +995,7 @@ export class PlayerRpcRepository {
 
     let level = progress.level
     let xp = progress.xp
+    const rankedWasUnlocked = hasUnlockedRanked(level, xp)
     let nextQuest: Quest | null = null
     const now = new Date().toISOString()
     const rewards: Array<Record<string, unknown>> = []
@@ -1115,6 +1136,68 @@ export class PlayerRpcRepository {
         )
         .bind(level, xp, now, userId)
     )
+
+    if (!rankedWasUnlocked && hasUnlockedRanked(level, xp)) {
+      const rankByMode = new Map(
+        rankedStatuses.results.map(status => [
+          status.game_mode,
+          status.player_rank
+        ])
+      )
+      for (const mode of [
+        'RANKED_CONSTRUCTED',
+        'RANKED_DISCOVERY'
+      ] as const) {
+        statements.push(
+          this.database
+            .prepare(
+              `INSERT OR IGNORE INTO player_account_stats
+                 (user_id, game_mode, season, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)`
+            )
+            .bind(userId, mode, currentSeason, now, now),
+          this.database
+            .prepare(
+              `UPDATE player_account_stats
+               SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+                   score = 0, player_rank_state = ?, updated_at = ?
+               WHERE user_id = ? AND game_mode = ? AND season = ?
+                 AND player_rank = 'UNRANKED'`
+            )
+            .bind(INITIAL_RANK_STATE_JSON, now, userId, mode, currentSeason)
+        )
+      }
+      if (
+        !rankByMode.has('RANKED_CONSTRUCTED') ||
+        rankByMode.get('RANKED_CONSTRUCTED') === 'UNRANKED'
+      ) {
+        rewards.push({
+          accountID: 0,
+          type: 'RANK',
+          gameMode: 'RANKED_CONSTRUCTED',
+          rank: {
+            beforeMatch: {
+              rank: 'UNRANKED',
+              rankStage: 'STAGE_I',
+              requiredRankPoints: 0,
+              rankPosition: 0,
+              score: 0,
+              scoreAbove: 0,
+              scoreBelow: 0
+            },
+            afterMatch: {
+              rank: 'WANDERER',
+              rankStage: 'STAGE_I',
+              requiredRankPoints: 100,
+              rankPosition: 0,
+              score: 0,
+              scoreAbove: 0,
+              scoreBelow: 0
+            }
+          }
+        })
+      }
+    }
     await this.database.batch(statements)
 
     if (nextQuest) {

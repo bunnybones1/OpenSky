@@ -1,5 +1,6 @@
 import { GameMode, ItemType, PlayerRank, Quest } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
+import { hasUnlockedRanked } from '@opensky/shared/ranked-progression'
 
 interface HumanProfileRow {
   display_name: string
@@ -65,6 +66,7 @@ export interface MatchmakingProfile {
   lostLastMatch: boolean
   cards: Array<[number, 'base' | 'silver' | 'gold']>
   recentMatches: Array<{ opponentId: string }>
+  rankedEligible: boolean
   activeMatch?: {
     mode: GameMode
     serverAddress: string
@@ -90,6 +92,11 @@ interface MatchmakingHistoryRow {
 interface ActiveMatchRow {
   mode: GameMode
   server_address: string
+}
+
+interface MatchmakingUserRow {
+  level: number
+  xp: number
 }
 
 const statsModeFor = (mode: GameMode): GameMode | undefined => {
@@ -141,9 +148,13 @@ export class MatchRepository {
     const statsMode = statsModeFor(mode)
     const [user, stats, items, recent, active] = await Promise.all([
       this.database
-        .prepare('SELECT 1 AS present FROM users WHERE id = ?')
+        .prepare(
+          `SELECT profile.level, profile.xp
+           FROM users JOIN player_profiles profile ON profile.user_id = users.id
+           WHERE users.id = ?`
+        )
         .bind(userId)
-        .first<{ present: number }>(),
+        .first<MatchmakingUserRow>(),
       statsMode
         ? this.database
             .prepare(
@@ -215,6 +226,7 @@ export class MatchRepository {
       lostLastMatch: (stats?.loss_streak ?? 0) > 0,
       cards: [...cards.entries()].sort(([left], [right]) => left - right),
       recentMatches,
+      rankedEligible: hasUnlockedRanked(user.level, user.xp),
       ...(active
         ? {
             activeMatch: {

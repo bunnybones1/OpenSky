@@ -155,6 +155,9 @@ describe('Cloud Weasel accepted-match service', () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, xp = 0 WHERE user_id = ?`
+      ).bind(USER_ID),
+      env.AUTH_DB.prepare(
         `INSERT INTO multiplayer_matches
            (proposal_id, replay_id, mode, version, player1_principal,
             player2_principal, player1_user_id, player2_user_id,
@@ -182,6 +185,7 @@ describe('Cloud Weasel accepted-match service', () => {
       profile: {
         score: 1600,
         rank: 'EXPERT',
+        rankedEligible: true,
         lostLastMatch: true,
         cards: expect.arrayContaining([[6, 'base']]),
         recentMatches: [{ opponentId: PRINCIPAL }],
@@ -202,6 +206,27 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(forged.status).toBe(403)
     expect(await forged.json()).toEqual({
       error: 'identity principal mismatch'
+    })
+  })
+
+  it('enforces ranked experience on the server while leaving practice open', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_profiles SET level = 1, xp = 0 WHERE user_id = ?`
+    )
+      .bind(USER_ID)
+      .run()
+
+    const ranked = await profile(GameMode.RANKED_CONSTRUCTED, principal)
+    expect(await ranked.json()).toMatchObject({
+      gameModeEnabled: false,
+      profile: { rankedEligible: false }
+    })
+
+    const practice = await profile(GameMode.PRACTICE_PVP, principal)
+    expect(await practice.json()).toMatchObject({
+      gameModeEnabled: true,
+      profile: { rankedEligible: false }
     })
   })
 

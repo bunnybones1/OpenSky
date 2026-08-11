@@ -9,7 +9,9 @@ compatible bot participants, and dispatches an idempotent match creation call.
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current
 rank/MMR, card rarities, recent-match state, enabled modes, and active-match
-reconnection data from D1. Conquest modes are deliberately disabled until the
+reconnection data from D1. Ranked queues additionally enforce the source's
+200-total-XP requirement on the server; the original UI lock is not treated as
+an authorization boundary. Conquest modes are deliberately disabled until the
 Conquest state/reward port is complete.
 
 The endpoint is not public. `cloud-weasel-matchmaker` calls

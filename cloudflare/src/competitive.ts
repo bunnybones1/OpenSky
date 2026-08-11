@@ -9,6 +9,7 @@ import type {
   PlayerRank,
   PlayerRankStage
 } from '@opensky/proto'
+import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { encodeDeckString } from './deck-codec'
 import { invalidArgument, permissionDenied } from './errors'
@@ -277,8 +278,8 @@ export class CompetitiveRepository {
 
   async ensureCurrentStats(userId: string, now = new Date().toISOString()) {
     const season = seasonFromDate()
-    await this.database.batch(
-      [...RANKED_MODES].map(mode =>
+    await this.database.batch([
+      ...[...RANKED_MODES].map(mode =>
         this.database
           .prepare(
             `INSERT OR IGNORE INTO player_account_stats
@@ -286,8 +287,22 @@ export class CompetitiveRepository {
              VALUES (?, ?, ?, ?, ?)`
           )
           .bind(userId, mode, season, now, now)
-      )
-    )
+      ),
+      this.database
+        .prepare(
+          `UPDATE player_account_stats
+           SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+               score = 0, player_rank_state = ?, updated_at = ?
+           WHERE user_id = ? AND season = ? AND player_rank = 'UNRANKED'
+             AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
+             AND EXISTS (
+               SELECT 1 FROM player_profiles profile
+               WHERE profile.user_id = player_account_stats.user_id
+                 AND ((MAX(profile.level, 1) - 1) * 200 + profile.xp) >= 200
+             )`
+        )
+        .bind(INITIAL_RANK_STATE_JSON, now, userId, season)
+    ])
   }
 
   async currentStats(userId: string): Promise<{

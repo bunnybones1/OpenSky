@@ -112,16 +112,21 @@ const matchmakingProfile = async (
 
   try {
     const repository = new MatchRepository(env.AUTH_DB)
+    const profile = await repository.matchmakingProfile(
+      body.userId,
+      body.principal,
+      body.mode as GameMode,
+      season(env.CURRENT_SEASON)
+    )
+    const requiresRankedExperience = [
+      GameMode.RANKED_CONSTRUCTED,
+      GameMode.RANKED_DISCOVERY
+    ].includes(body.mode as GameMode)
     return json({
-      gameModeEnabled: enabledGameModes(env.ENABLED_GAME_MODES).has(
-        body.mode as GameMode
-      ),
-      profile: await repository.matchmakingProfile(
-        body.userId,
-        body.principal,
-        body.mode as GameMode,
-        season(env.CURRENT_SEASON)
-      )
+      gameModeEnabled:
+        enabledGameModes(env.ENABLED_GAME_MODES).has(body.mode as GameMode) &&
+        (!requiresRankedExperience || profile.rankedEligible),
+      profile
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'player was not found') {
