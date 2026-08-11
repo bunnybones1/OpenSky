@@ -1,0 +1,5 @@
+# Shared with the web/API gateway and matchmaker service binding.
+INTERNAL_AUTH_SECRET=replace-with-a-long-random-value
+
+# Secp256k1 key used only to own and advance authoritative match proofs.
+MATCH_OWNER_PRIVATE_KEY=replace-with-64-lowercase-hex-characters

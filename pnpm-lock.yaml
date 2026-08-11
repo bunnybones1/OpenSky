@@ -518,6 +518,49 @@ importers:
         specifier: ^7.2.0
         version: 7.5.10
 
+  game-server-cloudflare:
+    dependencies:
+      '@noble/hashes':
+        specifier: 1.2.0
+        version: 1.2.0
+      '@noble/secp256k1':
+        specifier: 1.7.1
+        version: 1.7.1
+      '@opensky/proto':
+        specifier: workspace:*
+        version: link:../lib/proto
+      '@opensky/shared':
+        specifier: workspace:*
+        version: link:../lib/shared
+      '@skyweaver/state-browser-sys':
+        specifier: workspace:*
+        version: link:../state/js-bindings/packages/browser-sys
+      '@skyweaver/state-metadata':
+        specifier: workspace:*
+        version: link:../state/js-bindings/packages/metadata
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: 0.21.0
+        version: 0.21.0(@cloudflare/workers-types@5.20260809.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@cloudflare/workers-types':
+        specifier: 5.20260809.1
+        version: 5.20260809.1
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
+      typescript:
+        specifier: ^5.1.6
+        version: 5.9.3
+      vite:
+        specifier: 8.2.1
+        version: 8.2.1(esbuild@0.28.1)
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(vite@8.2.1)
+      wrangler:
+        specifier: 4.110.0
+        version: 4.110.0(@cloudflare/workers-types@5.20260809.1)
+
   lib/analytics:
     dependencies:
       '@databeat/tracker':
@@ -6864,7 +6907,6 @@ packages:
 
   /@noble/hashes@1.2.0:
     resolution: {integrity: sha512-FZfhjEDbT5GRswV3C6uvLPHMiVD6lQBmpoX5+eSiPaMTXte/IKqI5dykDxzZB/WBeK/CDuQRBWarPdi3FNY2zQ==}
-    dev: true
 
   /@noble/hashes@1.8.0:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
@@ -6873,7 +6915,6 @@ packages:
 
   /@noble/secp256k1@1.7.1:
     resolution: {integrity: sha512-hOUk6AyBFmqVrv7k5WAw/LpszxVbj9gGN4JRkIX52fdFAj1UA61KXmZDvqVEm+pOyec3+fIeZB02LYa/pWOArw==}
-    dev: true
 
   /@nodelib/fs.scandir@2.1.5:
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}

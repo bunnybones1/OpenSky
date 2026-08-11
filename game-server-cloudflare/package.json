@@ -1,0 +1,29 @@
+{
+  "name": "@opensky/cloudflare-game-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run && vitest run --config vitest.cloudflare.config.ts --maxWorkers=1",
+    "test:unit": "vitest run",
+    "test:cloudflare": "vitest run --config vitest.cloudflare.config.ts --maxWorkers=1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.2.0",
+    "@noble/secp256k1": "1.7.1",
+    "@opensky/proto": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@skyweaver/state-browser-sys": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.21.0",
+    "@cloudflare/workers-types": "5.20260809.1",
+    "esbuild": "0.28.1",
+    "typescript": "^5.1.6",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "wrangler": "4.110.0"
+  }
+}
