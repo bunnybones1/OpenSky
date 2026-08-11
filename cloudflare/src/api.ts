@@ -22,7 +22,7 @@ import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { ContentRepository } from './content'
 import type { Env } from './env'
-import { invalidArgument, RpcError } from './errors'
+import { invalidArgument, notFound, RpcError } from './errors'
 import { signSession } from './jwt'
 import {
   currentSeasonStart,
@@ -346,6 +346,23 @@ export const handleApiRequest = async (
         return json(request, env, {
           account: (await accounts.findByAddress(body.address)) || null
         })
+      }
+
+      case 'GetAccountByUsername': {
+        const body = await requestBody<{ username?: unknown }>(request)
+        if (typeof body.username !== 'string' || body.username === '') {
+          throw invalidArgument('username is invalid')
+        }
+        const username = body.username.trim().toLowerCase()
+        const principal = await optionalRpcPrincipal(request, env)
+        const account =
+          (await accounts.findByName(username)) ||
+          (await playerRpc.getAccountByUsername(
+            username,
+            principal?.kind === 'identity' ? principal.userId : undefined
+          ))
+        if (!account) throw notFound('account not found')
+        return json(request, env, { account })
       }
 
       case 'AccountExists': {

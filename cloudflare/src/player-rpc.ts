@@ -490,6 +490,22 @@ export class PlayerRpcRepository {
     return this.getIdentityAccount(userId, viewerUserId === userId)
   }
 
+  async getAccountByUsername(
+    username: string,
+    viewerUserId?: string
+  ): Promise<Account | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT user_id
+         FROM player_account_settings
+         WHERE name = ? COLLATE NOCASE`
+      )
+      .bind(username.trim().toLowerCase())
+      .first<{ user_id: string }>()
+    if (!row) return null
+    return this.getIdentityAccount(row.user_id, viewerUserId === row.user_id)
+  }
+
   async feed(
     accountAddress: string,
     page?: Page,

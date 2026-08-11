@@ -34,6 +34,7 @@ const CRITICAL_METHODS = [
   'DeleteDeck',
   'EnterConquest',
   'GetAccount',
+  'GetAccountByUsername',
   'GetAccountStats',
   'GetCardLibrary',
   'GetCardsByDeckString',
@@ -59,7 +60,7 @@ const CRITICAL_METHODS = [
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 79) {
+  if (audit.implemented.length < 80) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {

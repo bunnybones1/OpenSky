@@ -293,6 +293,55 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('looks up accounts by trimmed, case-insensitive username', async () => {
+    const publicAccount = await rpc(
+      'GetAccountByUsername',
+      { username: '  cLoUd WeAsEl PlAyEr' },
+      false
+    )
+    expect(publicAccount.status).toBe(200)
+    const publicBody = await publicAccount.json<{
+      account: { address: string; name: string; settings?: unknown }
+    }>()
+    expect(publicBody.account).toMatchObject({
+      address: identityReference,
+      name: 'Cloud Weasel Player'
+    })
+    expect(publicBody.account.settings).toBeUndefined()
+
+    const ownAccount = await rpc('GetAccountByUsername', {
+      username: 'cloud weasel player'
+    })
+    expect(ownAccount.status).toBe(200)
+    expect(await ownAccount.json()).toMatchObject({
+      account: {
+        address: identityReference,
+        settings: { starterDeckV2Migration: true }
+      }
+    })
+
+    const missing = await rpc(
+      'GetAccountByUsername',
+      { username: '  unknown player  ' },
+      false
+    )
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({
+      status: 404,
+      code: 'webrpc.not_found',
+      msg: 'account not found'
+    })
+
+    const empty = await rpc('GetAccountByUsername', { username: '' }, false)
+    expect(empty.status).toBe(400)
+    const whitespace = await rpc(
+      'GetAccountByUsername',
+      { username: '   ' },
+      false
+    )
+    expect(whitespace.status).toBe(404)
+  })
+
   it('creates, retains, and explicitly rotates source-compatible spectate codes', async () => {
     const first = await rpc('GetPrivateSpectateCode', {})
     expect(first.status).toBe(200)
