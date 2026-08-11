@@ -2524,4 +2524,23 @@ export class PlayerRpcRepository {
     }
     return unlocks
   }
+
+  async heroUnlockLevels(season: number): Promise<Record<string, number>> {
+    const result = await this.database
+      .prepare(
+        `SELECT level, attributes FROM skypass_rewards
+         WHERE season = ? AND item_type = 500
+         ORDER BY level ASC`
+      )
+      .bind(season)
+      .all<{ level: number; attributes: string | null }>()
+    const unlocks: Record<string, number> = {}
+    for (const row of result.results) {
+      for (const tokenId of parseAttributes(row.attributes).tokenIDs) {
+        const hero = HERO_BY_ID[Number(tokenId)]
+        if (hero) unlocks[hero] = row.level
+      }
+    }
+    return unlocks
+  }
 }

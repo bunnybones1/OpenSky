@@ -68,6 +68,22 @@ const enabledGameModes = (value: string | undefined) => {
   )
 }
 
+const gameModesStatus = (value: string | undefined) => {
+  const modes = enabledGameModes(value)
+  return {
+    tutorial: true,
+    practicePVP: modes.has(GameMode.PRACTICE_PVP),
+    practiceBot: modes.has(GameMode.PRACTICE_BOT),
+    warmUp: modes.has(GameMode.WARM_UP),
+    rankedConstructed: modes.has(GameMode.RANKED_CONSTRUCTED),
+    rankedDiscovery: modes.has(GameMode.RANKED_DISCOVERY),
+    conquestConstructed: modes.has(GameMode.CONQUEST_CONSTRUCTED),
+    conquestDiscovery: modes.has(GameMode.CONQUEST_DISCOVERY),
+    challengeConstructed: modes.has(GameMode.CHALLENGE_CONSTRUCTED),
+    challengeDiscovery: modes.has(GameMode.CHALLENGE_DISCOVERY)
+  }
+}
+
 const authorized = (request: Request, env: MatchServiceEnv) =>
   env.INTERNAL_AUTH_SECRET.length >= 16 &&
   request.headers.get(INTERNAL_AUTH_HEADER) === env.INTERNAL_AUTH_SECRET
@@ -179,6 +195,10 @@ export default {
         component: 'cloud-weasel-match-service',
         protocolVersion: 1
       })
+    }
+    if (request.method === 'GET' && url.pathname === '/internal/game-modes') {
+      if (!authorized(request, env)) return json({ error: 'not found' }, 404)
+      return json({ status: gameModesStatus(env.ENABLED_GAME_MODES) })
     }
     if (
       request.method === 'POST' &&

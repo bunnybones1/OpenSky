@@ -9,4 +9,5 @@ export interface Env {
   INTERNAL_AUTH_SECRET: string
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
+  MATCH_SERVICE: Fetcher
 }

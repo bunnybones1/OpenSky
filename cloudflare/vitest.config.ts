@@ -25,6 +25,25 @@ export default defineConfig(async () => {
             INTERNAL_AUTH_SECRET: 'multiplayer-gateway-test-secret'
           },
           serviceBindings: {
+            MATCH_SERVICE: async request => {
+              if (new URL(request.url).pathname !== '/internal/game-modes') {
+                return Response.json({ error: 'not found' }, { status: 404 })
+              }
+              return Response.json({
+                status: {
+                  tutorial: true,
+                  practicePVP: true,
+                  practiceBot: true,
+                  warmUp: true,
+                  rankedConstructed: true,
+                  rankedDiscovery: true,
+                  conquestConstructed: false,
+                  conquestDiscovery: false,
+                  challengeConstructed: true,
+                  challengeDiscovery: true
+                }
+              })
+            },
             MATCHMAKER_SERVICE: async request =>
               Response.json({
                 target: new URL(request.url).pathname,

@@ -153,6 +153,35 @@ beforeEach(async () => {
 })
 
 describe('Cloud Weasel accepted-match service', () => {
+  it('reports the authoritative deployment mode switches only to trusted services', async () => {
+    const response = await SELF.fetch(
+      'https://match-service.example/internal/game-modes',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+      }
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: {
+        tutorial: true,
+        practicePVP: true,
+        practiceBot: true,
+        warmUp: true,
+        rankedConstructed: true,
+        rankedDiscovery: true,
+        conquestConstructed: false,
+        conquestDiscovery: false,
+        challengeConstructed: true,
+        challengeDiscovery: true
+      }
+    })
+
+    const denied = await SELF.fetch(
+      'https://match-service.example/internal/game-modes'
+    )
+    expect(denied.status).toBe(404)
+  })
+
   it('resolves source matchmaking data and an existing match from D1', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const now = new Date().toISOString()

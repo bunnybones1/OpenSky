@@ -3,6 +3,7 @@ import type {
   AccountRegistration,
   DeckClass,
   FeedEventType,
+  GameModesStatus,
   Hero,
   ItemType,
   Page
@@ -129,6 +130,38 @@ const userStorageJson = (value: unknown): string => {
   return jsonValue
 }
 
+const authoritativeGameModesStatus = async (
+  env: Env
+): Promise<GameModesStatus> => {
+  const response = await env.MATCH_SERVICE.fetch(
+    new Request('https://cloud-weasel-match-service/internal/game-modes', {
+      headers: { 'x-cloud-weasel-internal-auth': env.INTERNAL_AUTH_SECRET }
+    })
+  )
+  if (!response.ok) throw new Error('match service mode status failed')
+  const body = (await response.json()) as { status?: unknown }
+  const keys: Array<keyof GameModesStatus> = [
+    'tutorial',
+    'practicePVP',
+    'practiceBot',
+    'warmUp',
+    'rankedConstructed',
+    'rankedDiscovery',
+    'conquestConstructed',
+    'conquestDiscovery',
+    'challengeConstructed',
+    'challengeDiscovery'
+  ]
+  if (
+    typeof body.status !== 'object' ||
+    body.status === null ||
+    !keys.every(key => typeof (body.status as Record<string, unknown>)[key] === 'boolean')
+  ) {
+    throw new Error('match service returned invalid mode status')
+  }
+  return body.status as GameModesStatus
+}
+
 export const handleApiRequest = async (
   request: Request,
   env: Env,
@@ -215,6 +248,37 @@ export const handleApiRequest = async (
             ? { gamePrincipal: await deriveGamePrincipal(principal.userId) }
             : {})
         })
+      }
+
+      case 'Ping': {
+        await requestBody<Record<string, unknown>>(request)
+        await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM users').first()
+        return json(request, env, { status: true })
+      }
+
+      case 'Clock': {
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, { serverTime: new Date().toISOString() })
+      }
+
+      case 'GetGameModesStatus': {
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, {
+          status: await authoritativeGameModesStatus(env)
+        })
+      }
+
+      case 'HeroUnlockLevels': {
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, {
+          res: await playerRpc.heroUnlockLevels(seasonFromDate())
+        })
+      }
+
+      case 'AvailableXPBonuses': {
+        await identityPrincipal(request, env)
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, { res: 0 })
       }
 
       case 'GetCardLibrary': {

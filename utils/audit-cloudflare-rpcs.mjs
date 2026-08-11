@@ -23,7 +23,9 @@ export const auditRpcCoverage = (sourceMethods, portedMethods) => {
 }
 
 const CRITICAL_METHODS = [
+  'AvailableXPBonuses',
   'ClaimQuestRewards',
+  'Clock',
   'ConquestPoints',
   'ConquestStats',
   'ConquestStatus',
@@ -33,13 +35,19 @@ const CRITICAL_METHODS = [
   'EnterConquest',
   'GetAccount',
   'GetAccountStats',
+  'GetCardLibrary',
+  'GetCardsByDeckString',
+  'GetCardsByID',
   'GetFeed',
+  'GetGameModesStatus',
   'GetItemOwnershipByType',
   'GetItemSummary',
   'ListDecks',
   'ListLeaderboard',
   'ListMatches',
   'ListQuests',
+  'HeroUnlockLevels',
+  'Ping',
   'SetInvitedBy',
   'UpdateAccount',
   'UpdateDeck',
@@ -49,7 +57,7 @@ const CRITICAL_METHODS = [
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 60) {
+  if (audit.implemented.length < 77) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {
