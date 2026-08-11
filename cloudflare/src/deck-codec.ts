@@ -132,6 +132,78 @@ const dualClass = (classes: Set<DeckClass>): DeckClass | undefined => {
   return undefined
 }
 
+const REQUESTED_PRISMS: Record<string, string[]> = {
+  STH: ['STR', 'HRT'],
+  STA: ['STR', 'AGY'],
+  STI: ['STR', 'INT'],
+  STW: ['STR', 'WIS'],
+  HRA: ['HRT', 'AGY'],
+  HRI: ['HRT', 'INT'],
+  HRW: ['HRT', 'WIS'],
+  AGI: ['AGY', 'INT'],
+  AGW: ['AGY', 'WIS'],
+  INW: ['INT', 'WIS']
+}
+
+export const forceValidDeckClass = (
+  cardIds: number[],
+  requestedClass: DeckClass
+): {
+  cardIds: number[]
+  deckClass: DeckClass
+  containsInvalid: boolean
+} => {
+  const counts = new Map<DeckClass, number>()
+  const cardClasses = new Map<number, DeckClass>()
+  for (const cardId of cardIds) {
+    let cardClass: DeckClass
+    try {
+      cardClass = cardClassForDeckValidation(cardId)
+    } catch {
+      // Source CheckDeck ignores card IDs missing from its card index here.
+      continue
+    }
+    cardClasses.set(cardId, cardClass)
+    counts.set(cardClass, (counts.get(cardClass) ?? 0) + 1)
+  }
+
+  const excluded = new Set<DeckClass>()
+  while (counts.size > 2) {
+    const [smallest] = [...counts].sort(
+      ([leftClass, leftCount], [rightClass, rightCount]) =>
+        leftCount - rightCount || leftClass.localeCompare(rightClass)
+    )
+    excluded.add(smallest[0])
+    counts.delete(smallest[0])
+  }
+
+  const classes = new Set(counts.keys())
+  if (!classes.size) {
+    return {
+      cardIds: [...cardIds],
+      deckClass: requestedClass,
+      containsInvalid: false
+    }
+  }
+  const inferred = classes.size === 1 ? [...classes][0] : dualClass(classes)
+  if (!inferred) throw new Error('cannot infer deck class')
+  const deckClass =
+    classes.size === 1 && REQUESTED_PRISMS[requestedClass]?.includes(inferred)
+      ? requestedClass
+      : inferred
+
+  return {
+    cardIds: excluded.size
+      ? cardIds.filter(cardId => {
+          const cardClass = cardClasses.get(cardId)
+          return cardClass !== undefined && !excluded.has(cardClass)
+        })
+      : [...cardIds],
+    deckClass,
+    containsInvalid: excluded.size > 0
+  }
+}
+
 export const validateDeckClass = (
   cardIds: number[],
   requestedClass: DeckClass
@@ -147,19 +219,7 @@ export const validateDeckClass = (
   if (!inferred) throw new Error('cannot infer deck class')
   if (requestedClass === inferred) return
 
-  const requestedPrisms: Record<string, string[]> = {
-    STH: ['STR', 'HRT'],
-    STA: ['STR', 'AGY'],
-    STI: ['STR', 'INT'],
-    STW: ['STR', 'WIS'],
-    HRA: ['HRT', 'AGY'],
-    HRI: ['HRT', 'INT'],
-    HRW: ['HRT', 'WIS'],
-    AGI: ['AGY', 'INT'],
-    AGW: ['AGY', 'WIS'],
-    INW: ['INT', 'WIS']
-  }
-  if (!requestedPrisms[requestedClass]?.includes(inferred)) {
+  if (!REQUESTED_PRISMS[requestedClass]?.includes(inferred)) {
     throw new Error('invalid deck class')
   }
 }

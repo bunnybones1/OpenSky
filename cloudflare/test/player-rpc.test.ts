@@ -1,9 +1,10 @@
 import { env } from 'cloudflare:workers'
-import { QuestPeriodicity } from '@opensky/proto'
+import { DeckClass, QuestPeriodicity } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
+import { encodeDeckString } from '../src/deck-codec'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
@@ -868,6 +869,68 @@ describe('legacy player RPC compatibility', () => {
       ).status
     ).toBe(400)
     expect((await rpc('SearchDecks', { req: {} }, false)).status).toBe(401)
+  })
+
+  it('checks deck ownership and class unlocks with source semantics', async () => {
+    const decks = await rpc('ListDecks', {})
+    const listed = (
+      await decks.json<{
+        res: Array<{
+          uuid: string
+          class: string
+          deckString: string
+          cardIds: number[]
+        }>
+      }>()
+    ).res
+    const strength = listed.find(deck => deck.class === 'STR')!
+    const agility = listed.find(deck => deck.class === 'AGY')!
+
+    expect(
+      await (await rpc('CheckDeck', { req: { uuid: strength.uuid } })).json()
+    ).toEqual({
+      res: {
+        containsInvalid: false,
+        accountOwnsAllCards: true,
+        unlockedClass: true
+      }
+    })
+    expect(
+      await (
+        await rpc('CheckDeck', { req: { deckString: agility.deckString } })
+      ).json()
+    ).toEqual({
+      res: {
+        containsInvalid: false,
+        accountOwnsAllCards: false,
+        unlockedClass: false
+      }
+    })
+    expect(
+      await (
+        await rpc('CheckDeck', {
+          req: { deckString: encodeDeckString([], DeckClass.STR) }
+        })
+      ).json()
+    ).toEqual({
+      res: {
+        containsInvalid: false,
+        accountOwnsAllCards: true,
+        unlockedClass: true
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 0
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS' AND token_id = ?`
+    )
+      .bind(userId, strength.cardIds[0])
+      .run()
+    expect(
+      await (await rpc('CheckDeck', { req: { uuid: strength.uuid } })).json()
+    ).toMatchObject({ res: { accountOwnsAllCards: false } })
+
+    expect((await rpc('CheckDeck', { req: {} }, false)).status).toBe(401)
   })
 
   it('creates, reads, updates, and deletes decks through legacy contracts', async () => {

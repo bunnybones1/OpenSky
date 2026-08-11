@@ -1038,6 +1038,24 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'CheckDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: {
+            accountAddress?: string
+            uuid?: string
+            deckString?: string
+            contractQuery?: boolean
+          }
+        }>(request)
+        if (!body.req || typeof body.req !== 'object') {
+          throw invalidArgument('req is required')
+        }
+        return json(request, env, {
+          res: await playerRpc.checkDeck(principal.userId, body.req)
+        })
+      }
+
       case 'UpdateDeck': {
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{

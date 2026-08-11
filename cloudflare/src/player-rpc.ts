@@ -21,6 +21,7 @@ import {
 import {
   decodeDeckString,
   encodeDeckString,
+  forceValidDeckClass,
   validateDeckClass
 } from './deck-codec'
 import { CompetitiveRepository } from './competitive'
@@ -977,6 +978,93 @@ export class PlayerRpcRepository {
         ...(page?.sort ? { sort: page.sort } : {})
       },
       res
+    }
+  }
+
+  async checkDeck(
+    currentUserId: string,
+    request: {
+      accountAddress?: string
+      uuid?: string
+      deckString?: string
+      contractQuery?: boolean
+    }
+  ): Promise<{
+    containsInvalid: boolean
+    accountOwnsAllCards: boolean
+    unlockedClass: boolean
+  }> {
+    let userId = currentUserId
+    if (request.accountAddress !== undefined) {
+      if (!request.accountAddress.startsWith('identity:')) {
+        throw invalidArgument('account address is invalid')
+      }
+      userId = request.accountAddress.slice('identity:'.length)
+      if (!userId || !(await this.accountReferenceExists(request.accountAddress))) {
+        throw invalidArgument('account address is invalid')
+      }
+    }
+
+    const stored = (await this.listDecks(userId)).find(
+      deck =>
+        deck.deckType !== 'LOCKED_STARTER' &&
+        (!request.uuid || deck.uuid === request.uuid) &&
+        (!request.deckString || deck.deckString === request.deckString)
+    )
+    if (!stored && !request.deckString) {
+      return {
+        containsInvalid: false,
+        accountOwnsAllCards: true,
+        unlockedClass: false
+      }
+    }
+
+    const decoded = stored
+      ? { cardIds: stored.cardIds, deckClass: stored.class }
+      : decodeDeckString(request.deckString!)
+    const normalized = forceValidDeckClass(
+      decoded.cardIds,
+      decoded.deckClass
+    )
+    if (normalized.cardIds.length > 30) {
+      throw new Error('deck validation failed: wrong number of cards')
+    }
+
+    const owned = normalized.cardIds.length
+      ? await this.database
+          .prepare(
+            `SELECT token_id
+             FROM player_items
+             WHERE user_id = ? AND token_id IN (${normalized.cardIds
+               .map(() => '?')
+               .join(',')})
+               AND item_type IN ('SW_BASE_CARDS', 'SW_SILVER_CARDS',
+                                 'SW_GOLD_CARDS')
+             GROUP BY token_id
+             HAVING SUM(balance) > 0`
+          )
+          .bind(userId, ...normalized.cardIds)
+          .all<{ token_id: number }>()
+      : { results: [] }
+
+    const heroId = HERO_ID_BY_DECK_CLASS.get(normalized.deckClass)
+    const unlockedClass =
+      heroId === 1 ||
+      (heroId !== undefined &&
+        !!(await this.database
+          .prepare(
+            `SELECT 1 FROM player_items
+             WHERE user_id = ? AND item_type = 'SW_HERO'
+               AND token_id = ? AND balance > 0`
+          )
+          .bind(userId, heroId)
+          .first()))
+
+    return {
+      containsInvalid: normalized.containsInvalid,
+      accountOwnsAllCards:
+        normalized.cardIds.length === owned.results.length,
+      unlockedClass
     }
   }
 

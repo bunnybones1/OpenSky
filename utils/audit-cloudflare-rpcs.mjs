@@ -26,6 +26,7 @@ const CRITICAL_METHODS = [
   'AvailableXPBonuses',
   'ClaimQuestRewards',
   'Clock',
+  'CheckDeck',
   'ConquestPoints',
   'ConquestStats',
   'ConquestStatus',
@@ -64,7 +65,7 @@ const CRITICAL_METHODS = [
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 84) {
+  if (audit.implemented.length < 85) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {
