@@ -85,7 +85,7 @@ describe('source conquest RPC foundation', () => {
     await env.AUTH_DB.prepare(
       `INSERT INTO player_conquest_points
          (user_id, event_id, current_points, total_points, updated_at)
-       VALUES (?, 1, 900, 1400, ?)`
+       VALUES (?, 2, 900, 1400, ?)`
     )
       .bind(userId, now)
       .run()

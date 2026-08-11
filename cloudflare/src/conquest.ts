@@ -279,7 +279,7 @@ export class ConquestRepository {
     return result
   }
 
-  async points(userId: string, eventId = 1) {
+  async points(userId: string, eventId = 2) {
     const row = await this.database
       .prepare(
         `SELECT current_points, total_points FROM player_conquest_points
