@@ -13,6 +13,7 @@ import {
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from '../src/protocol'
+import { applyMatchProgression } from '../src/progression'
 import {
   createMatchFixture,
   PRINCIPAL_1,
@@ -32,6 +33,8 @@ const internalHeaders = {
   'content-type': 'application/json',
   [INTERNAL_AUTH_HEADER]: 'game-server-test-secret'
 }
+const USER_ID_1 = '11111111-1111-4111-8111-111111111111'
+const USER_ID_2 = '22222222-2222-4222-8222-222222222222'
 
 const createMatch = (fixture = createMatchFixture({ proposalId })) =>
   SELF.fetch('https://game.example/internal/matches', {
@@ -46,14 +49,17 @@ const initializeMatch = async (fixture = createMatchFixture({ proposalId })) => 
   return response.json()
 }
 
-const insertActiveLedgerRow = async (ledgerProposalId = proposalId) => {
+const insertActiveLedgerRow = async (
+  ledgerProposalId = proposalId,
+  userIds: [string | null, string | null] = [null, null]
+) => {
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO multiplayer_matches
        (proposal_id, replay_id, mode, version, player1_principal,
         player2_principal, player1_user_id, player2_user_id,
         match_payload_json, server_address, status, created_at, updated_at)
-     VALUES (?, ?, 'RANKED_CONSTRUCTED', 'test-release', ?, ?, NULL, NULL,
+     VALUES (?, ?, 'RANKED_CONSTRUCTED', 'test-release', ?, ?, ?, ?,
              '{}', ?, 'active', ?, ?)`
   )
     .bind(
@@ -61,11 +67,45 @@ const insertActiveLedgerRow = async (ledgerProposalId = proposalId) => {
       `replay-${ledgerProposalId}`,
       PRINCIPAL_1,
       PRINCIPAL_2,
+      userIds[0],
+      userIds[1],
       `wss://opensky.example/api/game/matches/${ledgerProposalId}`,
       now,
       now
     )
     .run()
+}
+
+const insertQuestPlayers = async () => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Player One', 'one@example.com', NULL, ?, ?)`
+    ).bind(USER_ID_1, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Player Two', 'two@example.com', NULL, ?, ?)`
+    ).bind(USER_ID_2, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_quests
+         (rowid, user_id, quest_key, title, description, progress, target,
+          reward_xp, status, created_at, updated_at, quest_type, position,
+          periodicity, is_rerollable, is_new, active)
+       VALUES (7001, ?, 'strength-one', '', '', 0, 1, 100, 'active', ?, ?,
+               'Strengthweaver', 1, 'DAILY', 0, 1, 1)`
+    ).bind(USER_ID_1, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_quests
+         (rowid, user_id, quest_key, title, description, progress, target,
+          reward_xp, status, created_at, updated_at, quest_type, position,
+          periodicity, is_rerollable, is_new, active)
+       VALUES (7002, ?, 'strength-two', '', '', 0, 1, 100, 'active', ?, ?,
+               'Strengthweaver', 1, 'DAILY', 0, 1, 1)`
+    ).bind(USER_ID_2, now, now)
+  ])
 }
 
 const connect = async (principal: string) => {
@@ -131,7 +171,12 @@ const join = (socket: WebSocket, subkeyByte: number) => {
 
 beforeEach(async () => {
   proposalId = `proposal-test-${crypto.randomUUID()}`
-  await env.AUTH_DB.prepare('DELETE FROM multiplayer_matches').run()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
+    env.AUTH_DB.prepare('DELETE FROM player_quests'),
+    env.AUTH_DB.prepare('DELETE FROM users')
+  ])
 })
 
 afterEach(() => {
@@ -322,7 +367,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   }, 10_000)
 
   it('uses durable alarms to advance commit-reveal state', async () => {
-    await insertActiveLedgerRow()
+    await insertQuestPlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
     const second = await connect(PRINCIPAL_2)
@@ -377,11 +423,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       state: { hasState: true }
     })
 
-    const completionMessages = collectMessages(first, 2)
+    const completionMessages = collectMessages(first, 3)
     first.send(JSON.stringify({ type: 'abandon_match' }))
     expect((await completionMessages).map(message => message.type)).toEqual([
       'gameplay',
-      'match_ended'
+      'match_ended',
+      'rewards'
     ])
     const endedStatus = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
@@ -409,6 +456,42 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       ended_at: expect.any(String)
     })
     expect(JSON.parse(ledger!.result_json)).toMatchObject({ winner: 1 })
+
+    const quests = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id, progress, status FROM player_quests ORDER BY rowid`
+    ).all<{ id: number; progress: number; status: string }>()
+    expect(quests.results).toEqual([
+      { id: 7001, progress: 0, status: 'active' },
+      { id: 7002, progress: 1, status: 'complete' }
+    ])
+    const progression = await env.AUTH_DB.prepare(
+      `SELECT player1_quest_progress_json, player2_quest_progress_json,
+              rewards_json
+       FROM multiplayer_match_progression WHERE proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{
+        player1_quest_progress_json: string
+        player2_quest_progress_json: string
+        rewards_json: string
+      }>()
+    expect(JSON.parse(progression!.player1_quest_progress_json)).toEqual({})
+    expect(JSON.parse(progression!.player2_quest_progress_json)).toEqual({
+      7002: 1
+    })
+    expect(JSON.parse(progression!.rewards_json)).toEqual([[], []])
+
+    const retried = await applyMatchProgression(
+      env.AUTH_DB,
+      proposalId,
+      [{ 7001: 1 }, { 7002: 1 }],
+      new Date(Date.now() + 1_000).toISOString()
+    )
+    expect(retried.questProgress).toEqual([{}, { 7002: 1 }])
+    const afterRetry = await env.AUTH_DB.prepare(
+      `SELECT progress FROM player_quests WHERE rowid = 7002`
+    ).first<{ progress: number }>()
+    expect(afterRetry?.progress).toBe(1)
   })
 
   it('restores a hibernated practice bot and applies one validated action per alarm', async () => {

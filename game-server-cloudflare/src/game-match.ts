@@ -9,6 +9,7 @@ import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
+import { applyMatchProgression } from './progression'
 import {
   AcceptedClientMessage,
   CreateMatchRequest,
@@ -31,6 +32,7 @@ const PLAYERS_KEY = 'match:players'
 const TIMERS_KEY = 'match:timers'
 const PENDING_GAMEPLAY_KEY = 'match:pending-gameplay'
 const QUEST_RUNTIME_KEY = 'match:quest-runtime'
+const QUEST_PROGRESS_KEY = 'match:quest-progress'
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
@@ -298,7 +300,11 @@ export class GameMatch implements DurableObject {
       if (!metadata) return
       if (metadata.ended) {
         if (!metadata.completionRecorded) {
-          await this.recordCompletionWithRetry(metadata, Date.now())
+          await this.recordCompletionWithRetry(
+            metadata,
+            Date.now(),
+            await this.questProgress()
+          )
         }
         return
       }
@@ -395,7 +401,8 @@ export class GameMatch implements DurableObject {
       [PLAYERS_KEY]: players,
       [TIMERS_KEY]: {} satisfies MatchTimers,
       [PENDING_GAMEPLAY_KEY]: [] satisfies PendingGameplay[],
-      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState()
+      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState(),
+      [QUEST_PROGRESS_KEY]: runtime.questProgress()
     })
     await this.afterStateChange(metadata, players, {}, Date.now())
     return this.creationResponse(metadata)
@@ -797,20 +804,32 @@ export class GameMatch implements DurableObject {
       [PLAYERS_KEY]: players,
       [TIMERS_KEY]: timers,
       [SNAPSHOT_KEY]: runtime.snapshot(),
-      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState()
+      [QUEST_RUNTIME_KEY]: runtime.questRuntimeState(),
+      [QUEST_PROGRESS_KEY]: runtime.questProgress()
     })
     await this.scheduleAlarm(players, timers, now)
     if (metadata.ended && !metadata.completionRecorded) {
-      await this.recordCompletionWithRetry(metadata, now)
+      await this.recordCompletionWithRetry(
+        metadata,
+        now,
+        runtime.questProgress()
+      )
     }
   }
 
   private async recordCompletionWithRetry(
     metadata: MatchMetadata,
-    now: number
+    now: number,
+    questProgress: [Record<number, number>, Record<number, number>]
   ) {
     try {
       const endedAt = new Date(metadata.endedAtMs ?? now).toISOString()
+      const progression = await applyMatchProgression(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        questProgress,
+        endedAt
+      )
       const result = await this.env.AUTH_DB.prepare(
         `UPDATE multiplayer_matches
          SET status = 'ended', winner_player = ?, result_json = ?,
@@ -819,7 +838,10 @@ export class GameMatch implements DurableObject {
       )
         .bind(
           metadata.result?.winner ?? null,
-          JSON.stringify(metadata.result ?? {}),
+          JSON.stringify({
+            ...(metadata.result ?? {}),
+            questProgress: progression.questProgress
+          }),
           endedAt,
           endedAt,
           metadata.proposalId
@@ -827,6 +849,13 @@ export class GameMatch implements DurableObject {
         .run()
       if ((result.meta.changes ?? 0) < 1) {
         throw new Error('active match ledger row was not found')
+      }
+      const principals = this.playerAddresses(metadata.match)
+      for (const player of [0, 1] as const) {
+        this.sendToPrincipal(principals[player], {
+          type: 'rewards',
+          data: progression.rewards[player] as never[]
+        })
       }
       metadata.completionRecorded = true
       await this.state.storage.put(METADATA_KEY, metadata)
@@ -992,6 +1021,14 @@ export class GameMatch implements DurableObject {
     return (
       (await this.state.storage.get<PendingGameplay[]>(PENDING_GAMEPLAY_KEY)) ??
       []
+    )
+  }
+
+  private async questProgress() {
+    return (
+      (await this.state.storage.get<
+        [Record<number, number>, Record<number, number>]
+      >(QUEST_PROGRESS_KEY)) ?? [{}, {}]
     )
   }
 
