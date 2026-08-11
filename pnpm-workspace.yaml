@@ -1,4 +1,5 @@
 packages:
+  - 'cloudflare'
   - 'bot'
   - 'chain'
   - 'cosmetics'
