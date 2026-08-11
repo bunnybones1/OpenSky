@@ -4,6 +4,7 @@ import {
   INTERNAL_AUTH_HEADER,
   MatchmakerEnv,
   MatchmakerPool,
+  POOL_VERSION,
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from './runtime'
@@ -69,5 +70,3 @@ export default {
 } satisfies ExportedHandler<MatchmakerEnv>
 
 export { MatchmakerPool }
-
-const POOL_VERSION = 1

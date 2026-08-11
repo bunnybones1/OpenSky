@@ -33,7 +33,10 @@ import {
 const TICKET_PREFIX = 'ticket:'
 const PROPOSAL_PREFIX = 'proposal:'
 const PENDING_PREFIX = 'pending:'
-const POOL_VERSION = 1
+// Bump this only when a deployed pool must not continue on a hibernated prior
+// runtime. The Worker and tests import the same value so rollout boundaries
+// cannot silently drift.
+export const POOL_VERSION = 2
 
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
