@@ -183,6 +183,10 @@ and progress are not migrated.
   agree that Conquest is still disabled. D1-backed Ping, server Clock, current
   SkyPass hero-unlock levels, and the authenticated source XP-bonus read are
   also ported.
+- Public single, batch, and item-type supply reads now share the D1 aggregate
+  inventory model, including the source 50-token batch limit and numeric
+  item-type response buckets. Wallet ownership is not required for these public
+  catalog reads.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
