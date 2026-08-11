@@ -34,6 +34,25 @@ superseded by the separate TypeScript match service and authoritative game
 Durable Object. The exact missing method list is emitted by the audit command so
 it cannot drift from the repository.
 
+## Next product contracts
+
+The two remaining "other product" methods need storage and abuse boundaries,
+not only handler translations:
+
+- `ReportAccount` is authenticated and match-scoped. The source rejects a
+  missing report, self-reporting, reports from non-participants, and reports
+  against anyone other than the reporter's opponent in that match. It strips
+  markup from comments, truncates them to 4,000 characters, and creates a
+  pending account signal. The Cloudflare port should preserve all of those
+  checks, use the Google-backed account identity rather than treating a wallet
+  address as authentication, and retain an auditable moderation record.
+- `RecordGameClientFeedback` is authenticated and writes a private JSON dump
+  plus an optional base64 JPEG. The Cloudflare equivalent should use a private
+  R2 bucket, enforce body/image size and MIME limits before decoding, avoid
+  identity-bearing object names, and define retention and staff-access policy.
+  Until those controls exist, leaving this RPC absent is safer and more
+  faithful than accepting feedback without durable private storage.
+
 ## Recommended order
 
 1. Finish deterministic Conquest card reward selection and settlement; this is
