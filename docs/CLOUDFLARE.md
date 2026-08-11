@@ -168,7 +168,13 @@ and progress are not migrated.
   messages, bots, timers, reconnects, spectators, quests, XP, rank transitions,
   rewards, and replay archives.
 - D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
-  match history, profile feed, competitive stats, and item summary reads.
+  match history, profile feed, competitive stats, item summary reads, and
+  write-once social referrals with friend-point accrual.
+- The original Invite Friends screens are mounted for Google identities. New
+  accounts preserve the source invite-link attribution behavior, while existing
+  accounts retain the source confirmation flow. No current-season sticker
+  schedule is configured, so the rewards track reports `Coming Soon` instead of
+  implying or inventing rewards.
 - Card and presentation assets still load from the configured external assets host.
 - Google authentication and identity sessions are native TypeScript Worker services.
 - The matchmaker includes the source captcha retry/cache policy and durable
@@ -180,8 +186,8 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest state/rewards, social/invite APIs, marketplace writes, and
-  administrative APIs still require ports.
+- Conquest state/rewards, seasonal invite-sticker redemption, marketplace
+  writes, and administrative APIs still require ports.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
