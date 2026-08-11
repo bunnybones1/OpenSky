@@ -10,4 +10,5 @@ export interface Env {
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
   MATCH_SERVICE: Fetcher
+  WORKER_VERSION: WorkerVersionMetadata
 }

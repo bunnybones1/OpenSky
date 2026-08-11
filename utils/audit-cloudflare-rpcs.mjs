@@ -56,12 +56,13 @@ const CRITICAL_METHODS = [
   'UpdateAccount',
   'UpdateDeck',
   'UserStorageFetch',
-  'UserStorageSave'
+  'UserStorageSave',
+  'Version'
 ]
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 81) {
+  if (audit.implemented.length < 82) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {

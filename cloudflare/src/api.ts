@@ -9,6 +9,11 @@ import type {
   ItemType,
   Page
 } from '@opensky/proto'
+import {
+  WebRPCSchemaHash,
+  WebRPCSchemaVersion,
+  WebRPCVersion
+} from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
@@ -256,6 +261,18 @@ export const handleApiRequest = async (
         await requestBody<Record<string, unknown>>(request)
         await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM users').first()
         return json(request, env, { status: true })
+      }
+
+      case 'Version': {
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, {
+          version: {
+            webrpcVersion: WebRPCVersion,
+            schemaVersion: WebRPCSchemaVersion,
+            schemaHash: WebRPCSchemaHash,
+            appVersion: env.WORKER_VERSION.id
+          }
+        })
       }
 
       case 'Clock': {

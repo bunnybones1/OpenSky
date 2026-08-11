@@ -36,6 +36,20 @@ describe('source system and progression RPC compatibility', () => {
     expect(await response.json()).toEqual({ status: true })
   })
 
+  it('reports generated schema and actual Worker version metadata', async () => {
+    const response = await rpc('Version')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      version: {
+        webrpcVersion: 'v1',
+        schemaVersion: 'v0.3.0',
+        schemaHash: '1af205f25bf63fa6d2cc4e14eee5d67251570206',
+        appVersion: testEnv.WORKER_VERSION.id
+      }
+    })
+    expect(testEnv.WORKER_VERSION.id).not.toHaveLength(0)
+  })
+
   it('returns an RFC3339 server clock close to the Worker clock', async () => {
     const before = Date.now()
     const response = await rpc('Clock')

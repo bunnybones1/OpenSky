@@ -2,6 +2,9 @@
   "name": "opensky-cloudflare-test",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-15",
+  "version_metadata": {
+    "binding": "WORKER_VERSION"
+  },
   "d1_databases": [
     {
       "binding": "AUTH_DB",
