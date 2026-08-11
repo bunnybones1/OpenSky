@@ -1,4 +1,4 @@
-import type { AccountRegistration, ItemType } from '@opensky/proto'
+import type { AccountRegistration, DeckClass, ItemType } from '@opensky/proto'
 
 import { AccountsRepository } from './accounts'
 import { CookiePoliciesRepository } from './cookie-policies'
@@ -248,6 +248,89 @@ export const handleApiRequest = async (
         return json(request, env, {
           page: { pageSize: 200 },
           res: await playerRpc.listDecks(principal.userId)
+        })
+      }
+
+      case 'CreateDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: {
+            name?: string
+            class?: DeckClass
+            cardIds?: number[]
+            art?: string
+          }
+        }>(request)
+        if (!body.req?.name || !Array.isArray(body.req.cardIds)) {
+          throw invalidArgument('req.name and req.cardIds are required')
+        }
+        return json(request, env, {
+          res: await playerRpc.createDeck(principal.userId, {
+            name: body.req.name,
+            class: body.req.class,
+            cardIds: body.req.cardIds,
+            art: body.req.art
+          })
+        })
+      }
+
+      case 'GetDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: { uuid?: string; deckString?: string }
+        }>(request)
+        if (!body.req) throw invalidArgument('req is required')
+        return json(request, env, {
+          res: await playerRpc.getDeck(principal.userId, body.req)
+        })
+      }
+
+      case 'UpdateDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: {
+            uuid?: string
+            deckString?: string
+            deck?: {
+              deckString?: string
+              name?: string
+              class?: DeckClass
+              art?: string
+            }
+          }
+        }>(request)
+        if (
+          !body.req?.deck?.deckString ||
+          !body.req.deck.name ||
+          !body.req.deck.class ||
+          (!body.req.uuid && !body.req.deckString)
+        ) {
+          throw invalidArgument('a selector and complete deck update are required')
+        }
+        return json(request, env, {
+          res: await playerRpc.updateDeck(
+            principal.userId,
+            { uuid: body.req.uuid, deckString: body.req.deckString },
+            {
+              deckString: body.req.deck.deckString,
+              name: body.req.deck.name,
+              class: body.req.deck.class,
+              art: body.req.deck.art
+            }
+          )
+        })
+      }
+
+      case 'DeleteDeck': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          req?: { uuid?: string; deckString?: string }
+        }>(request)
+        if (!body.req?.uuid && !body.req?.deckString) {
+          throw invalidArgument('must provide either uuid or deckString')
+        }
+        return json(request, env, {
+          ok: await playerRpc.deleteDeck(principal.userId, body.req)
         })
       }
 

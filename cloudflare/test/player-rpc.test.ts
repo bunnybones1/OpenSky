@@ -91,6 +91,62 @@ describe('legacy player RPC compatibility', () => {
     ])
   })
 
+  it('creates, reads, updates, and deletes decks through legacy contracts', async () => {
+    const createdResponse = await rpc('CreateDeck', {
+      req: {
+        name: 'Practice Copy',
+        class: 'STR',
+        cardIds: STARTER_CARD_IDS,
+        art: '140'
+      }
+    })
+    expect(createdResponse.status).toBe(200)
+    const created = (
+      await createdResponse.json<{
+        res: { uuid: string; name: string; deckString: string; deckType: string }
+      }>()
+    ).res
+    expect(created).toMatchObject({
+      name: 'Practice Copy',
+      deckString: expect.stringMatching(/^SWxSTR02/),
+      deckType: 'CUSTOM'
+    })
+
+    const fetched = await rpc('GetDeck', { req: { uuid: created.uuid } })
+    expect(await fetched.json()).toMatchObject({
+      res: { uuid: created.uuid, name: 'Practice Copy' }
+    })
+
+    const updated = await rpc('UpdateDeck', {
+      req: {
+        uuid: created.uuid,
+        deck: {
+          deckString: created.deckString,
+          name: 'Renamed Practice Copy',
+          class: 'STR',
+          art: '98'
+        }
+      }
+    })
+    expect(await updated.json()).toMatchObject({
+      res: {
+        uuid: created.uuid,
+        name: 'Renamed Practice Copy',
+        art: '98',
+        isNew: false
+      }
+    })
+
+    const deleted = await rpc('DeleteDeck', { req: { uuid: created.uuid } })
+    expect(await deleted.json()).toEqual({ ok: true })
+    const decks = await rpc('ListDecks', {})
+    expect((await decks.json<{ res: unknown[] }>()).res).toHaveLength(1)
+  })
+
+  it('requires a deck selector before deletion', async () => {
+    expect((await rpc('DeleteDeck', { req: {} })).status).toBe(400)
+  })
+
   it('returns item and card ownership using legacy balance semantics', async () => {
     const itemsResponse = await rpc('GetItemOwnershipByType', {
       accountAddress: identityReference,

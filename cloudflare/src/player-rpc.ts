@@ -9,6 +9,11 @@ import type {
   SkypassReward
 } from '@opensky/proto'
 
+import {
+  decodeDeckString,
+  encodeDeckString,
+  validateDeckClass
+} from './deck-codec'
 import { identityReferenceFor } from './rpc-principal'
 
 const CARD_FRAMES = [
@@ -331,6 +336,131 @@ export class PlayerRpcRepository {
       isNew: row.is_new === 1,
       conquestV2Points: row.conquest_v2_points
     }))
+  }
+
+  private async findDeck(
+    userId: string,
+    selector: { uuid?: string; deckString?: string }
+  ): Promise<Deck | null> {
+    const decks = await this.listDecks(userId)
+    return (
+      decks.find(
+        deck =>
+          (!selector.uuid || deck.uuid === selector.uuid) &&
+          (!selector.deckString || deck.deckString === selector.deckString)
+      ) || null
+    )
+  }
+
+  async getDeck(
+    userId: string,
+    selector: { uuid?: string; deckString?: string }
+  ): Promise<Deck | null> {
+    return this.findDeck(userId, selector)
+  }
+
+  async createDeck(
+    userId: string,
+    request: {
+      name: string
+      class?: Deck['class']
+      cardIds: number[]
+      art?: string
+    }
+  ): Promise<Deck> {
+    const deckClass = request.class || ('UNKNOWN_CLASS' as Deck['class'])
+    if (deckClass === ('UNKNOWN_CLASS' as Deck['class'])) {
+      throw new Error('deck class is required')
+    }
+    validateDeckClass(request.cardIds, deckClass)
+    const deckString = encodeDeckString(request.cardIds, deckClass)
+    const uuid = crypto.randomUUID()
+    const now = new Date().toISOString()
+    await this.database
+      .prepare(
+        `INSERT INTO player_decks
+           (id, user_id, name, prism, deck_string, card_count, is_starter,
+            created_at, updated_at, deck_class, card_ids, art, deck_type,
+            is_new, conquest_v2_points)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'CUSTOM', 0, 0)`
+      )
+      .bind(
+        uuid,
+        userId,
+        request.name,
+        String(deckClass).toLowerCase(),
+        deckString,
+        request.cardIds.length,
+        now,
+        now,
+        deckClass,
+        JSON.stringify(request.cardIds),
+        request.art || ''
+      )
+      .run()
+    const deck = await this.findDeck(userId, { uuid })
+    if (!deck) throw new Error('created deck was not found')
+    return deck
+  }
+
+  async updateDeck(
+    userId: string,
+    selector: { uuid?: string; deckString?: string },
+    update: {
+      deckString: string
+      name: string
+      class: Deck['class']
+      art?: string
+    }
+  ): Promise<Deck> {
+    const existing = await this.findDeck(userId, selector)
+    if (!existing) throw new Error('deck does not exist')
+    if (existing.deckType === ('LOCKED_STARTER' as Deck['deckType'])) {
+      throw new Error('deck not unlocked')
+    }
+
+    const decoded = decodeDeckString(update.deckString)
+    validateDeckClass(decoded.cardIds, decoded.deckClass)
+    const now = new Date().toISOString()
+    await this.database
+      .prepare(
+        `UPDATE player_decks
+         SET name = ?, deck_class = ?, prism = ?, deck_string = ?, card_ids = ?,
+             card_count = ?, art = ?, is_new = 0, updated_at = ?
+         WHERE user_id = ? AND id = ?`
+      )
+      .bind(
+        update.name || existing.name,
+        decoded.deckClass,
+        String(decoded.deckClass).toLowerCase(),
+        update.deckString,
+        JSON.stringify(decoded.cardIds),
+        decoded.cardIds.length,
+        update.art || existing.art,
+        now,
+        userId,
+        existing.uuid
+      )
+      .run()
+    const deck = await this.findDeck(userId, { uuid: existing.uuid })
+    if (!deck) throw new Error('updated deck was not found')
+    return deck
+  }
+
+  async deleteDeck(
+    userId: string,
+    selector: { uuid?: string; deckString?: string }
+  ): Promise<boolean> {
+    const existing = await this.findDeck(userId, selector)
+    if (!existing) throw new Error('deck not found')
+    if (existing.deckType === ('LOCKED_STARTER' as Deck['deckType'])) {
+      throw new Error('deck not unlocked')
+    }
+    await this.database
+      .prepare(`DELETE FROM player_decks WHERE user_id = ? AND id = ?`)
+      .bind(userId, existing.uuid)
+      .run()
+    return true
   }
 
   async setDeckFavorite(
