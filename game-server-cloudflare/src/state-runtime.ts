@@ -200,6 +200,14 @@ export interface BotActionResult {
   policy: BotPolicyState
 }
 
+export interface ReplayInitialization {
+  rootProof: string
+  secrets: [
+    [PlayerSecret<SkyWeaver>, number[]],
+    [PlayerSecret<SkyWeaver>, number[]]
+  ]
+}
+
 export class AuthoritativeMatchRuntime {
   private readonly ownerSign: (message: string) => number[]
 
@@ -207,7 +215,8 @@ export class AuthoritativeMatchRuntime {
     private readonly store: StateBindings.WasmMatch,
     ownerPrivateKey: string,
     private readonly emitted: RuntimeCapture,
-    private readonly questManagers: PlayerQuestManager[]
+    private readonly questManagers: PlayerQuestManager[],
+    private readonly replayInitialization?: ReplayInitialization
   ) {
     this.ownerSign = createOwnerSigner(ownerPrivateKey)
   }
@@ -279,10 +288,18 @@ export class AuthoritativeMatchRuntime {
       player2Seed
     )
     const emitted = { diffs: [] as string[] }
+    const storeSecrets = [
+      createSecret(player1Seed, 0),
+      createSecret(player2Seed, 1)
+    ] as ReplayInitialization['secrets']
+    const replaySecrets = [
+      createSecret(player1Seed, 0),
+      createSecret(player2Seed, 1)
+    ] as ReplayInitialization['secrets']
     const store = new bindings.WasmMatch(
       undefined,
       root,
-      [createSecret(player1Seed, 0), createSecret(player2Seed, 1)],
+      storeSecrets,
       false,
       this.stateCallback(questManagers),
       ownerSign,
@@ -297,7 +314,8 @@ export class AuthoritativeMatchRuntime {
       store,
       init.ownerPrivateKey,
       emitted,
-      questManagers
+      questManagers,
+      { rootProof: bytesToHex(root), secrets: replaySecrets }
     )
     store.flush()
     return runtime
@@ -347,6 +365,13 @@ export class AuthoritativeMatchRuntime {
 
   serialize(secretKnowledge: 0 | 1 | 2 | 3) {
     return this.store.serialize(secretKnowledge)
+  }
+
+  initialReplayState() {
+    if (!this.replayInitialization) {
+      throw new Error('replay initialization is unavailable after restore')
+    }
+    return this.replayInitialization
   }
 
   snapshot() {

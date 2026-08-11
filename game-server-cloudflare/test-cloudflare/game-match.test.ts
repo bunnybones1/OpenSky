@@ -42,8 +42,7 @@ const USER_ID_2 = '22222222-2222-4222-8222-222222222222'
 const SPECTATOR_USER_ID = '33333333-3333-4333-8333-333333333333'
 const PRIVATE_SPECTATOR_USER_ID = '44444444-4444-4444-8444-444444444444'
 const SPECTATOR_PRINCIPAL = '0x3333333333333333333333333333333333333333'
-const PRIVATE_SPECTATOR_PRINCIPAL =
-  '0x4444444444444444444444444444444444444444'
+const PRIVATE_SPECTATOR_PRINCIPAL = '0x4444444444444444444444444444444444444444'
 const PLAYER_1_SPECTATE_CODE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 const createMatch = (fixture = createMatchFixture({ proposalId })) =>
@@ -148,11 +147,7 @@ const insertSpectateIdentities = async () => {
     [USER_ID_1, 'Spectated One', 'spectated-one@example.com'],
     [USER_ID_2, 'Spectated Two', 'spectated-two@example.com'],
     [SPECTATOR_USER_ID, 'Public Viewer', 'public-viewer@example.com'],
-    [
-      PRIVATE_SPECTATOR_USER_ID,
-      'Private Viewer',
-      'private-viewer@example.com'
-    ]
+    [PRIVATE_SPECTATOR_USER_ID, 'Private Viewer', 'private-viewer@example.com']
   ] as const
   await env.AUTH_DB.batch([
     ...identities.map(([userId, name, email]) =>
@@ -528,7 +523,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(await health.json()).toEqual({
       ok: true,
       component: 'cloud-weasel-game-server',
-      protocolVersion: 2
+      protocolVersion: 3
     })
 
     const tooLarge = await SELF.fetch('https://game.example/internal/matches', {
@@ -592,6 +587,62 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(wrongRelease.status).toBe(409)
   })
 
+  it('persists source-shaped replay initialization and authoritative diffs', async () => {
+    await initializeMatch()
+    const headers = {
+      [INTERNAL_AUTH_HEADER]: 'game-server-test-secret'
+    }
+    const initialIndex = await stub().fetch(
+      'https://match/internal/replay-index',
+      { headers }
+    )
+    expect(await initialIndex.json()).toEqual({ indexes: [0] })
+    const initialRecord = await stub().fetch(
+      'https://match/internal/replay/0',
+      { headers }
+    )
+    const [init] = (await initialRecord.json()) as Array<{
+      type: string
+      version: string
+      rootProof: string
+      players: unknown[]
+      secrets: unknown[]
+    }>
+    expect(init).toMatchObject({
+      type: 'init',
+      version: 'test-release',
+      rootProof: expect.stringMatching(/^0x[0-9a-f]+$/)
+    })
+    expect(init.players).toHaveLength(2)
+    expect(init.secrets).toHaveLength(2)
+
+    const player = await connect(PRINCIPAL_1)
+    const joined = collectMessages(player, 2)
+    join(player, 0x41)
+    await joined
+    const updatedIndex = await stub().fetch(
+      'https://match/internal/replay-index',
+      { headers }
+    )
+    expect(await updatedIndex.json()).toEqual({ indexes: [0, 1] })
+    const diffRecord = await stub().fetch('https://match/internal/replay/1', {
+      headers
+    })
+    expect(await diffRecord.json()).toEqual([
+      {
+        type: 'gameplay',
+        timestamp: expect.any(String),
+        message: {
+          type: 'gameplay',
+          data: [expect.stringMatching(/^0x[0-9a-f]+$/)]
+        }
+      }
+    ])
+
+    const denied = await stub().fetch('https://match/internal/replay/0')
+    expect(denied.status).toBe(404)
+  })
+
   it('authenticates players at the gateway boundary and sends private reconnect state', async () => {
     await initializeMatch()
     const denied = await SELF.fetch(
@@ -634,10 +685,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     join(player, 0x31)
     await joined
 
-    const publicViewer = await connectAs(
-      SPECTATOR_PRINCIPAL,
-      SPECTATOR_USER_ID
-    )
+    const publicViewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
     const publicMessages = collectMessages(publicViewer, 2)
     const playerList = nextMessage(player)
     spectate(publicViewer, `identity:${USER_ID_1}`)
@@ -664,10 +712,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       PRIVATE_SPECTATOR_USER_ID
     )
     const privateMessages = collectMessages(privateViewer, 2)
-    spectate(
-      privateViewer,
-      `identity:${USER_ID_1}.${PLAYER_1_SPECTATE_CODE}`
-    )
+    spectate(privateViewer, `identity:${USER_ID_1}.${PLAYER_1_SPECTATE_CODE}`)
     const [privateReconnect, privateList] = await privateMessages
     expect(privateReconnect).toMatchObject({ type: 'reconnect' })
     expect(privateReconnect.store).not.toBe(publicReconnect.store)

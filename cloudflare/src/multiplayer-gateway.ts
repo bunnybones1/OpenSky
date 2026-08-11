@@ -9,7 +9,7 @@ import {
 } from './identity-session'
 import { IdentitiesRepository } from './identities'
 
-const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
+export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
 const TRUSTED_DISPLAY_NAME_HEADER = 'x-cloud-weasel-display-name'

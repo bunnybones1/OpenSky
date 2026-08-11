@@ -81,6 +81,7 @@ interface MatchRow {
   proposal_id: string
   replay_id: string
   mode: GameMode
+  status: 'creating' | 'active' | 'ended' | 'failed'
   player1_user_id: string | null
   player2_user_id: string | null
   match_payload_json: string
@@ -270,6 +271,65 @@ const matchPlayer = (
       ? { playerSessionId: participant.playerSessionID }
       : {}),
     isBot: typeof participant?.botSubkey === 'string'
+  }
+}
+
+const matchFromRow = (row: MatchRow): Match | null => {
+  let payload: MatchPayload
+  let resultBody: {
+    reason?: unknown
+    status?: unknown
+    turnCount?: unknown
+    moveCount?: unknown
+  }
+  try {
+    payload = JSON.parse(row.match_payload_json) as MatchPayload
+    resultBody = row.result_json ? JSON.parse(row.result_json) : {}
+  } catch {
+    return null
+  }
+  const player1 = matchPlayer(payload.match?.player1, row.player1_user_id)
+  const player2 = matchPlayer(payload.match?.player2, row.player2_user_id)
+  const storedStatus =
+    typeof resultBody.status === 'string' ? resultBody.status : undefined
+  const status =
+    row.status === 'active' || row.status === 'creating'
+      ? 'IN_PROGRESS'
+      : row.status === 'failed'
+        ? 'CRASHED'
+        : ['ABANDONED', 'FORFEITED', 'COMPLETED'].includes(storedStatus ?? '')
+          ? storedStatus!
+          : resultBody.reason === 'abandoned'
+            ? 'ABANDONED'
+            : resultBody.reason === 'forfeited'
+              ? 'FORFEITED'
+              : 'COMPLETED'
+  return {
+    id: row.id,
+    status: status as Match['status'],
+    player1,
+    player2,
+    player1GameMode: row.mode,
+    player2GameMode: row.mode,
+    initPlayer1DeckNumCards: 0,
+    initPlayer2DeckNumCards: 0,
+    player1DeckClass: player1.deckClass,
+    player2DeckClass: player2.deckClass,
+    ...(row.winner_player !== null
+      ? { winningPlayer: row.winner_player + 1 }
+      : {}),
+    turnNonce:
+      typeof resultBody.turnCount === 'number' ? resultBody.turnCount : 0,
+    player1Moves:
+      typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
+    player2Moves:
+      typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
+    metrics: {},
+    startedAt: row.created_at,
+    ...(row.ended_at ? { endedAt: row.ended_at } : {}),
+    updatedAt: row.updated_at,
+    createdAt: row.created_at,
+    replayID: row.replay_id
   }
 }
 
@@ -519,7 +579,7 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, player1_user_id,
+        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
                 player2_user_id, match_payload_json, winner_player,
                 result_json, created_at, updated_at, ended_at
          FROM multiplayer_matches
@@ -534,58 +594,9 @@ export class CompetitiveRepository {
     const offset = decodeCursor(page?.before)
     const slice = rows.slice(offset, offset + size)
     const nextOffset = offset + slice.length
-    const matches = slice.flatMap(row => {
-      let payload: MatchPayload
-      try {
-        payload = JSON.parse(row.match_payload_json) as MatchPayload
-      } catch {
-        return []
-      }
-      const player1 = matchPlayer(payload.match?.player1, row.player1_user_id)
-      const player2 = matchPlayer(payload.match?.player2, row.player2_user_id)
-      const resultBody = row.result_json
-        ? (JSON.parse(row.result_json) as {
-            reason?: unknown
-            turnCount?: unknown
-            moveCount?: unknown
-          })
-        : {}
-      const status =
-        resultBody.reason === 'abandoned'
-          ? 'ABANDONED'
-          : resultBody.reason === 'forfeited'
-            ? 'FORFEITED'
-            : 'COMPLETED'
-      return [
-        {
-          id: row.id,
-          status,
-          player1,
-          player2,
-          player1GameMode: row.mode,
-          player2GameMode: row.mode,
-          initPlayer1DeckNumCards: 0,
-          initPlayer2DeckNumCards: 0,
-          player1DeckClass: player1.deckClass,
-          player2DeckClass: player2.deckClass,
-          ...(row.winner_player !== null
-            ? { winningPlayer: row.winner_player + 1 }
-            : {}),
-          turnNonce:
-            typeof resultBody.turnCount === 'number' ? resultBody.turnCount : 0,
-          player1Moves:
-            typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
-          player2Moves:
-            typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
-          metrics: {},
-          startedAt: row.created_at,
-          ...(row.ended_at ? { endedAt: row.ended_at } : {}),
-          updatedAt: row.updated_at,
-          createdAt: row.created_at,
-          replayID: row.replay_id
-        } as Match
-      ]
-    })
+    const matches = slice
+      .map(matchFromRow)
+      .filter((match): match is Match => match !== null)
     return {
       page: {
         pageSize: size,
@@ -596,5 +607,28 @@ export class CompetitiveRepository {
       } satisfies Page,
       res: matches
     }
+  }
+
+  async matchByReplay(matchId: number, replayId: string) {
+    const row = await this.database
+      .prepare(
+        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+                player2_user_id, match_payload_json, winner_player,
+                result_json, created_at, updated_at, ended_at
+         FROM multiplayer_matches
+         WHERE id = ? AND replay_id = ?`
+      )
+      .bind(matchId, replayId)
+      .first<MatchRow>()
+    if (!row) return null
+    const match = matchFromRow(row)
+    return match
+      ? {
+          match,
+          proposalId: row.proposal_id,
+          inProgress: row.ended_at === null,
+          startedAt: row.created_at
+        }
+      : null
   }
 }

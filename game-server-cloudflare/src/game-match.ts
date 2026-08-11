@@ -38,6 +38,9 @@ const TIMERS_KEY = 'match:timers'
 const PENDING_GAMEPLAY_KEY = 'match:pending-gameplay'
 const QUEST_RUNTIME_KEY = 'match:quest-runtime'
 const QUEST_PROGRESS_KEY = 'match:quest-progress'
+const REPLAY_RECORD_PREFIX = 'match:replay:'
+const REPLAY_NEXT_INDEX_KEY = 'match:replay-next-index'
+const MAX_REPLAY_RECORD_BYTES = 1024 * 1024
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
@@ -250,6 +253,10 @@ export class GameMatch implements DurableObject {
       if (url.pathname === '/internal/create')
         return await this.createMatch(request)
       if (url.pathname === '/internal/status') return await this.status(request)
+      if (url.pathname === '/internal/replay-index')
+        return await this.replayIndex(request)
+      if (url.pathname.startsWith('/internal/replay/'))
+        return await this.replayRecord(request, url.pathname)
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
         return new Response('Expected WebSocket upgrade', { status: 426 })
       }
@@ -357,8 +364,10 @@ export class GameMatch implements DurableObject {
         timers.botAtMs = undefined
         await this.runBotAction(metadata, timers, runtime)
       }
-      if (emitted.length > 0)
+      if (emitted.length > 0) {
         this.broadcast({ type: 'gameplay', data: emitted })
+        await this.replayGameplay(emitted)
+      }
       await this.afterStateChange(metadata, players, timers, now)
     } finally {
       this.releaseRuntime()
@@ -409,6 +418,30 @@ export class GameMatch implements DurableObject {
       participants: [input.match.player1, input.match.player2]
     })
     this.runtime = runtime
+    const replay = runtime.initialReplayState()
+    const replayInit = this.replayJson([
+      {
+        type: 'init',
+        version: input.releaseVersion,
+        players: [input.match.player1, input.match.player2].map(
+          participant => ({
+            id: participant.account.address,
+            name: participant.account.name || 'unknown_name',
+            initDeckString: '',
+            stats: participant.account.stats,
+            heroSkinID: participant.account.deckEquipment?.heroSkin,
+            cardBackID: participant.account.deckEquipment?.cardBack
+          })
+        ),
+        rootProof: replay.rootProof,
+        secrets: replay.secrets,
+        gameMode:
+          input.match.player1.gameMode === input.match.player2.gameMode
+            ? input.match.player1.gameMode
+            : GameMode.UNKNOWN,
+        timestamp: new Date().toISOString()
+      }
+    ])
     const players: PlayerStateMap = {
       [normalizedAddress(input.match.player1.account.address)]:
         emptyPlayerState(Boolean(input.match.player1.botSubkey)),
@@ -422,7 +455,9 @@ export class GameMatch implements DurableObject {
       [TIMERS_KEY]: {} satisfies MatchTimers,
       [PENDING_GAMEPLAY_KEY]: [] satisfies PendingGameplay[],
       [QUEST_RUNTIME_KEY]: runtime.questRuntimeState(),
-      [QUEST_PROGRESS_KEY]: runtime.questProgress()
+      [QUEST_PROGRESS_KEY]: runtime.questProgress(),
+      [REPLAY_NEXT_INDEX_KEY]: 1,
+      [`${REPLAY_RECORD_PREFIX}000000`]: replayInit
     })
     await this.afterStateChange(metadata, players, {}, Date.now())
     return this.creationResponse(metadata)
@@ -448,6 +483,39 @@ export class GameMatch implements DurableObject {
       state: stateInfo,
       questProgress: runtime.questProgress(),
       sockets: this.state.getWebSockets().length
+    })
+  }
+
+  private async replayIndex(request: Request) {
+    if (!this.isInternal(request))
+      return new Response('Not found', { status: 404 })
+    const records = await this.state.storage.list<string>({
+      prefix: REPLAY_RECORD_PREFIX
+    })
+    return Response.json({
+      indexes: [...records.keys()]
+        .map(key => Number(key.slice(REPLAY_RECORD_PREFIX.length)))
+        .filter(Number.isSafeInteger)
+        .sort((left, right) => left - right)
+    })
+  }
+
+  private async replayRecord(request: Request, pathname: string) {
+    if (!this.isInternal(request))
+      return new Response('Not found', { status: 404 })
+    const value = pathname.slice('/internal/replay/'.length)
+    if (!/^\d{1,6}$/.test(value))
+      return new Response('Invalid replay index', { status: 400 })
+    const record = await this.state.storage.get<string>(
+      this.replayRecordKey(Number(value))
+    )
+    if (!record) return new Response('Replay record not found', { status: 404 })
+    return new Response(record, {
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'private, max-age=3600',
+        'x-content-type-options': 'nosniff'
+      }
     })
   }
 
@@ -575,7 +643,10 @@ export class GameMatch implements DurableObject {
       rootSubkey === subkey
         ? []
         : runtime.approveSubkey(attachment.principal, subkey)
-    if (emitted.length > 0) this.broadcast({ type: 'gameplay', data: emitted })
+    if (emitted.length > 0) {
+      this.broadcast({ type: 'gameplay', data: emitted })
+      await this.replayGameplay(emitted)
+    }
 
     attachment.joined = true
     socket.serializeAttachment(attachment)
@@ -652,9 +723,10 @@ export class GameMatch implements DurableObject {
       normalizedAddress(ledger.player1_principal),
       normalizedAddress(ledger.player2_principal)
     ]
-    const identityTargets = [ledger.player1_user_id, ledger.player2_user_id].map(
-      userId => (userId ? `identity:${userId.toLowerCase()}` : undefined)
-    )
+    const identityTargets = [
+      ledger.player1_user_id,
+      ledger.player2_user_id
+    ].map(userId => (userId ? `identity:${userId.toLowerCase()}` : undefined))
     const targetIndex = [0, 1].find(
       index =>
         requestedTarget === principalTargets[index] ||
@@ -811,6 +883,7 @@ export class GameMatch implements DurableObject {
       type: 'gameplay',
       data: result.opponentDiffs
     })
+    await this.replayGameplay(result.opponentDiffs)
     if (result.senderDiffs.length > 0) {
       this.sendToPrincipal(principal, {
         type: 'gameplay',
@@ -848,10 +921,7 @@ export class GameMatch implements DurableObject {
     }
   }
 
-  private async emote(
-    attachment: SocketAttachment,
-    message: EmoteMessage
-  ) {
+  private async emote(attachment: SocketAttachment, message: EmoteMessage) {
     const metadata = await this.metadataRequired()
     const players = await this.players()
     if (!Object.values(players).every(player => player.finishedLoadingAssets))
@@ -865,8 +935,7 @@ export class GameMatch implements DurableObject {
       )
         .bind(attachment.userId, message.sticker)
         .first()
-      if (!owned)
-        throw new GameProtocolError('spectator used unowned sticker')
+      if (!owned) throw new GameProtocolError('spectator used unowned sticker')
       const sanitized: EmoteMessage = {
         type: 'emote',
         sticker: message.sticker,
@@ -874,6 +943,7 @@ export class GameMatch implements DurableObject {
       }
       this.sendToPrincipal(attachment.spectatedPrincipal, sanitized)
       this.sendToSpectators(sanitized, attachment.spectatedPrincipal)
+      await this.replayEmote(sanitized)
       return
     }
     const principal = attachment.principal
@@ -896,6 +966,7 @@ export class GameMatch implements DurableObject {
       sanitized
     )
     this.sendToSpectators(sanitized)
+    await this.replayEmote(sanitized)
     await this.state.storage.put(PLAYERS_KEY, players)
   }
 
@@ -907,7 +978,10 @@ export class GameMatch implements DurableObject {
     const emitted = runtime.dispatchAbandon(
       this.playerIndex(metadata.match, principal)
     )
-    if (emitted.length > 0) this.broadcast({ type: 'gameplay', data: emitted })
+    if (emitted.length > 0) {
+      this.broadcast({ type: 'gameplay', data: emitted })
+      await this.replayGameplay(emitted)
+    }
     await this.afterStateChange(
       metadata,
       players,
@@ -1144,6 +1218,7 @@ export class GameMatch implements DurableObject {
       type: 'gameplay',
       data: applied.opponentDiffs
     })
+    await this.replayGameplay(applied.opponentDiffs)
   }
 
   private botParticipant(match: MatchmakerStartMatchMessage) {
@@ -1192,8 +1267,10 @@ export class GameMatch implements DurableObject {
     // represented by `store.player === undefined`, owes the reveal.
     if (!info.hasState && info.pendingPlayer === undefined) {
       const emitted = runtime.dispatchTimeout()
-      if (emitted.length > 0)
+      if (emitted.length > 0) {
         this.broadcast({ type: 'gameplay', data: emitted })
+        await this.replayGameplay(emitted)
+      }
     }
     await this.afterStateChange(
       metadata,
@@ -1201,6 +1278,55 @@ export class GameMatch implements DurableObject {
       await this.timers(),
       Date.now()
     )
+  }
+
+  private replayRecordKey(index: number) {
+    return `${REPLAY_RECORD_PREFIX}${String(index).padStart(6, '0')}`
+  }
+
+  private replayJson(value: unknown) {
+    const body = JSON.stringify(value, (_key, current) =>
+      current instanceof Uint8Array ? bytesToHex(current) : current
+    )
+    if (new TextEncoder().encode(body).byteLength > MAX_REPLAY_RECORD_BYTES) {
+      throw new Error('replay record is too large')
+    }
+    return body
+  }
+
+  private async appendReplay(value: unknown) {
+    try {
+      const index =
+        (await this.state.storage.get<number>(REPLAY_NEXT_INDEX_KEY)) ?? 1
+      await this.state.storage.put({
+        [this.replayRecordKey(index)]: this.replayJson(value),
+        [REPLAY_NEXT_INDEX_KEY]: index + 1
+      })
+    } catch (error) {
+      // Source matches continue if record archival is unavailable.
+      console.error('replay record append failed', error)
+    }
+  }
+
+  private replayGameplay(diffs: string[]) {
+    if (diffs.length === 0) return Promise.resolve()
+    return this.appendReplay([
+      {
+        type: 'gameplay',
+        timestamp: new Date().toISOString(),
+        message: { type: 'gameplay', data: diffs }
+      }
+    ])
+  }
+
+  private replayEmote(message: EmoteMessage) {
+    return this.appendReplay([
+      {
+        type: 'noop',
+        timestamp: new Date().toISOString(),
+        message
+      }
+    ])
   }
 
   private async ensureRuntime() {
@@ -1332,8 +1458,7 @@ export class GameMatch implements DurableObject {
     const message: GameServerMessage = {
       type: 'spectators_list',
       spectators: spectators.map(socket => {
-        const attachment =
-          socket.deserializeAttachment() as SocketAttachment
+        const attachment = socket.deserializeAttachment() as SocketAttachment
         const player = attachment.spectatedPlayer ?? 0
         return {
           id: 0,

@@ -22,6 +22,7 @@ import {
   seasonName
 } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
+import { replayArchive } from './replays'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import {
@@ -353,6 +354,23 @@ export const handleApiRequest = async (
             principal.userId,
             body.page,
             body.req?.accountAddress
+          )
+        )
+      }
+
+      case 'GetMatchArchiveRecordsURI': {
+        const body = await requestBody<{
+          matchID?: number
+          replayID?: string
+        }>(request)
+        return json(
+          request,
+          env,
+          await replayArchive(
+            request,
+            env,
+            body.matchID ?? 0,
+            body.replayID ?? ''
           )
         )
       }

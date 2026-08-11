@@ -42,7 +42,7 @@ export default {
       return json({
         ok: true,
         component: 'cloud-weasel-game-server',
-        protocolVersion: 2
+        protocolVersion: 3
       })
     }
     if (request.method === 'POST' && url.pathname === '/internal/matches') {
