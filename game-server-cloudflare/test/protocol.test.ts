@@ -14,13 +14,26 @@ const joinMessage = (loadingProgress: unknown = 0.5) => ({
 })
 
 describe('game WebSocket protocol validation', () => {
-  it('accepts source-compatible join and abandon messages', () => {
+  it('accepts source-compatible join, spectate, and abandon messages', () => {
     expect(parseClientMessage(JSON.stringify(joinMessage()))).toMatchObject({
       type: 'join_server',
       loadingProgress: 0.5
     })
     expect(parseClientMessage('{"type":"abandon_match"}')).toEqual({
       type: 'abandon_match'
+    })
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          type: 'spectate_server',
+          spectateToken: 'identity:player.private-code',
+          authToken: null
+        })
+      )
+    ).toEqual({
+      type: 'spectate_server',
+      spectateToken: 'identity:player.private-code',
+      authToken: null
     })
   })
 
@@ -54,7 +67,23 @@ describe('game WebSocket protocol validation', () => {
     )
     expect(() => parseClientMessage('{')).toThrow('message is not valid JSON')
     expect(() => parseClientMessage('{"type":"spectate_server"}')).toThrow(
-      'unsupported message type'
+      'invalid spectate request'
     )
+    for (const spectateToken of [
+      '',
+      `.code`,
+      `player.${'a'.repeat(51)}`,
+      'player.one.two.three'
+    ]) {
+      expect(() =>
+        parseClientMessage(
+          JSON.stringify({
+            type: 'spectate_server',
+            spectateToken,
+            authToken: null
+          })
+        )
+      ).toThrow(GameProtocolError)
+    }
   })
 })

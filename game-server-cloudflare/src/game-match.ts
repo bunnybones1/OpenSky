@@ -2,7 +2,8 @@ import { GameMode, MatchStatus } from '@opensky/proto'
 import {
   EmoteMessage,
   GameServerMessage,
-  JoinServerMessage
+  JoinServerMessage,
+  SpectateServerMessage
 } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
@@ -103,8 +104,20 @@ interface PendingGameplay {
 interface SocketAttachment {
   principal: string
   userId: string
+  // Optional for sockets hibernated before spectator roles were introduced.
+  role?: 'player' | 'spectator'
   joined: boolean
   connectedAtMs: number
+  spectatedPrincipal?: string
+  spectatedPlayer?: Player
+  knowledge?: 0 | 1 | 2 | 3
+}
+
+interface MatchLedgerParticipants {
+  player1_principal: string
+  player2_principal: string
+  player1_user_id: string | null
+  player2_user_id: string | null
 }
 
 interface RuntimeSettings {
@@ -143,6 +156,7 @@ const runtimeSettings = (env: GameServerEnv): RuntimeSettings => ({
 })
 
 const normalizedAddress = (address: string) => address.toLowerCase()
+const MAX_SPECTATORS = 50
 
 const validateCreateRequest = (request: CreateMatchRequest) => {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(request.proposalId)) {
@@ -239,7 +253,7 @@ export class GameMatch implements DurableObject {
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
         return new Response('Expected WebSocket upgrade', { status: 426 })
       }
-      return await this.connectPlayer(request)
+      return await this.connectSocket(request)
     } finally {
       this.releaseRuntime()
     }
@@ -259,18 +273,19 @@ export class GameMatch implements DurableObject {
       }
       try {
         const message = parseClientMessage(raw)
-        // The source client sends loading progress while connecting and an
-        // initial time-sync burst immediately on WebSocket open. Both can
-        // arrive before its queued join_server message. The gateway has
-        // already bound this socket to a match participant, so these two
-        // bootstrap messages are safe; gameplay still requires a joined socket.
-        if (
-          message.type !== 'join_server' &&
-          message.type !== 'timesync' &&
-          message.type !== 'player_loading_progress' &&
-          !attachment.joined
-        ) {
-          throw new GameProtocolError('join_server is required first')
+        const role = attachment.role ?? 'player'
+        if (!attachment.joined) {
+          const bootstrapAllowed =
+            message.type === 'timesync' ||
+            (role === 'player' &&
+              (message.type === 'join_server' ||
+                message.type === 'player_loading_progress')) ||
+            (role === 'spectator' && message.type === 'spectate_server')
+          if (!bootstrapAllowed) {
+            throw new GameProtocolError(
+              `${role === 'spectator' ? 'spectate_server' : 'join_server'} is required first`
+            )
+          }
         }
         await this.handleMessage(socket, attachment, message)
       } catch (error) {
@@ -436,7 +451,7 @@ export class GameMatch implements DurableObject {
     })
   }
 
-  private async connectPlayer(request: Request) {
+  private async connectSocket(request: Request) {
     const principal = normalizedAddress(
       request.headers.get(TRUSTED_PRINCIPAL_HEADER) ?? ''
     )
@@ -445,16 +460,28 @@ export class GameMatch implements DurableObject {
     if (!metadata) return new Response('Match not found', { status: 404 })
     if (
       !this.isInternal(request) ||
-      !this.playerAddresses(metadata.match).includes(principal)
+      !/^0x[0-9a-f]{40}$/.test(principal) ||
+      !userId
     ) {
       return new Response('Not authorized for match', { status: 401 })
     }
+    const role = this.playerAddresses(metadata.match).includes(principal)
+      ? 'player'
+      : 'spectator'
     const previousSockets = this.state.getWebSockets(principal)
+    if (
+      role === 'spectator' &&
+      previousSockets.length === 0 &&
+      this.spectatorSockets(undefined, true).length >= MAX_SPECTATORS
+    ) {
+      return new Response('Too many spectators', { status: 429 })
+    }
     const pair = new WebSocketPair()
     const [client, server] = Object.values(pair)
     const attachment: SocketAttachment = {
       principal,
       userId: userId.slice(0, 256),
+      role,
       joined: false,
       connectedAtMs: Date.now()
     }
@@ -476,10 +503,22 @@ export class GameMatch implements DurableObject {
     attachment: SocketAttachment,
     message: AcceptedClientMessage
   ) {
+    const role = attachment.role ?? 'player'
     switch (message.type) {
-      case 'join_server':
+      case 'join_server': {
+        if (role !== 'player')
+          throw new GameProtocolError('spectator cannot join as a player')
         await this.join(socket, attachment, message)
         return
+      }
+      case 'spectate_server': {
+        if (role !== 'spectator')
+          throw new GameProtocolError('players cannot spectate their own match')
+        if (attachment.joined)
+          throw new GameProtocolError('spectator is already joined')
+        await this.spectate(socket, attachment, message)
+        return
+      }
       case 'timesync':
         this.safeSend(socket, {
           type: 'timesync',
@@ -488,21 +527,25 @@ export class GameMatch implements DurableObject {
         })
         return
       case 'player_loading_progress':
+        this.requirePlayer(role)
         await this.updateLoading(attachment.principal, message.progress)
         return
       case 'gameplay':
+        this.requirePlayer(role)
         await this.gameplay(attachment.principal, message.data)
         return
       case 'emote':
-        await this.emote(attachment.principal, message)
+        await this.emote(attachment, message)
         return
       case 'mute_opponent': {
+        this.requirePlayer(role)
         const players = await this.players()
         players[attachment.principal].opponentMuted = message.muted
         await this.state.storage.put(PLAYERS_KEY, players)
         return
       }
       case 'abandon_match':
+        this.requirePlayer(role)
         await this.abandon(attachment.principal)
         return
       case 'error':
@@ -579,7 +622,108 @@ export class GameMatch implements DurableObject {
     this.sendToOpponent(metadata.match, attachment.principal, {
       type: 'opponent_connected'
     })
+    this.sendToSpectators({ type: 'opponent_connected' })
+    if (this.spectatorSockets(attachment.principal).length > 0) {
+      this.updateSpectators(attachment.principal)
+    }
     await this.updateLoading(attachment.principal, player.loadingProgress)
+  }
+
+  private async spectate(
+    socket: WebSocket,
+    attachment: SocketAttachment,
+    message: SpectateServerMessage
+  ) {
+    const metadata = await this.metadataRequired()
+    const ledger = await this.env.AUTH_DB.prepare(
+      `SELECT player1_principal, player2_principal,
+              player1_user_id, player2_user_id
+       FROM multiplayer_matches
+       WHERE proposal_id = ? AND status IN ('active', 'ended')`
+    )
+      .bind(metadata.proposalId)
+      .first<MatchLedgerParticipants>()
+    if (!ledger) throw new GameProtocolError('match cannot be found')
+
+    const [requestedTarget, ...requestedCodes] = message.spectateToken
+      .toLowerCase()
+      .split('.')
+    const principalTargets = [
+      normalizedAddress(ledger.player1_principal),
+      normalizedAddress(ledger.player2_principal)
+    ]
+    const identityTargets = [ledger.player1_user_id, ledger.player2_user_id].map(
+      userId => (userId ? `identity:${userId.toLowerCase()}` : undefined)
+    )
+    const targetIndex = [0, 1].find(
+      index =>
+        requestedTarget === principalTargets[index] ||
+        requestedTarget === identityTargets[index]
+    )
+    if (targetIndex === undefined) {
+      throw new GameProtocolError('spectated player is not in match')
+    }
+    const targetUserId =
+      targetIndex === 0 ? ledger.player1_user_id : ledger.player2_user_id
+    if (
+      attachment.principal === principalTargets[targetIndex] ||
+      (targetUserId !== null &&
+        attachment.userId.toLowerCase() === targetUserId.toLowerCase())
+    ) {
+      throw new GameProtocolError('you cannot spectate yourself')
+    }
+
+    const codes = new Set(requestedCodes)
+    const settings = await this.env.AUTH_DB.prepare(
+      `SELECT user_id, spectate_code
+       FROM player_account_settings
+       WHERE user_id IN (?, ?)`
+    )
+      .bind(ledger.player1_user_id, ledger.player2_user_id)
+      .all<{ user_id: string; spectate_code: string | null }>()
+    let knowledge = 0
+    for (const setting of settings.results) {
+      if (
+        !setting.spectate_code ||
+        !codes.has(setting.spectate_code.toLowerCase())
+      )
+        continue
+      if (setting.user_id === ledger.player1_user_id) knowledge |= 1
+      if (setting.user_id === ledger.player2_user_id) knowledge |= 2
+    }
+
+    attachment.joined = true
+    attachment.spectatedPrincipal = principalTargets[targetIndex]
+    attachment.spectatedPlayer = targetIndex as Player
+    attachment.knowledge = knowledge as 0 | 1 | 2 | 3
+    socket.serializeAttachment(attachment)
+
+    const runtime = await this.ensureRuntime()
+    const timers = await this.timers()
+    const reconnect: GameServerMessage = {
+      type: 'reconnect',
+      accounts: [
+        metadata.match.player1.account,
+        metadata.match.player2.account
+      ],
+      store: bytesToHex(runtime.serialize(attachment.knowledge)),
+      turnExpiryTime: timers.turnAtMs ?? 0,
+      isGameStart: !metadata.started,
+      replayID: metadata.match.replayID,
+      opponentMuted: false,
+      gitCommit: metadata.releaseVersion || 'cloud-weasel'
+    }
+    if (
+      metadata.match.player1.gameMode === GameMode.CONQUEST_CONSTRUCTED ||
+      metadata.match.player1.gameMode === GameMode.CONQUEST_DISCOVERY
+    ) {
+      reconnect.conquestInfo = [
+        metadata.match.player1.conquestInfo!,
+        metadata.match.player2.conquestInfo!
+      ]
+    }
+    this.safeSend(socket, reconnect)
+    this.updateSpectators(attachment.spectatedPrincipal)
   }
 
   private async updateLoading(principal: string, progress: number) {
@@ -591,26 +735,32 @@ export class GameMatch implements DurableObject {
     const opponentPrincipal = this.opponentAddress(metadata.match, principal)
     const matchAbandonTime =
       metadata.createdAtMs + this.settings.abandonTimeoutMs
-    this.sendToPrincipal(opponentPrincipal, {
+    const loadingForOpponent = {
       type: 'opponent_loading_progress',
       progress,
       matchAbandonTime
-    })
+    } as const
+    this.sendToPrincipal(opponentPrincipal, loadingForOpponent)
+    this.sendToSpectators(loadingForOpponent)
     const opponent = players[opponentPrincipal]
-    this.sendToPrincipal(principal, {
+    const loadingForPlayer = {
       type: 'opponent_loading_progress',
       progress: opponent.loadingProgress,
       matchAbandonTime
-    })
+    } as const
+    this.sendToPrincipal(principal, loadingForPlayer)
+    this.sendToSpectators(loadingForPlayer)
     await this.state.storage.put(PLAYERS_KEY, players)
     if (
       Object.values(players).every(current => current.finishedLoadingAssets)
     ) {
-      this.sendToPrincipal(principal, {
+      const loadingComplete = {
         type: 'opponent_loading_progress',
         progress: 1,
         matchAbandonTime: -1
-      })
+      } as const
+      this.sendToPrincipal(principal, loadingComplete)
+      this.sendToSpectators(loadingComplete)
       await this.flushPendingGameplay(metadata, players)
     }
     await this.afterStateChange(
@@ -657,8 +807,16 @@ export class GameMatch implements DurableObject {
       type: 'gameplay',
       data: result.opponentDiffs
     })
+    this.sendToSpectators({
+      type: 'gameplay',
+      data: result.opponentDiffs
+    })
     if (result.senderDiffs.length > 0) {
       this.sendToPrincipal(principal, {
+        type: 'gameplay',
+        data: result.senderDiffs
+      })
+      this.sendToSpectators({
         type: 'gameplay',
         data: result.senderDiffs
       })
@@ -690,11 +848,35 @@ export class GameMatch implements DurableObject {
     }
   }
 
-  private async emote(principal: string, message: EmoteMessage) {
+  private async emote(
+    attachment: SocketAttachment,
+    message: EmoteMessage
+  ) {
     const metadata = await this.metadataRequired()
     const players = await this.players()
     if (!Object.values(players).every(player => player.finishedLoadingAssets))
       return
+    if ((attachment.role ?? 'player') === 'spectator') {
+      if (!('sticker' in message) || !attachment.spectatedPrincipal) return
+      const owned = await this.env.AUTH_DB.prepare(
+        `SELECT 1 FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKERS'
+           AND token_id = ? AND balance > 0`
+      )
+        .bind(attachment.userId, message.sticker)
+        .first()
+      if (!owned)
+        throw new GameProtocolError('spectator used unowned sticker')
+      const sanitized: EmoteMessage = {
+        type: 'emote',
+        sticker: message.sticker,
+        fromSpectator: `identity:${attachment.userId}`
+      }
+      this.sendToPrincipal(attachment.spectatedPrincipal, sanitized)
+      this.sendToSpectators(sanitized, attachment.spectatedPrincipal)
+      return
+    }
+    const principal = attachment.principal
     const player = players[principal]
     const now = Date.now()
     const sinceFirst = now - player.lastEmoteTimestamps[0]
@@ -713,6 +895,7 @@ export class GameMatch implements DurableObject {
       this.opponentAddress(metadata.match, principal),
       sanitized
     )
+    this.sendToSpectators(sanitized)
     await this.state.storage.put(PLAYERS_KEY, players)
   }
 
@@ -957,6 +1140,10 @@ export class GameMatch implements DurableObject {
       type: 'gameplay',
       data: applied.opponentDiffs
     })
+    this.sendToSpectators({
+      type: 'gameplay',
+      data: applied.opponentDiffs
+    })
   }
 
   private botParticipant(match: MatchmakerStartMatchMessage) {
@@ -975,6 +1162,13 @@ export class GameMatch implements DurableObject {
   private async disconnectPlayer(socket: WebSocket) {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null
     if (!attachment?.joined) return
+    if ((attachment.role ?? 'player') === 'spectator') {
+      const spectatedPrincipal = attachment.spectatedPrincipal
+      attachment.joined = false
+      socket.serializeAttachment(attachment)
+      if (spectatedPrincipal) this.updateSpectators(spectatedPrincipal)
+      return
+    }
     if (
       this.state
         .getWebSockets(attachment.principal)
@@ -991,6 +1185,7 @@ export class GameMatch implements DurableObject {
     this.sendToOpponent(metadata.match, attachment.principal, {
       type: 'opponent_disconnected'
     })
+    this.sendToSpectators({ type: 'opponent_disconnected' })
     const runtime = await this.ensureRuntime()
     const info = runtime.stateInfo()
     // Source behavior only advances immediately when the authoritative owner,
@@ -1105,6 +1300,55 @@ export class GameMatch implements DurableObject {
         socket.deserializeAttachment() as SocketAttachment | null
       if (attachment?.joined) this.safeSend(socket, message)
     }
+  }
+
+  private spectatorSockets(
+    spectatedPrincipal?: string,
+    includePending = false
+  ) {
+    return this.state.getWebSockets().filter(socket => {
+      const attachment =
+        socket.deserializeAttachment() as SocketAttachment | null
+      return (
+        attachment?.role === 'spectator' &&
+        (includePending || attachment.joined) &&
+        (!spectatedPrincipal ||
+          attachment.spectatedPrincipal === spectatedPrincipal)
+      )
+    })
+  }
+
+  private sendToSpectators(
+    message: GameServerMessage,
+    spectatedPrincipal?: string
+  ) {
+    for (const socket of this.spectatorSockets(spectatedPrincipal)) {
+      this.safeSend(socket, message)
+    }
+  }
+
+  private updateSpectators(spectatedPrincipal: string) {
+    const spectators = this.spectatorSockets(spectatedPrincipal)
+    const message: GameServerMessage = {
+      type: 'spectators_list',
+      spectators: spectators.map(socket => {
+        const attachment =
+          socket.deserializeAttachment() as SocketAttachment
+        const player = attachment.spectatedPlayer ?? 0
+        return {
+          id: 0,
+          address: `identity:${attachment.userId}`,
+          canSeeHand: Boolean((attachment.knowledge ?? 0) & (1 << player))
+        }
+      })
+    }
+    this.sendToPrincipal(spectatedPrincipal, message)
+    for (const socket of spectators) this.safeSend(socket, message)
+  }
+
+  private requirePlayer(role: 'player' | 'spectator') {
+    if (role !== 'player')
+      throw new GameProtocolError('spectator cannot send player actions')
   }
 
   private broadcast(message: GameServerMessage) {

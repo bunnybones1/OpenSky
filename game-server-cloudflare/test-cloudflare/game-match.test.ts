@@ -39,6 +39,12 @@ const internalHeaders = {
 }
 const USER_ID_1 = '11111111-1111-4111-8111-111111111111'
 const USER_ID_2 = '22222222-2222-4222-8222-222222222222'
+const SPECTATOR_USER_ID = '33333333-3333-4333-8333-333333333333'
+const PRIVATE_SPECTATOR_USER_ID = '44444444-4444-4444-8444-444444444444'
+const SPECTATOR_PRINCIPAL = '0x3333333333333333333333333333333333333333'
+const PRIVATE_SPECTATOR_PRINCIPAL =
+  '0x4444444444444444444444444444444444444444'
+const PLAYER_1_SPECTATE_CODE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 const createMatch = (fixture = createMatchFixture({ proposalId })) =>
   SELF.fetch('https://game.example/internal/matches', {
@@ -136,6 +142,41 @@ const insertQuestPlayers = async () => {
   ])
 }
 
+const insertSpectateIdentities = async () => {
+  const now = new Date().toISOString()
+  const identities = [
+    [USER_ID_1, 'Spectated One', 'spectated-one@example.com'],
+    [USER_ID_2, 'Spectated Two', 'spectated-two@example.com'],
+    [SPECTATOR_USER_ID, 'Public Viewer', 'public-viewer@example.com'],
+    [
+      PRIVATE_SPECTATOR_USER_ID,
+      'Private Viewer',
+      'private-viewer@example.com'
+    ]
+  ] as const
+  await env.AUTH_DB.batch([
+    ...identities.map(([userId, name, email]) =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, avatar_url, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, ?)`
+      ).bind(userId, name, email, now, now)
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_settings
+         (user_id, name, locale, spectate_code, spectate_code_expires_at,
+          created_at, updated_at)
+       VALUES (?, 'Spectated.One', 'en', ?, ?, ?, ?)`
+    ).bind(
+      USER_ID_1,
+      PLAYER_1_SPECTATE_CODE,
+      new Date(Date.now() + 60_000).toISOString(),
+      now,
+      now
+    )
+  ])
+}
+
 const insertExperiencePlayers = async () => {
   const now = new Date().toISOString()
   const statements: D1PreparedStatement[] = []
@@ -182,7 +223,7 @@ const insertExperiencePlayers = async () => {
   await env.AUTH_DB.batch(statements)
 }
 
-const connect = async (principal: string) => {
+const connectAs = async (principal: string, userId: string) => {
   const response = await SELF.fetch(
     `https://game.example/v1/matches/${proposalId}`,
     {
@@ -191,7 +232,7 @@ const connect = async (principal: string) => {
         Origin: 'https://opensky.example',
         [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
         [TRUSTED_PRINCIPAL_HEADER]: principal,
-        [TRUSTED_USER_ID_HEADER]: `user-${principal.slice(2, 6)}`
+        [TRUSTED_USER_ID_HEADER]: userId
       }
     }
   )
@@ -200,6 +241,19 @@ const connect = async (principal: string) => {
   socket.accept()
   sockets.push(socket)
   return socket
+}
+
+const connect = (principal: string) =>
+  connectAs(principal, `user-${principal.slice(2, 6)}`)
+
+const spectate = (
+  socket: WebSocket,
+  spectateToken: string,
+  authToken: string | null = null
+) => {
+  socket.send(
+    JSON.stringify({ type: 'spectate_server', spectateToken, authToken })
+  )
 }
 
 const collectMessages = (socket: WebSocket, count: number) =>
@@ -474,7 +528,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(await health.json()).toEqual({
       ok: true,
       component: 'cloud-weasel-game-server',
-      protocolVersion: 1
+      protocolVersion: 2
     })
 
     const tooLarge = await SELF.fetch('https://game.example/internal/matches', {
@@ -568,6 +622,132 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       type: 'opponent_loading_progress',
       progress: 0
     })
+  })
+
+  it('restores public and private spectator state without exposing it to public viewers', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const player = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const joined = collectMessages(player, 2)
+    join(player, 0x31)
+    await joined
+
+    const publicViewer = await connectAs(
+      SPECTATOR_PRINCIPAL,
+      SPECTATOR_USER_ID
+    )
+    const publicMessages = collectMessages(publicViewer, 2)
+    const playerList = nextMessage(player)
+    spectate(publicViewer, `identity:${USER_ID_1}`)
+    const [publicReconnect, publicList] = await publicMessages
+    expect(publicReconnect).toMatchObject({
+      type: 'reconnect',
+      replayID: 'replay-test-42',
+      gitCommit: 'test-release'
+    })
+    expect(publicList).toEqual({
+      type: 'spectators_list',
+      spectators: [
+        {
+          id: 0,
+          address: `identity:${SPECTATOR_USER_ID}`,
+          canSeeHand: false
+        }
+      ]
+    })
+    expect(await playerList).toEqual(publicList)
+
+    const privateViewer = await connectAs(
+      PRIVATE_SPECTATOR_PRINCIPAL,
+      PRIVATE_SPECTATOR_USER_ID
+    )
+    const privateMessages = collectMessages(privateViewer, 2)
+    spectate(
+      privateViewer,
+      `identity:${USER_ID_1}.${PLAYER_1_SPECTATE_CODE}`
+    )
+    const [privateReconnect, privateList] = await privateMessages
+    expect(privateReconnect).toMatchObject({ type: 'reconnect' })
+    expect(privateReconnect.store).not.toBe(publicReconnect.store)
+    expect(privateList).toEqual({
+      type: 'spectators_list',
+      spectators: expect.arrayContaining([
+        {
+          id: 0,
+          address: `identity:${SPECTATOR_USER_ID}`,
+          canSeeHand: false
+        },
+        {
+          id: 0,
+          address: `identity:${PRIVATE_SPECTATOR_USER_ID}`,
+          canSeeHand: true
+        }
+      ])
+    })
+    expect(privateList.spectators).toHaveLength(2)
+  })
+
+  it('isolates spectator protocol errors and disconnects from player abandon state', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const beforeJoinError = nextMessage(viewer)
+    viewer.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
+    expect(await beforeJoinError).toMatchObject({
+      type: 'error',
+      message: 'Error: spectate_server is required first'
+    })
+
+    const connected = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const spectatorMessages = collectMessages(connected, 2)
+    spectate(connected, PRINCIPAL_1)
+    await spectatorMessages
+    const playerActionError = nextMessage(connected)
+    connected.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
+    expect(await playerActionError).toMatchObject({
+      type: 'error',
+      message: 'Error: spectator cannot send player actions'
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    const status = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    const body = (await status.json()) as {
+      players: Record<string, { abandonAtMs?: number }>
+    }
+    expect(body.players[PRINCIPAL_1].abandonAtMs).toBeUndefined()
+    expect(body.players[PRINCIPAL_2].abandonAtMs).toBeUndefined()
+  })
+
+  it('caps pending and joined spectators at the source limit', async () => {
+    await initializeMatch()
+    for (let index = 0; index < 50; index += 1) {
+      const principal = `0x${BigInt(index + 100)
+        .toString(16)
+        .padStart(40, '0')}`
+      await connectAs(principal, `spectator-${index}`)
+    }
+
+    const overflow = await SELF.fetch(
+      `https://game.example/v1/matches/${proposalId}`,
+      {
+        headers: {
+          Upgrade: 'websocket',
+          Origin: 'https://opensky.example',
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]:
+            '0xffffffffffffffffffffffffffffffffffffffff',
+          [TRUSTED_USER_ID_HEADER]: 'spectator-overflow'
+        }
+      }
+    )
+    expect(overflow.status).toBe(429)
+    expect(await overflow.text()).toBe('Too many spectators')
   })
 
   it('preserves the source client time-sync-before-join handshake', async () => {

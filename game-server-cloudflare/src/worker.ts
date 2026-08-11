@@ -39,7 +39,11 @@ export default {
   async fetch(request: Request, env: GameServerEnv): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, component: 'cloud-weasel-game-server', protocolVersion: 1 })
+      return json({
+        ok: true,
+        component: 'cloud-weasel-game-server',
+        protocolVersion: 2
+      })
     }
     if (request.method === 'POST' && url.pathname === '/internal/matches') {
       if (!isInternal(request, env)) return json({ error: 'not found' }, 404)

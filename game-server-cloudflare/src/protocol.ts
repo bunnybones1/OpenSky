@@ -21,6 +21,7 @@ export type AcceptedClientMessage = Extract<
   {
     type:
       | 'join_server'
+      | 'spectate_server'
       | 'gameplay'
       | 'timesync'
       | 'player_loading_progress'
@@ -71,6 +72,25 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
         value.loadingProgress > 1
       ) {
         throw new GameProtocolError('invalid loading progress')
+      }
+      return value as unknown as AcceptedClientMessage
+    }
+    case 'spectate_server': {
+      if (
+        typeof value.spectateToken !== 'string' ||
+        value.spectateToken.length < 1 ||
+        value.spectateToken.length > 256 ||
+        (value.authToken !== null && typeof value.authToken !== 'string')
+      ) {
+        throw new GameProtocolError('invalid spectate request')
+      }
+      const [spectatedPlayer, ...codes] = value.spectateToken.split('.')
+      if (
+        !spectatedPlayer ||
+        codes.length > 2 ||
+        codes.some(code => code.length > 50)
+      ) {
+        throw new GameProtocolError('invalid spectate code')
       }
       return value as unknown as AcceptedClientMessage
     }
