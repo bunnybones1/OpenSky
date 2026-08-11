@@ -120,7 +120,7 @@ const humanParticipant = async (
       playerSessionID: request.playerSessionID,
       botSubkey: false,
       spectateCode: crypto.randomUUID(),
-      quests: []
+      quests: profile.quests
     }
   }
 }

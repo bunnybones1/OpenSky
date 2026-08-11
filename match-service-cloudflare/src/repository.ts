@@ -1,3 +1,4 @@
+import { ItemType, Quest } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
 
 interface HumanProfileRow {
@@ -10,10 +11,27 @@ interface HumanProfileRow {
   basic_skypass_level: number
 }
 
+interface ActiveQuestRow {
+  row_id: number
+  quest_type: Quest['questType']
+  epic_type: Quest['epicType'] | null
+  epic_index: number | null
+  epic_length: number | null
+  position: number
+  progress: number
+  target: number
+  reward_xp: number
+  periodicity: Quest['periodicity']
+  is_rerollable: number
+  is_new: number
+  status: 'active' | 'complete' | 'claimed'
+}
+
 export interface HumanMatchAccount {
   account: AccountWithPrismsAndCosmeticsInfo
   level: number
   unlockedCards: Set<number>
+  quests: Quest[]
 }
 
 export interface MultiplayerMatchRow {
@@ -69,7 +87,7 @@ export class MatchRepository {
       )
       .bind(userId, now)
       .run()
-    const [profile, gameAccount, cards] = await Promise.all([
+    const [profile, gameAccount, cards, quests] = await Promise.all([
       this.database
         .prepare(
           `SELECT u.display_name,
@@ -93,12 +111,42 @@ export class MatchRepository {
       this.database
         .prepare('SELECT card_id FROM player_card_unlocks WHERE user_id = ?')
         .bind(userId)
-        .all<{ card_id: number }>()
+        .all<{ card_id: number }>(),
+      this.database
+        .prepare(
+          `SELECT rowid AS row_id, quest_type, epic_type, epic_index,
+                  epic_length, position, progress, target, reward_xp,
+                  periodicity, is_rerollable, is_new, status
+           FROM player_quests
+           WHERE user_id = ? AND active = 1
+           ORDER BY periodicity ASC, position ASC, rowid ASC`
+        )
+        .bind(userId)
+        .all<ActiveQuestRow>()
     ])
     if (!profile || !gameAccount) throw new Error('player profile is not initialized')
     return {
       level: profile.level,
       unlockedCards: new Set(cards.results.map((row) => row.card_id)),
+      quests: quests.results.map((quest) => ({
+        id: quest.row_id,
+        position: quest.position,
+        questType: quest.quest_type,
+        ...(quest.epic_type ? { epicType: quest.epic_type } : {}),
+        ...(quest.epic_index !== null ? { epicIndex: quest.epic_index } : {}),
+        ...(quest.epic_length !== null ? { epicLength: quest.epic_length } : {}),
+        progress: quest.progress,
+        endProgress: quest.target,
+        reward: {
+          itemType: 'SW_XP' as ItemType,
+          amount: quest.reward_xp
+        },
+        periodicity: quest.periodicity,
+        isRerollable: quest.is_rerollable === 1,
+        isClaimable: quest.status === 'complete',
+        isClaimed: quest.status === 'claimed',
+        isNew: quest.is_new === 1
+      })),
       account: {
         id: gameAccount.id,
         address: principal,

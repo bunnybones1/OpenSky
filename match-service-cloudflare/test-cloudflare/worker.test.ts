@@ -101,6 +101,16 @@ beforeEach(async () => {
           basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
        VALUES (?, 1, 0, 200, 0, ?, ?)`
     ).bind(USER_ID, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_quests
+         (user_id, quest_key, title, description, progress, target,
+          reward_xp, status, created_at, updated_at, quest_type, epic_type,
+          epic_index, epic_length, position, periodicity, is_rerollable,
+          is_new, active)
+       VALUES (?, 'starter-deck', 'Strengthweaver', '', 0, 1, 100,
+               'active', ?, ?, 'Strengthweaver', 'starter1_test', 1, 3, 1,
+               'DAILY', 0, 1, 1)`
+    ).bind(USER_ID, now, now),
     ...STARTER_CARD_IDS.map(cardId =>
       env.AUTH_DB.prepare(
         `INSERT INTO player_card_unlocks
@@ -143,7 +153,17 @@ describe('Cloud Weasel accepted-match service', () => {
           player: hexToBytes(PRINCIPAL),
           subkey: Array(20).fill(0x31)
         },
-        botSubkey: false
+        botSubkey: false,
+        quests: [
+          {
+            id: expect.any(Number),
+            questType: 'Strengthweaver',
+            progress: 0,
+            endProgress: 1,
+            reward: { itemType: 'SW_XP', amount: 100 },
+            isClaimable: false
+          }
+        ]
       },
       player2: {
         gameMode: GameMode.PRACTICE_BOT,
