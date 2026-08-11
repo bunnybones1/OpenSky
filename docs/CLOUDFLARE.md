@@ -239,6 +239,8 @@ and progress are not migrated.
 ## Suggested next slice
 
 Finish Conquest card selection and settlement before enabling its queues.
+The source-derived transaction and rollout gates are captured in
+[`CONQUEST_SETTLEMENT_PORT.md`](./CONQUEST_SETTLEMENT_PORT.md).
 WalletConnect can then be added independently in account settings: connect a
 wallet, sign a session-owned nonce, persist the verified address, and merge
 wallet contents at read boundaries without granting the wallet authority over
