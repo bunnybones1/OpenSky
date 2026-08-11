@@ -203,6 +203,39 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
   })
 
+  it('preserves the source client time-sync-before-join handshake', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+
+    for (const clientTime of [101, 102, 103, 104, 105]) {
+      const response = nextMessage(first)
+      first.send(JSON.stringify({ type: 'timesync', clientTime }))
+      expect(await response).toMatchObject({
+        type: 'timesync',
+        clientTime
+      })
+    }
+
+    const joined = collectMessages(first, 2)
+    join(first, 0x31)
+    expect(await joined).toEqual([
+      expect.objectContaining({ type: 'reconnect' }),
+      expect.objectContaining({ type: 'opponent_loading_progress' })
+    ])
+  })
+
+  it('still rejects gameplay before join_server', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const response = nextMessage(first)
+    first.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
+
+    expect(await response).toMatchObject({
+      type: 'error',
+      message: 'Error: join_server is required first'
+    })
+  })
+
   it('restores the authoritative WASM snapshot and socket attachment after eviction', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)

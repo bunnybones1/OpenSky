@@ -210,7 +210,15 @@ export class GameMatch implements DurableObject {
       }
       try {
         const message = parseClientMessage(raw)
-        if (message.type !== 'join_server' && !attachment.joined) {
+        // The source client sends its initial time-sync burst immediately on
+        // WebSocket open, then queues join_server until its state becomes OPEN.
+        // Time sync is stateless and safe before authentication; all gameplay
+        // and player-mutating messages still require a completed join.
+        if (
+          message.type !== 'join_server' &&
+          message.type !== 'timesync' &&
+          !attachment.joined
+        ) {
           throw new GameProtocolError('join_server is required first')
         }
         await this.handleMessage(socket, attachment, message)
