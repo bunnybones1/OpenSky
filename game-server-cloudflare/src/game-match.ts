@@ -11,6 +11,10 @@ import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
 import {
+  readAbandonPenaltyConfig,
+  recordAbandonPenalty
+} from './abandon-penalties'
+import {
   applyMatchExperience,
   applyMatchProgression,
   applyMatchStats
@@ -54,6 +58,8 @@ export interface GameServerEnv {
   COMMIT_REVEAL_EXPIRY_MS?: string
   ABANDON_TIMEOUT_MS?: string
   BOT_ACTION_DELAY_MS?: string
+  ABANDON_PENALTY_WINDOW_MS?: string
+  ABANDON_PENALTY_SECONDS?: string
 }
 
 interface MatchMetadata {
@@ -1116,6 +1122,27 @@ export class GameMatch implements DurableObject {
         endedAt,
         stats.rewards
       )
+      if (
+        metadata.result?.status === MatchStatus.ABANDONED &&
+        (metadata.result.winner === 0 || metadata.result.winner === 1)
+      ) {
+        const loser = metadata.result.winner === 0 ? 1 : 0
+        const principals = this.playerAddresses(metadata.match)
+        await recordAbandonPenalty(
+          this.env.AUTH_DB,
+          {
+            proposalId: metadata.proposalId,
+            principal: principals[loser],
+            releaseVersion: metadata.releaseVersion ?? 'cloud-weasel',
+            mode:
+              loser === 0
+                ? metadata.match.player1.gameMode
+                : metadata.match.player2.gameMode
+          },
+          readAbandonPenaltyConfig(this.env),
+          now
+        )
+      }
       const result = await this.env.AUTH_DB.prepare(
         `UPDATE multiplayer_matches
          SET status = 'ended', winner_player = ?, result_json = ?,

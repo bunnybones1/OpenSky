@@ -25,7 +25,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - source spectator roles, public/private knowledge levels, private access
   codes, emotes, connection limits, and hibernation-safe attachments; and
 - source-shaped initialization/gameplay replay records exposed through
-  capability-protected same-origin archive URLs.
+  capability-protected same-origin archive URLs; and
+- source-compatible, release-scoped ranked/Conquest abandon counts and
+  cooldowns bridged through D1 to the matchmaker, with idempotent completion
+  markers.
 
 The gateway, not the browser, is the identity authority. It validates the
 Google session, maps the user to the stable 20-byte game principal, then adds
@@ -34,10 +37,10 @@ fields remain on source-compatible client messages but are not trusted.
 
 ## Deliberately pending
 
-Conquest state/rewards, the shared game-abandon cooldown, and anonymous public
-spectator entry remain pending. Wallet-backed item merging is intentionally an
-API/account integration rather than game-server authentication. These gaps must
-be closed before the Cloudflare service replaces every source production mode.
+Conquest state/rewards and anonymous public spectator entry remain pending.
+Wallet-backed item merging is intentionally an API/account integration rather
+than game-server authentication. These gaps must be closed before the
+Cloudflare service replaces every source production mode.
 
 ## Configuration
 
@@ -47,7 +50,13 @@ set with Wrangler and are never committed:
 - `INTERNAL_AUTH_SECRET`: shared only by service-bound Workers;
 - `MATCH_OWNER_PRIVATE_KEY`: secp256k1 key that owns authoritative proofs.
 
-Non-secret deployment settings are in `wrangler.jsonc`. Run:
+Non-secret deployment settings are in `wrangler.jsonc`.
+
+`ABANDON_PENALTY_WINDOW_MS` and `ABANDON_PENALTY_SECONDS` preserve the source
+fixed-window policy. The committed production map is the source repository's
+disabled default (`0,0,0,0`) until product policy explicitly enables cooldowns.
+
+Run:
 
 ```sh
 corepack pnpm --filter @opensky/cloudflare-game-server typecheck

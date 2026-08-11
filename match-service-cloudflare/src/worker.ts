@@ -80,7 +80,8 @@ const matchmakingProfile = async (
   env: MatchServiceEnv
 ): Promise<Response> => {
   const declaredLength = Number(request.headers.get('content-length') ?? 0)
-  if (declaredLength > 4 * 1024) return json({ error: 'request too large' }, 413)
+  if (declaredLength > 4 * 1024)
+    return json({ error: 'request too large' }, 413)
 
   let body: unknown
   try {
@@ -101,6 +102,9 @@ const matchmakingProfile = async (
     body.userId.length > 256 ||
     typeof body.principal !== 'string' ||
     !/^0x[0-9a-f]{40}$/.test(body.principal) ||
+    typeof body.versionHash !== 'string' ||
+    body.versionHash.length < 1 ||
+    body.versionHash.length > 128 ||
     !modes.has(body.mode as GameMode)
   ) {
     return json({ error: 'invalid profile request' }, 400)
@@ -116,7 +120,8 @@ const matchmakingProfile = async (
       body.userId,
       body.principal,
       body.mode as GameMode,
-      season(env.CURRENT_SEASON)
+      season(env.CURRENT_SEASON),
+      body.versionHash
     )
     const requiresRankedExperience = [
       GameMode.RANKED_CONSTRUCTED,

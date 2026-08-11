@@ -83,7 +83,11 @@ const collectMessages = (webSocket: WebSocket, count: number) =>
     webSocket.addEventListener('message', listener)
   })
 
-const findCommand = (mode = GameMode.RANKED_CONSTRUCTED, sessionID = '') => ({
+const findCommand = (
+  mode = GameMode.RANKED_CONSTRUCTED,
+  sessionID = '',
+  versionHash = 'release-1'
+) => ({
   type: 'find_match',
   authToken: 'legacy-token-is-not-trusted',
   privateSeed: {
@@ -94,7 +98,7 @@ const findCommand = (mode = GameMode.RANKED_CONSTRUCTED, sessionID = '') => ({
   },
   sessionID,
   mode,
-  versionHash: 'release-1',
+  versionHash,
   playerSessionID: crypto.randomUUID()
 })
 
@@ -282,6 +286,25 @@ describe('Cloudflare matchmaker Worker', () => {
         })
       }
     )
+  })
+
+  it('applies the source game-abandon cooldown returned by the match service', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const cooldown = nextMessage(player)
+    player.send(
+      JSON.stringify(
+        findCommand(GameMode.RANKED_CONSTRUCTED, '', 'release-cooldown')
+      )
+    )
+    expect(await cooldown).toEqual({
+      type: 'match_refusal_cooldown',
+      durationSeconds: 5
+    })
+
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
   })
 
   it('reconnects an active player instead of creating a second queue ticket', async () => {

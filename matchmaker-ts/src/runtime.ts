@@ -124,6 +124,7 @@ interface MatchmakingProfile {
   lostLastMatch: boolean
   cards: Array<[number, Rarity]>
   recentMatches: Array<{ opponentId: string }>
+  abandonPenaltyMs: number
   activeMatch?: {
     mode: GameMode
     serverAddress: string
@@ -400,7 +401,11 @@ export class MatchmakerPool implements DurableObject {
     if (!captchaValid) return
     if (!(await this.captcha.canMatch(attachment.principal))) return
 
-    const profile = await this.loadPlayerProfile(attachment, command.mode)
+    const profile = await this.loadPlayerProfile(
+      attachment,
+      command.mode,
+      command.versionHash
+    )
     if (profile.activeMatch) {
       this.sendToPrincipal(attachment.principal, {
         type: 'match_made',
@@ -413,10 +418,13 @@ export class MatchmakerPool implements DurableObject {
       return
     }
 
-    const penaltyMs = await this.penalties.getPenaltyMs({
-      address: attachment.principal,
-      mode: command.mode
-    })
+    const penaltyMs = Math.max(
+      profile.abandonPenaltyMs,
+      await this.penalties.getPenaltyMs({
+        address: attachment.principal,
+        mode: command.mode
+      })
+    )
     if (penaltyMs > 0) {
       this.sendToPrincipal(attachment.principal, {
         type: 'match_refusal_cooldown',
@@ -457,7 +465,8 @@ export class MatchmakerPool implements DurableObject {
 
   private async loadPlayerProfile(
     attachment: SocketAttachment,
-    mode: GameMode
+    mode: GameMode,
+    versionHash: string
   ): Promise<MatchmakingProfile> {
     if (!this.env.MATCH_SERVICE) {
       throw new ProtocolError('SERVER_ERROR', 'match service is unavailable')
@@ -476,7 +485,8 @@ export class MatchmakerPool implements DurableObject {
             body: JSON.stringify({
               userId: attachment.userId,
               principal: attachment.principal,
-              mode
+              mode,
+              versionHash
             })
           }
         )
@@ -510,6 +520,9 @@ export class MatchmakerPool implements DurableObject {
       Math.abs(profile.score as number) > 2_147_483_647 ||
       !playerRanks.has(profile.rank as PlayerRank) ||
       typeof profile.lostLastMatch !== 'boolean' ||
+      !Number.isSafeInteger(profile.abandonPenaltyMs) ||
+      (profile.abandonPenaltyMs as number) < 0 ||
+      (profile.abandonPenaltyMs as number) > 30 * 24 * 60 * 60_000 ||
       !Array.isArray(profile.cards) ||
       profile.cards.length > 5_000 ||
       !Array.isArray(profile.recentMatches) ||
@@ -563,6 +576,7 @@ export class MatchmakerPool implements DurableObject {
       lostLastMatch: profile.lostLastMatch,
       cards,
       recentMatches,
+      abandonPenaltyMs: profile.abandonPenaltyMs as number,
       ...(activeMatch ? { activeMatch } : {})
     }
   }

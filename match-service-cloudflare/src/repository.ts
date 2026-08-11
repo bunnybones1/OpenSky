@@ -67,6 +67,7 @@ export interface MatchmakingProfile {
   cards: Array<[number, 'base' | 'silver' | 'gold']>
   recentMatches: Array<{ opponentId: string }>
   rankedEligible: boolean
+  abandonPenaltyMs: number
   activeMatch?: {
     mode: GameMode
     serverAddress: string
@@ -97,6 +98,10 @@ interface ActiveMatchRow {
 interface MatchmakingUserRow {
   level: number
   xp: number
+}
+
+interface AbandonPenaltyRow {
+  cooldown_expires_at: string | null
 }
 
 const statsModeFor = (mode: GameMode): GameMode | undefined => {
@@ -143,61 +148,72 @@ export class MatchRepository {
     userId: string,
     principal: string,
     mode: GameMode,
-    currentSeason: number
+    currentSeason: number,
+    releaseVersion: string,
+    now = Date.now()
   ): Promise<MatchmakingProfile> {
     const statsMode = statsModeFor(mode)
-    const [user, stats, items, recent, active] = await Promise.all([
-      this.database
-        .prepare(
-          `SELECT profile.level, profile.xp
+    const [user, stats, items, recent, active, abandonPenalty] =
+      await Promise.all([
+        this.database
+          .prepare(
+            `SELECT profile.level, profile.xp
            FROM users JOIN player_profiles profile ON profile.user_id = users.id
            WHERE users.id = ?`
-        )
-        .bind(userId)
-        .first<MatchmakingUserRow>(),
-      statsMode
-        ? this.database
-            .prepare(
-              `SELECT score, player_rank, loss_streak
+          )
+          .bind(userId)
+          .first<MatchmakingUserRow>(),
+        statsMode
+          ? this.database
+              .prepare(
+                `SELECT score, player_rank, loss_streak
                FROM player_account_stats
                WHERE user_id = ? AND game_mode = ? AND season = ?`
-            )
-            .bind(userId, statsMode, currentSeason)
-            .first<MatchmakingStatsRow>()
-        : Promise.resolve(null),
-      this.database
-        .prepare(
-          `SELECT card_id, item_type
+              )
+              .bind(userId, statsMode, currentSeason)
+              .first<MatchmakingStatsRow>()
+          : Promise.resolve(null),
+        this.database
+          .prepare(
+            `SELECT card_id, item_type
            FROM player_card_unlocks
            WHERE user_id = ? AND item_type IN
              ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
-        )
-        .bind(userId)
-        .all<MatchmakingItemRow>(),
-      this.database
-        .prepare(
-          `SELECT player1_principal, player2_principal
+          )
+          .bind(userId)
+          .all<MatchmakingItemRow>(),
+        this.database
+          .prepare(
+            `SELECT player1_principal, player2_principal
            FROM multiplayer_matches
            WHERE status = 'ended'
              AND winner_player IS NOT NULL
              AND (player1_principal = ? OR player2_principal = ?)
            ORDER BY ended_at DESC, id DESC
            LIMIT 1`
-        )
-        .bind(principal, principal)
-        .first<MatchmakingHistoryRow>(),
-      this.database
-        .prepare(
-          `SELECT mode, server_address
+          )
+          .bind(principal, principal)
+          .first<MatchmakingHistoryRow>(),
+        this.database
+          .prepare(
+            `SELECT mode, server_address
            FROM multiplayer_matches
            WHERE status = 'active' AND server_address IS NOT NULL
              AND (player1_principal = ? OR player2_principal = ?)
            ORDER BY updated_at DESC, id DESC
            LIMIT 1`
-        )
-        .bind(principal, principal)
-        .first<ActiveMatchRow>()
-    ])
+          )
+          .bind(principal, principal)
+          .first<ActiveMatchRow>(),
+        this.database
+          .prepare(
+            `SELECT cooldown_expires_at
+           FROM player_abandon_penalties
+           WHERE principal = ? AND release_version = ?`
+          )
+          .bind(principal, releaseVersion)
+          .first<AbandonPenaltyRow>()
+      ])
     if (!user) throw new Error('player was not found')
 
     const cards = new Map<number, 'base' | 'silver' | 'gold'>()
@@ -220,6 +236,9 @@ export class MatchRepository {
           }
         ]
       : []
+    const cooldownExpiresAt = abandonPenalty?.cooldown_expires_at
+      ? Date.parse(abandonPenalty.cooldown_expires_at)
+      : 0
     return {
       score: Math.min(1600, stats?.score ?? 0),
       rank: stats?.player_rank ?? PlayerRank.UNKNOWN,
@@ -227,6 +246,7 @@ export class MatchRepository {
       cards: [...cards.entries()].sort(([left], [right]) => left - right),
       recentMatches,
       rankedEligible: hasUnlockedRanked(user.level, user.xp),
+      abandonPenaltyMs: Math.max(0, cooldownExpiresAt - now),
       ...(active
         ? {
             activeMatch: {
@@ -300,17 +320,20 @@ export class MatchRepository {
         .bind(userId)
         .all<ActiveQuestRow>()
     ])
-    if (!profile || !gameAccount) throw new Error('player profile is not initialized')
+    if (!profile || !gameAccount)
+      throw new Error('player profile is not initialized')
     return {
       level: profile.level,
-      unlockedCards: new Set(cards.results.map((row) => row.card_id)),
-      quests: quests.results.map((quest) => ({
+      unlockedCards: new Set(cards.results.map(row => row.card_id)),
+      quests: quests.results.map(quest => ({
         id: quest.row_id,
         position: quest.position,
         questType: quest.quest_type,
         ...(quest.epic_type ? { epicType: quest.epic_type } : {}),
         ...(quest.epic_index !== null ? { epicIndex: quest.epic_index } : {}),
-        ...(quest.epic_length !== null ? { epicLength: quest.epic_length } : {}),
+        ...(quest.epic_length !== null
+          ? { epicLength: quest.epic_length }
+          : {}),
         progress: quest.progress,
         endProgress: quest.target,
         reward: {

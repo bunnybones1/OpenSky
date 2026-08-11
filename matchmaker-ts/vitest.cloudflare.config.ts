@@ -7,7 +7,7 @@ export default defineConfig({
       wrangler: { configPath: './wrangler.test.jsonc' },
       miniflare: {
         serviceBindings: {
-          MATCH_SERVICE: async (request) => {
+          MATCH_SERVICE: async request => {
             const url = new URL(request.url)
             if (url.pathname === '/internal/matchmaker/player-profile') {
               if (
@@ -21,8 +21,14 @@ export default defineConfig({
                 userId?: string
                 principal?: string
                 mode?: string
+                versionHash?: string
               }
-              if (!body.userId || !body.principal || !body.mode) {
+              if (
+                !body.userId ||
+                !body.principal ||
+                !body.mode ||
+                !body.versionHash
+              ) {
                 return new Response('invalid profile body', { status: 400 })
               }
               return Response.json({
@@ -31,6 +37,8 @@ export default defineConfig({
                   score: body.userId.includes('1111') ? 450 : 500,
                   rank: 'APPRENTICE',
                   lostLastMatch: body.userId.includes('1111'),
+                  abandonPenaltyMs:
+                    body.versionHash === 'release-cooldown' ? 5_000 : 0,
                   cards: [[6, 'base']],
                   recentMatches: [
                     {

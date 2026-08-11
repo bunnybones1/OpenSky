@@ -76,7 +76,8 @@ const profile = async (
   mode: GameMode,
   principal: string,
   userId = USER_ID,
-  secret = 'match-service-test-secret'
+  secret = 'match-service-test-secret',
+  versionHash = 'release-1'
 ) =>
   SELF.fetch(
     'https://match-service.example/internal/matchmaker/player-profile',
@@ -86,12 +87,14 @@ const profile = async (
         'content-type': 'application/json',
         [INTERNAL_AUTH_HEADER]: secret
       },
-      body: JSON.stringify({ userId, principal, mode })
+      body: JSON.stringify({ userId, principal, mode, versionHash })
     }
   )
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_abandon_penalties_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_abandon_penalties'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
     env.AUTH_DB.prepare('DELETE FROM game_accounts'),
@@ -175,7 +178,18 @@ describe('Cloud Weasel accepted-match service', () => {
          VALUES ('profile-active', 'profile-active-replay', 'PRACTICE_BOT',
                  'release-1', ?, ?, ?, NULL, '{}',
                  'wss://match.example/active', 'active', ?, ?)`
-      ).bind(principal, BOT_PLACEHOLDER, USER_ID, now, now)
+      ).bind(principal, BOT_PLACEHOLDER, USER_ID, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_abandon_penalties
+           (principal, release_version, abandon_count, window_expires_at,
+            cooldown_expires_at, updated_at)
+         VALUES (?, 'release-1', 2, ?, ?, ?)`
+      ).bind(
+        principal,
+        new Date(Date.now() + 60_000).toISOString(),
+        new Date(Date.now() + 10_000).toISOString(),
+        now
+      )
     ])
 
     const response = await profile(GameMode.RANKED_CONSTRUCTED, principal)
@@ -189,12 +203,18 @@ describe('Cloud Weasel accepted-match service', () => {
         lostLastMatch: true,
         cards: expect.arrayContaining([[6, 'base']]),
         recentMatches: [{ opponentId: PRINCIPAL }],
+        abandonPenaltyMs: expect.any(Number),
         activeMatch: {
           mode: GameMode.PRACTICE_BOT,
           serverAddress: 'wss://match.example/active'
         }
       }
     })
+    const body = await profile(GameMode.RANKED_CONSTRUCTED, principal).then(
+      result => result.json<{ profile: { abandonPenaltyMs: number } }>()
+    )
+    expect(body.profile.abandonPenaltyMs).toBeGreaterThan(0)
+    expect(body.profile.abandonPenaltyMs).toBeLessThanOrEqual(10_000)
   })
 
   it('disables unfinished conquest queues and rejects forged identity bindings', async () => {

@@ -45,9 +45,12 @@ existing `match_made` and `match_ready_to_start` messages.
 Before a queue ticket is written, the same internal binding resolves the
 source-authoritative player inputs from D1: current mode score/rank, highest
 owned card rarity, last opponent/loss state, operational game-mode status, and
-any active match. An active match is replayed to the browser instead of creating
-a competing ticket. Malformed, unavailable, or identity-mismatched profile data
-fails closed and is never replaced by client-provided values.
+any active match, plus the release-scoped game-abandon cooldown written by the
+authoritative game service. An active match is replayed to the browser instead
+of creating a competing ticket. The longest live abandon, refusal, or
+acceptance-timeout penalty is returned through the original cooldown message.
+Malformed, unavailable, or identity-mismatched profile data fails closed and is
+never replaced by client-provided values.
 
 ## Deployment gates
 
@@ -61,9 +64,9 @@ fails closed and is never replaced by client-provided values.
 
 ## Remaining source behavior
 
-The game-server abandon cooldown bridge and Conquest state still need
-Cloudflare adapters. The same-origin gateway already provides the source
-match-info response for reconnects. Conquest queues remain operationally
-disabled until their state and rewards are ported; the matchmaker does not
-pretend an incomplete mode is available. Captcha remains disabled in production
-until a Cloud Weasel hCaptcha site is configured and its secret provisioned.
+Conquest state still needs a Cloudflare adapter. The same-origin gateway already
+provides the source match-info response for reconnects. Conquest queues remain
+operationally disabled until their state and rewards are ported; the matchmaker
+does not pretend an incomplete mode is available. Captcha remains disabled in
+production until a Cloud Weasel hCaptcha site is configured and its secret
+provisioned.

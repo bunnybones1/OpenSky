@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GameMode, MatchStatus } from '@opensky/proto'
 
 import { GameMatch, GameServerEnv } from '../src/game-match'
+import { recordAbandonPenalty } from '../src/abandon-penalties'
 import {
   INTERNAL_AUTH_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
@@ -317,6 +318,71 @@ afterEach(() => {
 })
 
 describe('Cloudflare authoritative game Match Durable Object', () => {
+  it('records fixed-window abandon counts and idempotent proposal markers', async () => {
+    const principal = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const releaseVersion = 'penalty-policy-release'
+    const now = Date.parse('2026-08-11T12:00:00.000Z')
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `DELETE FROM multiplayer_abandon_penalties_applied
+         WHERE proposal_id LIKE 'penalty-policy-%'`
+      ),
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_abandon_penalties
+         WHERE principal = ? AND release_version = ?`
+      ).bind(principal, releaseVersion)
+    ])
+    const input = (proposalId: string) => ({
+      proposalId,
+      principal,
+      releaseVersion,
+      mode: GameMode.RANKED_CONSTRUCTED
+    })
+    const config = { windowMs: 10_000, penaltyMs: [0, 2_000, 4_000] }
+
+    expect(
+      await recordAbandonPenalty(
+        env.AUTH_DB,
+        input('penalty-policy-1'),
+        config,
+        now
+      )
+    ).toEqual({ applied: true, count: 1, cooldownMs: 0 })
+    expect(
+      await recordAbandonPenalty(
+        env.AUTH_DB,
+        input('penalty-policy-1'),
+        config,
+        now + 1
+      )
+    ).toEqual({ applied: false, count: 0, cooldownMs: 0 })
+    expect(
+      await recordAbandonPenalty(
+        env.AUTH_DB,
+        input('penalty-policy-2'),
+        config,
+        now + 1_000
+      )
+    ).toEqual({ applied: true, count: 2, cooldownMs: 2_000 })
+
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT abandon_count FROM player_abandon_penalties
+         WHERE principal = ? AND release_version = ?`
+      )
+        .bind(principal, releaseVersion)
+        .first('abandon_count')
+    ).toBe(2)
+    expect(
+      await recordAbandonPenalty(
+        env.AUTH_DB,
+        input('penalty-policy-3'),
+        config,
+        now + 10_001
+      )
+    ).toEqual({ applied: true, count: 1, cooldownMs: 0 })
+  })
+
   it('applies source match XP, level-up, and ranked unlock only once', async () => {
     await insertExperiencePlayers()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
@@ -986,6 +1052,29 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       winner: 1,
       status: 'ABANDONED'
     })
+
+    const abandonPenalty = await env.AUTH_DB.prepare(
+      `SELECT abandon_count, cooldown_expires_at
+       FROM player_abandon_penalties
+       WHERE principal = ? AND release_version = 'test-release'`
+    )
+      .bind(PRINCIPAL_1)
+      .first<{ abandon_count: number; cooldown_expires_at: string | null }>()
+    expect(abandonPenalty).toEqual({
+      abandon_count: 1,
+      // The first checked-in test penalty is zero, matching Redis setex's
+      // source no-op behavior.
+      cooldown_expires_at: null
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_abandon_penalties_applied
+         WHERE proposal_id = ? AND principal = ?`
+      )
+        .bind(proposalId, PRINCIPAL_1)
+        .first('count')
+    ).toBe(1)
 
     const stats = await env.AUTH_DB.prepare(
       `SELECT user_id, win_count, loss_count, tie_count, win_streak,
