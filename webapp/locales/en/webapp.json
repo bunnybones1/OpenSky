@@ -332,6 +332,17 @@
     "vodsAvailable_one": "{{ count }} video available",
     "vodsAvailable_other": "{{ count }} videos on"
   },
+  "identityAuth": {
+    "cancelled": "Google sign-in was cancelled.",
+    "continueWithGoogle": "CONTINUE WITH GOOGLE",
+    "description": "Sign in to save your progress across devices, or continue directly to Practice.",
+    "failed": "Google sign-in could not be completed. Try again or continue to Practice.",
+    "notConfigured": "Google sign-in is temporarily unavailable. Practice is still available.",
+    "playPractice": "PLAY PRACTICE",
+    "signOut": "SIGN OUT",
+    "statusUnavailable": "Your sign-in status could not be loaded. Practice is still available.",
+    "walletOptional": "Wallet connection is optional and is never required for Practice."
+  },
   "deckBuilder": {
     "cardPreview": "CARD PREVIEW",
     "noUnlockedDesc": "Battle opponents to learn new spells and recruit wonderful creatures to fight by your side.",

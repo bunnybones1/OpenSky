@@ -64,6 +64,7 @@ interface Environment {
 
   LOCAL_BOT_ENABLED: boolean
   AUTO_REGISTER_WALLET: boolean
+  AUTH_MODE: 'google' | 'legacy-wallet'
 }
 
 const assetsUrl = (url: string, version: string): string => {
@@ -76,7 +77,7 @@ const assetsUrl = (url: string, version: string): string => {
 
 const releaseVersion =
   [process.env.RELEASE_VERSION, process.env.GITCOMMIT].find(
-    value => !!value && value !== 'undefined' && value !== 'null'
+    (value) => !!value && value !== 'undefined' && value !== 'null'
   ) || 'dev'
 
 const gameBaseUrl = new URL(
@@ -153,7 +154,8 @@ const env: Environment = {
   USER_PILOT_TOKEN: String(window.APP_CONFIG.USER_PILOT_TOKEN || ''),
 
   LOCAL_BOT_ENABLED: window.APP_CONFIG.LOCAL_BOT_ENABLED === true,
-  AUTO_REGISTER_WALLET: window.APP_CONFIG.AUTO_REGISTER_WALLET === true
+  AUTO_REGISTER_WALLET: window.APP_CONFIG.AUTO_REGISTER_WALLET === true,
+  AUTH_MODE: window.APP_CONFIG.AUTH_MODE === 'google' ? 'google' : 'legacy-wallet'
 }
 
 // eslint-disable-next-line
