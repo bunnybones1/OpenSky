@@ -3,11 +3,11 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`c52d8ee3-ab3e-4a0d-8b89-2ce134cb21d3`)
+- API/web Worker: `opensky-webapp` (`231f4a97-5eaf-4689-a3a1-807fc1099e30`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`dc2b0617-e805-4564-b6b7-dd582021a114`)
 - Game Worker: `cloud-weasel-game-server` (`dc82be9f-5cd1-48f5-bb46-ab346a1f1b7e`)
-- Deployed component commits: web/API `93c231c`; game `c7a7f00`; matchmaker
+- Deployed component commits: web/API `3d93959`; game `c7a7f00`; matchmaker
   `c9e2201`; match service `dbd4ea2`
 - Deployed: 2026-08-11
 - Applied D1 migrations: `0001` through `0026`
@@ -23,6 +23,7 @@
 - Starter quest claims and the original quest progression chain
 - Basic SkyPass card claims for the ported season data
 - Legacy deck listing, creation, update, deletion, and deck-string encoding
+- Atomic, owner-scoped deck favorite toggling
 - Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads
 - Durable Conquest entry, status, statistics, points, and source treasure thresholds
 - Retry-safe authoritative Conquest win/loss/draw and terminal-state progression

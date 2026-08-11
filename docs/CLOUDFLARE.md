@@ -175,7 +175,9 @@ and progress are not migrated.
   match history, profile feed, competitive stats, item summary reads, and
   write-once social referrals with friend-point accrual. Public account lookup
   also preserves the source's trimmed, case-insensitive username behavior while
-  keeping identity settings owner-only.
+  keeping identity settings owner-only. Deck favorite toggling is a single
+  owner-scoped D1 update with the source boolean result and concurrent-toggle
+  atomicity.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

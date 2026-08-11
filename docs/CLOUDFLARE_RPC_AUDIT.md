@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 82 |
-| Remaining source RPCs | 90 |
+| Ported source RPCs | 83 |
+| Remaining source RPCs | 89 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | --- | ---: | --- |
 | Admin and operations | 49 | Requires a new identity/RBAC boundary before exposing source GM tools. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
-| Content and discovery | 6 | Deck search, deck-rank search, and deck validation. |
+| Content and discovery | 5 | Deck search, deck-rank search, and deck validation. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
 | Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
 | Other product | 5 | Account reporting, feedback, live-record and miscellaneous reads. |
