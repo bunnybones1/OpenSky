@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 69 |
-| Remaining source RPCs | 103 |
+| Ported source RPCs | 72 |
+| Remaining source RPCs | 100 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | --- | ---: | --- |
 | Admin and operations | 49 | Requires a new identity/RBAC boundary before exposing source GM tools. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
-| Content and discovery | 13 | Card library/search, deck-rank search, game-mode status, and supply reads. |
+| Content and discovery | 10 | Card search, deck-rank search, game-mode status, and supply reads. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
 | Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
 | Other product | 11 | Account reporting, feedback, version/clock, live-record and miscellaneous reads. |
@@ -38,8 +38,9 @@ it cannot drift from the repository.
 
 1. Finish deterministic Conquest card reward selection and settlement; this is
    the remaining blocker before its matchmaking modes can be enabled.
-2. Port public content discovery (`GetCardLibrary`, card lookups/search, game
-   mode status) so the client depends less on legacy/external content hosts.
+2. Finish public content discovery (card search, game-mode status, deck-rank
+   search, and supply reads). The card library and both lookup RPCs now derive
+   deterministically from the source API's latest generated card migration.
 3. Add identity-native account lifecycle and reporting, with audit trails.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.

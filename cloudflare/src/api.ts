@@ -11,6 +11,11 @@ import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
+import {
+  allLibraryCards,
+  libraryCardsByIds,
+  libraryCardsFromDeckString
+} from './card-library'
 import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
@@ -209,6 +214,36 @@ export const handleApiRequest = async (
           ...(principal.kind === 'identity'
             ? { gamePrincipal: await deriveGamePrincipal(principal.userId) }
             : {})
+        })
+      }
+
+      case 'GetCardLibrary': {
+        await requestBody<Record<string, unknown>>(request)
+        return json(request, env, { cards: allLibraryCards() })
+      }
+
+      case 'GetCardsByID': {
+        const body = await requestBody<{ cardIDs?: unknown }>(request)
+        if (
+          !Array.isArray(body.cardIDs) ||
+          !body.cardIDs.every(
+            id => typeof id === 'number' && Number.isSafeInteger(id) && id >= 0
+          )
+        ) {
+          throw invalidArgument(
+            'cardIDs must be an array of non-negative integers'
+          )
+        }
+        return json(request, env, { cards: libraryCardsByIds(body.cardIDs) })
+      }
+
+      case 'GetCardsByDeckString': {
+        const body = await requestBody<{ deckString?: unknown }>(request)
+        if (typeof body.deckString !== 'string') {
+          throw invalidArgument('deckString is required')
+        }
+        return json(request, env, {
+          cards: libraryCardsFromDeckString(body.deckString)
         })
       }
 
