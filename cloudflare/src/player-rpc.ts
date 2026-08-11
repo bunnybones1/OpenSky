@@ -2,6 +2,7 @@ import type {
   Account,
   CardOwnershipResponse,
   Deck,
+  DeckEquipment,
   Item,
   ItemType,
   Quest,
@@ -19,7 +20,12 @@ import {
   validateDeckClass
 } from './deck-codec'
 import { CompetitiveRepository } from './competitive'
-import { alreadyExists, invalidArgument, permissionDenied } from './errors'
+import {
+  alreadyExists,
+  invalidArgument,
+  notFound,
+  permissionDenied
+} from './errors'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
@@ -110,6 +116,18 @@ const HERO_BY_ID: Record<number, string> = {
   14: 'BANJO',
   15: 'SITTI'
 }
+
+const HERO_ID_BY_DECK_CLASS = new Map(
+  Object.entries(HERO_DECK_CLASS).map(([heroId, deckClass]) => [
+    deckClass,
+    Number(heroId)
+  ])
+)
+
+const EQUIPPABLE_ITEM_TYPES = new Set<ItemType>([
+  'SW_STICKERS' as ItemType,
+  'SW_CARD_BACKS' as ItemType
+])
 
 const HEXBOUND_CARD_IDS = [
   30, 98, 125, 140, 1047, 1100, 1101, 1125, 3004, 3101, 3125, 3135, 4004, 4027,
@@ -840,6 +858,137 @@ export class PlayerRpcRepository {
         updatedAt: row.updated_at,
         isNew: row.is_new === 1
       }))
+  }
+
+  private async ownedItem(
+    userId: string,
+    itemType: ItemType,
+    tokenId: number
+  ): Promise<InventoryRow | null> {
+    return this.database
+      .prepare(
+        `SELECT id, item_type, token_id, balance, created_at, updated_at, is_new
+         FROM player_items
+         WHERE user_id = ? AND item_type = ? AND token_id = ? AND balance > 0`
+      )
+      .bind(userId, itemType, tokenId)
+      .first<InventoryRow>()
+  }
+
+  private itemFromRow(row: InventoryRow): Item {
+    return {
+      id: row.id,
+      itemType: row.item_type,
+      tokenID: row.token_id,
+      balance: String(row.balance),
+      lastUpdateID: 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      isNew: row.is_new === 1
+    }
+  }
+
+  async equipItem(
+    userId: string,
+    itemType: ItemType,
+    tokenId: number
+  ): Promise<Item> {
+    if (!EQUIPPABLE_ITEM_TYPES.has(itemType)) {
+      throw invalidArgument(`unsupported item type: ${itemType}`)
+    }
+    const item = await this.ownedItem(userId, itemType, tokenId)
+    if (!item) throw notFound('item is not owned')
+    await this.database
+      .prepare(
+        `INSERT OR IGNORE INTO player_items_equipped
+           (user_id, item_id, item_type, token_id, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(
+        userId,
+        item.id,
+        item.item_type,
+        item.token_id,
+        new Date().toISOString()
+      )
+      .run()
+    return this.itemFromRow(item)
+  }
+
+  async unequipItem(
+    userId: string,
+    itemType: ItemType,
+    tokenId: number
+  ): Promise<boolean> {
+    const item = await this.ownedItem(userId, itemType, tokenId)
+    if (!item) throw notFound('item is not owned')
+    await this.database
+      .prepare(
+        `DELETE FROM player_items_equipped
+         WHERE user_id = ? AND item_type = ? AND token_id = ?`
+      )
+      .bind(userId, itemType, tokenId)
+      .run()
+    return true
+  }
+
+  async listEquippedItems(
+    userId: string,
+    itemType?: ItemType
+  ): Promise<Item[]> {
+    const filter = itemType ? 'AND equipped.item_type = ?' : ''
+    const statement = this.database.prepare(
+      `SELECT item.id, item.item_type, item.token_id, item.balance,
+              item.created_at, item.updated_at, item.is_new
+       FROM player_items_equipped equipped
+       JOIN player_items item ON item.id = equipped.item_id
+       WHERE equipped.user_id = ? AND item.balance > 0 ${filter}
+       ORDER BY equipped.item_type ASC, equipped.token_id ASC`
+    )
+    const result = itemType
+      ? await statement.bind(userId, itemType).all<InventoryRow>()
+      : await statement.bind(userId).all<InventoryRow>()
+    return result.results.map(row => this.itemFromRow(row))
+  }
+
+  async deckEquipment(
+    userId: string,
+    deckString: string
+  ): Promise<DeckEquipment> {
+    const { deckClass } = decodeDeckString(deckString)
+    const equipped = await this.database
+      .prepare(
+        `SELECT equipped.item_type, equipped.token_id
+         FROM player_items_equipped equipped
+         JOIN player_items item ON item.id = equipped.item_id
+         WHERE equipped.user_id = ? AND item.balance > 0
+         ORDER BY equipped.item_type ASC, equipped.token_id ASC`
+      )
+      .bind(userId)
+      .all<{ item_type: ItemType; token_id: number }>()
+    const stickers = equipped.results
+      .filter(item => item.item_type === ('SW_STICKERS' as ItemType))
+      .map(item => item.token_id)
+    const cardBacks = equipped.results
+      .filter(item => item.item_type === ('SW_CARD_BACKS' as ItemType))
+      .map(item => item.token_id)
+    const result: DeckEquipment = {}
+    if (stickers.length) result.stickers = stickers
+    if (cardBacks.length) {
+      const random = crypto.getRandomValues(new Uint32Array(1))[0]
+      result.cardBack = cardBacks[random % cardBacks.length]
+    }
+
+    const heroId = HERO_ID_BY_DECK_CLASS.get(deckClass)
+    if (heroId !== undefined) {
+      const heroSkin = await this.ownedItem(
+        userId,
+        'SW_HERO_SKINS' as ItemType,
+        heroId
+      )
+      if (heroSkin) result.heroSkin = heroId
+    }
+    return result
   }
 
   async markItemsNotNew(

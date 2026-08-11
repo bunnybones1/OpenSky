@@ -624,6 +624,140 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('faithfully equips owned stickers and card backs for game decks', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKERS', 5, 1, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_CARD_BACKS', 7, 1, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_CARD_BACKS', 8, 1, 0, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO_SKINS', 1, 1, 0, 'test', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+
+    const sticker = await rpc('EquipItem', {
+      itemType: 'SW_STICKERS',
+      tokenID: 5
+    })
+    expect(sticker.status).toBe(200)
+    expect(await sticker.json()).toMatchObject({
+      item: { itemType: 'SW_STICKERS', tokenID: 5, balance: '1' }
+    })
+    expect(
+      (
+        await rpc('EquipItem', {
+          itemType: 'SW_STICKERS',
+          tokenID: 5
+        })
+      ).status
+    ).toBe(200)
+    for (const tokenID of [7, 8]) {
+      expect(
+        (
+          await rpc('EquipItem', {
+            itemType: 'SW_CARD_BACKS',
+            tokenID
+          })
+        ).status
+      ).toBe(200)
+    }
+
+    const listed = await rpc('ListEquippedItems', {
+      itemType: 'SW_CARD_BACKS'
+    })
+    expect(await listed.json()).toMatchObject({
+      items: [
+        { itemType: 'SW_CARD_BACKS', tokenID: 7 },
+        { itemType: 'SW_CARD_BACKS', tokenID: 8 }
+      ]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_items_equipped WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first('count')
+    ).toBe(3)
+
+    const decks = await rpc('ListDecks', {})
+    const adaDeck = (
+      await decks.json<{ res: Array<{ class: string; deckString: string }> }>()
+    ).res.find(deck => deck.class === 'STR')!
+    const equipment = await rpc('GetDeckEquipmentByDeckString', {
+      accountAddress: 'identity:ignored-by-authenticated-source-contract',
+      deckString: adaDeck.deckString
+    })
+    expect(await equipment.json()).toMatchObject({
+      deckEquipment: {
+        stickers: [5],
+        heroSkin: 1,
+        cardBack: expect.toSatisfy((value: number) => [7, 8].includes(value))
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 0
+       WHERE user_id = ? AND item_type = 'SW_CARD_BACKS' AND token_id = 7`
+    )
+      .bind(userId)
+      .run()
+    expect(
+      await (
+        await rpc('GetDeckEquipmentByDeckString', {
+          deckString: adaDeck.deckString
+        })
+      ).json()
+    ).toMatchObject({ deckEquipment: { cardBack: 8 } })
+
+    expect(
+      await (
+        await rpc('UnequipItem', {
+          itemType: 'SW_STICKERS',
+          tokenID: 5
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (await rpc('ListEquippedItems', { itemType: 'SW_STICKERS' })).json()
+    ).toEqual({ items: [] })
+  })
+
+  it('refuses to equip unsupported or unowned inventory', async () => {
+    expect(
+      (
+        await rpc('EquipItem', {
+          itemType: 'SW_BASE_CARDS',
+          tokenID: STARTER_CARD_IDS[0]
+        })
+      ).status
+    ).toBe(400)
+    const unowned = await rpc('EquipItem', {
+      itemType: 'SW_STICKERS',
+      tokenID: 999
+    })
+    expect(unowned.status).toBe(404)
+    expect(await unowned.json()).toMatchObject({ msg: 'item is not owned' })
+    expect((await rpc('ListEquippedItems', {}, false)).status).toBe(401)
+  })
+
   it('uses the original quest response fields and starter quest types', async () => {
     const response = await rpc('ListQuests', {
       accountAddress: identityReference

@@ -445,6 +445,67 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'EquipItem': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          itemType?: ItemType
+          tokenID?: number
+        }>(request)
+        if (!body.itemType) throw invalidArgument('itemType is required')
+        if (!Number.isSafeInteger(body.tokenID) || (body.tokenID ?? -1) < 0) {
+          throw invalidArgument('tokenID must be a non-negative integer')
+        }
+        return json(request, env, {
+          item: await playerRpc.equipItem(
+            principal.userId,
+            body.itemType,
+            body.tokenID!
+          )
+        })
+      }
+
+      case 'UnequipItem': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          itemType?: ItemType
+          tokenID?: number
+        }>(request)
+        if (!body.itemType) throw invalidArgument('itemType is required')
+        if (!Number.isSafeInteger(body.tokenID) || (body.tokenID ?? -1) < 0) {
+          throw invalidArgument('tokenID must be a non-negative integer')
+        }
+        return json(request, env, {
+          ok: await playerRpc.unequipItem(
+            principal.userId,
+            body.itemType,
+            body.tokenID!
+          )
+        })
+      }
+
+      case 'ListEquippedItems': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ itemType?: ItemType }>(request)
+        return json(request, env, {
+          items: await playerRpc.listEquippedItems(
+            principal.userId,
+            body.itemType
+          )
+        })
+      }
+
+      case 'GetDeckEquipmentByDeckString': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ deckString?: string }>(request)
+        if (!body.deckString) throw invalidArgument('deckString is required')
+        return json(request, env, {
+          deckEquipment: await playerRpc.deckEquipment(
+            principal.userId,
+            body.deckString
+          )
+        })
+      }
+
       case 'GetCardOwnership': {
         const principal = await identityPrincipal(request, env)
         return json(request, env, {

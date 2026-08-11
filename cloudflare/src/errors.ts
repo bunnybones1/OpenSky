@@ -17,5 +17,8 @@ export const permissionDenied = (message: string) =>
 export const alreadyExists = (message: string) =>
   new RpcError(409, 'webrpc.already_exists', message)
 
+export const notFound = (message: string) =>
+  new RpcError(404, 'webrpc.not_found', message)
+
 export const unauthenticated = (message = 'unauthorized') =>
   new RpcError(401, 'webrpc.unauthenticated', message)
