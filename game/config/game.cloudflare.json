@@ -5,7 +5,7 @@
   "ASSETS_VERSION_HASH": "",
   "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
   "MATCHMAKER_URL": "/matchmaker/",
-  "ETHEREUM_HOST_PROVIDER": "https://nodes.sequence.app/polygon/AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
+  "ETHEREUM_HOST_PROVIDER": "",
   "WEBAPP_URL": "/",
   "GAME_BASE_URL_PATH": "/game/",
   "GAME_SERVER_WALLET_ADDRESS": "",

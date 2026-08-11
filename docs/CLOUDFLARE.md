@@ -1,9 +1,23 @@
 # Cloudflare deployment
 
 The Cloudflare deployment runs the Vite webapp, browser-hosted game client, and the first
-TypeScript API slice as one Worker. The game deliberately supports `LOCAL_BOT` only. Wallet login,
-Cloudflare account registration, session restoration, and cookie-policy persistence use D1; the
-matchmaker, multiplayer game server, and authenticated Practice queue remain out of scope.
+TypeScript API slices as one Worker. The game deliberately supports `LOCAL_BOT` only. OpenSky
+identity is independent of blockchain wallets: Google OIDC is the first login provider, while
+wallet connections are a separate, optional integration reserved for WalletConnect.
+
+## Identity model
+
+The D1 schema separates three concepts:
+
+- `users` are OpenSky people and own the application session.
+- `auth_identities` link login providers to users. Google is the first provider; additional
+  providers can be linked without changing the user ID.
+- `wallet_connections` link verified wallets to users. No wallet is required to create an OpenSky
+  identity or play Practice.
+
+The Google flow uses server-side OpenID Connect authorization code exchange, anti-forgery state,
+PKCE, and a seven-day HttpOnly, Secure, SameSite=Lax OpenSky session cookie. OAuth access and ID
+tokens are not stored.
 
 ## Build
 
@@ -33,6 +47,35 @@ RELEASE_VERSION=my-release pnpm build:cloudflare
 
 The build also fails if an emitted file exceeds Cloudflare Workers' 25 MiB static-asset limit.
 
+## Google OAuth configuration
+
+Create an OAuth 2.0 Client ID with application type **Web application** in Google Cloud. Add this
+production authorized redirect URI exactly:
+
+```text
+https://opensky-webapp.dysinski-tomasz.workers.dev/api/auth/google/callback
+```
+
+For a local Wrangler preview, also add the exact origin and callback printed by Wrangler, commonly:
+
+```text
+http://localhost:8787/api/auth/google/callback
+```
+
+Copy `.dev.vars.example` to `.dev.vars` for local development and fill in the values. `.dev.vars`
+is ignored by Git. Never commit the Google client secret or the production session signing key.
+
+The production Worker needs all three secrets:
+
+```sh
+pnpm --dir cloudflare exec wrangler secret put SESSION_SIGNING_KEY --config ../wrangler.jsonc
+pnpm --dir cloudflare exec wrangler secret put GOOGLE_CLIENT_ID --config ../wrangler.jsonc
+pnpm --dir cloudflare exec wrangler secret put GOOGLE_CLIENT_SECRET --config ../wrangler.jsonc
+```
+
+The client ID is public by design, but binding both OAuth values through Wrangler keeps deployment
+configuration together and avoids committing environment-specific identifiers.
+
 ## Local Cloudflare preview
 
 Apply the D1 migrations before the first local run:
@@ -41,8 +84,7 @@ Apply the D1 migrations before the first local run:
 pnpm db:migrate:cloudflare:local
 ```
 
-Provide a development-only signing key through `.dev.vars` or Wrangler's `--var` option. Never
-commit the production signing key.
+Then run:
 
 ```sh
 pnpm preview:cloudflare
@@ -66,16 +108,10 @@ account, create that database and replace the generated `database_id` in the con
 pnpm --dir cloudflare exec wrangler d1 create opensky-auth --config ../wrangler.jsonc
 ```
 
-Apply migrations and configure the session signing secret before deploying:
+Apply migrations and configure the secrets above before deploying:
 
 ```sh
 pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --remote --config ../wrangler.jsonc
-pnpm --dir cloudflare exec wrangler secret put SESSION_SIGNING_KEY --config ../wrangler.jsonc
-```
-
-Then build and deploy:
-
-```sh
 pnpm deploy:cloudflare
 ```
 
@@ -84,25 +120,34 @@ compute first.
 
 ## Ported API surface
 
-- `GetAuthToken` validates the ETHAuth proof with Sequence and issues an OpenSky HS256 session.
-- `GetSession` restores the D1 account for a valid session.
-- `RegisterAccount`, `AccountExists`, and `AccountExistsByName` persist and query Cloudflare accounts.
-- `GetCookiePolicy` and `SaveCookiePolicy` cover the webapp's login-finalization dependency.
+The identity-native routes are:
 
-First-time Sequence wallets are automatically registered in the Cloudflare profile. The D1 data is
-currently isolated from the legacy Go/Postgres deployment, so legacy names, decks, inventory, and
-progress are not migrated.
+- `GET /api/auth/session` returns the current user, optional verified wallet links, and provider
+  availability without exposing provider tokens.
+- `GET /api/auth/google/start` begins Google OIDC with state and PKCE.
+- `GET /api/auth/google/callback` completes Google OIDC and creates or updates the D1 identity.
+- `POST /api/auth/logout` clears the OpenSky identity session.
+
+The earlier Sequence ETHAuth-compatible RPC routes remain temporarily for legacy clients, but the
+Cloudflare webapp no longer calls them, includes a Sequence project key, creates burner wallets, or
+automatically registers wallet accounts.
+
+The D1 data is isolated from the legacy Go/Postgres deployment, so legacy names, decks, inventory,
+and progress are not migrated.
 
 ## Current boundary
 
 - `LOCAL_BOT` simulates both players in the browser using the existing TypeScript/Wasm state code.
 - Card and presentation assets still load from the configured external assets host.
-- Wallet login and the minimal account/session state are native TypeScript Worker services.
+- Google authentication and identity sessions are native TypeScript Worker services.
+- WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
+  response keep them separate from login.
 - `PRACTICE_BOT`, ranked play, multiplayer, decks, rewards, inventory, and legacy account-data
   migration still require additional service ports.
 - `/matchmaker` remains reserved as a same-origin path for a later Durable Object/WebSocket slice.
 
 ## Suggested next slice
 
-Port the minimal deck/read-model endpoints needed by the signed-in Play screen, then replace the
-Practice matchmaker hop with a Worker/Durable Object game session.
+Add WalletConnect as an account-settings integration: connect a wallet, sign a nonce owned by the
+current OpenSky session, persist the verified address in `wallet_connections`, and expose wallet
+contents without granting that wallet authority over the user's login session.

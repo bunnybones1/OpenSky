@@ -1,18 +1,18 @@
 {
-  "!!": "Phase-one Cloudflare profile: static webapp plus browser-hosted localbot game",
+  "!!": "Cloudflare profile: Google identity plus browser-hosted localbot game; wallet linking is optional and not enabled yet",
   "ASSETS_URL": "https://assets.skyweaver.net",
   "ASSETS_VERSION_HASH": "",
   "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
   "ASSETS_MANIFEST_WEBAPP_HASH": "496ce46e45e0a24cf442aba3f187e473",
   "API_HOST": "/api",
-  "ETHEREUM_HOST_PROVIDER": "https://nodes.sequence.app/polygon/AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
+  "ETHEREUM_HOST_PROVIDER": "",
   "ETHEREUM_NETWORK_CHAIN_ID": "137",
   "WEB_WALLET_HOST": "https://sequence.app",
   "GAME_URL": "/game/",
   "WEBAPP_URL": "/",
   "MATCHMAKER_URL": "/matchmaker/",
   "ANALYTICS": false,
-  "SEQUENCE_API_KEY": "AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
+  "SEQUENCE_API_KEY": "",
   "SEQUENCE_API_HOST": "https://api.sequence.app",
   "SEQUENCE_METADATA_HOST": "https://metadata.sequence.app",
   "SEQUENCE_SESSIONS_HOST": "https://sessions.sequence.app",
@@ -29,5 +29,6 @@
   "GEOBLOCKING": false,
   "USER_PILOT_TOKEN": "",
   "LOCAL_BOT_ENABLED": true,
-  "AUTO_REGISTER_WALLET": true
+  "AUTO_REGISTER_WALLET": false,
+  "AUTH_MODE": "google"
 }
