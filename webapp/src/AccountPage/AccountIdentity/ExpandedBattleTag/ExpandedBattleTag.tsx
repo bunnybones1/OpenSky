@@ -92,7 +92,7 @@ export const ExpandedBattleTag = memo(() => {
         </BattleTagIdentityWrapper>
       </FlexBox>
       {env.AUTH_MODE !== 'google' && <WalletInfo />}
-      {env.AUTH_MODE !== 'google' && <SpectateInfo />}
+      <SpectateInfo />
     </>
   )
 })
