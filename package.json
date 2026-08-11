@@ -8,12 +8,15 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
+    "build:cloudflare": "node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "clean": "pnpm dlx rimraf node_modules ./**/node_modules",
     "audit:fix": "pnpm dlx pnpm-audit-fix",
-    "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit"
+    "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
+    "preview:cloudflare": "pnpm build:cloudflare && pnpm dlx wrangler@4.110.0 dev",
+    "deploy:cloudflare": "pnpm build:cloudflare && pnpm dlx wrangler@4.110.0 deploy"
   },
   "devDependencies": {
     "dpdm": "^3.10.0",

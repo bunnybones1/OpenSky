@@ -1,0 +1,10 @@
+{
+  "name": "opensky-webapp",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./webapp/dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application"
+  }
+}

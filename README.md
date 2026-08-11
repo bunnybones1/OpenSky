@@ -5,6 +5,9 @@ OpenSky is the open-source monorepo for OpenSky's webapp, game client, API, matc
 and shared game logic. OpenSky is an open-source version of the original Skyweaver game,
 originally created by Horizon Blockchain Games Inc.
 
+For the phase-one Cloudflare static webapp and browser-hosted localbot build, see
+[`docs/CLOUDFLARE.md`](./docs/CLOUDFLARE.md).
+
 ## OpenSky Repositories
 
 - https://github.com/horizon-games/OpenSky (this one)

@@ -36,7 +36,7 @@ const assetsUrl = (url: string, version: string): string => {
 }
 
 const matchmakerUrl = (url: string, version: string): string => {
-  const base = new URL(url)
+  const base = new URL(url, window.location.origin)
   base.search = `release=${version}`
   return base.href
 }
@@ -65,7 +65,10 @@ const env: Environment = {
   ASSETS_MANIFEST_GAME_HASH: String(
     window.APP_CONFIG.ASSETS_MANIFEST_GAME_HASH
   ),
-  WEBAPP_URL: String(window.APP_CONFIG.WEBAPP_URL || ''),
+  WEBAPP_URL: new URL(
+    String(window.APP_CONFIG.WEBAPP_URL || '/'),
+    window.location.origin
+  ).href,
   MATCHMAKER_URL: matchmakerUrl(
     String(window.APP_CONFIG.MATCHMAKER_URL || ''),
     releaseVersion

@@ -138,6 +138,10 @@ export const AuthenticationPage = memo(() => {
     }
   }, [])
 
+  const onLocalPracticeClick = useCallback(() => {
+    window.location.href = `${env.GAME_URL}?mode=LOCAL_BOT&skipAuth`
+  }, [])
+
   return (
     <>
       <div
@@ -216,6 +220,34 @@ export const AuthenticationPage = memo(() => {
                     onClick={onCreate}
                     leftAdornment={isLoggingIn ? { icon: 'spinner' } : undefined}
                     text={t('general.newAccount')}
+                  />
+                </div>
+              )}
+              {env.LOCAL_BOT_ENABLED && (
+                <div
+                  data-id="localPractice"
+                  className={clsx(
+                    Sprinkles({
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }),
+                    AuthenticationPageButtonWrapper,
+                    'isSecondButton'
+                  )}
+                >
+                  <Button
+                    disabled={isLoggingIn}
+                    height="52px"
+                    className={FullWidthButtonStyle}
+                    buttonClassName={FullWidthButtonStyle}
+                    buttonId="local-practice"
+                    colorType="orange"
+                    frameType="default"
+                    clickSound={null}
+                    hoverSound={null}
+                    onClick={onLocalPracticeClick}
+                    text={`${t('generic.Play')} ${t('generic.Practice')}`}
                   />
                 </div>
               )}

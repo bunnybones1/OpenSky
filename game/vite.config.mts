@@ -120,11 +120,19 @@ function htmlPlugin(): Plugin {
   return {
     name: 'html-transform',
     transformIndexHtml(html, ctx) {
-      const isDevMode = !!ctx.server || dist === 'local'
-      if (!isDevMode) {
-        return html.replace(/GITCOMMIT/gm, process.env.GITCOMMIT ?? '')
+      const shouldEmbedConfig =
+        !!ctx.server || dist === 'local' || dist === 'cloudflare'
+      const versionedHtml = html.replace(
+        /GITCOMMIT/gm,
+        process.env.GITCOMMIT ?? ''
+      )
+      if (shouldEmbedConfig) {
+        return versionedHtml.replace(
+          '/*APP_CONFIG>>*/ {} /*<<APP_CONFIG*/',
+          appConfig
+        )
       }
-      return html.replace('/*APP_CONFIG>>*/ {} /*<<APP_CONFIG*/', appConfig)
+      return versionedHtml
     }
   }
 }

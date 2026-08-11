@@ -24,6 +24,7 @@ lerna-debug.log*
 dump.rdb
 api/data/schema/schema.sql
 .pnpm-store/
+.wrangler/
 *.retry
 
 # configuration

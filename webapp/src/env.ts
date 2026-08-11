@@ -61,6 +61,8 @@ interface Environment {
   SW_TREASURY_CONTRACT_ADDRESS: string
 
   USER_PILOT_TOKEN: string
+
+  LOCAL_BOT_ENABLED: boolean
 }
 
 const assetsUrl = (url: string, version: string): string => {
@@ -76,13 +78,14 @@ const releaseVersion =
     value => !!value && value !== 'undefined' && value !== 'null'
   ) || 'dev'
 
-const gameUrl: URL = new URL(
-  `${releaseVersion}/`,
-  String(window.APP_CONFIG.GAME_URL || '')
+const gameBaseUrl = new URL(
+  String(window.APP_CONFIG.GAME_URL || '/game/'),
+  window.location.origin
 )
+const gameUrl = new URL(`${releaseVersion}/`, gameBaseUrl)
 
 const matchmakerUrl = (url: string, version: string): string => {
-  const base = new URL(url)
+  const base = new URL(url, window.location.origin)
   base.search = `release=${version}`
   return base.href
 }
@@ -116,7 +119,10 @@ const env: Environment = {
     releaseVersion
   ),
   GAME_URL: gameUrl.href,
-  WEBAPP_URL: String(window.APP_CONFIG.WEBAPP_URL),
+  WEBAPP_URL: new URL(
+    String(window.APP_CONFIG.WEBAPP_URL || '/'),
+    window.location.origin
+  ).href,
 
   ANALYTICS: Boolean(window.APP_CONFIG.ANALYTICS),
   DATABEAT_SERVER: String(window.APP_CONFIG.DATABEAT_SERVER || ''),
@@ -143,7 +149,9 @@ const env: Environment = {
   SW_TREASURY_CONTRACT_ADDRESS: String(
     window.APP_CONFIG.SW_TREASURY_CONTRACT_ADDRESS || ''
   ),
-  USER_PILOT_TOKEN: String(window.APP_CONFIG.USER_PILOT_TOKEN || '')
+  USER_PILOT_TOKEN: String(window.APP_CONFIG.USER_PILOT_TOKEN || ''),
+
+  LOCAL_BOT_ENABLED: window.APP_CONFIG.LOCAL_BOT_ENABLED === true
 }
 
 // eslint-disable-next-line
