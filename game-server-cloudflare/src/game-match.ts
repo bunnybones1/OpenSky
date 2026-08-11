@@ -15,6 +15,7 @@ import {
   recordAbandonPenalty
 } from './abandon-penalties'
 import {
+  applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
   applyMatchStats
@@ -1102,6 +1103,12 @@ export class GameMatch implements DurableObject {
         this.env.AUTH_DB,
         metadata.proposalId,
         questProgress,
+        endedAt
+      )
+      await applyConquestProgress(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        metadata.result?.winner,
         endedAt
       )
       const stats = await applyMatchStats(

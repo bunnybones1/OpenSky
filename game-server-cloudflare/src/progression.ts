@@ -1,4 +1,6 @@
 import {
+  ConquestMatchResult,
+  ConquestStatus,
   GameMode,
   MatchStatus,
   PlayerRank,
@@ -37,6 +39,21 @@ interface MatchPlayersRow {
 
 interface MatchStatsRow extends MatchPlayersRow {
   mode: string
+}
+
+interface ConquestMatchRow extends MatchStatsRow {
+  id: number
+}
+
+interface ActiveConquestRow {
+  id: number
+  match_progress: string
+}
+
+interface ConquestProgressReceiptRow {
+  player1_result: ConquestMatchResult
+  player2_result: ConquestMatchResult
+  processed_at: string
 }
 
 interface MatchExperienceRow extends MatchPlayersRow {
@@ -103,6 +120,12 @@ export interface MatchStatsReceipt {
 
 export interface MatchExperienceReceipt extends MatchStatsReceipt {}
 
+export interface ConquestProgressReceipt {
+  applied: boolean
+  results: [ConquestMatchResult, ConquestMatchResult]
+  processedAt: string
+}
+
 const parseReceipt = (row: ProgressionReceiptRow): MatchProgressionReceipt => ({
   questProgress: [
     JSON.parse(row.player1_quest_progress_json),
@@ -123,6 +146,185 @@ const normalizedDeltas = (value: Record<number, number>) =>
         delta > 0 &&
         delta <= 65_535
     )
+
+const conquestProgressReceipt = async (
+  database: D1Database,
+  proposalId: string,
+  applied: boolean
+): Promise<ConquestProgressReceipt | undefined> => {
+  const row = await database
+    .prepare(
+      `SELECT player1_result, player2_result, processed_at
+       FROM multiplayer_match_conquest_progress WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<ConquestProgressReceiptRow>()
+  return row
+    ? {
+        applied,
+        results: [row.player1_result, row.player2_result],
+        processedAt: row.processed_at
+      }
+    : undefined
+}
+
+const parsedConquestProgress = (
+  value: string
+): Record<string, ConquestMatchResult> => {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    const progress: Record<string, ConquestMatchResult> = {}
+    for (const [key, result] of Object.entries(parsed)) {
+      if (
+        /^\d+$/.test(key) &&
+        [
+          ConquestMatchResult.WIN,
+          ConquestMatchResult.LOSS,
+          ConquestMatchResult.DRAW
+        ].includes(result as ConquestMatchResult)
+      ) {
+        progress[key] = result as ConquestMatchResult
+      }
+    }
+    return progress
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Recreates the source Conquest state-manager transition at authoritative match
+ * completion. The per-proposal receipt and both player updates share one D1
+ * batch, so an alarm retry cannot append the same match twice.
+ */
+export const applyConquestProgress = async (
+  database: D1Database,
+  proposalId: string,
+  winner: 0 | 1 | undefined,
+  processedAt: string
+): Promise<ConquestProgressReceipt> => {
+  const existing = await conquestProgressReceipt(database, proposalId, false)
+  if (existing) return existing
+
+  const match = await database
+    .prepare(
+      `SELECT id, mode, player1_user_id, player2_user_id
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<ConquestMatchRow>()
+  if (!match) throw new Error('match ledger row was not found')
+  if (
+    ![GameMode.CONQUEST_CONSTRUCTED, GameMode.CONQUEST_DISCOVERY].includes(
+      match.mode as GameMode
+    )
+  ) {
+    return {
+      applied: false,
+      results: [ConquestMatchResult.DRAW, ConquestMatchResult.DRAW],
+      processedAt
+    }
+  }
+
+  const userIds = [match.player1_user_id, match.player2_user_id] as const
+  if (!userIds[0] || !userIds[1]) {
+    throw new Error('conquest matches require two identity players')
+  }
+  const results: [ConquestMatchResult, ConquestMatchResult] =
+    winner === undefined
+      ? [ConquestMatchResult.DRAW, ConquestMatchResult.DRAW]
+      : winner === 0
+      ? [ConquestMatchResult.WIN, ConquestMatchResult.LOSS]
+      : [ConquestMatchResult.LOSS, ConquestMatchResult.WIN]
+  const rows = await Promise.all(
+    userIds.map(userId =>
+      database
+        .prepare(
+          `SELECT id, match_progress FROM player_conquests
+           WHERE user_id = ? AND status = 'IN_PROGRESS' AND mode = ?
+           LIMIT 1`
+        )
+        .bind(userId, match.mode)
+        .first<ActiveConquestRow>()
+    )
+  )
+  if (!rows[0] || !rows[1]) {
+    throw new Error('there is no conquest in progress')
+  }
+
+  const statements: D1PreparedStatement[] = []
+  for (const player of [0, 1] as const) {
+    const progress = parsedConquestProgress(rows[player]!.match_progress)
+    progress[String(match.id)] = results[player]
+    const values = Object.values(progress)
+    const wins = values.filter(value => value === ConquestMatchResult.WIN).length
+    const ended =
+      wins >= 3 || values.includes(ConquestMatchResult.LOSS)
+    const status = !ended
+      ? ConquestStatus.IN_PROGRESS
+      : wins === 0
+      ? ConquestStatus.COMPLETED
+      : ConquestStatus.REWARDS_PENDING
+    statements.push(
+      database
+        .prepare(
+          `UPDATE player_conquests
+           SET match_progress = ?, status = ?,
+               ended_at = CASE WHEN ? = 1 THEN ? ELSE ended_at END
+           WHERE id = ? AND status = 'IN_PROGRESS'
+             AND match_progress = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM multiplayer_match_conquest_progress
+               WHERE proposal_id = ?
+             )`
+        )
+        .bind(
+          JSON.stringify(progress),
+          status,
+          ended ? 1 : 0,
+          processedAt,
+          rows[player]!.id,
+          rows[player]!.match_progress,
+          proposalId
+        )
+    )
+  }
+  statements.push(
+    database
+      .prepare(
+        `INSERT INTO multiplayer_match_conquest_progress
+           (proposal_id, player1_result, player2_result, processed_at)
+         SELECT ?, ?, ?, ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_conquest_progress
+           WHERE proposal_id = ?
+         ) AND EXISTS (
+           SELECT 1 FROM player_conquests
+           WHERE id = ? AND json_extract(match_progress, ?) = ?
+         ) AND EXISTS (
+           SELECT 1 FROM player_conquests
+           WHERE id = ? AND json_extract(match_progress, ?) = ?
+         )`
+      )
+      .bind(
+        proposalId,
+        results[0],
+        results[1],
+        processedAt,
+        proposalId,
+        rows[0].id,
+        `$."${match.id}"`,
+        results[0],
+        rows[1].id,
+        `$."${match.id}"`,
+        results[1]
+      )
+  )
+  await database.batch(statements)
+  const stored = await conquestProgressReceipt(database, proposalId, true)
+  if (!stored) throw new Error('conquest progress receipt was not persisted')
+  return stored
+}
 
 const receipt = (database: D1Database, proposalId: string) =>
   database
