@@ -1,3 +1,7 @@
+import { STARTER_DECKS } from './starter-decks'
+
+export { STRENGTH_STARTER_DECK } from './starter-decks'
+
 export interface PlayerQuest {
   key: string
   title: string
@@ -99,9 +103,6 @@ interface DeckRow {
   is_starter: number
 }
 
-export const STRENGTH_STARTER_DECK =
-  'SWxSTR0224gSjisS9WiYTUwzdwyc7xYgw9eR2us1aSrgBNHNAnSpFH8P7Sb4RdUXCD8c7FjHgbLwCJXttb1C7upZe7'
-
 export const STARTER_CARDS = [
   [6, 'Stomp'],
   [68, 'Goblet of Armis'],
@@ -190,7 +191,7 @@ export class PlayerRepository {
   async bootstrap(userId: string): Promise<PlayerState> {
     const now = new Date().toISOString()
     await this.ensureAccountSettings(userId, now)
-    const statements = [
+    const statements: D1PreparedStatement[] = [
       this.database
         .prepare(
           `INSERT OR IGNORE INTO player_profiles
@@ -208,22 +209,39 @@ export class PlayerRepository {
         .bind(userId, now, now),
       this.database
         .prepare(
-          `INSERT OR IGNORE INTO player_decks
-             (id, user_id, name, prism, deck_string, card_count, is_starter,
-              created_at, updated_at, deck_class, card_ids, deck_type)
-           VALUES (?, ?, 'Strength Starter', 'strength', ?, ?, 1, ?, ?, 'STR', ?,
-                   'UNLOCKED_STARTER')`
+          `INSERT OR IGNORE INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_HERO', 1, 1, 1, 'account-bootstrap', ?, ?)`
         )
-        .bind(
-          `${userId}:starter:strength`,
-          userId,
-          STRENGTH_STARTER_DECK,
-          STARTER_CARDS.length,
-          now,
-          now,
-          JSON.stringify(STARTER_CARD_IDS)
-        )
+        .bind(userId, now, now)
     ]
+
+    for (const deck of STARTER_DECKS) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_decks
+               (id, user_id, name, prism, deck_string, card_count, is_starter,
+                created_at, updated_at, deck_class, card_ids, deck_type, is_new)
+             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            `${userId}:starter:${deck.key}`,
+            userId,
+            deck.name,
+            deck.key,
+            deck.deckString,
+            deck.cardIds.length,
+            now,
+            now,
+            deck.deckClass,
+            JSON.stringify(deck.cardIds),
+            deck.unlocked ? 'UNLOCKED_STARTER' : 'LOCKED_STARTER',
+            deck.unlocked ? 1 : 0
+          )
+      )
+    }
 
     for (const quest of STARTER_QUESTS) {
       statements.push(
@@ -262,9 +280,19 @@ export class PlayerRepository {
             `INSERT OR IGNORE INTO player_card_unlocks
                (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
                 item_type, is_new)
-             VALUES (?, ?, ?, 'strength', 'starter-deck', ?, 'SW_BASE_CARDS', 1)`
+             VALUES (?, ?, ?, 'strength', 'starter-deck', ?, 'SW_BASE_CARDS', 0)`
           )
           .bind(userId, cardId, cardName, now)
+      )
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'starter-deck', ?, ?)`
+          )
+          .bind(userId, cardId, now, now)
       )
     }
 
@@ -333,7 +361,8 @@ export class PlayerRepository {
         this.database
           .prepare(
             `SELECT id, name, prism, deck_string, card_count, is_starter
-           FROM player_decks WHERE user_id = ?
+           FROM player_decks
+           WHERE user_id = ? AND deck_type != 'LOCKED_STARTER'
            ORDER BY is_starter DESC, created_at ASC`
           )
           .bind(userId)

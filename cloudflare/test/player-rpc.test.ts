@@ -507,14 +507,22 @@ describe('legacy player RPC compatibility', () => {
     }>()
 
     expect(body.page.pageSize).toBe(200)
-    expect(body.res).toEqual([
-      expect.objectContaining({
-        class: 'STR',
-        cardIds: STARTER_CARD_IDS,
-        deckType: 'UNLOCKED_STARTER',
-        deckString: expect.stringMatching(/^SWxSTR/)
-      })
-    ])
+    expect(body.res).toHaveLength(5)
+    expect(body.res).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          class: 'STR',
+          cardIds: STARTER_CARD_IDS,
+          deckType: 'UNLOCKED_STARTER',
+          deckString: expect.stringMatching(/^SWxSTR/)
+        }),
+        expect.objectContaining({
+          class: 'AGY',
+          deckType: 'LOCKED_STARTER',
+          deckString: expect.stringMatching(/^SWxAGY/)
+        })
+      ])
+    )
   })
 
   it('creates, reads, updates, and deletes decks through legacy contracts', async () => {
@@ -571,7 +579,7 @@ describe('legacy player RPC compatibility', () => {
     const deleted = await rpc('DeleteDeck', { req: { uuid: created.uuid } })
     expect(await deleted.json()).toEqual({ ok: true })
     const decks = await rpc('ListDecks', {})
-    expect((await decks.json<{ res: unknown[] }>()).res).toHaveLength(1)
+    expect((await decks.json<{ res: unknown[] }>()).res).toHaveLength(5)
   })
 
   it('requires a deck selector before deletion', async () => {
@@ -890,6 +898,99 @@ describe('legacy player RPC compatibility', () => {
       (await ownershipAgain.json<{ res: { unlockedCards: number } }>()).res
         .unlockedCards
     ).toBe(31)
+  })
+
+  it('claims a source hero reward and unlocks its starter deck and cards', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE player_progression SET basic_skypass_level = 6 WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+
+    const listed = await rpc('ListSkypassRewards', { season: 62 })
+    const levelSix = (
+      await listed.json<{
+        res: {
+          levels: Array<{
+            level: number
+            rewards: Array<{ id: number; itemType: string }>
+          }>
+        }
+      }>()
+    ).res.levels.find(level => level.level === 6)
+    const heroReward = levelSix?.rewards.find(
+      reward => reward.itemType === 'SW_HERO'
+    )
+    expect(heroReward).toBeDefined()
+
+    const claimed = await rpc('ClaimSkypassRewards', {
+      ids: [heroReward!.id]
+    })
+    expect(claimed.status).toBe(200)
+    expect(await claimed.json()).toMatchObject({
+      rewards: [
+        {
+          accountID: 0,
+          type: 'DECK',
+          deck: { deckClass: 'AGY', tokenIds: expect.any(Array) }
+        },
+        {
+          accountID: 0,
+          type: 'HERO',
+          hero: { hero: 'SAMYA', deckClass: 'AGY' }
+        }
+      ]
+    })
+
+    const heroes = await rpc('GetItemOwnershipByType', {
+      itemTypes: ['SW_HERO']
+    })
+    expect(
+      (
+        await heroes.json<{
+          items: Array<{ tokenID: number; itemType: string }>
+        }>()
+      ).items
+    ).toEqual([
+      expect.objectContaining({ tokenID: 1, itemType: 'SW_HERO' }),
+      expect.objectContaining({ tokenID: 2, itemType: 'SW_HERO' })
+    ])
+
+    const decks = await rpc('ListDecks', {})
+    const agilityDeck = (
+      await decks.json<{
+        res: Array<{ class: string; deckType: string; cardIds: number[] }>
+      }>()
+    ).res.find(deck => deck.class === 'AGY')
+    expect(agilityDeck).toMatchObject({
+      class: 'AGY',
+      deckType: 'UNLOCKED_STARTER'
+    })
+    expect(agilityDeck?.cardIds).toHaveLength(30)
+
+    const cardCount = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM player_card_unlocks WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ count: number }>()
+    expect(cardCount?.count).toBe(60)
+
+    const claimedAgain = await rpc('ClaimSkypassRewards', {
+      ids: [heroReward!.id]
+    })
+    expect(await claimedAgain.json()).toMatchObject({
+      rewards: [
+        expect.objectContaining({ type: 'DECK' }),
+        expect.objectContaining({ type: 'HERO' })
+      ]
+    })
+    const heroCount = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_HERO'`
+    )
+      .bind(userId)
+      .first<{ count: number }>()
+    expect(heroCount?.count).toBe(2)
   })
 
   it('rejects SkyPass rewards that are unearned or replaced in the listing', async () => {

@@ -7,6 +7,7 @@ import {
   validateDeckClass
 } from '../src/deck-codec'
 import { STARTER_CARD_IDS, STRENGTH_STARTER_DECK } from '../src/player'
+import { STARTER_DECKS } from '../src/starter-decks'
 
 describe('legacy deck string contract', () => {
   it('encodes and decodes the exact original Strength starter deck', () => {
@@ -20,5 +21,20 @@ describe('legacy deck string contract', () => {
     expect(() =>
       validateDeckClass(STARTER_CARD_IDS, DeckClass.STR)
     ).not.toThrow()
+  })
+
+  it('validates every exact single-prism starter deck from the Go source', () => {
+    for (const deck of STARTER_DECKS) {
+      expect(decodeDeckString(deck.deckString)).toEqual({
+        cardIds: deck.cardIds,
+        deckClass: deck.deckClass
+      })
+      expect(encodeDeckString(deck.cardIds, deck.deckClass)).toBe(
+        deck.deckString
+      )
+      expect(() =>
+        validateDeckClass(deck.cardIds, deck.deckClass)
+      ).not.toThrow()
+    }
   })
 })

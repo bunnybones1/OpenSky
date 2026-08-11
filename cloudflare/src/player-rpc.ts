@@ -22,6 +22,7 @@ import { CompetitiveRepository } from './competitive'
 import { alreadyExists, invalidArgument, permissionDenied } from './errors'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
+import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
 
 const CARD_FRAMES = [
   'SW_BASE_CARDS',
@@ -59,6 +60,21 @@ const ITEM_TYPE_BY_ID: Record<number, ItemType> = {
   500: 'SW_HERO' as ItemType
 }
 
+const ITEM_TYPE_BY_TOKEN_CODE: Record<number, ItemType> = {
+  0: 'SW_BASE_CARDS' as ItemType,
+  1: 'SW_SILVER_CARDS' as ItemType,
+  2: 'SW_GOLD_CARDS' as ItemType,
+  3: 'SW_HERO_SKINS' as ItemType,
+  4: 'SW_CRYSTALS' as ItemType,
+  5: 'SW_STICKERS' as ItemType,
+  6: 'SW_CARD_BACKS' as ItemType,
+  7: 'SW_SKYPASS' as ItemType,
+  8: 'SW_TITLES' as ItemType,
+  9: 'SW_STICKER_POINTS' as ItemType,
+  10: 'SW_XP' as ItemType,
+  254: 'SW_CONQUEST_TICKET' as ItemType
+}
+
 const HERO_DECK_CLASS: Record<number, string> = {
   1: 'STR',
   2: 'AGY',
@@ -75,6 +91,24 @@ const HERO_DECK_CLASS: Record<number, string> = {
   13: 'AGI',
   14: 'INW',
   15: 'HRI'
+}
+
+const HERO_BY_ID: Record<number, string> = {
+  1: 'ADA',
+  2: 'SAMYA',
+  3: 'FOX',
+  4: 'LOTUS',
+  5: 'TITUS',
+  6: 'IRIS',
+  7: 'BOURAN',
+  8: 'HORIK',
+  9: 'ZOEY',
+  10: 'AXEL',
+  11: 'ARI',
+  12: 'MIRA',
+  13: 'MAI',
+  14: 'BANJO',
+  15: 'SITTI'
 }
 
 const HEXBOUND_CARD_IDS = [
@@ -126,6 +160,16 @@ interface CardRow {
   prism: string
   item_type: ItemType
   unlocked_at: string
+  is_new: number
+}
+
+interface InventoryRow {
+  id: number
+  item_type: ItemType
+  token_id: number
+  balance: number
+  created_at: string
+  updated_at: string
   is_new: number
 }
 
@@ -258,9 +302,9 @@ const parseAttributes = (value: string | null) => {
 }
 
 const cardClassForId = (cardId: number): string => {
-  if (cardId >= 4000) return 'HRT'
-  if (cardId >= 3000) return 'WIS'
-  if (cardId >= 2000) return 'INT'
+  if (cardId >= 4000) return 'INT'
+  if (cardId >= 3000) return 'HRT'
+  if (cardId >= 2000) return 'WIS'
   if (cardId >= 1000) return 'AGY'
   return 'STR'
 }
@@ -471,8 +515,9 @@ export class PlayerRpcRepository {
       }
       const owned = await this.database
         .prepare(
-          `SELECT 1 FROM player_card_unlocks
-           WHERE user_id = ? AND item_type = 'SW_TITLES' AND card_id = ?`
+          `SELECT 1 FROM player_items
+           WHERE user_id = ? AND item_type = 'SW_TITLES' AND token_id = ?
+             AND balance > 0`
         )
         .bind(userId, titleID)
         .first()
@@ -724,6 +769,19 @@ export class PlayerRpcRepository {
     await this.database.batch([
       this.database
         .prepare(
+          `UPDATE player_items
+           SET is_new = 0, updated_at = ?
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM player_deferred_item_updates pending
+             WHERE pending.user_id = player_items.user_id
+               AND pending.item_type = player_items.item_type
+               AND pending.token_id = player_items.token_id
+               AND pending.execute_at <= ?
+           )`
+        )
+        .bind(now, userId, now),
+      this.database
+        .prepare(
           `UPDATE player_card_unlocks
            SET is_new = 0
            WHERE user_id = ? AND EXISTS (
@@ -759,18 +817,27 @@ export class PlayerRpcRepository {
   }
 
   async listItems(userId: string, itemTypes?: ItemType[]): Promise<Item[]> {
-    const rows = await this.listCardRows(userId)
+    await this.applyDeferredItemUpdates(userId)
+    const result = await this.database
+      .prepare(
+        `SELECT id, item_type, token_id, balance, created_at, updated_at, is_new
+         FROM player_items
+         WHERE user_id = ? AND balance > 0
+         ORDER BY item_type ASC, token_id ASC`
+      )
+      .bind(userId)
+      .all<InventoryRow>()
     const requested = itemTypes?.length ? new Set(itemTypes) : undefined
-    return rows
+    return result.results
       .filter(row => !requested || requested.has(row.item_type))
       .map(row => ({
-        id: row.row_id,
+        id: row.id,
         itemType: row.item_type,
-        tokenID: row.card_id,
-        balance: '1',
+        tokenID: row.token_id,
+        balance: String(row.balance),
         lastUpdateID: 0,
-        createdAt: row.unlocked_at,
-        updatedAt: row.unlocked_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
         isNew: row.is_new === 1
       }))
   }
@@ -786,27 +853,41 @@ export class PlayerRpcRepository {
     const statements: D1PreparedStatement[] = []
     for (const tokenId of tokenIds) {
       const typeCode = (tokenId & 0xff0000) >> 16
-      const itemType = CARD_FRAMES[typeCode]
-      const cardId = tokenId & 0x00ffff
+      const itemType = ITEM_TYPE_BY_TOKEN_CODE[typeCode]
+      const itemId = tokenId & 0x00ffff
       if (!itemType) continue
-      statements.push(
-        immediately
-          ? this.database
+      if (immediately) {
+        statements.push(
+          this.database
+            .prepare(
+              `UPDATE player_items SET is_new = 0, updated_at = ?
+               WHERE user_id = ? AND item_type = ? AND token_id = ?`
+            )
+            .bind(now.toISOString(), userId, itemType, itemId)
+        )
+        if (CARD_FRAMES.includes(itemType as (typeof CARD_FRAMES)[number])) {
+          statements.push(
+            this.database
               .prepare(
                 `UPDATE player_card_unlocks SET is_new = 0
                  WHERE user_id = ? AND item_type = ? AND card_id = ?`
               )
-              .bind(userId, itemType, cardId)
-          : this.database
-              .prepare(
-                `INSERT INTO player_deferred_item_updates
+              .bind(userId, itemType, itemId)
+          )
+        }
+      } else {
+        statements.push(
+          this.database
+            .prepare(
+              `INSERT INTO player_deferred_item_updates
                    (user_id, item_type, token_id, execute_at)
                  VALUES (?, ?, ?, ?)
                  ON CONFLICT (user_id, item_type, token_id)
                  DO UPDATE SET execute_at = excluded.execute_at`
-              )
-              .bind(userId, itemType, cardId, executeAt)
-      )
+            )
+            .bind(userId, itemType, itemId, executeAt)
+        )
+      }
     }
     if (statements.length) await this.database.batch(statements)
     return true
@@ -1144,10 +1225,7 @@ export class PlayerRpcRepository {
           status.player_rank
         ])
       )
-      for (const mode of [
-        'RANKED_CONSTRUCTED',
-        'RANKED_DISCOVERY'
-      ] as const) {
+      for (const mode of ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const) {
         statements.push(
           this.database
             .prepare(
@@ -1363,11 +1441,119 @@ export class PlayerRpcRepository {
             new Date().toISOString()
           )
       )
+      const now = new Date().toISOString()
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             VALUES (?, 'SW_BASE_CARDS', ?, 1, 1, ?, ?, ?)`
+          )
+          .bind(userId, cardId, `skypass:${reward.id}`, now, now)
+      )
     }
 
     return granted.map(cardId =>
       rewardCard(cardId, 'SW_BASE_CARDS' as ItemType)
     )
+  }
+
+  private async applyHeroSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    statements: D1PreparedStatement[]
+  ): Promise<Array<Record<string, unknown>>> {
+    const attributes = parseAttributes(reward.attributes)
+    const heroIds = attributes.tokenIDs
+      .map(Number)
+      .filter(heroId => Number.isSafeInteger(heroId) && HERO_BY_ID[heroId])
+    if (!heroIds.length) throw new Error('no heroes provided')
+
+    const now = new Date().toISOString()
+    const deckRewards: Array<Record<string, unknown>> = []
+    const heroRewards: Array<Record<string, unknown>> = []
+
+    for (const heroId of heroIds) {
+      const deckClass = HERO_DECK_CLASS[heroId]
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             VALUES (?, 'SW_HERO', ?, 1, 1, ?, ?, ?)`
+          )
+          .bind(userId, heroId, `skypass:${reward.id}`, now, now)
+      )
+
+      const starterDeck = STARTER_DECK_BY_HERO_ID.get(heroId)
+      if (starterDeck) {
+        statements.push(
+          this.database
+            .prepare(
+              `UPDATE player_decks
+               SET deck_type = 'UNLOCKED_STARTER', is_new = 1, updated_at = ?
+               WHERE user_id = ? AND deck_class = ?
+                 AND deck_type = 'LOCKED_STARTER'`
+            )
+            .bind(now, userId, starterDeck.deckClass)
+        )
+
+        for (const cardId of starterDeck.cardIds) {
+          statements.push(
+            this.database
+              .prepare(
+                `INSERT OR IGNORE INTO player_card_unlocks
+                   (user_id, card_id, card_name, prism, unlock_source,
+                    unlocked_at, item_type, is_new)
+                 VALUES (?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 0)`
+              )
+              .bind(
+                userId,
+                cardId,
+                CARD_NAMES[cardId] || `Card ${cardId}`,
+                starterDeck.key,
+                `starter-deck:${starterDeck.deckClass}`,
+                now
+              )
+          )
+          statements.push(
+            this.database
+              .prepare(
+                `INSERT OR IGNORE INTO player_items
+                   (user_id, item_type, token_id, balance, is_new, unlock_source,
+                    created_at, updated_at)
+                 VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, ?, ?, ?)`
+              )
+              .bind(
+                userId,
+                cardId,
+                `starter-deck:${starterDeck.deckClass}`,
+                now,
+                now
+              )
+          )
+        }
+
+        deckRewards.push({
+          accountID: 0,
+          type: 'DECK',
+          deck: {
+            deckClass: starterDeck.deckClass,
+            tokenIds: starterDeck.cardIds
+          }
+        })
+      }
+
+      heroRewards.push({
+        accountID: 0,
+        type: 'HERO',
+        hero: { hero: HERO_BY_ID[heroId], deckClass }
+      })
+    }
+
+    return [...deckRewards, ...heroRewards]
   }
 
   async claimSkypassRewards(
@@ -1426,14 +1612,16 @@ export class PlayerRpcRepository {
       }
 
       const itemType = ITEM_TYPE_BY_ID[rawReward.item_type]
-      if (itemType !== ('SW_BASE_CARDS' as ItemType)) {
-        throw new Error(`unsupported item type ${itemType || 'UNKNOWN'}`)
-      }
-      const applied = await this.applyBaseCardSkypassReward(
-        userId,
-        rawReward,
-        statements
-      )
+      const applied =
+        itemType === ('SW_BASE_CARDS' as ItemType)
+          ? await this.applyBaseCardSkypassReward(userId, rawReward, statements)
+          : itemType === ('SW_HERO' as ItemType)
+            ? await this.applyHeroSkypassReward(userId, rawReward, statements)
+            : (() => {
+                throw new Error(
+                  `unsupported item type ${itemType || 'UNKNOWN'}`
+                )
+              })()
       gainedRewards.push(...applied)
       statements.push(
         this.database

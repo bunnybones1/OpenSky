@@ -2,7 +2,10 @@ import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { Env } from '../src/env'
-import { createIdentitySession, IDENTITY_SESSION_COOKIE } from '../src/identity-session'
+import {
+  createIdentitySession,
+  IDENTITY_SESSION_COOKIE
+} from '../src/identity-session'
 import { handlePlayerRequest } from '../src/player-api'
 
 const testEnv = env as unknown as Env
@@ -11,7 +14,10 @@ const userId = 'player-user-id'
 const request = async (path: string, init?: RequestInit, signedIn = true) => {
   const headers = new Headers(init?.headers)
   if (signedIn) {
-    const token = await createIdentitySession(userId, testEnv.SESSION_SIGNING_KEY)
+    const token = await createIdentitySession(
+      userId,
+      testEnv.SESSION_SIGNING_KEY
+    )
     headers.set('Cookie', `${IDENTITY_SESSION_COOKIE}=${token}`)
   }
   return handlePlayerRequest(
@@ -56,7 +62,7 @@ describe('Cloudflare player API', () => {
     expect(body.player.quests).toHaveLength(3)
     expect(body.player.collection.basicCardCount).toBe(30)
     expect(body.player.decks).toEqual([
-      expect.objectContaining({ name: 'Strength Starter', cardCount: 30 })
+      expect.objectContaining({ name: 'Ada Starter', cardCount: 30 })
     ])
 
     const wallets = await env.AUTH_DB.prepare(
@@ -68,24 +74,39 @@ describe('Cloudflare player API', () => {
   })
 
   it('is idempotent when the player returns', async () => {
-    const init = { method: 'POST', headers: { Origin: 'https://opensky.example' } }
+    const init = {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    }
     expect((await request('/api/player/bootstrap', init)).status).toBe(200)
     expect((await request('/api/player/bootstrap', init)).status).toBe(200)
 
-    const [profiles, cards, decks] = await Promise.all([
-      env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM player_profiles WHERE user_id = ?')
+    const [profiles, cards, decks, items] = await Promise.all([
+      env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_profiles WHERE user_id = ?'
+      )
         .bind(userId)
         .first<{ count: number }>(),
-      env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM player_card_unlocks WHERE user_id = ?')
+      env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_card_unlocks WHERE user_id = ?'
+      )
         .bind(userId)
         .first<{ count: number }>(),
-      env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM player_decks WHERE user_id = ?')
+      env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_decks WHERE user_id = ?'
+      )
+        .bind(userId)
+        .first<{ count: number }>(),
+      env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_items WHERE user_id = ?'
+      )
         .bind(userId)
         .first<{ count: number }>()
     ])
     expect(profiles?.count).toBe(1)
     expect(cards?.count).toBe(30)
-    expect(decks?.count).toBe(1)
+    expect(decks?.count).toBe(5)
+    expect(items?.count).toBe(31)
   })
 
   it('requires an identity session', async () => {

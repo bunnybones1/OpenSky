@@ -109,9 +109,9 @@ export const decodeDeckString = (
 }
 
 const cardClassForDeckValidation = (cardId: number): DeckClass => {
-  if (cardId >= 4000 && cardId < 5000) return 'HRT' as DeckClass
-  if (cardId >= 3000 && cardId < 4000) return 'WIS' as DeckClass
-  if (cardId >= 2000 && cardId < 3000) return 'INT' as DeckClass
+  if (cardId >= 4000 && cardId < 5000) return 'INT' as DeckClass
+  if (cardId >= 3000 && cardId < 4000) return 'HRT' as DeckClass
+  if (cardId >= 2000 && cardId < 3000) return 'WIS' as DeckClass
   if (cardId >= 1000 && cardId < 2000) return 'AGY' as DeckClass
   if (cardId < 1000) return 'STR' as DeckClass
   throw new Error(`card id ${cardId} is invalid`)
@@ -143,8 +143,7 @@ export const validateDeckClass = (
       `detected ${classes.size} classes in card list; one or two are required`
     )
   }
-  const inferred =
-    classes.size === 1 ? [...classes][0] : dualClass(classes)
+  const inferred = classes.size === 1 ? [...classes][0] : dualClass(classes)
   if (!inferred) throw new Error('cannot infer deck class')
   if (requestedClass === inferred) return
 
