@@ -922,6 +922,64 @@ export class PlayerRpcRepository {
     }))
   }
 
+  async searchDecks(
+    userId: string,
+    request: {
+      deckString?: string
+      name?: string
+      class?: Deck['class']
+    },
+    page?: Page
+  ): Promise<{ page: Page; res: Deck[] }> {
+    if (page?.before && page.after) {
+      throw invalidArgument('before and after cannot be used together')
+    }
+
+    const decks = (await this.listDecks(userId))
+      .filter(
+        deck => !request.deckString || deck.deckString === request.deckString
+      )
+      .filter(
+        deck =>
+          !request.name ||
+          deck.name.toLowerCase().includes(request.name.toLowerCase())
+      )
+      .filter(deck => !request.class || deck.class === request.class)
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
+          right.uuid.localeCompare(left.uuid)
+      )
+
+    const pageSize = Math.min(
+      200,
+      Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+        ? page!.pageSize!
+        : 20
+    )
+    const requestedOffset = page?.before
+      ? feedCursor(page.before)
+      : page?.after
+        ? Math.max(0, feedCursor(page.after) - pageSize)
+        : 0
+    const offset = Math.min(requestedOffset, decks.length)
+    const res = decks.slice(offset, offset + pageSize)
+    const end = offset + res.length
+
+    return {
+      page: {
+        pageSize,
+        hasBefore: end < decks.length,
+        hasAfter: offset > 0,
+        ...(end < decks.length ? { before: feedCursorFor(end) } : {}),
+        ...(offset > 0 ? { after: feedCursorFor(offset) } : {}),
+        ...(page?.sort ? { sort: page.sort } : {})
+      },
+      res
+    }
+  }
+
   private async findDeck(
     userId: string,
     selector: { uuid?: string; deckString?: string }

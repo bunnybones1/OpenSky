@@ -811,6 +811,65 @@ describe('legacy player RPC compatibility', () => {
     )
   })
 
+  it('searches private decks with source filters and cursor pagination', async () => {
+    const filtered = await rpc('SearchDecks', {
+      req: { name: 'STARTER', class: 'STR' }
+    })
+    expect(filtered.status).toBe(200)
+    expect(await filtered.json()).toMatchObject({
+      page: { pageSize: 20, hasBefore: false, hasAfter: false },
+      res: [expect.objectContaining({ name: 'Ada Starter', class: 'STR' })]
+    })
+
+    const first = await rpc('SearchDecks', {
+      req: {},
+      page: { pageSize: 2 }
+    })
+    expect(first.status).toBe(200)
+    const firstBody = await first.json<{
+      page: { before: string; hasBefore: boolean; hasAfter: boolean }
+      res: Array<{ name: string }>
+    }>()
+    expect(firstBody.res.map(deck => deck.name)).toEqual([
+      'Ada Starter',
+      'Ari Starter'
+    ])
+    expect(firstBody.page).toMatchObject({
+      hasBefore: true,
+      hasAfter: false,
+      before: expect.any(String)
+    })
+
+    const second = await rpc('SearchDecks', {
+      req: {},
+      page: { pageSize: 2, before: firstBody.page.before }
+    })
+    expect(second.status).toBe(200)
+    const secondBody = await second.json<{
+      page: { hasBefore: boolean; hasAfter: boolean; after: string }
+      res: Array<{ name: string }>
+    }>()
+    expect(secondBody.res.map(deck => deck.name)).toEqual([
+      'Bouran Starter',
+      'Lotus Starter'
+    ])
+    expect(secondBody.page).toMatchObject({
+      hasBefore: true,
+      hasAfter: true,
+      after: expect.any(String)
+    })
+
+    expect(
+      (
+        await rpc('SearchDecks', {
+          req: {},
+          page: { before: firstBody.page.before, after: firstBody.page.before }
+        })
+      ).status
+    ).toBe(400)
+    expect((await rpc('SearchDecks', { req: {} }, false)).status).toBe(401)
+  })
+
   it('creates, reads, updates, and deletes decks through legacy contracts', async () => {
     const createdResponse = await rpc('CreateDeck', {
       req: {

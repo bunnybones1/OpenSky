@@ -984,6 +984,26 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'SearchDecks': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          page?: Page
+          req?: {
+            deckString?: string
+            name?: string
+            class?: DeckClass
+          }
+        }>(request)
+        if (!body.req || typeof body.req !== 'object') {
+          throw invalidArgument('req is required')
+        }
+        return json(
+          request,
+          env,
+          await playerRpc.searchDecks(principal.userId, body.req, body.page)
+        )
+      }
+
       case 'CreateDeck': {
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{
