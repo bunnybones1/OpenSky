@@ -205,6 +205,9 @@ importers:
       '@opensky/proto':
         specifier: workspace:*
         version: link:../lib/proto
+      '@skyweaver/state-browser-sys':
+        specifier: workspace:*
+        version: link:../state/js-bindings/packages/browser-sys
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 0.21.0

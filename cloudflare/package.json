@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@opensky/proto": "workspace:*"
+    "@opensky/proto": "workspace:*",
+    "@skyweaver/state-browser-sys": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.21.0",
