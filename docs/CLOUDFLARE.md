@@ -174,10 +174,14 @@ and progress are not migrated.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
+- Ranked/Conquest abandon counts and cooldowns use the source fixed-window,
+  release-scoped policy in D1 and are combined with matchmaker refusal and
+  acceptance penalties. The production penalty map remains the source default
+  of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest state/rewards, the cross-service game abandon cooldown, social/invite
-  APIs, marketplace writes, and administrative APIs still require ports.
+- Conquest state/rewards, social/invite APIs, marketplace writes, and
+  administrative APIs still require ports.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
