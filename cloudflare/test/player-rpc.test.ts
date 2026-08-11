@@ -842,6 +842,57 @@ describe('legacy player RPC compatibility', () => {
       res: { uuid: created.uuid, name: 'Practice Copy' }
     })
 
+    const favorited = await rpc('ToggleDeckFavorite', { uuid: created.uuid })
+    expect(await favorited.json()).toEqual({ isFavorite: true })
+    expect(
+      await (
+        await rpc('GetDeck', { req: { uuid: created.uuid } })
+      ).json()
+    ).toMatchObject({
+      res: {
+        uuid: created.uuid,
+        isFavorite: true,
+        favoritedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
+      }
+    })
+    const unfavorited = await rpc('ToggleDeckFavorite', { uuid: created.uuid })
+    expect(await unfavorited.json()).toEqual({ isFavorite: false })
+    expect(
+      await (
+        await rpc('GetDeck', { req: { uuid: created.uuid } })
+      ).json()
+    ).toMatchObject({
+      res: { uuid: created.uuid, isFavorite: false, favoritedAt: '' }
+    })
+
+    const concurrentToggles = await Promise.all([
+      rpc('ToggleDeckFavorite', { uuid: created.uuid }),
+      rpc('ToggleDeckFavorite', { uuid: created.uuid })
+    ])
+    expect(
+      (
+        await Promise.all(
+          concurrentToggles.map(response =>
+            response.json<{ isFavorite: boolean }>()
+          )
+        )
+      )
+        .map(response => response.isFavorite)
+        .sort()
+    ).toEqual([false, true])
+    expect(
+      await (
+        await rpc('GetDeck', { req: { uuid: created.uuid } })
+      ).json()
+    ).toMatchObject({ res: { isFavorite: false } })
+    expect(
+      (
+        await rpcAs('another-player', 'ToggleDeckFavorite', {
+          uuid: created.uuid
+        })
+      ).status
+    ).toBe(500)
+
     const updated = await rpc('UpdateDeck', {
       req: {
         uuid: created.uuid,

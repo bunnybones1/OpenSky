@@ -1063,6 +1063,22 @@ export class PlayerRpcRepository {
     return true
   }
 
+  async toggleDeckFavorite(userId: string, uuid: string): Promise<boolean> {
+    const now = new Date().toISOString()
+    const row = await this.database
+      .prepare(
+        `UPDATE player_decks
+         SET favorited_at = CASE WHEN favorited_at IS NULL THEN ? ELSE NULL END,
+             updated_at = ?
+         WHERE user_id = ? AND id = ?
+         RETURNING favorited_at`
+      )
+      .bind(now, now, userId, uuid)
+      .first<{ favorited_at: string | null }>()
+    if (!row) throw new Error('deck not found')
+    return row.favorited_at !== null
+  }
+
   async markDeckNotNew(userId: string, uuid: string): Promise<boolean> {
     await this.database
       .prepare(

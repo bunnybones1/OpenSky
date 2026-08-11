@@ -1083,6 +1083,18 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'ToggleDeckFavorite': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ uuid?: string }>(request)
+        if (!body.uuid) throw invalidArgument('uuid is required')
+        return json(request, env, {
+          isFavorite: await playerRpc.toggleDeckFavorite(
+            principal.userId,
+            body.uuid
+          )
+        })
+      }
+
       case 'MarkDeckNotNew': {
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ uuid?: string }>(request)

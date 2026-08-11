@@ -53,6 +53,7 @@ const CRITICAL_METHODS = [
   'Ping',
   'SearchCards',
   'SetInvitedBy',
+  'ToggleDeckFavorite',
   'UpdateAccount',
   'UpdateDeck',
   'UserStorageFetch',
@@ -62,7 +63,7 @@ const CRITICAL_METHODS = [
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 82) {
+  if (audit.implemented.length < 83) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {
