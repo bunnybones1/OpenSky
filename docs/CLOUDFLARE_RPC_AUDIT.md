@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 103 |
-| Remaining source RPCs | 69 |
+| Ported source RPCs | 105 |
+| Remaining source RPCs | 67 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 39 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 37 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -73,3 +73,8 @@ game UI only as a match-local lookup, never as authentication.
    deployed. Report details and summaries are also connected to the D1 audit
    rows, with neutral scores until the separate fraud model is ported.
    Production has no staff grants.
+
+Role-gated reads now also cover every configured banner and reusable one-time
+notification template. Player banner visibility remains time-filtered, and
+template definitions are deliberately distinct from per-player notification
+deliveries.
