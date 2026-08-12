@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`be11c131-00a9-4e3e-a96f-8756893bedef`)
+- API/web Worker: `opensky-webapp` (`d6a00372-2fee-4044-abf0-e5b45862b86d`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `7672d9a` for web/API and `b612af3` for game, plus the
+- Deployed source includes `68fe9f0` for web/API and `b612af3` for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0035`
+- Applied D1 migrations: `0001` through `0036`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -80,6 +80,10 @@
 - Audited one-time notification template create/update/delete plus player-side
   materialization with source age/address/creation-date filters, current-valid
   delivery suppression, revision-keyed retry receipts, and no wallet dependency
+- Admin match-review transitions behind both `ADMIN` and an independently
+  provisioned `MODERATION_WRITE` permission, with retry-idempotent state writes
+  and immutable transition-only audits; production currently has no grants or
+  review rows
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -99,7 +103,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 129 tests
+- API Worker: 21 files, 130 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -159,6 +163,11 @@ settlement and delayed delivery against that pool.
   templates, template audits, template deliveries, total inbox rows, or writer
   grants, version metadata matched `be11c131-00a9-4e3e-a96f-8756893bedef`, and
   every D1 read reported `changed_db: false`
+- The live `GMSetReviewed` probe returned `401` without a session; migration
+  `0036` was present, production retained zero moderation-writer grants, review
+  rows, or review-audit rows, version metadata matched
+  `d6a00372-2fee-4044-abf0-e5b45862b86d`, and every D1 read reported
+  `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   `CLOUDFLARE_ACCOUNT_ID=528badc1c29c30196335df252a73c5a6` explicitly even
   though `wrangler.jsonc` pins that account; the first `0035` attempt failed

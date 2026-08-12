@@ -264,8 +264,11 @@ and progress are not migrated.
   analytics pipeline that has not been ported or imitated.
 - Staff match inspection now reads the authoritative match ledger with source
   account, mode, status, duration, reviewed, and cursor contracts; replay IDs
-  are returned only after the admin-role check. Reviewed state currently
-  defaults to false because its separate audited write model is not yet ported.
+  are returned only after the admin-role check. `GMSetReviewed` additionally
+  requires the independently provisioned `MODERATION_WRITE` permission and
+  records only actual state transitions in an immutable audit table. Repeating
+  the same desired value is retry-safe and does not create a second audit row;
+  production currently has no permission grants or review rows.
 - The original pending-Gold admin table now reads the Conquest delivery ledger.
   Only `PENDING` deliveries are listed, while day/week totals count the actual
   card quantities from recent pending and completed delivery records.
