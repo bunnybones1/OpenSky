@@ -23,4 +23,11 @@ The Cloudflare adapter archives the private source-shaped replay records and a m
 
 The analytics Worker exposes only `/health`; replay archives and CSVs have no public retrieval route. Failed processing is retried at most 25 times and then retained as a failed D1 receipt/dead-letter message.
 
+## Rollout status
+
+- D1 migration `0065_multiplayer_match_analytics.sql` is applied in production.
+- Queues `cloud-weasel-game-analytics` and `cloud-weasel-game-analytics-dead-letter` are provisioned.
+- Production Worker deployment is intentionally waiting for R2 to be enabled on Cloudflare account `528badc1c29c30196335df252a73c5a6`; the Cloudflare API currently returns `10042` for R2 operations.
+- Do not deploy the game-server producer until bucket `cloud-weasel-game-analytics` exists and the analytics consumer is healthy.
+
 Analytics is observational and cannot grant gameplay items. The off-chain build gate scans the Worker for player inventory writes or transaction calls. All player-facing match, quest, conquest, and SkyPass rewards remain canonical off-chain inventory rows in D1; WalletConnect is not a dependency of this pipeline.
