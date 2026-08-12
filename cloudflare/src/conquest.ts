@@ -9,6 +9,7 @@ import {
   type ConquestV2TreasureProgress,
   type WeeklyGolds
 } from '@opensky/proto'
+import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
 import { invalidArgument } from './errors'
 
@@ -54,28 +55,6 @@ interface WeeklyGoldRow {
   total_supply: number
 }
 
-const matchProgress = (value: string): Record<number, ConquestMatchResult> => {
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>
-    const result: Record<number, ConquestMatchResult> = {}
-    for (const [key, entry] of Object.entries(parsed)) {
-      if (
-        /^\d+$/.test(key) &&
-        [
-          ConquestMatchResult.WIN,
-          ConquestMatchResult.LOSS,
-          ConquestMatchResult.DRAW
-        ].includes(entry as ConquestMatchResult)
-      ) {
-        result[Number(key)] = entry as ConquestMatchResult
-      }
-    }
-    return result
-  } catch {
-    return {}
-  }
-}
-
 const conquest = (row: ConquestRow): Conquest => ({
   id: row.id,
   status: row.status,
@@ -83,7 +62,7 @@ const conquest = (row: ConquestRow): Conquest => ({
   mode: row.mode,
   hero: row.hero,
   deckClass: row.deck_class,
-  matchProgress: matchProgress(row.match_progress),
+  matchProgress: parseConquestMatchProgress(row.match_progress),
   createdAt: row.created_at,
   ...(row.ended_at ? { endedAt: row.ended_at } : {})
 })
@@ -252,7 +231,9 @@ export class ConquestRepository {
     let discoveryWins = 0
     let constructedWins = 0
     for (const row of rows.results) {
-      const progress = Object.values(matchProgress(row.match_progress))
+      const progress = Object.values(
+        parseConquestMatchProgress(row.match_progress)
+      )
       const wins = progress.filter(
         value => value === ConquestMatchResult.WIN
       ).length

@@ -12,6 +12,7 @@ import {
   conquestMatchMode,
   storedMatchModes
 } from '@opensky/shared/match-modes'
+import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
 const SILVER_OFFSET = 1 << 16
 const GOLD_OFFSET = 2 << 16
@@ -125,15 +126,9 @@ const parseIds = (value: string): number[] => {
 }
 
 const winsFromProgress = (value: string): number => {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 0
-    return Object.values(parsed).filter(
-      result => result === ConquestMatchResult.WIN
-    ).length
-  } catch {
-    return 0
-  }
+  return Object.values(parseConquestMatchProgress(value)).filter(
+    result => result === ConquestMatchResult.WIN
+  ).length
 }
 
 const cardReward = (

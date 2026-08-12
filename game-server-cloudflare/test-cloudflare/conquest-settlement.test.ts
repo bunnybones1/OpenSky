@@ -448,6 +448,39 @@ describe('source Conquest reward settlement', () => {
     ).toEqual({ status: ConquestStatus.REWARDS_PENDING })
   })
 
+  it('fails closed for malformed persisted match progress', async () => {
+    const conquest = await setup(1)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests SET match_progress = '[' WHERE id = ?`
+    )
+      .bind(conquest!.id)
+      .run()
+
+    await expect(
+      settlePendingConquest(
+        env.AUTH_DB,
+        conquest!.id,
+        SETTLED_AT,
+        sequenceDraw(0)
+      )
+    ).rejects.toThrow('Conquest match progress is malformed')
+    expect((await inventory()).results).toEqual([])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_conquest_settlements) AS settlements,
+           (SELECT COUNT(*) FROM player_conquest_feed_events) AS events,
+           (SELECT status FROM player_conquests WHERE id = ?) AS status`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({
+      settlements: 0,
+      events: 0,
+      status: ConquestStatus.REWARDS_PENDING
+    })
+  })
+
   it('fails closed for expired and malformed configured pools', async () => {
     const expired = await setup(1)
     await env.AUTH_DB.prepare(

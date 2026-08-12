@@ -292,4 +292,34 @@ describe('source conquest RPC foundation', () => {
       }
     })
   })
+
+  it('matches source typed-map decoding and fails malformed rows closed', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at)
+       VALUES ('typed-map', ?, 'IN_PROGRESS', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR', ?, ?)`
+    )
+      .bind(userId, '{"+01":"FUTURE_VALUE","0":"DRAW","2":null}', now)
+      .run()
+
+    expect(await (await rpc('ConquestStatus', {})).json()).toMatchObject({
+      conquest: {
+        matchProgress: {
+          0: 'DRAW',
+          1: 'UNKNOWN',
+          2: 'UNKNOWN'
+        }
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests SET match_progress = '['
+       WHERE entry_key = 'typed-map'`
+    ).run()
+    expect((await rpc('ConquestStatus', {})).status).toBe(500)
+    expect((await rpc('ConquestStats', {})).status).toBe(500)
+  })
 })

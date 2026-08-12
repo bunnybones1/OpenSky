@@ -15,6 +15,7 @@ import {
   isRankedMatchModes,
   storedMatchModes
 } from '@opensky/shared/match-modes'
+import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 import {
   hasUnlockedRanked,
   INITIAL_RANK_STATE_JSON
@@ -315,30 +316,6 @@ const conquestProgressReceipt = async (
     : undefined
 }
 
-const parsedConquestProgress = (
-  value: string
-): Record<string, ConquestMatchResult> => {
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>
-    const progress: Record<string, ConquestMatchResult> = {}
-    for (const [key, result] of Object.entries(parsed)) {
-      if (
-        /^\d+$/.test(key) &&
-        [
-          ConquestMatchResult.WIN,
-          ConquestMatchResult.LOSS,
-          ConquestMatchResult.DRAW
-        ].includes(result as ConquestMatchResult)
-      ) {
-        progress[key] = result as ConquestMatchResult
-      }
-    }
-    return progress
-  } catch {
-    return {}
-  }
-}
-
 /**
  * Recreates the source Conquest state-manager transition at authoritative match
  * completion. The per-proposal receipt and both player updates share one D1
@@ -399,7 +376,9 @@ export const applyConquestProgress = async (
 
   const statements: D1PreparedStatement[] = []
   for (const player of [0, 1] as const) {
-    const progress = parsedConquestProgress(rows[player]!.match_progress)
+    const progress = parseConquestMatchProgress(
+      rows[player]!.match_progress
+    )
     progress[String(match.id)] = results[player]
     const values = Object.values(progress)
     const wins = values.filter(

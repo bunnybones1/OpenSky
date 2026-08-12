@@ -327,6 +327,89 @@ describe('source Conquest authoritative match progression', () => {
     ).toEqual({ count: 0 })
   })
 
+  it.each([
+    ['invalid JSON', '{'],
+    ['an array', '[]'],
+    ['a nonnumeric match ID', '{"not-a-match":"WIN"}'],
+    ['an out-of-range match ID', '{"18446744073709551616":"WIN"}'],
+    ['a non-string match result', '{"10":1}']
+  ])(
+    'fails closed before changing either player for %s progress',
+    async (_description, malformedProgress) => {
+      const proposalId = `conquest-progress-malformed-${malformedProgress.length}`
+      await setup(proposalId)
+      await env.AUTH_DB.prepare(
+        `UPDATE player_conquests SET match_progress = ? WHERE user_id = ?`
+      )
+        .bind(malformedProgress, USER_2)
+        .run()
+      const before = (await conquests()).results
+
+      await expect(
+        applyConquestProgress(
+          env.AUTH_DB,
+          proposalId,
+          0,
+          '2026-08-11T12:04:45.000Z'
+        )
+      ).rejects.toThrow('Conquest match progress is malformed')
+      expect((await conquests()).results).toEqual(before)
+      expect(
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count
+           FROM multiplayer_match_conquest_progress WHERE proposal_id = ?`
+        )
+          .bind(proposalId)
+          .first<{ count: number }>()
+      ).toEqual({ count: 0 })
+    }
+  )
+
+  it('matches source uint64-key and unknown-enum normalization', async () => {
+    const proposalId = 'conquest-progress-source-normalization'
+    const match = await setup(proposalId)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests SET match_progress = ? WHERE user_id = ?`
+    )
+      .bind('{"+01":"FUTURE_VALUE","0":"DRAW","2":null}', USER_1)
+      .run()
+
+    await applyConquestProgress(
+      env.AUTH_DB,
+      proposalId,
+      0,
+      '2026-08-11T12:04:50.000Z'
+    )
+    expect(
+      JSON.parse((await conquests()).results[0].match_progress)
+    ).toEqual({
+      0: ConquestMatchResult.DRAW,
+      1: ConquestMatchResult.UNKNOWN,
+      2: ConquestMatchResult.UNKNOWN,
+      [match!.id]: ConquestMatchResult.WIN
+    })
+  })
+
+  it('matches the source nil-map behavior for JSON null progress', async () => {
+    const proposalId = 'conquest-progress-null-map'
+    const match = await setup(proposalId)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests SET match_progress = 'null' WHERE user_id = ?`
+    )
+      .bind(USER_1)
+      .run()
+
+    await applyConquestProgress(
+      env.AUTH_DB,
+      proposalId,
+      0,
+      '2026-08-11T12:04:55.000Z'
+    )
+    expect(
+      JSON.parse((await conquests()).results[0].match_progress)
+    ).toEqual({ [match!.id]: ConquestMatchResult.WIN })
+  })
+
   it('does nothing for non-Conquest matches', async () => {
     const proposalId = 'conquest-progress-ranked'
     await setup(proposalId)
