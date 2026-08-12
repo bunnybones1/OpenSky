@@ -13,19 +13,42 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     145 |
-| Remaining source RPCs        |      27 |
+| Ported source RPCs           |     146 |
+| Cloudflare-superseded RPCs   |      15 |
+| Deliberately retired RPCs    |       2 |
+| Actionable source RPC gaps   |       9 |
 | Cloudflare-only RPC adapters |       0 |
 
-## Remaining workstreams
+Together, 163/172 source contracts (94.8%) are implemented, replaced by a
+reviewed Cloud Weasel contract, or intentionally retired. This is a product-
+intent measure; the audit still prints every raw source omission.
 
-| Workstream             | Remaining | Interpretation                                                                                                                                                                         |
-| ---------------------- | --------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin and operations   |         1 | App Developer Keys and Conquest V2 previews now use deployed dormant capabilities and immutable audits; only SkyPass reward-definition writes remain.                                |
-| Commerce and wallet    |         9 | Stripe Checkout and its webhook are ported behind dormant optional configuration. Mobile receipts and on-chain methods should follow optional WalletConnect, not be copied into login. |
-| Content and discovery  |         1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule.                                                                                                            |
-| Internal legacy        |        10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs.                                                              |
-| Migration and identity |         6 | Burner/account migration, deletion, and old social-provider endpoints need explicit product decisions.                                                                                 |
+## Actionable workstreams
+
+| Workstream            | Actionable | Interpretation                                                                                                                                                                         |
+| --------------------- | ---------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mobile-store commerce |          5 | Apple, Google Play, and Samsung product/receipt integrations remain optional product work. Any fulfillment must grant idempotent off-chain inventory; it must never mint.              |
+| Reward schedule       |          1 | `GetNextRewardsTime` needs an explicit Cloud Weasel UTC schedule and the distribution worker contract behind it.                                                                       |
+| Social and launch     |          3 | Discord/Twitch information and the early-access list need Cloud Weasel product choices; they are not inferred from the zero-user migration decision.                                    |
+
+All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
+source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
+bounded fetches, atomic optimistic replacement, immutable audits, and a D1-
+enforced freeze after the first claim in a season.
+
+## Reviewed non-ports
+
+- The ten `Internal*` match/account/archive RPCs are superseded by typed Worker
+  service bindings, the match ledger, and authoritative Durable Objects.
+- The four on-chain/burner transaction-preparation RPCs are superseded by the
+  [off-chain reward policy](./OFFCHAIN_REWARD_POLICY.md). WalletConnect remains
+  an optional ownership read, not a reward destination.
+- `RequestAccountDeletion` is superseded by the deployed Google OIDC step-up
+  web flow.
+- `MigrateAccount` and `MigrateFromBurner` are retired for a zero-user Google-
+  identity launch. Future providers get new reviewed account-linking flows.
+- `JoinEarlyAccessList` and the source Discord/Twitch endpoints remain visible
+  product decisions rather than being retired without an explicit choice.
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are
@@ -55,11 +78,11 @@ Cloudflare account and a retention lifecycle is approved.
    anonymization follows the source delay. The source invite-request setting is
    deployed, and its deprecated `SignIn` method remains an explicit
    compatibility error rather than a second login authority.
-4. Design optional WalletConnect linking and only then adapt commerce/on-chain
-   methods at wallet-content boundaries.
-5. Provision staff only through an audited out-of-band procedure, then add
-   granular permissions and immutable audit records before porting any GM/admin
-   write. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
+4. Add optional WalletConnect only at external-ownership read boundaries. Game
+   rewards remain off-chain and do not depend on a wallet.
+5. Provision staff only through an audited out-of-band procedure. Every current
+   GM/admin write is ported with a granular dormant capability and immutable
+   audit. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
    the original UI's read-only authorization probe and account discovery are
    deployed. Report details and summaries are also connected to the D1 audit
    rows, with neutral scores until the separate fraud model is ported.

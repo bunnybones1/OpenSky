@@ -66,14 +66,73 @@ const CRITICAL_METHODS = [
   'Version'
 ]
 
+// These are explicit Cloud Weasel product decisions, not an excuse to hide
+// unknown source gaps. Anything missing from the TypeScript gateway and absent
+// from these reviewed sets remains actionable and fails the audit unless it is
+// added to the short approved-gap list below.
+export const RETIRED_SOURCE_RPCS = new Set([
+  'MigrateAccount',
+  'MigrateFromBurner'
+])
+
+export const SUPERSEDED_SOURCE_RPCS = new Set([
+  'InternalAppendMatchArchiveRecords',
+  'InternalAppendMatchLiveRecords',
+  'InternalConquestStatus',
+  'InternalGetAccount',
+  'InternalGetAccountStats',
+  'InternalGetBotAccounts',
+  'InternalGetPrivateSpectateCode',
+  'InternalListUnlockedDeckStrings',
+  'InternalMatchEnd',
+  'InternalMatchStart',
+  'PrepareOnChainInCurrencyTransaction',
+  'PrepareOnChainInItemsTransaction',
+  'PrepareOnChainTransaction',
+  'PrepareTransferAssetsFromBurnerTransaction',
+  'RequestAccountDeletion'
+])
+
+export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([
+  'GetDiscordInfo',
+  'GetNextRewardsTime',
+  'GetTwitchInfo',
+  'IAPVerifyAppleProducts2',
+  'IAPVerifyGoogleProducts2',
+  'JoinEarlyAccessList',
+  'VerifyAppleAppStorePayment',
+  'VerifyGooglePlayPayment',
+  'VerifySamsungGalaxyStorePayment'
+])
+
+export const partitionRpcGaps = methods => ({
+  retired: methods.filter(method => RETIRED_SOURCE_RPCS.has(method)).sort(),
+  superseded: methods
+    .filter(method => SUPERSEDED_SOURCE_RPCS.has(method))
+    .sort(),
+  actionable: methods
+    .filter(
+      method =>
+        !RETIRED_SOURCE_RPCS.has(method) &&
+        !SUPERSEDED_SOURCE_RPCS.has(method)
+    )
+    .sort()
+})
+
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 88) {
+  if (audit.implemented.length < 146) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {
     if (!audit.implemented.includes(method)) {
       errors.push(`critical RPC is missing: ${method}`)
+    }
+  }
+  const gaps = partitionRpcGaps(audit.missing)
+  for (const method of gaps.actionable) {
+    if (!APPROVED_ACTIONABLE_SOURCE_RPCS.has(method)) {
+      errors.push(`unreviewed actionable RPC gap: ${method}`)
     }
   }
   return errors
@@ -131,23 +190,29 @@ const main = async () => {
   const audit = await loadAudit(root)
   const errors = checkRpcCoverage(audit)
   if (process.argv.includes('--json')) {
-    process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`)
+    process.stdout.write(
+      `${JSON.stringify({ ...audit, gaps: partitionRpcGaps(audit.missing) }, null, 2)}\n`
+    )
   } else {
-    const categories = summarizeRpcCategories(audit.missing)
+    const gaps = partitionRpcGaps(audit.missing)
+    const fulfilled =
+      audit.implemented.length + gaps.superseded.length + gaps.retired.length
     process.stdout.write(
       [
         `Source RPCs: ${audit.source.length}`,
         `Ported source RPCs: ${audit.implemented.length}`,
-        `Remaining source RPCs: ${audit.missing.length}`,
+        `Superseded source RPCs: ${gaps.superseded.length}`,
+        `Retired source RPCs: ${gaps.retired.length}`,
+        `Fulfilled/retired source contracts: ${fulfilled}`,
+        `Actionable source RPC gaps: ${gaps.actionable.length}`,
         `Cloudflare-only adapters: ${audit.adapters.length}`,
-        `Remaining by category: ${Object.entries(categories)
-          .map(([category, count]) => `${category}=${count}`)
-          .join(', ')}`,
         '',
-        `Remaining: ${audit.missing.join(', ')}`,
+        `Actionable: ${gaps.actionable.join(', ')}`,
+        `Superseded: ${gaps.superseded.join(', ')}`,
+        `Retired: ${gaps.retired.join(', ')}`,
         audit.adapters.length ? `Adapters: ${audit.adapters.join(', ')}` : ''
       ]
-        .filter((line, index) => line || index < 6)
+        .filter((line, index) => line || index < 8)
         .join('\n') + '\n'
     )
   }

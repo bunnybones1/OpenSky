@@ -486,12 +486,17 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - Optional EVM ownership proofs are deployed independently of Google login;
   the WalletConnect browser adapter and merged wallet-content reads remain
-  pending a public project ID, origin allowlist, and product mapping.
-- Seasonal invite-sticker redemption, marketplace writes, and most
-  administrative APIs still require ports. Conquest settlement is implemented, but production
-  has no active reward-pool rows; matchmaking remains disabled until an
+  pending a public project ID, origin allowlist, and product mapping. Wallet
+  ownership is read-only: Cloud Weasel rewards use canonical off-chain D1
+  inventory and never require a mint or reward-transfer transaction.
+- Seasonal invite-sticker redemption and marketplace writes still need Cloud
+  Weasel product decisions; the source admin RPC surface is ported. Conquest
+  settlement is implemented, but production has no active reward-pool rows;
+  matchmaking remains disabled until an
   explicitly approved pool and a pre-enable delivery drill pass.
-- Existing Go/Postgres account data is not automatically migrated into D1.
+- Existing Go/Postgres account data will not be migrated into D1. Cloud Weasel
+  launches with zero users, so source burner/account migration is deliberately
+  retired rather than carried into the new identity model.
 
 ## Suggested next slice
 
