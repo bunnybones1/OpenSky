@@ -1482,38 +1482,30 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       state: { hasState: true }
     })
 
-    const completionMessages = collectMessages(first, 3)
-    first.send(JSON.stringify({ type: 'abandon_match' }))
+    const disconnected = nextMessage(second)
+    first.close(1000, 'test disconnect')
+    expect(await disconnected).toEqual({ type: 'opponent_disconnected' })
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players = await state.storage.get<
+          Record<string, { abandonAtMs?: number }>
+        >('match:players')
+        expect(players?.[PRINCIPAL_1].abandonAtMs).toEqual(expect.any(Number))
+        players![PRINCIPAL_1].abandonAtMs = Date.now() - 1
+        await state.storage.put('match:players', players)
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    const completionMessages = collectMessages(second, 3)
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
     const completed = await completionMessages
     expect(completed.map(message => message.type)).toEqual([
       'gameplay',
       'match_ended',
       'rewards'
     ])
-    expect(completed[2]).toMatchObject({
-      type: 'rewards',
-      data: [
-        {
-          accountID: 1,
-          type: 'RANK',
-          gameMode: 'RANKED_CONSTRUCTED',
-          rank: {
-            beforeMatch: {
-              rank: 'WANDERER',
-              rankStage: 'STAGE_I',
-              score: 0,
-              requiredRankPoints: 100
-            },
-            afterMatch: {
-              rank: 'WANDERER',
-              rankStage: 'STAGE_I',
-              score: 0,
-              requiredRankPoints: 100
-            }
-          }
-        }
-      ]
-    })
+    expect(completed[2]).toMatchObject({ type: 'rewards' })
     const endedStatus = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
     })

@@ -27,7 +27,6 @@ export type AcceptedClientMessage = Extract<
       | 'player_loading_progress'
       | 'emote'
       | 'mute_opponent'
-      | 'abandon_match'
       | 'error'
   }
 >
@@ -144,8 +143,6 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
       }
       return value as unknown as AcceptedClientMessage
     case 'error':
-      return value as unknown as AcceptedClientMessage
-    case 'abandon_match':
       return value as unknown as AcceptedClientMessage
     default:
       throw new GameProtocolError('unsupported message type')

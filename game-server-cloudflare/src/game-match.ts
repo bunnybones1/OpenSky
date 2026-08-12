@@ -729,10 +729,6 @@ export class GameMatch implements DurableObject {
         await this.state.storage.put(PLAYERS_KEY, players)
         return
       }
-      case 'abandon_match':
-        this.requirePlayer(role)
-        await this.abandon(attachment.principal)
-        return
       case 'error':
         console.error(
           'game client reported error',
@@ -1096,27 +1092,6 @@ export class GameMatch implements DurableObject {
     this.sendToSpectators(sanitized)
     await this.replayEmote(sanitized)
     await this.state.storage.put(PLAYERS_KEY, players)
-  }
-
-  private async abandon(principal: string) {
-    const metadata = await this.metadataRequired()
-    if (metadata.ended) return
-    const players = await this.players()
-    const runtime = await this.ensureRuntime()
-    const emitted = this.dispatchAbandonFromAnyState(
-      runtime,
-      this.playerIndex(metadata.match, principal)
-    )
-    if (emitted.length > 0) {
-      this.broadcast({ type: 'gameplay', data: emitted })
-      await this.replayGameplay(emitted)
-    }
-    await this.afterStateChange(
-      metadata,
-      players,
-      await this.timers(),
-      Date.now()
-    )
   }
 
   private async afterStateChange(

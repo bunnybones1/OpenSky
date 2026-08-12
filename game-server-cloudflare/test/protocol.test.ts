@@ -14,13 +14,10 @@ const joinMessage = (loadingProgress: unknown = 0.5) => ({
 })
 
 describe('game WebSocket protocol validation', () => {
-  it('accepts source-compatible join, spectate, and abandon messages', () => {
+  it('accepts source-compatible join and spectate messages', () => {
     expect(parseClientMessage(JSON.stringify(joinMessage()))).toMatchObject({
       type: 'join_server',
       loadingProgress: 0.5
-    })
-    expect(parseClientMessage('{"type":"abandon_match"}')).toEqual({
-      type: 'abandon_match'
     })
     expect(
       parseClientMessage(
@@ -66,6 +63,9 @@ describe('game WebSocket protocol validation', () => {
       'binary messages are not supported'
     )
     expect(() => parseClientMessage('{')).toThrow('message is not valid JSON')
+    expect(() => parseClientMessage('{"type":"abandon_match"}')).toThrow(
+      'unsupported message type'
+    )
     expect(() => parseClientMessage('{"type":"spectate_server"}')).toThrow(
       'invalid spectate request'
     )
