@@ -519,3 +519,8 @@ The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
 `pnpm check:cloudflare:rpcs` to reproduce it and guard the critical compatibility
 surface against regression.
+
+The deployable-service inventory lives in
+[`CLOUDFLARE_SERVICE_AUDIT.md`](./CLOUDFLARE_SERVICE_AUDIT.md). Its release gate
+also catches newly introduced Docker workloads, compose services, and executable
+Go entrypoints that do not yet have an explicit Cloudflare disposition.
