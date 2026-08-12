@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`e0d19426-c3f3-4d59-9e23-58c54de6425a`)
+- API/web Worker: `opensky-webapp` (`ec76765a-2b9a-4bb2-8ba8-4ba83af1dde1`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -31,10 +31,13 @@
   mobile/early-access tombstones, and `0442374` for Apple App Store Server API
   verification, plus `0fc801e`/`0895054` for the off-chain Gold-to-Hero-skin
   exchange and its preserved original-product interface, and `a8b8d89` for
-  Google-mode off-chain reward presentation and regression guards
+  Google-mode off-chain reward presentation and regression guards, plus
+  `8aaac21` for build-enforced Go-worker inventory and `d50c553` for off-chain
+  SkyPass season close and auto-claim
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0063`
-- Scheduled trigger: every minute for due Conquest Gold delivery, account
+- Applied D1 migrations: `0001` through `0064`
+- Scheduled trigger: every minute for due Conquest Gold delivery, SkyPass
+  season close and auto-claim, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
   production.
@@ -1085,6 +1088,24 @@ settlement and delayed delivery against that pool.
   checks found no visible mint/tradable language or console errors on Conquest
   and SkyPass. The final D1 query reported 31 inventory rows, zero Hero
   exchanges, zero writes, and `changed_db: false`.
+- API/web Worker version `ec76765a-2b9a-4bb2-8ba8-4ba83af1dde1` contains
+  background-worker audit milestone `8aaac21` and SkyPass auto-claim milestone
+  `d50c553`. The build now inventories all 23 active Go worker runners and
+  fails on an unreviewed registration or missing TypeScript evidence: 11 are
+  ported, three superseded, six retired, two dormant, one optional, and none
+  remain actionable. Migration `0064_skypass_season_auto_claim.sql` adds
+  immutable per-reward and per-player season receipts, a one-per-season in-app
+  notification, five-attempt failure records, and a close-cycle guard. The
+  minute scheduler processes at most ten players and five rewards per player
+  per tick, resumes without duplicate inventory, honors free and entitled
+  premium tracks, and starts at the source boundary plus ten seconds. All 272
+  Worker tests passed, including concurrent execution and poisoned definitions;
+  TypeScript, reward/transaction gates, and the complete 472-file browser/game
+  build also passed. Production only has season 62 definitions, whose close is
+  2026-08-24T14:00:10Z, so deployment created no cycle or claim. The final D1
+  query reported one user, 31 inventory rows, zero SkyPass claims, auto-claims,
+  failures, or notifications, migration 64, zero writes, and `changed_db:
+  false`; the production URL returned HTTP 200.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
