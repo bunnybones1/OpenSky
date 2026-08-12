@@ -262,6 +262,13 @@ and progress are not migrated.
   intentionally neutral: the source's current raw `user report` signal has no
   direct weight, while its aggregate probability is maintained by a separate
   analytics pipeline that has not been ported or imitated.
+- Staff match inspection now reads the authoritative match ledger with source
+  account, mode, status, duration, reviewed, and cursor contracts; replay IDs
+  are returned only after the admin-role check. Reviewed state currently
+  defaults to false because its separate audited write model is not yet ported.
+- The original pending-Gold admin table now reads the Conquest delivery ledger.
+  Only `PENDING` deliveries are listed, while day/week totals count the actual
+  card quantities from recent pending and completed delivery records.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
