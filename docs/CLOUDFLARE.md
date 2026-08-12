@@ -245,6 +245,10 @@ and progress are not migrated.
   drains waiting tickets with `GAME_MODE_DISABLED` and accepted proposals with
   `SERVER_SHUTDOWN`; status-service failures pause matching without discarding
   durable queue/proposal state.
+  The source director's final player shuffle is preserved with a proposal-UUID
+  derived side assignment: both sides remain equally possible, while retries
+  keep D1 principals/modes and the game payload in the same `player1`/`player2`
+  order. A persisted all-accepted proposal is alarm-recoverable before dispatch.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

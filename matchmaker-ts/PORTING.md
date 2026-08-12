@@ -75,6 +75,12 @@ ten-second cache interval even when only one player is waiting. Disabled queues
 are drained with `GAME_MODE_DISABLED`; accepted proposals are canceled with
 `SERVER_SHUTDOWN`. An unavailable or malformed switchboard pauses matching and
 dispatch while retaining durable state for the next alarm retry.
+Immediately before accepted dispatch, both participants receive the source
+director's randomized game-side assignment. Cloudflare derives the coin flip
+from the cryptographically random proposal UUID after canonicalizing addresses,
+so allocation retries cannot reorder `player1`/`player2`. The accepted
+transition is also recoverable by the Durable Object alarm if execution stops
+after the final acceptance was persisted.
 
 ## Deployment gates
 

@@ -18,6 +18,7 @@ import {
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from '../src/runtime'
+import { orderParticipantsForGame } from '../src/player-order'
 
 const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
@@ -26,6 +27,7 @@ const PRINCIPAL_4 = '0x4444444444444444444444444444444444444444'
 const PRINCIPAL_5 = '0x5555555555555555555555555555555555555555'
 const PRINCIPAL_6 = '0x6666666666666666666666666666666666666666'
 const PRINCIPAL_7 = '0x7777777777777777777777777777777777777777'
+const PRINCIPAL_8 = '0x8888888888888888888888888888888888888888'
 
 const runtimeEnv = env as unknown as MatchmakerEnv
 const pool = () =>
@@ -715,6 +717,91 @@ describe('Cloudflare matchmaker Worker', () => {
       queuedPlayers: 0,
       activeProposals: 1
     })
+  })
+
+  it('shuffles game sides once per proposal and preserves them through dispatch', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.RANKED_CONSTRUCTED,
+      'release-1',
+      [PRINCIPAL_8, PRINCIPAL_2]
+    )
+    track(first, second)
+    const proposalId = await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list({ prefix: 'proposal:' })
+        expect(proposals.size).toBe(1)
+        return [...proposals.keys()][0].slice('proposal:'.length)
+      }
+    )
+    const expected = await orderParticipantsForGame(proposalId, [
+      { player: { address: PRINCIPAL_8 } },
+      { player: { address: PRINCIPAL_2 } }
+    ])
+
+    const firstSawAcceptance = nextMessage(first)
+    const secondSawAcceptance = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    await firstSawAcceptance
+    await secondSawAcceptance
+    const firstDispatch = collectMessages(first, 3)
+    const secondDispatch = collectMessages(second, 3)
+    second.send(JSON.stringify({ type: 'accept_match' }))
+    for (const messages of [await firstDispatch, await secondDispatch]) {
+      expect(messages[1]).toEqual({
+        type: 'match_made',
+        serverAddress: `wss://match.example/v1/matches/player1-${expected[0].player.address}`
+      })
+    }
+  })
+
+  it('recovers a persisted all-accepted proposal through the alarm', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.RANKED_CONSTRUCTED,
+      'release-1',
+      [PRINCIPAL_8, PRINCIPAL_2]
+    )
+    track(first, second)
+    const proposalId = await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        expect(proposals.size).toBe(1)
+        const [key, proposal] = [...proposals.entries()][0]
+        await state.storage.put(key, {
+          ...proposal,
+          accepted: [PRINCIPAL_8, PRINCIPAL_2]
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+        return key.slice('proposal:'.length)
+      }
+    )
+    const expected = await orderParticipantsForGame(proposalId, [
+      { player: { address: PRINCIPAL_8 } },
+      { player: { address: PRINCIPAL_2 } }
+    ])
+
+    const firstDispatch = collectMessages(first, 2)
+    const secondDispatch = collectMessages(second, 2)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    for (const messages of [await firstDispatch, await secondDispatch]) {
+      expect(messages).toEqual([
+        {
+          type: 'match_made',
+          serverAddress: `wss://match.example/v1/matches/player1-${expected[0].player.address}`
+        },
+        {
+          type: 'match_ready_to_start',
+          mode: GameMode.RANKED_CONSTRUCTED
+        }
+      ])
+    }
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ activeProposals: 0 })
   })
 
   it('persists queue state and socket identity through Durable Object eviction', async () => {

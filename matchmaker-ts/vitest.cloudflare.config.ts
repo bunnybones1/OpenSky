@@ -191,6 +191,17 @@ export default defineConfig({
                 { status: 503 }
               )
             }
+            if (
+              dispatch.participants?.some(
+                participant =>
+                  participant.player?.address ===
+                  '0x8888888888888888888888888888888888888888'
+              )
+            ) {
+              return Response.json({
+                serverAddress: `wss://match.example/v1/matches/player1-${dispatch.participants[0].player?.address}`
+              })
+            }
             return Response.json({
               serverAddress: 'wss://match.example/v1/matches/test'
             })

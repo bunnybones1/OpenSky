@@ -40,6 +40,7 @@ import {
   Rarity
 } from './model'
 import { PenaltyTracker, readPenaltyConfig } from './penalties'
+import { orderParticipantsForGame } from './player-order'
 import {
   errorMessage,
   FindMatchCommand,
@@ -722,21 +723,30 @@ export class MatchmakerPool implements DurableObject {
       this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
       return
     }
-    if (proposal.accepted.includes(principal)) return
-
-    proposal.accepted.push(principal)
-    await this.state.storage.put(proposalKey(proposal.id), proposal)
-    this.broadcastProposal(proposal, {
-      type: 'accept_match',
-      playerID: principal
-    })
+    if (!proposal.accepted.includes(principal)) {
+      proposal.accepted.push(principal)
+      await this.state.storage.put(proposalKey(proposal.id), proposal)
+      this.broadcastProposal(proposal, {
+        type: 'accept_match',
+        playerID: principal
+      })
+    }
 
     if (addresses.every(address => proposal.accepted.includes(address))) {
-      proposal.status = 'ACCEPTED'
-      proposal.nextDispatchAtMs = Date.now()
-      await this.state.storage.put(proposalKey(proposal.id), proposal)
-      await this.dispatchProposal(proposal)
+      await this.beginAcceptedDispatch(proposal)
     }
+  }
+
+  private async beginAcceptedDispatch(proposal: StoredProposal) {
+    if (proposal.status !== 'FOUND') return
+    proposal.participants = await orderParticipantsForGame(
+      proposal.id,
+      proposal.participants as [StoredParticipant, StoredParticipant]
+    )
+    proposal.status = 'ACCEPTED'
+    proposal.nextDispatchAtMs = Date.now()
+    await this.state.storage.put(proposalKey(proposal.id), proposal)
+    await this.dispatchProposal(proposal)
   }
 
   private async declineMatch(principal: string) {
@@ -942,6 +952,15 @@ export class MatchmakerPool implements DurableObject {
       prefix: PROPOSAL_PREFIX
     })
     for (const proposal of stored.values()) {
+      if (
+        proposal.status === 'FOUND' &&
+        proposal.participants.every(participant =>
+          proposal.accepted.includes(participant.player.address)
+        )
+      ) {
+        await this.beginAcceptedDispatch(proposal)
+        continue
+      }
       if (
         proposal.status === 'FOUND' &&
         proposal.botAcceptAtMs !== undefined &&
