@@ -5,6 +5,12 @@ runner registered by `api/cmd/opensky-worker/main.go` has an explicit product
 and Cloudflare disposition, enforced by
 `utils/audit-cloudflare-worker-runners.mjs` during the Cloudflare build.
 
+Production migration `0067_optional_push_notifications.sql` and main Worker
+version `40a750cb-2ba3-445e-9ded-3faa45a84210` were deployed on 2026-08-12.
+Post-deploy D1 verification found zero push deliveries and zero push-enabled
+notifications, as expected while OneSignal is unconfigured. Public webapp,
+Google-provider session, and Ping smoke checks returned HTTP 200.
+
 The central reward rule is: a gameplay reward must be delivered to authoritative
 off-chain inventory. It must not require a wallet, blockchain transaction, or
 mint. WalletConnect remains an optional ownership integration only.
