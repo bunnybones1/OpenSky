@@ -270,6 +270,12 @@ and progress are not migrated.
   audit is atomic. The card repair uses the generated source library and does
   not mint a base duplicate when the identity already owns that logical card
   in Silver or Gold. Production has no player-support permission grants.
+- Quest completion and current-period reroll reset use that capability but
+  write a separate immutable quest-support ledger. Completion is deliberately
+  status-only, as in the source; it does not synthesize quest progress or issue
+  rewards. Both mutations scope assignments to the target Google identity and
+  make identical retries no-ops. The source production refusal for quest
+  deletion is preserved after admin and target validation.
 - Player reports are visible to staff through the original signal detail and
   summary contracts. The reads preserve reporter identity, match ID, sanitized
   comment, pending state, status/date filters, and bounded cursors. Scores are

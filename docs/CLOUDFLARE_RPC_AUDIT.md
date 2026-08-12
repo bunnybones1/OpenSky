@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 125 |
-| Remaining source RPCs | 47 |
+| Ported source RPCs | 128 |
+| Remaining source RPCs | 44 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 17 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 14 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -132,3 +132,12 @@ and protect every audit row from update or deletion. The card operation walks
 the generated 856-card source library and treats an owned Silver or Gold copy as
 ownership of that logical card instead of minting a redundant base copy.
 Production has no player-support grants.
+
+Quest support follows that same dormant capability with a dedicated immutable
+ledger. `GMCompleteQuest` preserves the source's status-only mutation, scopes
+the numeric assignment ID to the selected Google identity, and does not invent
+progress or rewards. `GMResetQuestReRolls` only changes assignments from the
+requested current daily, weekly, or seasonal period. Identical retries are
+no-ops in the same D1 transaction boundary. `GMDeleteQuest` preserves the
+source production refusal after role and target validation instead of exposing
+a destructive non-production path from a globally deployed Worker.
