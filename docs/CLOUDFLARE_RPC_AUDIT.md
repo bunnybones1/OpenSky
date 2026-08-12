@@ -13,20 +13,19 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     136 |
-| Remaining source RPCs        |      36 |
+| Ported source RPCs           |     140 |
+| Remaining source RPCs        |      32 |
 | Cloudflare-only RPC adapters |       0 |
 
 ## Remaining workstreams
 
 | Workstream             | Remaining | Interpretation                                                                                                                                                                         |
 | ---------------------- | --------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin and operations   |         9 | Stripe payment and payment-log reads now use deployed RBAC; remaining writes require granular authorization and immutable audits.                                                      |
+| Admin and operations   |         6 | Conquest V2 previews and Stripe reads now use deployed RBAC; remaining app-key and SkyPass writes require granular authorization and immutable audits.                                |
 | Commerce and wallet    |         9 | Stripe Checkout and its webhook are ported behind dormant optional configuration. Mobile receipts and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery  |         1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule.                                                                                                            |
 | Internal legacy        |        10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs.                                                              |
 | Migration and identity |         6 | Burner/account migration, deletion, and old social-provider endpoints need explicit product decisions.                                                                                 |
-| Other product          |         1 | Private game-client feedback storage and retention.                                                                                                                                    |
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are
@@ -36,19 +35,10 @@ it cannot drift from the repository.
 
 ## Next product contracts
 
-The remaining "other product" method needs private storage and abuse
-boundaries, not only a handler translation. `ReportAccount` is now deployed
-with its source participant/opponent checks, plain-text sanitization,
-4,000-byte cap, pending moderation state, and an auditable Google-identity
-record. It accepts the principal-shaped opponent address used by the original
-game UI only as a match-local lookup, never as authentication.
-
-- `RecordGameClientFeedback` is authenticated and writes a private JSON dump
-  plus an optional base64 JPEG. The Cloudflare equivalent should use a private
-  R2 bucket, enforce body/image size and MIME limits before decoding, avoid
-  identity-bearing object names, and define retention and staff-access policy.
-  Until those controls exist, leaving this RPC absent is safer and more
-  faithful than accepting feedback without durable private storage.
+`RecordGameClientFeedback` is ported with private R2 storage, payload limits,
+random identity-scoped keys, rate limiting, and deletion cleanup. It remains a
+fail-closed `503` after authentication in production until R2 is enabled on the
+Cloudflare account and a retention lifecycle is approved.
 
 ## Recommended order
 
@@ -85,11 +75,13 @@ premium status. Cloud Weasel stores premium as Google-identity entitlement
 state rather than authentication or wallet state, and a missing entitlement
 truthfully reads false without mutating the account.
 
-The event-2 Conquest account-progress read is also role-gated and backed by the
+The event-2 Conquest account-progress read is role-gated and backed by the
 deployed point ledger and source treasure thresholds. The legacy pool config
-and summary are still absent because their USDC-style economics do not map
-faithfully to Cloud Weasel's versioned card pools without an explicit product
-contract.
+and summary are now ported as faithful admin previews: exact defaults,
+zero-fallback settings, float32 weights, ten-unit rounding, ten treasure bands,
+and immutable capability-gated writes. They intentionally do not activate the
+public USDC pool or treasure amounts because those economics still need an
+explicit Cloud Weasel settlement product contract.
 
 Banner and featured-streamer mutations now demonstrate the required write
 pattern: `ADMIN` plus a distinct `CONTENT_WRITE` capability, strict public-field

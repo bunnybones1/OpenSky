@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`9dd1c47d-845e-46ae-9d4d-26d4bdfa331f`)
+- API/web Worker: `opensky-webapp` (`704c4049-e6fe-44b7-8824-28f7bec9aeef`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -17,9 +17,10 @@
   `c9f358c` for the source payment catalog, `5902915` for dormant Stripe
   checkout, `6dc5e12` for staff payment reads, and `284f1da` for optional
   wallet ownership proofs, and `f19fd20`/`b1597c6` for the fail-closed R2
-  feedback port; matchmaker and match service include `309861e`
+  feedback port, and `3113d17` for the gated Conquest V2 economy previews;
+  matchmaker and match service include `309861e`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0054`
+- Applied D1 migrations: `0001` through `0055`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -97,6 +98,12 @@
   track available without a wallet or entitlement row
 - Admin-only event-2 Conquest treasure-progress listing with bounded cursors,
   source point ordering and thresholds, and identity account names
+- Admin-only Conquest V2 config and summary previews preserving the source
+  defaults, zero fallback, float32 weights, ten-unit pool rounding, and all ten
+  treasure bands. Config mutation additionally requires the dormant
+  `CONQUEST_CONFIG_WRITE` capability, uses optimistic concurrency, and appends
+  immutable before/after audits; production has no capability grants. These
+  previews do not activate the legacy USDC-facing public pool or treasure RPCs
 - Original banner and featured-streamer mutations behind both `ADMIN` and an
   independently provisioned `CONTENT_WRITE` permission, with bounded public
   fields, HTTP(S)-only links, atomic before/after audits, and immutable audit
@@ -190,7 +197,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 29 files, 206 tests
+- API Worker: 30 files, 213 tests
 - Match service: 14 Worker tests
 - Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
@@ -821,6 +828,24 @@ settlement and delayed delivery against that pool.
   `401`; Google provider discovery and app HTML returned `200`. Production has
   zero limiter rows, migration `0054` exists once with its transition guard,
   and the post-probe D1 check reported `changed_db: false`.
+- API/web Worker version `704c4049-e6fe-44b7-8824-28f7bec9aeef` contains source
+  `3113d17`. Migration `0055_conquest_v2_economy_preview.sql` ports
+  `GMSetConquestV2PoolConfig`, `GMGetConquestV2PoolConfig`, and
+  `GMGetConquestV2Summary` to D1 while preserving the Go source's partial
+  updates, negative-value ignore behavior, zero-to-default composition,
+  float32 treasure weights, ten-unit pool rounding, maximum ceiling, and
+  ten-band event-2 summary. Admin reads remain role-gated; writes also require
+  a separately dormant `CONQUEST_CONFIG_WRITE` capability and use optimistic
+  concurrency plus immutable audit rows. The legacy USDC public pool and
+  treasure responses deliberately remain at zero until Cloud Weasel has an
+  approved settlement product contract. The rollout passed all 213 API tests,
+  Cloudflare TypeScript checking, the 140/172 RPC guard, the production build,
+  and a 1.56-MiB/224-KiB-gzip Wrangler dry run. Live app and version routes
+  returned `200`, all three new anonymous probes returned `401`, and the
+  public pool remained zero. Production has zero capability grants, audits, or
+  cache rows; the empty settings singleton remains at version zero, migration
+  `0055` exists once with all four transition/immutability guards, and every
+  post-probe D1 read reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

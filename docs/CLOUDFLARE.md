@@ -449,6 +449,13 @@ and progress are not migrated.
   ledger and uses the same treasure thresholds as the player RPC. It preserves
   source descending-point pagination and joins the Google identity's numeric
   game account/name without exposing a wallet dependency.
+- Conquest V2 pool configuration and summary RPCs are available as admin-only
+  economy previews. They preserve the source defaults, zero-fallback settings,
+  float32 weights, ten-unit rounding, maximum ceiling, and all ten event-2
+  treasure bands. Mutation needs both `ADMIN` and the dormant
+  `CONQUEST_CONFIG_WRITE` capability and creates an immutable audit. The public
+  legacy USDC pool and treasure amounts remain at zero until a separate Cloud
+  Weasel settlement contract is explicitly approved.
 - The original banner and featured-streamer admin mutations are ported with a
   narrower authorization boundary than the source: callers need both `ADMIN`
   and the separately provisioned `CONTENT_WRITE` permission. Public fields are
@@ -469,8 +476,9 @@ and progress are not migrated.
   release-scoped policy in D1 and are combined with matchmaker refusal and
   acceptance penalties. The production penalty map remains the source default
   of all zeroes until product policy explicitly enables it.
-- WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
-  response keep them separate from login.
+- Optional EVM ownership proofs are deployed independently of Google login;
+  the WalletConnect browser adapter and merged wallet-content reads remain
+  pending a public project ID, origin allowlist, and product mapping.
 - Seasonal invite-sticker redemption, marketplace writes, and most
   administrative APIs still require ports. Conquest settlement is implemented, but production
   has no active reward-pool rows; matchmaking remains disabled until an
