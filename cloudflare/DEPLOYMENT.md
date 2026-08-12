@@ -6,11 +6,12 @@
 - API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`930ff389-a51b-4002-a340-92a94a78e726`)
+- Game Worker: `cloud-weasel-game-server` (`1972e669-c857-4981-b185-2ed849d01254`)
 - Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
-  deadline milestone, `f5775cc` for the game Worker, and `309861e` for the
-  matchmaker and match service
+  deadline milestone, `f5775cc` for half-open socket handling, `0438095` for
+  Conquest settlement retry recovery, and `309861e` for the matchmaker and
+  match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -603,6 +604,18 @@ settlement and delayed delivery against that pool.
   checking, and the 8.9 MB Wrangler dry-run bundle. Live game health passed; a
   read-only production aggregate remained one active and nine ended matches and
   reported `changed_db: false`.
+- Game Worker version `1972e669-c857-4981-b185-2ed849d01254` contains source
+  `0438095`. A completion retry after an already-durable Conquest settlement
+  now recovers the immutable receipt even though the run is `COMPLETED`, so the
+  final match result and player reward message retain the exact Silver/Gold
+  payload without redrawing, regranting inventory, duplicating feed events, or
+  enqueueing another delayed Gold delivery. The rollout passed all 25 unit and
+  59 game-Worker tests, both affected TypeScript checks, the 148-test API
+  regression suite, release/RPC/card and Conquest gates, and the 8.9 MB Wrangler
+  dry-run bundle. Live protocol-v3 health and deployed version metadata passed;
+  a read-only production aggregate remained one active and nine ended matches
+  with no creating/failed rows, zero active Conquest pools, settlements, or
+  Gold deliveries, and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

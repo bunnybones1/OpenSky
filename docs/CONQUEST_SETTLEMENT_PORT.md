@@ -38,6 +38,10 @@ run only after that task settles.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
+- If settlement succeeds before a later match-finalization step fails, the
+  retry recovers the completed run's immutable receipt by authoritative match
+  ID. This preserves the match result/reward payload without redrawing or
+  regranting.
 - Silver is granted immediately. Gold is exposed as pending for 24 hours and a
   minute Worker schedule delivers it atomically to identity inventory.
 - Concurrent delivery claims are receipt-keyed; retries are idempotent;
@@ -83,6 +87,9 @@ Object alarm may partially grant inventory before the receipt is durable.
   selection.
 - Empty, expired, or malformed pools fail closed without changing the run.
 - Concurrent and alarm-retry settlement grants exactly one bundle.
+- A match-finalization retry after settlement returns the original reward
+  payload with one settlement, one delayed delivery, and no duplicate feed or
+  inventory writes.
 - D1 rollback coverage for failures at each statement in the batch.
 - Feed events, inventory balances, Conquest stats, and terminal status agree.
 - Production read-only probes show no pre-enable Conquest rows or grants.
