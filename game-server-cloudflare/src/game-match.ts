@@ -1,4 +1,4 @@
-import { GameMode, MatchStatus } from '@opensky/proto'
+import { GameMode, MatchStatus, type Reward } from '@opensky/proto'
 import {
   EmoteMessage,
   GameServerMessage,
@@ -136,6 +136,10 @@ interface MatchLedgerParticipants {
   player2_principal: string
   player1_user_id: string | null
   player2_user_id: string | null
+}
+
+interface CompletedMatchRow {
+  result_json: string | null
 }
 
 interface RuntimeSettings {
@@ -746,6 +750,29 @@ export class GameMatch implements DurableObject {
   ) {
     const metadata = await this.metadataRequired()
     const runtime = await this.ensureRuntime()
+    if (metadata.expiredBeforeLoad) {
+      throw new GameProtocolError('match ended or cannot be found.')
+    }
+    if (metadata.ended) {
+      attachment.joined = true
+      socket.serializeAttachment(attachment)
+      const index = this.playerIndex(metadata.match, attachment.principal)
+      this.safeSend(
+        socket,
+        this.reconnectMessage(
+          metadata,
+          runtime,
+          index,
+          Number.MAX_SAFE_INTEGER,
+          false
+        )
+      )
+      this.safeSend(socket, {
+        type: 'rewards',
+        data: await this.completedRewards(metadata.proposalId, index)
+      })
+      return
+    }
     const subkey = addressBytesToHex(message.subkeyCertification.subkey)
     const participant =
       this.playerIndex(metadata.match, attachment.principal) === 0
@@ -780,28 +807,14 @@ export class GameMatch implements DurableObject {
 
     const index = this.playerIndex(metadata.match, attachment.principal)
     const timers = await this.timers()
-    const reconnect: GameServerMessage = {
-      type: 'reconnect',
-      accounts: [
-        metadata.match.player1.account,
-        metadata.match.player2.account
-      ],
-      store: bytesToHex(runtime.serialize((index + 1) as 1 | 2)),
-      turnExpiryTime: timers.turnAtMs ?? 0,
-      isGameStart: !metadata.started,
-      replayID: metadata.match.replayID,
-      opponentMuted: player.opponentMuted,
-      gitCommit: metadata.releaseVersion || 'cloud-weasel'
-    }
-    if (
-      metadata.match.player1.gameMode === GameMode.CONQUEST_CONSTRUCTED ||
-      metadata.match.player1.gameMode === GameMode.CONQUEST_DISCOVERY
-    ) {
-      reconnect.conquestInfo = [
-        metadata.match.player1.conquestInfo!,
-        metadata.match.player2.conquestInfo!
-      ]
-    }
+    const reconnect = this.reconnectMessage(
+      metadata,
+      runtime,
+      index,
+      timers.turnAtMs ?? 0,
+      !metadata.started,
+      player.opponentMuted
+    )
     this.safeSend(socket, reconnect)
     this.sendToOpponent(metadata.match, attachment.principal, {
       type: 'opponent_connected'
@@ -1281,6 +1294,22 @@ export class GameMatch implements DurableObject {
         endedAt,
         stats.rewards
       )
+      const rewards: [Reward[], Reward[]] = [
+        [
+          ...progression.rewards[0],
+          ...conquestPoints.rewards[0],
+          ...conquestCards[0],
+          ...stats.rewards[0],
+          ...experience.rewards[0]
+        ] as Reward[],
+        [
+          ...progression.rewards[1],
+          ...conquestPoints.rewards[1],
+          ...conquestCards[1],
+          ...stats.rewards[1],
+          ...experience.rewards[1]
+        ] as Reward[]
+      ]
       if (
         metadata.result?.status === MatchStatus.ABANDONED &&
         (metadata.result.winner === 0 || metadata.result.winner === 1)
@@ -1313,20 +1342,7 @@ export class GameMatch implements DurableObject {
           JSON.stringify({
             ...(metadata.result ?? {}),
             questProgress: progression.questProgress,
-            rewards: [
-              [
-                ...conquestPoints.rewards[0],
-                ...conquestCards[0],
-                ...stats.rewards[0],
-                ...experience.rewards[0]
-              ],
-              [
-                ...conquestPoints.rewards[1],
-                ...conquestCards[1],
-                ...stats.rewards[1],
-                ...experience.rewards[1]
-              ]
-            ]
+            rewards
           }),
           endedAt,
           endedAt,
@@ -1340,13 +1356,7 @@ export class GameMatch implements DurableObject {
       for (const player of [0, 1] as const) {
         this.sendToPrincipal(principals[player], {
           type: 'rewards',
-          data: [
-            ...progression.rewards[player],
-            ...conquestPoints.rewards[player],
-            ...conquestCards[player],
-            ...stats.rewards[player],
-            ...experience.rewards[player]
-          ] as never[]
+          data: rewards[player]
         })
       }
       metadata.completionRecorded = true
@@ -1415,6 +1425,64 @@ export class GameMatch implements DurableObject {
         error
       )
       await this.state.storage.setAlarm(now + 10_000)
+    }
+  }
+
+  private reconnectMessage(
+    metadata: MatchMetadata,
+    runtime: AuthoritativeMatchRuntime,
+    index: Player,
+    turnExpiryTime: number,
+    isGameStart: boolean,
+    opponentMuted = false
+  ): GameServerMessage {
+    const reconnect: GameServerMessage = {
+      type: 'reconnect',
+      accounts: [
+        metadata.match.player1.account,
+        metadata.match.player2.account
+      ],
+      store: bytesToHex(runtime.serialize((index + 1) as 1 | 2)),
+      turnExpiryTime,
+      isGameStart,
+      replayID: metadata.match.replayID,
+      opponentMuted,
+      gitCommit: metadata.releaseVersion || 'cloud-weasel'
+    }
+    if (
+      metadata.match.player1.gameMode === GameMode.CONQUEST_CONSTRUCTED ||
+      metadata.match.player1.gameMode === GameMode.CONQUEST_DISCOVERY
+    ) {
+      reconnect.conquestInfo = [
+        metadata.match.player1.conquestInfo!,
+        metadata.match.player2.conquestInfo!
+      ]
+    }
+    return reconnect
+  }
+
+  private async completedRewards(
+    proposalId: string,
+    player: Player
+  ): Promise<Reward[]> {
+    const row = await this.env.AUTH_DB.prepare(
+      `SELECT result_json FROM multiplayer_matches
+       WHERE proposal_id = ? AND status = 'ended'`
+    )
+      .bind(proposalId)
+      .first<CompletedMatchRow>()
+    if (!row?.result_json) return []
+    try {
+      const result = JSON.parse(row.result_json) as { rewards?: unknown }
+      if (
+        !Array.isArray(result.rewards) ||
+        !Array.isArray(result.rewards[player])
+      ) {
+        return []
+      }
+      return result.rewards[player] as Reward[]
+    } catch {
+      return []
     }
   }
 

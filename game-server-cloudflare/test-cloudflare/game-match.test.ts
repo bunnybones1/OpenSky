@@ -1533,7 +1533,29 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(JSON.parse(ledger!.result_json)).toMatchObject({
       winner: 1,
-      status: 'ABANDONED'
+      status: 'ABANDONED',
+      rewards: [
+        [expect.objectContaining({ type: 'RANK' })],
+        [expect.objectContaining({ type: 'RANK' })]
+      ]
+    })
+
+    await evictDurableObject(stub())
+    const reconnected = await connectAs(PRINCIPAL_2, USER_ID_2)
+    const recentMessages = collectMessages(reconnected, 2)
+    join(reconnected, 0x32)
+    const [recentReconnect, recentRewards] = await recentMessages
+    expect(recentReconnect).toMatchObject({
+      type: 'reconnect',
+      isGameStart: false,
+      turnExpiryTime: Number.MAX_SAFE_INTEGER,
+      replayID: 'replay-test-42',
+      gitCommit: 'test-release'
+    })
+    expect(recentReconnect.store).toMatch(/^0x[0-9a-f]+$/)
+    expect(recentRewards).toEqual({
+      type: 'rewards',
+      data: JSON.parse(ledger!.result_json).rewards[1]
     })
 
     const abandonPenalty = await env.AUTH_DB.prepare(
