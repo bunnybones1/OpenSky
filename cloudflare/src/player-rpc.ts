@@ -788,6 +788,19 @@ export class PlayerRpcRepository {
     return !!row
   }
 
+  async requestMoreInvites(userId: string): Promise<boolean> {
+    const result = await this.database
+      .prepare(
+        `UPDATE player_account_settings
+         SET request_more_invites = 1, updated_at = ?
+         WHERE user_id = ?`
+      )
+      .bind(new Date().toISOString(), userId)
+      .run()
+    if (result.meta.changes !== 1) throw invalidArgument('missing account')
+    return true
+  }
+
   async updateAccount(
     userId: string,
     request: Partial<Account> & { address: string }

@@ -34,7 +34,13 @@ import { pendingConquestCards } from './conquest-delivery'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
-import { invalidArgument, notFound, RpcError, unimplemented } from './errors'
+import {
+  internal,
+  invalidArgument,
+  notFound,
+  RpcError,
+  unimplemented
+} from './errors'
 import { signSession } from './jwt'
 import {
   currentSeasonStart,
@@ -224,6 +230,10 @@ export const handleApiRequest = async (
 
   try {
     switch (method) {
+      case 'SignIn': {
+        throw internal('deprecated method, use GetAuthToken + RegisterAccount')
+      }
+
       case 'GetAuthToken': {
         const body = await requestBody<{ ethAuthProofString?: string }>(request)
         if (!body.ethAuthProofString)
@@ -481,6 +491,13 @@ export const handleApiRequest = async (
             ...body.account,
             address: body.account.address
           })
+        })
+      }
+
+      case 'RequestMoreInvites': {
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          status: await playerRpc.requestMoreInvites(principal.userId)
         })
       }
 

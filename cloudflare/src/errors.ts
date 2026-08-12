@@ -23,5 +23,8 @@ export const notFound = (message: string) =>
 export const unauthenticated = (message = 'unauthorized') =>
   new RpcError(401, 'webrpc.unauthenticated', message)
 
+export const internal = (message = 'internal server error') =>
+  new RpcError(500, 'webrpc.internal', message)
+
 export const unimplemented = (message = 'unimplemented') =>
   new RpcError(501, 'webrpc.unimplemented', message)
