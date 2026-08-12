@@ -43,6 +43,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_account_reports'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
+    env.AUTH_DB.prepare('DELETE FROM content_featured_streamers'),
     env.AUTH_DB.prepare('DELETE FROM content_banners'),
     env.AUTH_DB.prepare('DELETE FROM users')
   ])
@@ -65,6 +66,16 @@ const grantAdmin = async () => {
     `INSERT INTO staff_roles
        (user_id, role, granted_by_user_id, reason, created_at)
      VALUES (?, 'ADMIN', NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantContentWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_permissions
+       (user_id, permission, granted_by_user_id, reason, created_at)
+     VALUES (?, 'CONTENT_WRITE', NULL, 'test bootstrap', ?)`
   )
     .bind(ADMIN, new Date().toISOString())
     .run()
@@ -735,5 +746,132 @@ describe('fail-closed Google identity staff authorization', () => {
         })
       ).status
     ).toBe(400)
+  })
+
+  it('requires content-write permission and audits banner mutations atomically', async () => {
+    await grantAdmin()
+    const request = {
+      order: 3,
+      bannerType: 'WARNING',
+      msg: '<strong>Maintenance</strong>',
+      dismissable: true,
+      color: '#bc4918',
+      link: 'https://cloudweasel.example/status',
+      startAt: '2026-08-12T10:00:00.000Z',
+      endAt: '2026-08-12T11:00:00.000Z'
+    }
+    expect(
+      (await rpcAs(ADMIN, 'GMAddBanner', { bannersRequest: request })).status
+    ).toBe(403)
+    await grantContentWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMAddBanner', {
+          bannersRequest: { ...request, link: 'javascript:alert(1)' }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMAddBanner', { bannersRequest: request })
+      ).json()
+    ).toEqual({ status: true })
+    const added = await env.AUTH_DB.prepare(
+      `SELECT id FROM content_banners WHERE message = ?`
+    )
+      .bind(request.msg)
+      .first<{ id: number }>()
+    expect(added).not.toBeNull()
+    const modified = {
+      id: added!.id,
+      order: 4,
+      type: 'EMERGENCY',
+      msg: '<strong>Extended maintenance</strong>',
+      dismissable: false,
+      color: '#a9094c',
+      startAt: request.startAt,
+      endAt: '2026-08-12T12:00:00.000Z'
+    }
+    expect(
+      await (await rpcAs(ADMIN, 'GMModifyBanner', { banner: modified })).json()
+    ).toEqual({ status: true })
+    expect(
+      await (await rpcAs(ADMIN, 'GMRemoveBanner', { id: added!.id })).json()
+    ).toEqual({ status: true })
+    const audits = await env.AUTH_DB.prepare(
+      `SELECT action, target_id, actor_user_id, before_json, after_json
+         FROM staff_content_audit
+         WHERE target_type = 'BANNER' AND target_id = ? ORDER BY id ASC`
+    )
+      .bind(String(added!.id))
+      .all<{
+        action: string
+        target_id: string
+        actor_user_id: string
+        before_json: string | null
+        after_json: string | null
+      }>()
+    expect(audits).toMatchObject({
+      results: [
+        { action: 'ADD', actor_user_id: ADMIN, before_json: null },
+        { action: 'MODIFY', actor_user_id: ADMIN },
+        { action: 'REMOVE', actor_user_id: ADMIN, after_json: null }
+      ]
+    })
+    expect(JSON.parse(audits.results[0].after_json!)).toMatchObject({
+      dismissable: true
+    })
+    expect(JSON.parse(audits.results[1].after_json!)).toMatchObject({
+      dismissable: false
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_content_audit SET action = 'ADD'
+         WHERE target_type = 'BANNER' AND target_id = ?`
+      )
+        .bind(String(added!.id))
+        .run()
+    ).rejects.toThrow('staff content audit rows are immutable')
+  })
+
+  it('validates and audits featured streamer mutations', async () => {
+    await grantAdmin()
+    await grantContentWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMAddFeaturedStreamer', {
+          streamer: { username: 'bad/name' }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMAddFeaturedStreamer', {
+          streamer: { username: 'cloud_weasel' }
+        })
+      ).json()
+    ).toEqual({ status: true })
+    expect(await (await rpcAs(PLAYER, 'GetFeaturedStreamers')).json()).toEqual({
+      streamers: [{ username: 'cloud_weasel' }]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMRemoveFeaturedStreamer', {
+          streamer: { username: 'cloud_weasel' }
+        })
+      ).json()
+    ).toEqual({ status: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT action, actor_user_id FROM staff_content_audit
+         WHERE target_type = 'FEATURED_STREAMER'
+           AND target_id = 'cloud_weasel' ORDER BY id ASC`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { action: 'ADD', actor_user_id: ADMIN },
+        { action: 'REMOVE', actor_user_id: ADMIN }
+      ]
+    })
   })
 })

@@ -153,6 +153,18 @@ export class StaffRepository {
     if (!role) throw permissionDenied('admin access required')
   }
 
+  async requireContentWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_permissions
+         WHERE user_id = ? AND permission = 'CONTENT_WRITE'`
+      )
+      .bind(userId)
+      .first()
+    if (!permission) throw permissionDenied('content write access required')
+  }
+
   async stats(): Promise<GMStatsResponse> {
     const rows = await this.database
       .prepare(

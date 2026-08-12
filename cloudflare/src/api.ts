@@ -2,6 +2,8 @@ import type {
   Account,
   AccountRegistration,
   AccountStatus,
+  Banner,
+  BannersRequest,
   CardSearchCriteria,
   DeckClass,
   EpicType,
@@ -649,6 +651,68 @@ export const handleApiRequest = async (
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
           banners: await content.listAllBanners()
+        })
+      }
+
+      case 'GMAddBanner': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ bannersRequest?: BannersRequest }>(
+          request
+        )
+        if (!body.bannersRequest) {
+          throw invalidArgument('bannerRequest cannot be empty')
+        }
+        return json(request, env, {
+          status: await content.addBanner(principal.userId, body.bannersRequest)
+        })
+      }
+
+      case 'GMModifyBanner': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ banner?: Banner }>(request)
+        if (!body.banner) throw invalidArgument('banner cannot be empty')
+        return json(request, env, {
+          status: await content.modifyBanner(principal.userId, body.banner)
+        })
+      }
+
+      case 'GMRemoveBanner': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ id?: number }>(request)
+        if (body.id === undefined) throw invalidArgument('id is required')
+        return json(request, env, {
+          status: await content.removeBanner(principal.userId, body.id)
+        })
+      }
+
+      case 'GMAddFeaturedStreamer': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ streamer?: { username?: string } }>(
+          request
+        )
+        return json(request, env, {
+          status: await content.addFeaturedStreamer(
+            principal.userId,
+            body.streamer?.username ?? ''
+          )
+        })
+      }
+
+      case 'GMRemoveFeaturedStreamer': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ streamer?: { username?: string } }>(
+          request
+        )
+        return json(request, env, {
+          status: await content.removeFeaturedStreamer(
+            principal.userId,
+            body.streamer?.username ?? ''
+          )
         })
       }
 

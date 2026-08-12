@@ -1,5 +1,6 @@
 import type {
   Banner,
+  BannersRequest,
   ItemType,
   Notification,
   NotificationOneTime,
@@ -7,6 +8,9 @@ import type {
   StickerOwnershipResponse,
   TwitchFeaturedStreamer
 } from '@opensky/proto'
+import { BannerType } from '@opensky/proto'
+
+import { invalidArgument, notFound } from './errors'
 
 interface BannerRow {
   id: number
@@ -76,6 +80,95 @@ const bannerFromRow = (row: BannerRow): Banner => ({
   ...(row.start_at ? { startAt: row.start_at } : {}),
   ...(row.end_at ? { endAt: row.end_at } : {})
 })
+
+const BANNER_TYPES = new Set<Banner['type']>(Object.values(BannerType))
+const utf8Length = (value: string) => new TextEncoder().encode(value).byteLength
+
+const optionalText = (value: unknown, field: string, maxBytes: number) => {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string') throw invalidArgument(`${field} is invalid`)
+  const trimmed = value.trim()
+  if (!trimmed || utf8Length(trimmed) > maxBytes) {
+    throw invalidArgument(`${field} is invalid`)
+  }
+  return trimmed
+}
+
+const optionalDate = (value: unknown, field: string) => {
+  const text = optionalText(value, field, 64)
+  if (text === null) return null
+  const timestamp = Date.parse(text)
+  if (!Number.isFinite(timestamp)) throw invalidArgument(`${field} is invalid`)
+  return new Date(timestamp).toISOString()
+}
+
+const normalizedBanner = (
+  value: BannersRequest | Banner,
+  type: Banner['type']
+) => {
+  if (
+    !Number.isSafeInteger(value.order) ||
+    value.order < -2147483648 ||
+    value.order > 2147483647
+  ) {
+    throw invalidArgument('banner order is invalid')
+  }
+  if (!BANNER_TYPES.has(type)) throw invalidArgument('banner type is invalid')
+  if (
+    typeof value.msg !== 'string' ||
+    !value.msg.trim() ||
+    utf8Length(value.msg) > 4096
+  ) {
+    throw invalidArgument('banner message is invalid')
+  }
+  if (typeof value.dismissable !== 'boolean') {
+    throw invalidArgument('banner dismissable is invalid')
+  }
+  const color = optionalText(value.color, 'banner color', 32)
+  if (
+    color !== null &&
+    !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)
+  ) {
+    throw invalidArgument('banner color is invalid')
+  }
+  const link = optionalText(value.link, 'banner link', 2048)
+  if (link !== null) {
+    let url: URL
+    try {
+      url = new URL(link)
+    } catch {
+      throw invalidArgument('banner link is invalid')
+    }
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw invalidArgument('banner link is invalid')
+    }
+  }
+  const startAt = optionalDate(value.startAt, 'banner startAt')
+  const endAt = optionalDate(value.endAt, 'banner endAt')
+  if (startAt !== null && endAt !== null && startAt >= endAt) {
+    throw invalidArgument('banner startAt must be before endAt')
+  }
+  return {
+    order: value.order,
+    type,
+    msg: value.msg.trim(),
+    dismissable: value.dismissable,
+    color,
+    link,
+    startAt,
+    endAt
+  }
+}
+
+const streamerUsername = (value: unknown) => {
+  if (typeof value !== 'string')
+    throw invalidArgument('streamer username is invalid')
+  const username = value.trim().toLowerCase()
+  if (!/^[a-z0-9_]{1,25}$/i.test(username)) {
+    throw invalidArgument('streamer username is invalid')
+  }
+  return username
+}
 
 export class ContentRepository {
   constructor(private readonly database: D1Database) {}
@@ -220,5 +313,180 @@ export class ContentRepository {
           : {})
       } as NotificationOneTime
     })
+  }
+
+  async addBanner(
+    actorUserId: string,
+    request: BannersRequest
+  ): Promise<boolean> {
+    if (!request) throw invalidArgument('bannerRequest cannot be empty')
+    const banner = normalizedBanner(request, request.bannerType)
+    const createdAt = new Date().toISOString()
+    const result = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO content_banners
+             (order_by, banner_type, color, message, dismissable, link,
+              start_at, end_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          banner.order,
+          banner.type,
+          banner.color,
+          banner.msg,
+          banner.dismissable ? 1 : 0,
+          banner.link,
+          banner.startAt,
+          banner.endAt
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO staff_content_audit
+             (action, target_type, target_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'ADD', 'BANNER', CAST(id AS TEXT), ?, NULL,
+                  json_object(
+                    'id', id, 'order', order_by, 'type', banner_type,
+                    'color', color, 'msg', message,
+                    'dismissable', json(CASE WHEN dismissable = 1
+                      THEN 'true' ELSE 'false' END), 'link', link,
+                    'startAt', start_at, 'endAt', end_at
+                  ), ?
+           FROM content_banners WHERE id = last_insert_rowid()`
+        )
+        .bind(actorUserId, createdAt)
+    ])
+    return result[0].meta.changes === 1 && result[1].meta.changes === 1
+  }
+
+  async modifyBanner(actorUserId: string, value: Banner): Promise<boolean> {
+    if (!value || !Number.isSafeInteger(value.id) || value.id <= 0) {
+      throw invalidArgument('banner id is invalid')
+    }
+    const banner = normalizedBanner(value, value.type)
+    const updatedAt = new Date().toISOString()
+    const result = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_content_audit
+             (action, target_type, target_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'MODIFY', 'BANNER', CAST(id AS TEXT), ?,
+                  json_object(
+                    'id', id, 'order', order_by, 'type', banner_type,
+                    'color', color, 'msg', message,
+                    'dismissable', json(CASE WHEN dismissable = 1
+                      THEN 'true' ELSE 'false' END), 'link', link,
+                    'startAt', start_at, 'endAt', end_at
+                  ), json(?), ?
+           FROM content_banners WHERE id = ?`
+        )
+        .bind(
+          actorUserId,
+          JSON.stringify({ id: value.id, ...banner }),
+          updatedAt,
+          value.id
+        ),
+      this.database
+        .prepare(
+          `UPDATE content_banners
+           SET order_by = ?, banner_type = ?, color = ?, message = ?,
+               dismissable = ?, link = ?, start_at = ?, end_at = ?
+           WHERE id = ?`
+        )
+        .bind(
+          banner.order,
+          banner.type,
+          banner.color,
+          banner.msg,
+          banner.dismissable ? 1 : 0,
+          banner.link,
+          banner.startAt,
+          banner.endAt,
+          value.id
+        )
+    ])
+    if (result[1].meta.changes !== 1) throw notFound('banner not found')
+    return result[0].meta.changes === 1
+  }
+
+  async removeBanner(actorUserId: string, id: number): Promise<boolean> {
+    if (!Number.isSafeInteger(id) || id <= 0)
+      throw invalidArgument('banner id is invalid')
+    const removedAt = new Date().toISOString()
+    const result = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_content_audit
+             (action, target_type, target_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'REMOVE', 'BANNER', CAST(id AS TEXT), ?,
+                  json_object(
+                    'id', id, 'order', order_by, 'type', banner_type,
+                    'color', color, 'msg', message,
+                    'dismissable', json(CASE WHEN dismissable = 1
+                      THEN 'true' ELSE 'false' END), 'link', link,
+                    'startAt', start_at, 'endAt', end_at
+                  ), NULL, ?
+           FROM content_banners WHERE id = ?`
+        )
+        .bind(actorUserId, removedAt, id),
+      this.database.prepare('DELETE FROM content_banners WHERE id = ?').bind(id)
+    ])
+    if (result[1].meta.changes !== 1) throw notFound('banner not found')
+    return result[0].meta.changes === 1
+  }
+
+  async addFeaturedStreamer(
+    actorUserId: string,
+    value: string
+  ): Promise<boolean> {
+    const username = streamerUsername(value)
+    const createdAt = new Date().toISOString()
+    const result = await this.database.batch([
+      this.database
+        .prepare(
+          'INSERT INTO content_featured_streamers (username) VALUES (?)'
+        )
+        .bind(username),
+      this.database
+        .prepare(
+          `INSERT INTO staff_content_audit
+             (action, target_type, target_id, actor_user_id, before_json,
+              after_json, created_at)
+           VALUES ('ADD', 'FEATURED_STREAMER', ?, ?, NULL,
+                   json_object('username', ?), ?)`
+        )
+        .bind(username, actorUserId, username, createdAt)
+    ])
+    return result.every(entry => entry.meta.changes === 1)
+  }
+
+  async removeFeaturedStreamer(
+    actorUserId: string,
+    value: string
+  ): Promise<boolean> {
+    const username = streamerUsername(value)
+    const removedAt = new Date().toISOString()
+    const result = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_content_audit
+             (action, target_type, target_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'REMOVE', 'FEATURED_STREAMER', username, ?,
+                  json_object('username', username), NULL, ?
+           FROM content_featured_streamers WHERE username = ?`
+        )
+        .bind(actorUserId, removedAt, username),
+      this.database
+        .prepare('DELETE FROM content_featured_streamers WHERE username = ?')
+        .bind(username)
+    ])
+    if (result[1].meta.changes !== 1) {
+      throw notFound('featured streamer not found')
+    }
+    return result[0].meta.changes === 1
   }
 }
