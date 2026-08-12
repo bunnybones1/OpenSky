@@ -45,8 +45,8 @@ idempotent receipt/delivery key, in addition to excluding transaction code from
 the Google-identity route tree.
 
 The source transaction-queue audit also inventories all 13 queues consumed by
-`SendTxnsRunner`. Nine have an active source producer and must remain linked to
-an off-chain implementation or an explicit dormant product gate; four have no
+`SendTxnsRunner`. Eight have an active source producer and must remain linked to
+an off-chain implementation or an explicit dormant product gate; five have no
 production producer and must stay producerless unless reviewed. A newly added
 queue, a revived producerless task, or missing Cloudflare evidence fails the
 production build.

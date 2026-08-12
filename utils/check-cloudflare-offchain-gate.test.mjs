@@ -12,6 +12,7 @@ const validInput = () => ({
     'D1 inventory is the canonical authority. ' +
     'No game flow asks a player to mint a reward. ' +
     'Apply the inventory change and fulfillment receipt in one D1 transaction.',
+  pendingGoldSources: "env.AUTH_MODE === 'google'; Delivery in progress",
   rewardSources: {
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
@@ -78,4 +79,12 @@ test('rejects a reward producer without D1 inventory and a receipt key', () => {
   assert.ok(errors.some(error => error.includes('canonical D1 inventory')))
   assert.ok(errors.some(error => error.includes('idempotent receipt key')))
   assert.ok(errors.some(error => error.includes('legacy transaction code')))
+})
+
+test('rejects player-facing mint language from Google Pending Gold UI', () => {
+  const input = validInput()
+  input.pendingGoldSources = "t('shop.Minting In')"
+  assert.ok(
+    offchainGateErrors(input).some(error => error.includes('Pending Gold'))
+  )
 })

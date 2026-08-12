@@ -23,6 +23,7 @@ export const offchainGateErrors = ({
   identityRoutes,
   appSource,
   policySource,
+  pendingGoldSources = '',
   rewardSources = {}
 }) => {
   const errors = []
@@ -60,6 +61,13 @@ export const offchainGateErrors = ({
       errors.push(`off-chain reward policy is missing: ${required}`)
     }
   }
+  if (
+    pendingGoldSources &&
+    (!pendingGoldSources.includes("env.AUTH_MODE === 'google'") ||
+      !pendingGoldSources.includes('Delivery in'))
+  ) {
+    errors.push('Google Pending Gold UI contains player-facing mint language')
+  }
   for (const [name, source] of Object.entries(rewardSources)) {
     if (!/INSERT(?: OR IGNORE)? INTO player_items/.test(source)) {
       errors.push(`${name} does not grant canonical D1 inventory`)
@@ -93,7 +101,9 @@ const main = async () => {
     playerRpc,
     referralStickerRewards,
     silverTicketExchange,
-    stripeCheckout
+    stripeCheckout,
+    pendingGoldPage,
+    pendingGoldCard
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -116,13 +126,19 @@ const main = async () => {
       path.join(root, 'cloudflare/src/silver-ticket-exchange.ts'),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
+    readFile(path.join(root, 'webapp/src/PendingGoldsPage/PendingGoldsPage.tsx'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/PendingGoldsPage/components/PendingGoldCard.tsx'),
+      'utf8'
+    )
   ])
   const errors = offchainGateErrors({
     webappConfig: JSON.parse(configSource),
     identityRoutes,
     appSource,
     policySource,
+    pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}`,
     rewardSources: {
       conquestDelivery,
       leaderboardRewards,

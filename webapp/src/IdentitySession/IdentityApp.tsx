@@ -11,6 +11,7 @@ import InviteAFriendRewards from '~/InviteFriendsPage/outlets/InviteAFriendRewar
 import InvitedFriends from '~/InviteFriendsPage/outlets/InvitedFriends/InvitedFriends'
 import ItemsPage from '~/ItemsPage/ItemsPage'
 import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
+import PendingGoldsPage from '~/PendingGoldsPage/PendingGoldsPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
 import { QuestsPage } from '~/QuestsPage/QuestsPage'
 import { SelectSilversPage } from '~/SelectSilversPage/SelectSilversPage'
@@ -40,6 +41,10 @@ export const IdentityApp = memo(() => (
       <Route
         element={<SelectSilversPage />}
         path={ROUTES_CONFIG.routes.SELECT_SILVERS.path}
+      />
+      <Route
+        element={<PendingGoldsPage />}
+        path={ROUTES_CONFIG.routes.PENDING_GOLDS.path}
       />
       <Route element={<ItemsPage />} path={ROUTES_CONFIG.routes.ITEMS.path} />
       <Route

@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Card } from '~/shared/components/Card/Card'
 import { Text } from '~/shared/components/Text'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
@@ -12,7 +13,7 @@ interface PendingGoldCardProps {
 
 export const PendingGoldCard = memo(({ id, mintAt }: PendingGoldCardProps) => {
   const { t } = useTranslation()
-  const mintText = useMemo(() => {
+  const deliveryText = useMemo(() => {
     const today = new Date()
     const mintDate = new Date(mintAt)
     const msUntilMint = Math.ceil(
@@ -22,11 +23,15 @@ export const PendingGoldCard = memo(({ id, mintAt }: PendingGoldCardProps) => {
     const minutesUntilMint = Math.floor(msUntilMint / 1000 / 60)
 
     if (minutesUntilMint < -4) {
-      return t('shop.MintingInProg')
+      return env.AUTH_MODE === 'google'
+        ? 'Delivery in progress'
+        : t('shop.MintingInProg')
     }
 
     if (minutesUntilMint <= 0) {
-      return t('shop.MintingInProg')
+      return env.AUTH_MODE === 'google'
+        ? 'Delivery in progress'
+        : t('shop.MintingInProg')
     }
 
     let hours = 0
@@ -36,7 +41,9 @@ export const PendingGoldCard = memo(({ id, mintAt }: PendingGoldCardProps) => {
 
     const minutes = minutesUntilMint % 60
 
-    return t('shop.MintingIn', { hours, minutes })
+    return env.AUTH_MODE === 'google'
+      ? `Delivery in ${hours}h ${minutes}m`
+      : t('shop.MintingIn', { hours, minutes })
   }, [mintAt, t])
 
   return (
@@ -51,7 +58,7 @@ export const PendingGoldCard = memo(({ id, mintAt }: PendingGoldCardProps) => {
     >
       <Card id={id} isTiltable isOverlayEnabled />
       <Text fontSize="14px" color="warm6" fontWeight="500">
-        {mintText}
+        {deliveryText}
       </Text>
     </div>
   )
