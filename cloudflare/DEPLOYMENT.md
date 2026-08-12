@@ -6,9 +6,9 @@
 - API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`06aace30-7c3e-4a68-a5dc-4d20978e19d4`)
-- Deployed source includes `56c606d` across the API/web and game Workers,
-  and `309861e` for the matchmaker and match service
+- Game Worker: `cloud-weasel-game-server` (`cbbb929a-2724-4a9b-bf62-a5b9fde17bf8`)
+- Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
+  game Worker, and `309861e` for the matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -156,7 +156,7 @@ settlement and delayed delivery against that pool.
 
 - API Worker: 22 files, 148 tests
 - Match service: 14 Worker tests
-- Game Worker: 25 unit and 54 Worker tests
+- Game Worker: 25 unit and 56 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
@@ -561,6 +561,15 @@ settlement and delayed delivery against that pool.
   unauthenticated match-info boundary returned `401`, migration/index checks
   passed, and a read-only production aggregate remained one active and nine
   ended matches with `changed_db: false`.
+- Game Worker version `cbbb929a-2724-4a9b-bf62-a5b9fde17bf8` contains source
+  `72eece1`. Loading progress remains monotonic and continues to relay source UI
+  messages, but only the player's first incomplete-to-finished transition may
+  enter authoritative match-state and timer logic. Repeated completion packets
+  can no longer reset a turn or commit/reveal deadline, and fractional progress
+  cannot refresh the original loading grace alarm. The rollout passed all 25
+  unit and 56 game-Worker tests, TypeScript checking, and the 8.9 MB Wrangler
+  dry-run bundle. Live game health passed; a read-only production aggregate
+  remained one active and nine ended matches and reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
