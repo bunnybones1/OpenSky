@@ -620,6 +620,62 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(count?.count).toBe(1)
   })
 
+  it('reactivates a failed allocation after an idempotent game retry succeeds', async () => {
+    const accepted = {
+      ...dispatch(),
+      proposalId: 'proposal-retry-activation'
+    }
+    const first = await create(accepted)
+    expect(first.status).toBe(502)
+    expect(await first.json()).toEqual({
+      error: 'transient game allocation failure'
+    })
+    const failed = await env.AUTH_DB.prepare(
+      `SELECT id, replay_id, match_payload_json, server_address, status
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{
+        id: number
+        replay_id: string
+        match_payload_json: string
+        server_address: string | null
+        status: string
+      }>()
+    expect(failed).toMatchObject({
+      status: 'failed',
+      server_address: null
+    })
+    expect(failed?.match_payload_json).not.toBe('')
+
+    const retry = await create(accepted)
+    expect(retry.status).toBe(200)
+    expect(await retry.json()).toEqual({
+      proposalId: accepted.proposalId,
+      matchId: failed?.id,
+      serverAddress: `wss://opensky.example/api/game/matches/${accepted.proposalId}`
+    })
+    const active = await env.AUTH_DB.prepare(
+      `SELECT id, replay_id, match_payload_json, server_address, status
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{
+        id: number
+        replay_id: string
+        match_payload_json: string
+        server_address: string | null
+        status: string
+      }>()
+    expect(active).toMatchObject({
+      id: failed?.id,
+      replay_id: failed?.replay_id,
+      match_payload_json: failed?.match_payload_json,
+      status: 'active',
+      server_address: `wss://opensky.example/api/game/matches/${accepted.proposalId}`
+    })
+  })
+
   it('rejects chosen discovery cards at the final service boundary', async () => {
     const accepted = dispatch([6])
     accepted.participants[0].player.mode = GameMode.CHALLENGE_DISCOVERY

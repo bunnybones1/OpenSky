@@ -778,10 +778,17 @@ export class MatchRepository {
         .prepare(
           `UPDATE multiplayer_matches
            SET status = 'active', server_address = ?, updated_at = ?
-           WHERE proposal_id = ? AND status IN ('creating', 'active')`
+           WHERE proposal_id = ? AND status IN ('creating', 'active', 'failed')`
         )
         .bind(serverAddress, now, proposalId)
     ])
+    const activated = await this.findByProposal(proposalId)
+    if (
+      activated?.status !== 'active' ||
+      activated.server_address !== serverAddress
+    ) {
+      throw new Error('match allocation was not activated')
+    }
   }
 
   async fail(proposalId: string) {

@@ -249,6 +249,10 @@ and progress are not migrated.
   derived side assignment: both sides remain equally possible, while retries
   keep D1 principals/modes and the game payload in the same `player1`/`player2`
   order. A persisted all-accepted proposal is alarm-recoverable before dispatch.
+  A match-service retry that succeeds after a transient game-Worker failure now
+  transitions the same D1 allocation from `failed` to `active`, preserving its
+  match/replay IDs and installed payload; activation is verified before success
+  is returned to the matcher.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

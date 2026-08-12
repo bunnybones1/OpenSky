@@ -16,6 +16,10 @@ card claims are removed before those checks and cannot enter the game seed.
 Challenge sessions are validated against the queued player snapshot and
 preserved as the game server's `matchmakingCode`, matching the Go custom-game-
 server client.
+Transient game-Worker failures retain the stable D1 allocation and installed
+payload. A successful idempotent retry transitions the same row from `failed`
+to `active`, and that activation is verified before the matchmaker receives a
+success response.
 
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current

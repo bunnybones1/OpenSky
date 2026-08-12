@@ -8,6 +8,7 @@ import {
 import { defineConfig } from 'vitest/config'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
+const dispatchAttempts = new Map<string, number>()
 
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(
@@ -44,6 +45,17 @@ export default defineConfig(async () => {
                 return Response.json(
                   { error: 'invalid start match' },
                   { status: 400 }
+                )
+              }
+              const attempts = dispatchAttempts.get(body.proposalId) ?? 0
+              dispatchAttempts.set(body.proposalId, attempts + 1)
+              if (
+                body.proposalId === 'proposal-retry-activation' &&
+                attempts === 0
+              ) {
+                return Response.json(
+                  { error: 'transient game allocation failure' },
+                  { status: 503 }
                 )
               }
               return Response.json({
