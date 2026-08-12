@@ -21,11 +21,12 @@ import {
   versionValidator,
   WaitTimeScoreCalculator
 } from './criteria'
+import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import {
+  normalizePrivateSeedForIdentity,
   prismsFromPrivateSeed,
   validateGameModeDataConsistency
 } from './admission'
-import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
   BOT_PLAYER_ADDRESS,
@@ -375,8 +376,9 @@ export class MatchmakerPool implements DurableObject {
 
   private async findMatch(
     attachment: SocketAttachment,
-    command: FindMatchCommand
+    rawCommand: FindMatchCommand
   ) {
+    let command = rawCommand
     const pendingProposalId = await this.state.storage.get<string>(
       pendingKey(attachment.principal)
     )
@@ -402,6 +404,7 @@ export class MatchmakerPool implements DurableObject {
       throw new ProtocolError('OUTDATED_CLIENT', 'OUTDATED_CLIENT')
     }
 
+    command = normalizePrivateSeedForIdentity(command, attachment.principal)
     validateGameModeDataConsistency(command)
 
     let captchaValid: boolean

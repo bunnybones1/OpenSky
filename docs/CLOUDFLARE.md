@@ -232,6 +232,10 @@ and progress are not migrated.
   in the source player-factory order, validates the accepted request's session
   against its queued player, and carries the challenge code into the game
   payload's `matchmakingCode`.
+  Private seeds are normalized at queue admission: the trusted Google-session
+  principal replaces the browser identity claim, malformed key material/prisms/
+  cards receive `INVALID_PRIVATE_SEED`, and client rarity claims are discarded.
+  The zero certification signature remains supported for wallet-free play.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

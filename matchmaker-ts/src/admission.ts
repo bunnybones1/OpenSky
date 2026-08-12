@@ -18,6 +18,19 @@ const prismMap: Record<string, CardClass> = {
   TOK: CardClass.TOK
 }
 
+const validByteArray = (value: unknown, length: number): value is number[] =>
+  Array.isArray(value) &&
+  value.length === length &&
+  value.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+
+const principalBytes = (principal: string) => {
+  const bytes: number[] = []
+  for (let index = 2; index < principal.length; index += 2) {
+    bytes.push(Number.parseInt(principal.slice(index, index + 2), 16))
+  }
+  return bytes
+}
+
 export const prismsFromPrivateSeed = (
   privateSeed: Record<string, unknown>
 ) => {
@@ -25,6 +38,68 @@ export const prismsFromPrivateSeed = (
   return values
     .map(value => (typeof value === 'string' ? prismMap[value] : undefined))
     .filter((value): value is CardClass => value !== undefined)
+}
+
+const invalidPrivateSeed = () =>
+  new ProtocolError('INVALID_PRIVATE_SEED', 'INVALID_PRIVATE_SEED')
+
+// The Google session at the gateway replaces the source JWT's account claim as
+// identity authority. Canonicalize the remaining wire types exactly once so a
+// malformed seed cannot occupy durable queue/proposal state.
+export const normalizePrivateSeedForIdentity = (
+  command: FindMatchCommand,
+  principal: string
+): FindMatchCommand => {
+  const seed = command.privateSeed
+  const prisms = prismsFromPrivateSeed(seed)
+  const rawPrisms = seed.prisms
+  const rawCards = seed.cards === undefined ? [] : seed.cards
+  if (
+    !/^0x[0-9a-f]{40}$/.test(principal) ||
+    !validByteArray(seed.subkey, 20) ||
+    !validByteArray(seed.randomSeed, 16) ||
+    !Array.isArray(rawPrisms) ||
+    rawPrisms.length < 1 ||
+    rawPrisms.length > 2 ||
+    prisms.length !== rawPrisms.length ||
+    prismsToDeckClass(prisms) === DeckClass.UNKNOWN_CLASS ||
+    !Array.isArray(rawCards) ||
+    rawCards.length > 5_000
+  ) {
+    throw invalidPrivateSeed()
+  }
+
+  let cards: string[]
+  try {
+    cards = rawCards.map(card => {
+      if (typeof card !== 'string' || !/^\+?\d+$/.test(card)) {
+        throw invalidPrivateSeed()
+      }
+      const numeric = BigInt(card)
+      if (numeric > 0xffffffffffffffffn) throw invalidPrivateSeed()
+      return numeric.toString()
+    })
+  } catch (error) {
+    if (error instanceof ProtocolError) throw error
+    throw invalidPrivateSeed()
+  }
+
+  return {
+    ...command,
+    privateSeed: {
+      ...seed,
+      player: principalBytes(principal),
+      subkey: [...seed.subkey],
+      signature: validByteArray(seed.signature, 65)
+        ? [...seed.signature]
+        : Array(65).fill(0),
+      prisms: prisms.map(prism => prism.toLowerCase()),
+      cards,
+      randomSeed: [...seed.randomSeed],
+      // Source player.setPrivateSeed never trusts this client claim.
+      cardRarities: {}
+    }
+  }
 }
 
 const isRandomPrivateSeed = (privateSeed: Record<string, unknown>) => {

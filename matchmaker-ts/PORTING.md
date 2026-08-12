@@ -61,6 +61,10 @@ The source game-mode data contract is also enforced before captcha/profile
 work: discovery queues accept only an empty random-deck card list, challenge
 queues require a nonempty normalized session, and challenge discovery preserves
 the source's `SESSION_IS_EMPTY`-before-`DECK_IS_NOT_RANDOM` error ordering.
+The preserved Google session replaces the legacy JWT account claim: admission
+overwrites the browser's player bytes with that trusted principal, validates
+subkey/random-seed/prism/card wire shapes before durable queueing, supplies the
+wallet-optional zero signature when needed, and discards client rarity claims.
 
 ## Deployment gates
 

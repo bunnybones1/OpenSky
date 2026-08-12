@@ -98,6 +98,8 @@ const findCommand = (
   authToken: 'legacy-token-is-not-trusted',
   privateSeed: {
     player: '0xffffffffffffffffffffffffffffffffffffffff',
+    subkey: Array(20).fill(2),
+    signature: Array(65).fill(0),
     prisms,
     cards,
     randomSeed: Array(16).fill(1)
@@ -312,6 +314,10 @@ describe('Cloudflare matchmaker Worker', () => {
           cards: [[6, 'base']],
           recentMatches: [{ opponentId: PRINCIPAL_2 }]
         })
+        expect(
+          (ticket as { request?: { privateSeed?: { player?: unknown } } })
+            ?.request?.privateSeed?.player
+        ).toEqual(Array(20).fill(0x11))
       }
     )
   })
@@ -368,6 +374,24 @@ describe('Cloudflare matchmaker Worker', () => {
       type: 'error',
       reason: 'SESSION_IS_EMPTY',
       message: 'SESSION_IS_EMPTY',
+      level: 'server'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('rejects malformed private-seed key material before queueing', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const command = findCommand()
+    command.privateSeed.subkey = [1, 2, 3]
+    const error = nextMessage(player)
+    player.send(JSON.stringify(command))
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'INVALID_PRIVATE_SEED',
+      message: 'INVALID_PRIVATE_SEED',
       level: 'server'
     })
     const status = await pool().fetch('https://pool.example/internal/status', {
