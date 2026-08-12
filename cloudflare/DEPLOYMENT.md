@@ -6,9 +6,10 @@
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`49bd05fd-6fcd-4f8e-aa31-00ec0d115140`)
 - Match service Worker: `cloud-weasel-match-service` (`16934ac3-15b6-4e4e-9581-86b0a2646610`)
-- Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
-- Deployed source includes `492cd47` across the API/web and game Workers,
-  `18e66c1` for the matchmaker and match service
+- Game Worker: `cloud-weasel-game-server` (`f5ea16d9-42fa-45ed-b4f3-f409469c9448`)
+- Deployed source includes `492cd47` across the API/web Worker,
+  `18e66c1` for the matchmaker and match service, and `6574a62` for the game
+  Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -402,6 +403,16 @@ settlement and delayed delivery against that pool.
   authoritative mode-status binding, and game client HTML passed; both Conquest
   queues remain disabled. A read-only production aggregate remained one active
   and nine ended matches with no creating/failed rows and reported
+  `changed_db: false`.
+- Game Worker version `f5ea16d9-42fa-45ed-b4f3-f409469c9448` contains source
+  `6574a62`. An identical match-creation retry now repairs either side of the
+  Durable Object's two-stage initialization boundary: an empty pre-start timer
+  state is completed, and a persisted deadline with a missing or late alarm is
+  rescheduled without extending the healthy deadline. Immutable payload and
+  release-conflict checks still run before any repair. All 24 game unit and 49
+  game Worker tests and TypeScript checking passed. Live game and matcher
+  protocol-v3 health passed; a read-only production aggregate remained one
+  active and nine ended matches with no creating/failed rows and reported
   `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
