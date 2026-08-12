@@ -3,15 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
+- API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`02134a49-7560-4a10-85e3-08b0217ad5f4`)
-- Deployed source includes `492cd47` across the API/web Worker,
-  `309861e` for the matchmaker and match service, and `308a948`
-  for the game Worker
+- Game Worker: `cloud-weasel-game-server` (`06aace30-7c3e-4a68-a5dc-4d20978e19d4`)
+- Deployed source includes `56c606d` across the API/web and game Workers,
+  and `309861e` for the matchmaker and match service
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0046`
+- Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
   anonymization
 
@@ -155,9 +154,9 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 22 files, 146 tests
+- API Worker: 22 files, 148 tests
 - Match service: 14 Worker tests
-- Game Worker: 24 unit and 48 Worker tests
+- Game Worker: 25 unit and 54 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
@@ -548,6 +547,20 @@ settlement and delayed delivery against that pool.
   TypeScript checking. Live game health passed; a read-only production
   aggregate remained one active and nine ended matches and reported
   `changed_db: false`.
+- API/web version `d7fe1517-3ce2-476f-a655-380ffcdd0c3c` and game version
+  `06aace30-7c3e-4a68-a5dc-4d20978e19d4` contain source `56c606d`.
+  Match-info now preserves the source's 24-hour `recent_match_info` refresh
+  path: D1 selects only the participant's newest allocation, while the game
+  Durable Object returns that participant's final private store and persisted
+  rewards directly. Active-match lookup remains available for spectators, but
+  recent private state is participant-only; no-load results, expired results,
+  and old results superseded by a newer match attempt fail closed. Migration
+  `0047` adds both participant lookup indexes. The rollout passed all 148 API,
+  25 game-unit, and 54 game-Worker tests, both TypeScript checks, and both
+  Wrangler dry-run bundles. Live game health and app HTML returned `200`, the
+  unauthenticated match-info boundary returned `401`, migration/index checks
+  passed, and a read-only production aggregate remained one active and nine
+  ended matches with `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
