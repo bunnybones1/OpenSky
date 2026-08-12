@@ -50,12 +50,19 @@ export default defineConfig(async () => {
               const attempts = dispatchAttempts.get(body.proposalId) ?? 0
               dispatchAttempts.set(body.proposalId, attempts + 1)
               if (
-                body.proposalId === 'proposal-retry-activation' &&
+                (body.proposalId === 'proposal-retry-activation' ||
+                  body.proposalId === 'proposal-stale-retry') &&
                 attempts === 0
               ) {
                 return Response.json(
                   { error: 'transient game allocation failure' },
                   { status: 503 }
+                )
+              }
+              if (body.proposalId === 'proposal-stale-retry') {
+                return Response.json(
+                  { error: 'stale allocation reached the game service' },
+                  { status: 418 }
                 )
               }
               return Response.json({

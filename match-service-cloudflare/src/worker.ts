@@ -356,6 +356,7 @@ export default {
       const createRequest = JSON.parse(
         row.match_payload_json
       ) as CreateMatchRequest
+      await repository.rejectSupersededAllocation(row)
       const serverAddress = await dispatchToGame(createRequest, env)
       await repository.activate(dispatch.proposalId, serverAddress)
       return json({

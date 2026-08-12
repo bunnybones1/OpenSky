@@ -135,6 +135,7 @@ export class MatchPreconditionError extends Error {
     readonly reason:
       | 'CONQUEST_DECK_CLASS_MISMATCH'
       | 'INVALID_ACCOUNT'
+      | 'PLAYER_HAS_EXISTING_MATCH'
       | 'RANK_TOO_LOW',
     message: string
   ) {
@@ -760,7 +761,7 @@ export class MatchRepository {
                result_json = COALESCE(result_json, ?),
                ended_at = COALESCE(ended_at, ?),
                updated_at = ?
-           WHERE proposal_id != ? AND status = 'active'
+           WHERE proposal_id != ? AND id < ? AND status = 'active'
              AND (player1_principal IN (?, ?)
                OR player2_principal IN (?, ?))`
         )
@@ -769,6 +770,7 @@ export class MatchRepository {
           now,
           now,
           proposalId,
+          row.id,
           row.player1_principal,
           row.player2_principal,
           row.player1_principal,
@@ -778,11 +780,29 @@ export class MatchRepository {
         .prepare(
           `UPDATE multiplayer_matches
            SET status = 'active', server_address = ?, updated_at = ?
-           WHERE proposal_id = ? AND status IN ('creating', 'active', 'failed')`
+           WHERE proposal_id = ? AND status IN ('creating', 'active', 'failed')
+             AND NOT EXISTS (
+               SELECT 1 FROM multiplayer_matches AS newer
+               WHERE newer.id > ? AND newer.status = 'active'
+                 AND (newer.player1_principal IN (?, ?)
+                   OR newer.player2_principal IN (?, ?))
+             )`
         )
-        .bind(serverAddress, now, proposalId)
+        .bind(
+          serverAddress,
+          now,
+          proposalId,
+          row.id,
+          row.player1_principal,
+          row.player2_principal,
+          row.player1_principal,
+          row.player2_principal
+        )
     ])
     const activated = await this.findByProposal(proposalId)
+    if (activated?.status !== 'active') {
+      await this.rejectSupersededAllocation(row)
+    }
     if (
       activated?.status !== 'active' ||
       activated.server_address !== serverAddress
@@ -791,12 +811,54 @@ export class MatchRepository {
     }
   }
 
+  async rejectSupersededAllocation(row: MultiplayerMatchRow) {
+    const newer = await this.database
+      .prepare(
+        `SELECT proposal_id FROM multiplayer_matches
+         WHERE id > ? AND status = 'active'
+           AND (player1_principal IN (?, ?)
+             OR player2_principal IN (?, ?))
+         ORDER BY id DESC LIMIT 1`
+      )
+      .bind(
+        row.id,
+        row.player1_principal,
+        row.player2_principal,
+        row.player1_principal,
+        row.player2_principal
+      )
+      .first<{ proposal_id: string }>()
+    if (!newer) return
+    const now = new Date().toISOString()
+    await this.database
+      .prepare(
+        `UPDATE multiplayer_matches
+         SET status = 'ended', result_json = COALESCE(result_json, ?),
+             ended_at = COALESCE(ended_at, ?), updated_at = ?
+         WHERE proposal_id = ? AND status != 'ended'`
+      )
+      .bind(
+        JSON.stringify({
+          reason: 'superseded',
+          byProposalId: newer.proposal_id
+        }),
+        now,
+        now,
+        row.proposal_id
+      )
+      .run()
+    throw new MatchPreconditionError(
+      'PLAYER_HAS_EXISTING_MATCH',
+      'accepted proposal has been superseded'
+    )
+  }
+
   async fail(proposalId: string) {
     await this.database
       .prepare(
         `UPDATE multiplayer_matches
          SET status = 'failed', updated_at = ?
-         WHERE proposal_id = ? AND status != 'active'`
+         WHERE proposal_id = ? AND status IN ('creating', 'failed')`
       )
       .bind(new Date().toISOString(), proposalId)
       .run()

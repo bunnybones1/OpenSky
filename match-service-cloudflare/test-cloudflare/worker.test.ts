@@ -676,6 +676,52 @@ describe('Cloud Weasel accepted-match service', () => {
     })
   })
 
+  it('does not let a delayed failed retry supersede a newer active match', async () => {
+    const stale = {
+      ...dispatch(),
+      proposalId: 'proposal-stale-retry',
+      createdAtMs: Date.now()
+    }
+    expect((await create(stale)).status).toBe(502)
+
+    const newer = {
+      ...dispatch(),
+      proposalId: 'proposal-newer-active',
+      createdAtMs: stale.createdAtMs + 1
+    }
+    expect((await create(newer)).status).toBe(200)
+
+    const retry = await create(stale)
+    expect(retry.status).toBe(409)
+    expect(await retry.json()).toEqual({
+      error: 'accepted proposal has been superseded',
+      reason: 'PLAYER_HAS_EXISTING_MATCH'
+    })
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT proposal_id, status, result_json
+       FROM multiplayer_matches ORDER BY id`
+    ).all<{
+      proposal_id: string
+      status: string
+      result_json: string | null
+    }>()
+    expect(rows.results).toEqual([
+      {
+        proposal_id: stale.proposalId,
+        status: 'ended',
+        result_json: JSON.stringify({
+          reason: 'superseded',
+          byProposalId: newer.proposalId
+        })
+      },
+      {
+        proposal_id: newer.proposalId,
+        status: 'active',
+        result_json: null
+      }
+    ])
+  })
+
   it('rejects chosen discovery cards at the final service boundary', async () => {
     const accepted = dispatch([6])
     accepted.participants[0].player.mode = GameMode.CHALLENGE_DISCOVERY

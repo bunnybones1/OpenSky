@@ -253,6 +253,10 @@ and progress are not migrated.
   transitions the same D1 allocation from `failed` to `active`, preserving its
   match/replay IDs and installed payload; activation is verified before success
   is returned to the matcher.
+  If a later allocation for either participant is already active, a delayed
+  retry ends the stale row with `PLAYER_HAS_EXISTING_MATCH` before game dispatch
+  and cannot supersede the newer match; failure recording never rewrites ended
+  audit state.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

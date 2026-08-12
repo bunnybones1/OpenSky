@@ -20,6 +20,9 @@ Transient game-Worker failures retain the stable D1 allocation and installed
 payload. A successful idempotent retry transitions the same row from `failed`
 to `active`, and that activation is verified before the matchmaker receives a
 success response.
+Newest-allocation-wins checks also reject a delayed retry when a later match for
+either player is already active; the stale row is ended for audit without
+dispatching another game or superseding the newer match.
 
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current
