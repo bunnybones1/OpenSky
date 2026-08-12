@@ -89,6 +89,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS reject_leaderboard_reward_grant'
     ),
+    env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_leaderboard_rank_reset'),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS player_leaderboard_reward_feed_events_no_delete'
     ),
@@ -102,6 +103,9 @@ beforeEach(async () => {
       'DROP TRIGGER IF EXISTS leaderboard_reward_cycles_no_delete'
     ),
     env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS leaderboard_rank_reset_receipts_no_delete'
+    ),
+    env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS leaderboard_reward_schedule_versions_no_delete'
     )
   ])
@@ -112,6 +116,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_leaderboard_reward_feed_events'),
     env.AUTH_DB.prepare('DELETE FROM player_leaderboard_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_entries'),
+    env.AUTH_DB.prepare('DELETE FROM leaderboard_rank_reset_receipts'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycles'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_schedule_versions'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'reward-%'`)
@@ -136,6 +141,13 @@ beforeEach(async () => {
        BEFORE DELETE ON leaderboard_reward_entries
        BEGIN
          SELECT RAISE(ABORT, 'leaderboard reward entries are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER leaderboard_rank_reset_receipts_no_delete
+       BEFORE DELETE ON leaderboard_rank_reset_receipts
+       BEGIN
+         SELECT RAISE(ABORT, 'leaderboard rank reset receipts are immutable');
        END`
     ),
     env.AUTH_DB.prepare(
@@ -427,8 +439,82 @@ describe('weekly leaderboard reward worker', () => {
     ).toEqual({ awards: 1, notifications: 1, feed: 2 })
   })
 
+  it('retries a failed rank reset without repeating already delivered rewards', async () => {
+    await setupPlayer('reward-reset-retry', 2_000, NOW.toISOString())
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET player_rank_state = json_set(player_rank_state, '$[2]', 100)
+       WHERE user_id = 'reward-reset-retry' AND season = ?`
+    )
+      .bind(SEASON)
+      .run()
+    await enableSchedule()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_leaderboard_rank_reset
+       BEFORE INSERT ON leaderboard_rank_reset_receipts
+       BEGIN
+         SELECT RAISE(ABORT, 'injected leaderboard rank reset failure');
+       END`
+    ).run()
+
+    await expect(runDueLeaderboardRewards(env.AUTH_DB, NOW)).rejects.toThrow(
+      'injected leaderboard rank reset failure'
+    )
+    expect(await inventoryTotals('reward-reset-retry')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_leaderboard_reward_awards) AS awards,
+           (SELECT COUNT(*) FROM leaderboard_rank_reset_receipts) AS resets,
+           (SELECT attempt_count FROM leaderboard_reward_cycles) AS attempts`
+      ).first()
+    ).toEqual({ awards: 1, resets: 0, attempts: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT json_extract(player_rank_state, '$[2]') AS deviation
+         FROM player_account_stats
+         WHERE user_id = 'reward-reset-retry'
+           AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      )
+        .bind(SEASON)
+        .first('deviation')
+    ).toBe(100)
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_leaderboard_rank_reset'
+    ).run()
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed',
+      delivered: 0
+    })
+    expect(await inventoryTotals('reward-reset-retry')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT json_extract(player_rank_state, '$[2]') AS deviation
+         FROM player_account_stats
+         WHERE user_id = 'reward-reset-retry'
+           AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      )
+        .bind(SEASON)
+        .first('deviation')
+    ).toBe(125)
+  })
+
   it('serializes concurrent cron calls through the cycle and award receipts', async () => {
     await setupPlayer('reward-concurrent', 2_000, NOW.toISOString())
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET player_rank_state = json_set(player_rank_state, '$[2]', 100)
+       WHERE user_id = 'reward-concurrent' AND season = ?`
+    )
+      .bind(SEASON)
+      .run()
     await enableSchedule()
 
     const runs = await Promise.all([
@@ -447,9 +533,20 @@ describe('weekly leaderboard reward worker', () => {
            (SELECT COUNT(*) FROM player_leaderboard_reward_awards) AS awards,
            (SELECT COUNT(*) FROM player_notifications
             WHERE notification_type = 'LEADERBOARD_REWARD') AS notifications,
-           (SELECT COUNT(*) FROM player_leaderboard_reward_feed_events) AS feed`
+           (SELECT COUNT(*) FROM player_leaderboard_reward_feed_events) AS feed,
+           (SELECT COUNT(*) FROM leaderboard_rank_reset_receipts) AS resets`
       ).first()
-    ).toEqual({ cycles: 1, awards: 1, notifications: 1, feed: 2 })
+    ).toEqual({ cycles: 1, awards: 1, notifications: 1, feed: 2, resets: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT json_extract(player_rank_state, '$[2]') AS deviation
+         FROM player_account_stats
+         WHERE user_id = 'reward-concurrent'
+           AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      )
+        .bind(SEASON)
+        .first('deviation')
+    ).toBe(125)
   })
 
   it('bounds each cron batch and resumes remaining players from receipts', async () => {

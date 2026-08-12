@@ -1,6 +1,7 @@
 import cardLibrary from './generated/card-library.json'
 
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
+import { applyLeaderboardRankReset } from './leaderboard-rank-reset'
 import { seasonStart, seasonWeekFromDate } from './legacy-seasons'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -582,23 +583,25 @@ const deliverCycle = async (
       delivered++
     }
   }
-  await database
-    .prepare(
-      `UPDATE leaderboard_reward_cycles
-       SET status = 'COMPLETED', completed_at = ?
-       WHERE id = ? AND status = 'DELIVERING'
-         AND (
-           SELECT COUNT(DISTINCT user_id)
-           FROM leaderboard_reward_entries
-           WHERE cycle_id = ? AND rank <= 250
-         ) = (
-           SELECT COUNT(*) FROM player_leaderboard_reward_awards
-           WHERE cycle_id = ?
-         )`
-    )
-    .bind(now.toISOString(), cycle.id, cycle.id, cycle.id)
-    .run()
   return delivered
+}
+
+const cycleDeliveryComplete = async (
+  database: D1Database,
+  cycleId: number
+): Promise<boolean> => {
+  const row = await database
+    .prepare(
+      `SELECT
+         (SELECT COUNT(DISTINCT user_id)
+          FROM leaderboard_reward_entries
+          WHERE cycle_id = ? AND rank <= 250) AS expected,
+         (SELECT COUNT(*) FROM player_leaderboard_reward_awards
+          WHERE cycle_id = ?) AS delivered`
+    )
+    .bind(cycleId, cycleId)
+    .first<{ expected: number; delivered: number }>()
+  return row?.expected === row?.delivered
 }
 
 const recordFailure = async (
@@ -662,6 +665,9 @@ export const runDueLeaderboardRewards = async (
       ))!
     }
     const delivered = await deliverCycle(database, cycle, now)
+    if (await cycleDeliveryComplete(database, cycle.id)) {
+      await applyLeaderboardRankReset(database, cycle.id, now)
+    }
     const completed = await cycleBySchedule(
       database,
       schedule.version,
