@@ -29,6 +29,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - source-compatible, release-scoped ranked/Conquest abandon counts and
   cooldowns bridged through D1 to the matchmaker, with idempotent completion
   markers; and
+- source ranked-constructed deck aggregates, serialized through a dedicated
+  Durable Object so concurrent completions cannot lose Glicko transitions,
+  with Apprentice eligibility, match-status counters, per-season highest-player
+  wins, atomic D1 batches, and retry receipts; and
 - retry-safe Conquest progress, points, exact source reward bundles, versioned
   card selection, immediate Silver settlement, and persisted 24-hour Gold
   delivery tasks consumed by the API Worker's scheduler.

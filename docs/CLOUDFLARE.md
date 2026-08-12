@@ -188,6 +188,13 @@ and progress are not migrated.
   text and element matching, negative-mana ordering, pagination, optional
   balance projection, and 96 search-only token rows without adding tokens to
   the normal card library.
+- Complete saved decks and completed ranked-constructed matches now feed the
+  current-card-library deck leaderboard. A dedicated game Durable Object
+  serializes source-order Glicko updates, while D1 receipts make retries
+  idempotent. Public `ListDeckRanks` preserves positive-score/class filtering
+  and highest-player account projection; authenticated `SearchDeckRanks`
+  preserves exact deck, class, and contained-card filters including score-zero
+  rows.
 - Public game-mode status comes from the separately deployed match service over
   an authenticated Cloudflare service binding, so the UI and queue admission
   agree that Conquest is still disabled. D1-backed Ping, server Clock, current
@@ -255,9 +262,9 @@ than an unported code path.
 WalletConnect can then be added independently in account settings: connect a
 wallet, sign a session-owned nonce, persist the verified address, and merge
 wallet contents at read boundaries without granting the wallet authority over
-the user's login session. The next safe compatibility reads are deck-rank
-history once its aggregate storage is designed, and leaderboard reward timing
-once Cloud Weasel has an explicit UTC weekday/time configuration; the original
+the user's login session. The remaining content compatibility read is
+leaderboard reward timing once Cloud Weasel has an explicit UTC weekday/time
+configuration; the original
 deployment's reward schedule is not present in this repository and must not be
 invented.
 

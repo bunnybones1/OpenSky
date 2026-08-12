@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`ce8ba934-3858-4764-ae3c-bae473985c7d`)
+- API/web Worker: `opensky-webapp` (`3661358a-e27a-443b-aa23-1c3b6b7ac41e`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
-- Game Worker: `cloud-weasel-game-server` (`cb372ca3-de89-4135-a1d2-f3fc40a999ed`)
-- Deployed source includes `6f00087` for web/API and game, plus the match-service
+- Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
+- Deployed source includes `b612af3` for web/API and game, plus the match-service
   inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0028`
+- Applied D1 migrations: `0001` through `0029`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -27,6 +27,12 @@
 - Basic SkyPass card claims for the ported season data
 - Legacy deck listing, creation, update, deletion, and deck-string encoding
 - Private source deck search with exact/class/name filters and cursor pagination
+- Public source deck leaderboard plus authenticated rank search, with current
+  card-library scoping, score/class/card filters, highest-player accounts, and
+  score-zero rows for newly saved complete decks
+- Retry-safe ranked-constructed deck aggregation, including source Glicko
+  transitions, Apprentice eligibility, match-status counters, current-season
+  highest-player wins, a global Durable Object serializer, and D1 receipts
 - Source deck ownership, class-unlock, and partial-deck validation checks
 - Atomic, owner-scoped deck favorite toggling
 - Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads
@@ -60,9 +66,9 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 17 files, 95 tests
+- API Worker: 18 files, 100 tests
 - Match service: 9 Worker tests
-- Game Worker: 24 unit and 36 Worker tests
+- Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
@@ -70,6 +76,10 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
+- Remote D1 after migration `0029`: zero deck ranks, per-player deck wins, or
+  completion receipts before the first new ranked match; the public list was
+  empty, authenticated search rejected anonymous access, and the read-only
+  verification reported `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`

@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 88 |
-| Remaining source RPCs | 84 |
+| Ported source RPCs | 90 |
+| Remaining source RPCs | 82 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | --- | ---: | --- |
 | Admin and operations | 49 | Requires a new identity/RBAC boundary before exposing source GM tools. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
-| Content and discovery | 3 | Deck-rank search and reward-schedule reads. |
+| Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
 | Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
 | Other product | 2 | Account reporting and game-client feedback. |
@@ -57,9 +57,11 @@ not only handler translations:
 
 1. Approve a versioned production Conquest pool and run the pre-enable
    settlement/delayed-delivery drill; the code path is implemented and deployed.
-2. Finish public content discovery (deck-rank search and the reward-schedule
-   read). Card/deck search and validation, the card library, and both lookup
-   RPCs now follow the source contracts and generated card migration.
+2. Define an explicit Cloud Weasel UTC weekday/time and cadence for
+   `GetNextRewardsTime`. The original values were private runtime configuration
+   and are absent from this repository, so inventing them would not be a
+   faithful port. Deck-rank writes, public listing, and authenticated search are
+   now implemented and deployed.
 3. Add identity-native account lifecycle and reporting, with audit trails.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.
