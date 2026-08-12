@@ -5,6 +5,7 @@ import type {
   AccountStatus,
   Banner,
   BannersRequest,
+  AppleAppStorePaymentResponse,
   CardSearchCriteria,
   DeckClass,
   EpicType,
@@ -88,6 +89,7 @@ import {
 import { StaffRepository } from './staff'
 import { StripeCheckoutRepository, type StripeFetch } from './stripe-checkout'
 import type { VerifiedProof } from './proof'
+import type { AppleTrustAnchors } from './apple-app-store-verification'
 import { verifySequenceProof } from './proof'
 import {
   identityReferenceFor,
@@ -110,6 +112,7 @@ export interface AuthServices {
   skypassRewardAllowedOrigins?: string
   socialFetch?: SocialInfoFetch
   mobileStoreFetch?: MobileStoreFetch
+  appleTrustAnchors?: AppleTrustAnchors
 }
 
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
@@ -290,7 +293,8 @@ export const handleApiRequest = async (
   const mobileStores = new MobileStoreVerificationRepository(
     env.AUTH_DB,
     env,
-    services.mobileStoreFetch
+    services.mobileStoreFetch,
+    services.appleTrustAnchors
   )
 
   try {
@@ -2124,6 +2128,18 @@ export const handleApiRequest = async (
           throw invalidArgument('providerResponse is required')
         }
         await mobileStores.verifyGoogle(principal.userId, body.providerResponse)
+        return json(request, env, { status: true })
+      }
+
+      case 'VerifyAppleAppStorePayment': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          providerResponse?: AppleAppStorePaymentResponse
+        }>(request)
+        if (!body.providerResponse) {
+          throw invalidArgument('providerResponse is required')
+        }
+        await mobileStores.verifyApple(principal.userId, body.providerResponse)
         return json(request, env, { status: true })
       }
 

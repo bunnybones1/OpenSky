@@ -1,9 +1,15 @@
 import {
   PaymentProvider,
+  type AppleAppStorePaymentResponse,
   type GooglePlayPaymentResponse,
   type SamsungGalaxyStorePaymentResponse
 } from '@opensky/proto'
 
+import {
+  fetchAppleTransaction,
+  type AppleTrustAnchors
+} from './apple-app-store-verification'
+import { APPLE_ROOT_CERTIFICATES } from './apple-root-certificates'
 import type { Env } from './env'
 import { invalidArgument, unavailable } from './errors'
 import { MobileStoreFulfillmentRepository } from './mobile-store-fulfillment'
@@ -131,9 +137,117 @@ export class MobileStoreVerificationRepository {
   constructor(
     database: D1Database,
     private readonly env: Env,
-    private readonly storeFetch: MobileStoreFetch = request => fetch(request)
+    private readonly storeFetch: MobileStoreFetch = request => fetch(request),
+    private readonly appleTrustAnchors: AppleTrustAnchors = APPLE_ROOT_CERTIFICATES
   ) {
     this.fulfillment = new MobileStoreFulfillmentRepository(database)
+  }
+
+  async verifyApple(
+    userId: string,
+    providerResponse: AppleAppStorePaymentResponse,
+    now = new Date()
+  ): Promise<void> {
+    if (!providerResponse || typeof providerResponse !== 'object') {
+      throw invalidArgument('providerResponse is required')
+    }
+    const transactionId = requiredField(
+      providerResponse.transactionId,
+      'transactionId'
+    )
+    const productId = requiredField(
+      providerResponse.productId,
+      'productId',
+      128
+    )
+    const providerCurrency = requiredField(
+      providerResponse.currency,
+      'currency',
+      3
+    ).toUpperCase()
+    if (!/^[A-Z]{3}$/.test(providerCurrency)) {
+      throw invalidArgument('Apple currency is invalid')
+    }
+    if (
+      !Number.isFinite(providerResponse.totalPrice) ||
+      providerResponse.totalPrice < 0
+    ) {
+      throw invalidArgument('Apple total price is invalid')
+    }
+    const transaction = await fetchAppleTransaction(
+      this.env,
+      providerResponse,
+      this.storeFetch,
+      now,
+      this.appleTrustAnchors
+    )
+    if (transaction.transactionId !== transactionId) {
+      throw invalidArgument('Apple transaction ID does not match')
+    }
+    if (transaction.productId !== productId) {
+      throw invalidArgument('Apple product ID does not match')
+    }
+    if (transaction.revocationDate !== undefined) {
+      throw invalidArgument('Apple purchase has been revoked')
+    }
+    if (transaction.quantity !== 1) {
+      throw invalidArgument('Apple purchase quantity is invalid')
+    }
+    if (transaction.inAppOwnershipType !== 'PURCHASED') {
+      throw invalidArgument('Apple purchase ownership is invalid')
+    }
+    const currency = requiredField(
+      transaction.currency,
+      'Apple currency',
+      3
+    ).toUpperCase()
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw invalidArgument('Apple currency is invalid')
+    }
+    const priceMilliunits = Number(transaction.price)
+    if (!Number.isSafeInteger(priceMilliunits) || priceMilliunits < 0) {
+      throw invalidArgument('Apple price is invalid')
+    }
+    if (providerCurrency !== currency) {
+      throw invalidArgument('Apple currency does not match')
+    }
+    if (
+      !Number.isFinite(providerResponse.totalPrice) ||
+      providerResponse.totalPrice < 0 ||
+      Math.round(providerResponse.totalPrice * 1_000) !== priceMilliunits
+    ) {
+      throw invalidArgument('Apple total price does not match')
+    }
+    const verificationSha256 = await sha256(
+      JSON.stringify({
+        provider: PaymentProvider.APPLE_APP_STORE,
+        bundleId: transaction.bundleId,
+        transactionId,
+        originalTransactionId: transaction.originalTransactionId ?? null,
+        productId,
+        purchaseDate: transaction.purchaseDate ?? null,
+        originalPurchaseDate: transaction.originalPurchaseDate ?? null,
+        quantity: transaction.quantity,
+        type: transaction.type ?? null,
+        ownership: transaction.inAppOwnershipType,
+        signedDate: transaction.signedDate,
+        environment: transaction.environment,
+        currency,
+        priceMilliunits
+      })
+    )
+    await this.fulfillment.fulfill(
+      userId,
+      {
+        provider: PaymentProvider.APPLE_APP_STORE,
+        externalTransactionId: transactionId,
+        productCode: productId,
+        verificationSha256,
+        currency,
+        totalPrice: priceMilliunits / 1_000
+      },
+      now
+    )
   }
 
   private googleServiceAccount(): {

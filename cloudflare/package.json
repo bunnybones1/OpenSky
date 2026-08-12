@@ -12,6 +12,8 @@
     "@ethersproject/wallet": "^5.8.0",
     "@opensky/proto": "workspace:*",
     "@opensky/shared": "workspace:*",
+    "@peculiar/x509": "1.14.3",
+    "reflect-metadata": "0.2.2",
     "@skyweaver/state-browser-sys": "workspace:*"
   },
   "devDependencies": {

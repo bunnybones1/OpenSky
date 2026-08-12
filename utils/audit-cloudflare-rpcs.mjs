@@ -93,9 +93,7 @@ export const SUPERSEDED_SOURCE_RPCS = new Set([
   'RequestAccountDeletion'
 ])
 
-export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([
-  'VerifyAppleAppStorePayment'
-])
+export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([])
 
 export const partitionRpcGaps = methods => ({
   retired: methods.filter(method => RETIRED_SOURCE_RPCS.has(method)).sort(),
