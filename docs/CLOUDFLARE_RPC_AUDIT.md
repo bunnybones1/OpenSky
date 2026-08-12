@@ -13,21 +13,24 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     154 |
+| Ported source RPCs           |     155 |
 | Cloudflare-superseded RPCs   |      15 |
 | Deliberately retired RPCs    |       2 |
-| Actionable source RPC gaps   |       1 |
+| Actionable source RPC gaps   |       0 |
 | Cloudflare-only RPC adapters |       0 |
 
-Together, 171/172 source contracts (99.4%) are implemented, replaced by a
+Together, 172/172 source contracts (100%) are implemented, replaced by a
 reviewed Cloud Weasel contract, or intentionally retired. This is a product-
 intent measure; the audit still prints every raw source omission.
 
-## Actionable workstreams
+## Completed source surface
 
-| Workstream            | Actionable | Interpretation                                                                                                                                                                                                                                                                           |
-| --------------------- | ---------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mobile-store commerce |          1 | Google Play and Samsung verification now feed the shared idempotent off-chain fulfillment ledger. Apple's deprecated receipt API cannot be copied faithfully; the remaining port needs App Store Server API authentication plus complete signed-transaction certificate-chain verification. |
+There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
+Apple verification now feed the same idempotent off-chain fulfillment ledger.
+Apple uses the current App Store Server API, Worker-native ES256, Apple-specific
+certificate OIDs, the complete three-certificate JWS chain, and source-pinned
+Apple PKI roots. Sandbox, revoked, mismatched, future-signed, or untrusted
+transactions fail before reward storage.
 
 All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
@@ -79,29 +82,23 @@ hidden while that optional integration is unavailable.
 
 ## Recommended order
 
-1. Port `VerifyAppleAppStorePayment` only after the Worker can verify Apple's
-   signed transaction and X.509 certificate chain against an Apple trust
-   anchor. Decoding the JWS payload or merely trusting an authenticated fetch
-   is not sufficient reward authority. Keep the adapter unavailable until the
-   bundle, issuer, key, environment, transaction, product, and revocation
-   checks all fail closed.
-2. Approve a versioned production Conquest pool and run the pre-enable
+1. Approve a versioned production Conquest pool and run the pre-enable
    settlement/delayed-delivery drill; the code path is implemented and deployed.
-3. Define an explicit Cloud Weasel UTC weekday/time and add its immutable D1
+2. Define an explicit Cloud Weasel UTC weekday/time and add its immutable D1
    schedule version. `GetNextRewardsTime` and the distribution worker share
    that authority and are implemented; the original schedule values were
    private runtime configuration and are absent from this repository, so
    production remains deliberately unconfigured. Deck-rank writes, public
    listing, and authenticated search are implemented and deployed.
-4. Define the confirmation and recovery contract for any future hard deletion.
+3. Define the confirmation and recovery contract for any future hard deletion.
    Identity-native soft deletion is now deployed: the original settings dialog
    uses fresh Google OIDC step-up, access stops immediately, and scheduled
    anonymization follows the source delay. The source invite-request setting is
    deployed, and its deprecated `SignIn` method remains an explicit
    compatibility error rather than a second login authority.
-5. Add optional WalletConnect only at external-ownership read boundaries. Game
+4. Add optional WalletConnect only at external-ownership read boundaries. Game
    rewards remain off-chain and do not depend on a wallet.
-6. Provision staff only through an audited out-of-band procedure. Every current
+5. Provision staff only through an audited out-of-band procedure. Every current
    GM/admin write is ported with a granular dormant capability and immutable
    audit. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
    the original UI's read-only authorization probe and account discovery are

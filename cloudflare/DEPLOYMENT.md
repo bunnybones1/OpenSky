@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`ef89b704-f0c7-4c1e-9d62-0c05313a3dad`)
+- API/web Worker: `opensky-webapp` (`21078126-9518-4fe8-8ff0-0e6767189f0d`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -28,7 +28,8 @@
   fork-owned Discord/Twitch information, `8346b14` for the mobile-store
   off-chain ledger, `db134d0` for Samsung purchase verification, and
   `1b141eb` for Google Play verification, and `e713f20` for explicit legacy
-  mobile/early-access tombstones
+  mobile/early-access tombstones, and `0442374` for Apple App Store Server API
+  verification
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0062`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
@@ -1035,6 +1036,23 @@ settlement and delayed delivery against that pool.
   build passed. Live probes returned the expected `501`/`401` boundaries, while
   mobile payments remained zero, inventory remained 31 rows, and the D1 check
   reported zero writes and `changed_db: false`.
+- API/web Worker version `21078126-9518-4fe8-8ff0-0e6767189f0d` contains Apple
+  verification milestone `0442374`. It replaces the source's deprecated
+  `verifyReceipt` dependency with the production App Store Server API, signs a
+  five-minute ES256 authorization token in Workers WebCrypto, and verifies the
+  returned signed transaction against its complete three-certificate chain,
+  Apple transaction/intermediate OIDs, certificate validity and CA/key usages,
+  and the three official source-pinned Apple root certificates. It then checks
+  production environment, bundle, transaction, product, quantity, ownership,
+  revocation, signed date, currency, and milliunit price before the shared D1
+  ledger can grant off-chain inventory. Production has no Apple identifiers or
+  private key, so the integration remains fail-closed. All 266 Worker tests,
+  TypeScript, pinned-lock validation, the 172-of-172 fulfilled/retired RPC
+  audit, every off-chain/transaction gate, the complete browser/game build, and
+  a Wrangler bundle dry run passed. Live anonymous probes for Apple, Google,
+  and Samsung all returned `401`; mobile payments remained zero, inventory
+  remained 31 rows, and the read-only D1 check reported zero writes and
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
