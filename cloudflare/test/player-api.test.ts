@@ -129,4 +129,135 @@ describe('Cloudflare player API', () => {
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ code: 'player.forbidden' })
   })
+
+  it('atomically exchanges source-priced Silver cards for off-chain tickets', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', 42, 2, 1, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', 43, 1, 1, 'test', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+    const input = {
+      requestKey: 'silver-exchange-request-0001',
+      cards: [
+        { tokenId: 43, quantity: 1 },
+        { tokenId: 42, quantity: 2 }
+      ]
+    }
+    const exchange = () =>
+      request('/api/player/exchanges/silver-tickets', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://opensky.example',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(input)
+      })
+
+    const [first, simultaneousRetry] = await Promise.all([
+      exchange(),
+      exchange()
+    ])
+    expect([first.status, simultaneousRetry.status]).toEqual([200, 200])
+    expect(await first.json()).toMatchObject({
+      exchange: {
+        cards: [
+          { tokenId: 42, quantity: 2 },
+          { tokenId: 43, quantity: 1 }
+        ],
+        tickets: 3
+      }
+    })
+    const retry = await exchange()
+    expect(retry.status).toBe(200)
+
+    const inventory = await env.AUTH_DB.prepare(
+      `SELECT item_type, token_id, balance FROM player_items
+       WHERE user_id = ? AND (
+         item_type = 'SW_CONQUEST_TICKET' OR
+         (item_type = 'SW_SILVER_CARDS' AND token_id IN (42, 43))
+       ) ORDER BY item_type, token_id`
+    )
+      .bind(userId)
+      .all<{ item_type: string; token_id: number; balance: number }>()
+    expect(inventory.results).toEqual([
+      { item_type: 'SW_CONQUEST_TICKET', token_id: 2, balance: 3 },
+      { item_type: 'SW_SILVER_CARDS', token_id: 42, balance: 0 },
+      { item_type: 'SW_SILVER_CARDS', token_id: 43, balance: 0 }
+    ])
+    const receipt = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
+       FROM player_silver_ticket_exchanges WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ count: number; keys: number }>()
+    expect(receipt).toEqual({ count: 1, keys: 1 })
+  })
+
+  it('rejects insufficient, reused, cross-origin, and concurrent exchanges safely', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', 99, 1, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    const exchange = (requestKey: string, quantity = 1, origin = 'https://opensky.example') =>
+      request('/api/player/exchanges/silver-tickets', {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestKey,
+          cards: [{ tokenId: 99, quantity }]
+        })
+      })
+
+    expect((await exchange('silver-cross-origin-0001', 1, 'https://evil.example')).status).toBe(403)
+    expect((await exchange('silver-insufficient-0001', 2)).status).toBe(400)
+
+    const concurrent = await Promise.all([
+      exchange('silver-concurrent-0001'),
+      exchange('silver-concurrent-0002')
+    ])
+    expect(concurrent.map(response => response.status).sort()).toEqual([200, 400])
+    const ticket = await env.AUTH_DB.prepare(
+      `SELECT balance FROM player_items WHERE user_id = ?
+       AND item_type = 'SW_CONQUEST_TICKET' AND token_id = 2`
+    )
+      .bind(userId)
+      .first<{ balance: number }>()
+    expect(ticket?.balance).toBe(1)
+
+    const winningRequest =
+      concurrent[0].status === 200
+        ? 'silver-concurrent-0001'
+        : 'silver-concurrent-0002'
+    expect((await exchange(winningRequest, 2)).status).toBe(400)
+    const receipts = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM player_silver_ticket_exchanges
+       WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ count: number }>()
+    expect(receipts?.count).toBe(1)
+  })
 })

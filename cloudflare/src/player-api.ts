@@ -7,6 +7,10 @@ import {
 import { PlayerRepository } from './player'
 import { AccountActionsRepository } from './account-actions'
 import { RpcError } from './errors'
+import {
+  SilverTicketExchangeRepository,
+  type SilverCardExchangeInput
+} from './silver-ticket-exchange'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -85,11 +89,43 @@ export const handlePlayerRequest = async (
             404
           )
     }
+    if (
+      url.pathname === '/api/player/exchanges/silver-tickets' &&
+      request.method === 'POST'
+    ) {
+      if (!sameOrigin(request)) {
+        return json(
+          {
+            code: 'player.forbidden',
+            message: 'Cross-origin requests are not allowed.'
+          },
+          403
+        )
+      }
+      const contentType = request.headers.get('Content-Type') || ''
+      if (!contentType.toLowerCase().startsWith('application/json')) {
+        return json(
+          {
+            code: 'player.invalid_argument',
+            message: 'JSON request body is required.'
+          },
+          400
+        )
+      }
+      const input = (await request.json()) as SilverCardExchangeInput
+      const exchange = await new SilverTicketExchangeRepository(
+        env.AUTH_DB
+      ).exchange(userId, input)
+      return json({ exchange })
+    }
     return json(
       { code: 'player.not_found', message: 'Player route not found.' },
       404
     )
   } catch (error) {
+    if (error instanceof RpcError) {
+      return json({ code: error.code, message: error.message }, error.status)
+    }
     console.error('Cloudflare player API error', error)
     return json(
       { code: 'player.internal', message: 'Unable to load player data.' },

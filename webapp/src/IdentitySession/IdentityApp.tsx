@@ -13,6 +13,7 @@ import ItemsPage from '~/ItemsPage/ItemsPage'
 import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
 import { QuestsPage } from '~/QuestsPage/QuestsPage'
+import { SelectSilversPage } from '~/SelectSilversPage/SelectSilversPage'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import SkyPassPage from '~/SkyPassPage/SkyPassPage'
 
@@ -27,6 +28,19 @@ export const IdentityApp = memo(() => (
       />
       <Route element={<HomePage />} path={ROUTES_CONFIG.routes.HOME.path} />
       <Route element={<PlayPage />} path={ROUTES_CONFIG.routes.PLAY.path} />
+      <Route
+        element={
+          <Navigate
+            to={ROUTES_CONFIG.routes.SELECT_SILVERS.routes.CARDS.directPath}
+            replace
+          />
+        }
+        path={ROUTES_CONFIG.routes.PURCHASE_CONQUEST.path}
+      />
+      <Route
+        element={<SelectSilversPage />}
+        path={ROUTES_CONFIG.routes.SELECT_SILVERS.path}
+      />
       <Route element={<ItemsPage />} path={ROUTES_CONFIG.routes.ITEMS.path} />
       <Route
         element={<CreateDeckPage />}

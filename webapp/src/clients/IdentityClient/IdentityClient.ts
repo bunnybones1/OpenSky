@@ -142,6 +142,39 @@ class IdentityClient {
     return response.json()
   }
 
+  public exchangeSilverCardsForTickets = async (input: {
+    requestKey: string
+    cards: Array<{ tokenId: number; quantity: number }>
+  }): Promise<{
+    exchange: {
+      cards: Array<{ tokenId: number; quantity: number }>
+      tickets: number
+      createdAt: string
+    }
+  }> => {
+    const response = await fetch('/api/player/exchanges/silver-tickets', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(input)
+    })
+    const body = (await response.json()) as {
+      exchange?: {
+        cards: Array<{ tokenId: number; quantity: number }>
+        tickets: number
+        createdAt: string
+      }
+      message?: string
+    }
+    if (!response.ok || !body.exchange) {
+      throw new Error(body.message || 'Unable to exchange Silver cards.')
+    }
+    return { exchange: body.exchange }
+  }
+
   public signOut = async (): Promise<void> => {
     const response = await fetch('/api/auth/logout', {
       method: 'POST',

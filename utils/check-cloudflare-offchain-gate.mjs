@@ -6,7 +6,6 @@ const LEGACY_TRANSACTION_SURFACES = [
   'SkyPassPurchasePage',
   'PurchaseConquestPage',
   'HeroFeaturePage',
-  'SelectSilversPage',
   'SelectGoldCardsForSkinPage'
 ]
 
@@ -93,6 +92,7 @@ const main = async () => {
     leaderboardRewards,
     playerRpc,
     referralStickerRewards,
+    silverTicketExchange,
     stripeCheckout
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
@@ -112,6 +112,10 @@ const main = async () => {
       path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
       'utf8'
     ),
+    readFile(
+      path.join(root, 'cloudflare/src/silver-ticket-exchange.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8')
   ])
   const errors = offchainGateErrors({
@@ -124,6 +128,7 @@ const main = async () => {
       leaderboardRewards,
       playerRpc,
       referralStickerRewards,
+      silverTicketExchange,
       stripeCheckout
     }
   })
