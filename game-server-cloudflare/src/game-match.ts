@@ -306,11 +306,15 @@ export class GameMatch implements DurableObject {
         const message = parseClientMessage(raw)
         const role = attachment.role ?? 'player'
         if (!attachment.joined) {
+          // Source MatchManager.handleLoadingProgress returns while the socket
+          // has no linked match context. Ignore this bootstrap race without
+          // mutating durable loading state or closing the connection.
+          if (role === 'player' && message.type === 'player_loading_progress') {
+            return
+          }
           const bootstrapAllowed =
             message.type === 'timesync' ||
-            (role === 'player' &&
-              (message.type === 'join_server' ||
-                message.type === 'player_loading_progress')) ||
+            (role === 'player' && message.type === 'join_server') ||
             (role === 'spectator' && message.type === 'spectate_server')
           if (!bootstrapAllowed) {
             throw new GameProtocolError(

@@ -1311,7 +1311,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     const first = await connect(PRINCIPAL_1)
 
     first.send(
-      JSON.stringify({ type: 'player_loading_progress', progress: 0.25 })
+      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
     )
 
     for (const clientTime of [101, 102, 103, 104, 105]) {
@@ -1329,6 +1329,52 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       expect.objectContaining({ type: 'reconnect' }),
       expect.objectContaining({ type: 'opponent_loading_progress' })
     ])
+  })
+
+  it('does not count forged pre-join progress as a loaded player', async () => {
+    await insertActiveLedgerRow()
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
+    )
+    await expect
+      .poll(async () =>
+        runInDurableObject(
+          stub() as DurableObjectStub,
+          async (_instance, state) => {
+            const players = await state.storage.get<
+              Record<string, { finishedLoadingAssets: boolean }>
+            >('match:players')
+            return players?.[PRINCIPAL_1].finishedLoadingAssets
+          }
+        )
+      )
+      .toBe(false)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<Record<string, unknown>>(
+          'match:timers'
+        )
+        await state.storage.put('match:timers', {
+          ...timers,
+          loadExpiryAtMs: Date.now() - 1
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT winner_player, result_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{ winner_player: number | null; result_json: string }>()
+    expect(row?.winner_player).toBeNull()
+    expect(JSON.parse(row!.result_json)).toEqual({
+      reason: 'players_did_not_load'
+    })
   })
 
   it('still rejects gameplay before join_server', async () => {
