@@ -1,7 +1,9 @@
 import { env } from 'cloudflare:workers'
+import { ActionType } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
+import { AccountActionsRepository } from '../src/account-actions'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
@@ -40,6 +42,7 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM staff_account_action_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_game_mode_permissions'),
     env.AUTH_DB.prepare('DELETE FROM match_reviews'),
     env.AUTH_DB.prepare('DELETE FROM staff_moderation_permissions'),
@@ -107,6 +110,16 @@ const grantModerationWrite = async () => {
 const grantGameModeWrite = async () => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_game_mode_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantAccountActionWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_account_action_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
@@ -322,7 +335,7 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(
       await (
         await rpcAs(ADMIN, 'GMListAccounts', {
-          accountActions: ['BANNED']
+          accountActions: ['ACTIVE']
         })
       ).json()
     ).toMatchObject({ accounts: [] })
@@ -650,9 +663,7 @@ describe('fail-closed Google identity staff authorization', () => {
   })
 
   it('keeps game-mode history read-only for broad admins', async () => {
-    expect(
-      (await rpcAs(PLAYER, 'GMGameModeStatusHistory')).status
-    ).toBe(403)
+    expect((await rpcAs(PLAYER, 'GMGameModeStatusHistory')).status).toBe(403)
     await grantAdmin()
     const response = await rpcAs(ADMIN, 'GMGameModeStatusHistory', {
       gameModes: ['PRACTICE_BOT']
@@ -662,6 +673,201 @@ describe('fail-closed Google identity staff authorization', () => {
       page: { pageSize: 200, hasBefore: false, hasAfter: false },
       statusHistory: []
     })
+  })
+
+  it('ports account sanctions with append-only history and enforcement', async () => {
+    await grantAdmin()
+    await seedGoldDeliveries()
+    const ban = {
+      id: 999,
+      accountAddress: `identity:${PLAYER}`,
+      actionType: 'MOD_BAN',
+      isActive: true
+    }
+    expect(
+      (await rpcAs(ADMIN, 'GMCreateAccountAction', { action: ban })).status
+    ).toBe(403)
+    await grantAccountActionWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCreateAccountAction', {
+          action: { ...ban, actionType: 'AUTO_BAN' }
+        })
+      ).status
+    ).toBe(400)
+
+    const created = await rpcAs(ADMIN, 'GMCreateAccountAction', { action: ban })
+    expect(created.status).toBe(200)
+    const action = (await created.json()) as {
+      action: {
+        id: number
+        actionType: string
+        isActive: boolean
+        createdBy: number
+        expiresAt: string
+      }
+    }
+    expect(action.action).toMatchObject({
+      id: expect.any(Number),
+      actionType: 'MOD_BAN',
+      isActive: true,
+      createdBy: expect.any(Number),
+      expiresAt: expect.any(String)
+    })
+    expect(action.action.id).not.toBe(ban.id)
+    expect((await rpcAs(PLAYER, 'AvailableXPBonuses')).status).toBe(403)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT leaderboard_eligible
+         FROM player_account_settings
+         WHERE user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ leaderboard_eligible: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status
+         FROM player_conquest_gold_deliveries
+         WHERE user_id = ? AND conquest_id = 951`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ status: 'DISABLED' })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMIsAccountBanned', {
+          account: `identity:${PLAYER}`
+        })
+      ).json()
+    ).toMatchObject({
+      banned: true,
+      status: 'BANNED',
+      accountActions: [{ id: action.action.id, actionType: 'MOD_BAN' }]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListAccounts', {
+          // The source schema types this action filter as AccountStatus, so
+          // ACTIVE's ordinal selects MOD_BAN's matching ordinal.
+          accountActions: ['ACTIVE']
+        })
+      ).json()
+    ).toMatchObject({
+      accounts: [
+        {
+          account: { address: `identity:${PLAYER}` },
+          accountActions: [{ id: action.action.id }]
+        }
+      ]
+    })
+
+    const vetted = await rpcAs(ADMIN, 'GMCreateAccountAction', {
+      action: {
+        id: 1,
+        accountAddress: `identity:${PLAYER}`,
+        actionType: 'MOD_VET',
+        isActive: true
+      }
+    })
+    expect(vetted.status).toBe(200)
+    expect((await rpcAs(PLAYER, 'AvailableXPBonuses')).status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT leaderboard_eligible
+         FROM player_account_settings
+         WHERE user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ leaderboard_eligible: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status
+         FROM player_conquest_gold_deliveries
+         WHERE user_id = ? AND conquest_id = 951`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ status: 'PENDING' })
+    const history = await rpcAs(ADMIN, 'GMListAccountActions')
+    expect(history.status).toBe(200)
+    expect(await history.json()).toMatchObject({
+      accountActions: [
+        { actionType: 'MOD_VET', isActive: true },
+        { actionType: 'MOD_BAN', isActive: false }
+      ]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListAccountSignals', {
+          account: `identity:${PLAYER}`
+        })
+      ).json()
+    ).toMatchObject({
+      signal: [
+        { signalType: 'vetted by human' },
+        { signalType: 'banned by human' }
+      ]
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_account_actions WHERE account_user_id = ?`
+      )
+        .bind(PLAYER)
+        .run()
+    ).rejects.toThrow('account action rows are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_account_action_deactivations`
+      ).run()
+    ).rejects.toThrow('account action deactivations are immutable')
+  })
+
+  it('reactivates expired ban projections on the next player access check', async () => {
+    const isolated = 'staff-expiry-player'
+    const createdAt = '2026-08-13T00:00:00.000Z'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Expiry Player', 'expiry-player@example.com', ?, ?)`
+    )
+      .bind(isolated, createdAt, createdAt)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(isolated)
+    await grantAdmin()
+    await grantAccountActionWrite()
+    const repository = new AccountActionsRepository(testEnv.AUTH_DB)
+    await repository.create(
+      ADMIN,
+      {
+        id: 0,
+        accountAddress: `identity:${isolated}`,
+        actionType: ActionType.MOD_SUSPENSION,
+        isActive: true,
+        expiresAt: '2026-08-13T00:00:01.000Z'
+      },
+      new Date('2026-08-13T00:00:00.000Z')
+    )
+    await expect(
+      repository.enforcePlayerAccess(
+        isolated,
+        new Date('2026-08-13T00:00:00.500Z')
+      )
+    ).rejects.toThrow('account banned')
+    await expect(
+      repository.enforcePlayerAccess(
+        isolated,
+        new Date('2026-08-13T00:00:02.000Z')
+      )
+    ).resolves.toBeUndefined()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT account_status FROM player_account_settings WHERE user_id = ?`
+      )
+        .bind(isolated)
+        .first()
+    ).toEqual({ account_status: 'ACTIVE' })
   })
 
   it('lists pending Gold while counting all recent delivered card quantities', async () => {

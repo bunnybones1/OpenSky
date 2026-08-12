@@ -497,6 +497,9 @@ export class MatchmakerPool implements DurableObject {
     if (response.status === 404) {
       throw new ProtocolError('INVALID_ACCOUNT', 'player account was not found')
     }
+    if (response.status === 403) {
+      throw new ProtocolError('INVALID_ACCOUNT', 'account banned')
+    }
     if (!response.ok) {
       throw new ProtocolError('SERVER_ERROR', 'matchmaking profile failed')
     }

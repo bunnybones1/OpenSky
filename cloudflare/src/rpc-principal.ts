@@ -1,6 +1,7 @@
 import { readCookies } from './cookies'
 import type { Env } from './env'
 import { unauthenticated } from './errors'
+import { AccountActionsRepository } from './account-actions'
 import {
   IDENTITY_SESSION_COOKIE,
   verifyIdentitySession
@@ -36,6 +37,7 @@ export const optionalRpcPrincipal = async (
   if (!token) return null
   const userId = await verifyIdentitySession(token, env.SESSION_SIGNING_KEY)
   if (!userId) throw unauthenticated()
+  await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
   return { kind: 'identity', userId, reference: identityReferenceFor(userId) }
 }
 

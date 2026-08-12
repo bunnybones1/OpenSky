@@ -137,6 +137,11 @@ beforeEach(async () => {
        VALUES (?, 1, 0, 200, ?, ?)`
     ).bind(USER_ID, now, now),
     env.AUTH_DB.prepare(
+      `INSERT INTO player_account_settings
+         (user_id, name, locale, account_status, created_at, updated_at)
+       VALUES (?, 'Cloud Player', 'en', 'ACTIVE', ?, ?)`
+    ).bind(USER_ID, now, now),
+    env.AUTH_DB.prepare(
       `INSERT INTO player_progression
          (user_id, basic_skypass_level, basic_skypass_xp,
           basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
@@ -222,13 +227,37 @@ describe('Cloud Weasel accepted-match service', () => {
       await profile(
         GameMode.PRACTICE_BOT,
         await deriveGamePrincipal(USER_ID)
-      ).then(response =>
-        response.json()
-      )
+      ).then(response => response.json())
     ).toMatchObject({ gameModeEnabled: false })
     const dispatched = await create()
     expect(dispatched.status).toBe(409)
     expect(await dispatched.json()).toEqual({ error: 'game mode is disabled' })
+  })
+
+  it('rejects sanctioned accounts at profile admission and final dispatch', async () => {
+    const userPrincipal = await deriveGamePrincipal(USER_ID)
+    const now = new Date().toISOString()
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings SET account_status = 'BANNED'
+         WHERE user_id = ?`
+      ).bind(USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_actions
+           (action_key, account_user_id, account_address, action_type,
+            created_by_user_id, created_by_account_id, expires_at,
+            created_at, updated_at)
+         VALUES ('match-service-ban', ?, ?, 'MOD_BAN', 'staff', 1, ?, ?, ?)`
+      ).bind(USER_ID, `identity:${USER_ID}`, future, now, now)
+    ])
+
+    const deniedProfile = await profile(GameMode.PRACTICE_BOT, userPrincipal)
+    expect(deniedProfile.status).toBe(403)
+    expect(await deniedProfile.json()).toEqual({ error: 'account banned' })
+    const deniedDispatch = await create()
+    expect(deniedDispatch.status).toBe(403)
+    expect(await deniedDispatch.json()).toEqual({ error: 'account banned' })
   })
 
   it('resolves source matchmaking data and an existing match from D1', async () => {

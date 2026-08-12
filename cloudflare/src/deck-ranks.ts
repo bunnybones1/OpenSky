@@ -209,7 +209,11 @@ export class DeckRanksRepository {
          FROM player_deck_ranks ranks
          LEFT JOIN game_accounts account
            ON account.user_id = ranks.highest_player_user_id
-         WHERE ranks.library_revision = ?`
+         LEFT JOIN player_account_settings settings
+           ON settings.user_id = ranks.highest_player_user_id
+         WHERE ranks.library_revision = ?
+           AND (ranks.highest_player_user_id IS NULL
+             OR settings.leaderboard_eligible = 1)`
       )
       .bind(CURRENT_DECK_RANK_LIBRARY_REVISION)
       .all<DeckRankRow>()

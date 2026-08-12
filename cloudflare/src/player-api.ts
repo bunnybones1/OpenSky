@@ -5,6 +5,8 @@ import {
   verifyIdentitySession
 } from './identity-session'
 import { PlayerRepository } from './player'
+import { AccountActionsRepository } from './account-actions'
+import { RpcError } from './errors'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -36,6 +38,18 @@ export const handlePlayerRequest = async (
         message: 'Sign in to access player data.'
       },
       401
+    )
+  }
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
+  } catch (error) {
+    if (!(error instanceof RpcError) || error.status !== 403) throw error
+    return json(
+      {
+        code: 'player.forbidden',
+        message: error instanceof Error ? error.message : 'account banned'
+      },
+      403
     )
   }
 

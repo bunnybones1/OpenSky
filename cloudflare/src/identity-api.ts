@@ -17,6 +17,8 @@ import {
   verifyIdentitySession
 } from './identity-session'
 import { IdentitiesRepository } from './identities'
+import { AccountActionsRepository } from './account-actions'
+import { RpcError } from './errors'
 
 const OAUTH_STATE_COOKIE = 'opensky_google_state'
 const OAUTH_VERIFIER_COOKIE = 'opensky_google_verifier'
@@ -35,7 +37,8 @@ const isGoogleConfigured = (env: Env) =>
   Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim())
 
 const safeReturnTo = (candidate: string | null, origin: string): string => {
-  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) return '/'
+  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//'))
+    return '/'
   try {
     const url = new URL(candidate, origin)
     if (url.origin !== origin) return '/'
@@ -45,7 +48,8 @@ const safeReturnTo = (candidate: string | null, origin: string): string => {
   }
 }
 
-const secureRequest = (request: Request) => new URL(request.url).protocol === 'https:'
+const secureRequest = (request: Request) =>
+  new URL(request.url).protocol === 'https:'
 
 const oauthCookie = (request: Request, name: string, value: string) =>
   serializeCookie(name, value, {
@@ -55,10 +59,17 @@ const oauthCookie = (request: Request, name: string, value: string) =>
   })
 
 const clearOAuthCookies = (request: Request, headers: Headers) => {
-  for (const name of [OAUTH_STATE_COOKIE, OAUTH_VERIFIER_COOKIE, OAUTH_RETURN_COOKIE]) {
+  for (const name of [
+    OAUTH_STATE_COOKIE,
+    OAUTH_VERIFIER_COOKIE,
+    OAUTH_RETURN_COOKIE
+  ]) {
     headers.append(
       'Set-Cookie',
-      clearCookie(name, { path: OAUTH_COOKIE_PATH, secure: secureRequest(request) })
+      clearCookie(name, {
+        path: OAUTH_COOKIE_PATH,
+        secure: secureRequest(request)
+      })
     )
   }
 }
@@ -71,12 +82,21 @@ const callbackRedirect = (
   const url = new URL(returnTo, new URL(request.url).origin)
   if (result === 'success') url.searchParams.set('auth', 'success')
   else url.searchParams.set('auth_error', result)
-  const headers = new Headers({ Location: url.toString(), 'Cache-Control': 'no-store' })
+  const headers = new Headers({
+    Location: url.toString(),
+    'Cache-Control': 'no-store'
+  })
   clearOAuthCookies(request, headers)
-  return { headers, response: () => new Response(null, { status: 302, headers }) }
+  return {
+    headers,
+    response: () => new Response(null, { status: 302, headers })
+  }
 }
 
-const sessionResponse = async (request: Request, env: Env): Promise<Response> => {
+const sessionResponse = async (
+  request: Request,
+  env: Env
+): Promise<Response> => {
   const configured = isGoogleConfigured(env)
   const token = readCookies(request).get(IDENTITY_SESSION_COOKIE)
   if (!token) {
@@ -90,12 +110,31 @@ const sessionResponse = async (request: Request, env: Env): Promise<Response> =>
       'Set-Cookie',
       clearCookie(IDENTITY_SESSION_COOKIE, { secure: secureRequest(request) })
     )
-    return json({ authenticated: false, providers: { google: configured } }, 200, headers)
+    return json(
+      { authenticated: false, providers: { google: configured } },
+      200,
+      headers
+    )
+  }
+
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
+  } catch (error) {
+    if (!(error instanceof RpcError) || error.status !== 403) throw error
+    return json(
+      {
+        authenticated: true,
+        code: 'auth.account_banned',
+        message: error instanceof Error ? error.message : 'account banned'
+      },
+      403
+    )
   }
 
   const identities = new IdentitiesRepository(env.AUTH_DB)
   const user = await identities.findUserById(userId)
-  if (!user) return json({ authenticated: false, providers: { google: configured } })
+  if (!user)
+    return json({ authenticated: false, providers: { google: configured } })
 
   return json({
     authenticated: true,
@@ -106,7 +145,10 @@ const sessionResponse = async (request: Request, env: Env): Promise<Response> =>
   })
 }
 
-const beginGoogleLogin = async (request: Request, env: Env): Promise<Response> => {
+const beginGoogleLogin = async (
+  request: Request,
+  env: Env
+): Promise<Response> => {
   if (!isGoogleConfigured(env)) {
     return json(
       {
@@ -121,7 +163,10 @@ const beginGoogleLogin = async (request: Request, env: Env): Promise<Response> =
   const redirectUri = new URL(OAUTH_COOKIE_PATH, requestUrl.origin).toString()
   const state = randomToken()
   const verifier = randomToken(48)
-  const returnTo = safeReturnTo(requestUrl.searchParams.get('returnTo'), requestUrl.origin)
+  const returnTo = safeReturnTo(
+    requestUrl.searchParams.get('returnTo'),
+    requestUrl.origin
+  )
   const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_ENDPOINT)
   authorizationUrl.search = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
@@ -135,9 +180,15 @@ const beginGoogleLogin = async (request: Request, env: Env): Promise<Response> =
     prompt: 'select_account'
   }).toString()
 
-  const headers = new Headers({ Location: authorizationUrl.toString(), 'Cache-Control': 'no-store' })
+  const headers = new Headers({
+    Location: authorizationUrl.toString(),
+    'Cache-Control': 'no-store'
+  })
   headers.append('Set-Cookie', oauthCookie(request, OAUTH_STATE_COOKIE, state))
-  headers.append('Set-Cookie', oauthCookie(request, OAUTH_VERIFIER_COOKIE, verifier))
+  headers.append(
+    'Set-Cookie',
+    oauthCookie(request, OAUTH_VERIFIER_COOKIE, verifier)
+  )
   headers.append(
     'Set-Cookie',
     oauthCookie(request, OAUTH_RETURN_COOKIE, base64UrlEncode(returnTo))
@@ -156,7 +207,10 @@ const finishGoogleLogin = async (
   try {
     const encodedReturnTo = cookies.get(OAUTH_RETURN_COOKIE)
     if (encodedReturnTo) {
-      returnTo = safeReturnTo(base64UrlDecodeText(encodedReturnTo), requestUrl.origin)
+      returnTo = safeReturnTo(
+        base64UrlDecodeText(encodedReturnTo),
+        requestUrl.origin
+      )
     }
   } catch {
     returnTo = '/'
@@ -170,7 +224,13 @@ const finishGoogleLogin = async (
   const code = requestUrl.searchParams.get('code')
   const expectedState = cookies.get(OAUTH_STATE_COOKIE)
   const verifier = cookies.get(OAUTH_VERIFIER_COOKIE)
-  if (!state || !code || !expectedState || state !== expectedState || !verifier) {
+  if (
+    !state ||
+    !code ||
+    !expectedState ||
+    state !== expectedState ||
+    !verifier
+  ) {
     return callbackRedirect(request, returnTo, 'failed').response()
   }
   if (!isGoogleConfigured(env)) {
@@ -207,7 +267,13 @@ const logout = (request: Request): Response => {
   const requestUrl = new URL(request.url)
   const origin = request.headers.get('Origin')
   if (origin && origin !== requestUrl.origin) {
-    return json({ code: 'auth.forbidden', message: 'Cross-origin logout is not allowed.' }, 403)
+    return json(
+      {
+        code: 'auth.forbidden',
+        message: 'Cross-origin logout is not allowed.'
+      },
+      403
+    )
   }
   const headers = new Headers()
   headers.append(
@@ -232,8 +298,14 @@ export const handleIdentityRequest = async (
   if (url.pathname === '/api/auth/google/start' && request.method === 'GET') {
     return beginGoogleLogin(request, env)
   }
-  if (url.pathname === '/api/auth/google/callback' && request.method === 'GET') {
+  if (
+    url.pathname === '/api/auth/google/callback' &&
+    request.method === 'GET'
+  ) {
     return finishGoogleLogin(request, env, services)
   }
-  return json({ code: 'auth.not_found', message: 'Authentication route not found.' }, 404)
+  return json(
+    { code: 'auth.not_found', message: 'Authentication route not found.' },
+    404
+  )
 }

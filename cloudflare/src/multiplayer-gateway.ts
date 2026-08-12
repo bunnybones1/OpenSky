@@ -8,6 +8,8 @@ import {
   verifyIdentitySession
 } from './identity-session'
 import { IdentitiesRepository } from './identities'
+import { AccountActionsRepository } from './account-actions'
+import { RpcError } from './errors'
 
 export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
@@ -40,6 +42,7 @@ const identity = async (request: Request, env: Env) => {
   if (!token) return
   const userId = await verifyIdentitySession(token, env.SESSION_SIGNING_KEY)
   if (!userId) return
+  await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
   const user = await new IdentitiesRepository(env.AUTH_DB).findUserById(userId)
   if (!user) return
   return { user, principal: await deriveGamePrincipal(userId) }
@@ -173,7 +176,16 @@ export const handleMultiplayerGateway = async (
   request: Request,
   env: Env
 ): Promise<Response> => {
-  const authenticated = await identity(request, env)
+  let authenticated
+  try {
+    authenticated = await identity(request, env)
+  } catch (error) {
+    if (!(error instanceof RpcError) || error.status !== 403) throw error
+    return json(
+      { error: error instanceof Error ? error.message : 'account banned' },
+      403
+    )
+  }
   if (!authenticated) return json({ error: 'authentication required' }, 401)
   const url = new URL(request.url)
 

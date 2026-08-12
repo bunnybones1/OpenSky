@@ -23,8 +23,8 @@ interface StaffAccountRow {
 
 interface SignalRow {
   id: number
-  match_id: number
-  reporter_user_id: string
+  match_id: number | null
+  reporter_user_id: string | null
   signal_type: string
   signal_status: AccountSignal['signalStatus']
   comment: string
@@ -94,6 +94,23 @@ const GAME_MODES = new Set<GameMode>([
   'CHALLENGE_DISCOVERY' as GameMode,
   'PRACTICE_PVP' as GameMode
 ])
+const ACTION_TYPES_BY_FILTER: Record<string, string[]> = {
+  // The source RIDL accidentally exposes this action-type filter as
+  // AccountStatus[]. Go consequently compares the status ordinal to the
+  // action-type ordinal: ACTIVE (0) selects MOD_BAN (0), and so on. Also accept
+  // direct action names from clients that worked around that generated type.
+  ACTIVE: ['MOD_BAN'],
+  SUSPENDED: ['MOD_SUSPENSION'],
+  BANNED: ['AUTO_BAN'],
+  VIP: ['AUTO_SUSPENSION'],
+  FLAGGED: ['DELAYED_MOD_BAN'],
+  TO_DELETE: ['DELAYED_MOD_SUSPENSION'],
+  DELETED: ['DELAYED_AUTO_BAN'],
+  MOD_BAN: ['MOD_BAN'],
+  MOD_SUSPENSION: ['MOD_SUSPENSION'],
+  MOD_FLAG: ['MOD_FLAG'],
+  MOD_VET: ['MOD_VET']
+}
 
 const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
 
@@ -197,6 +214,19 @@ export class StaffRepository {
     }
   }
 
+  async requireAccountActionWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_account_action_permissions WHERE user_id = ?`
+      )
+      .bind(userId)
+      .first()
+    if (!permission) {
+      throw permissionDenied('account action write access required')
+    }
+  }
+
   async requireGameModeWrite(userId: string): Promise<void> {
     await this.requireAdmin(userId)
     const permission = await this.database
@@ -234,9 +264,7 @@ export class StaffRepository {
         .bind(new Date().toISOString(), new Date().toISOString())
         .first()
       if (!pool) {
-        throw invalidArgument(
-          'verified active Conquest reward pool required'
-        )
+        throw invalidArgument('verified active Conquest reward pool required')
       }
     }
     const now = new Date().toISOString()
@@ -309,9 +337,7 @@ export class StaffRepository {
         after: rows.length ? encodeCursor(nextOffset) : undefined,
         hasBefore: result.results.length > size,
         hasAfter: offset > 0,
-        sort: [
-          { column: 'created_at', order: 'ASC' as SortBy['order'] }
-        ]
+        sort: [{ column: 'created_at', order: 'ASC' as SortBy['order'] }]
       },
       rows: rows.map(row => ({
         id: row.id,
@@ -422,9 +448,27 @@ export class StaffRepository {
       filters.push(`${conquestExpression} = ?`)
       bindings.push(input.conquestsUnlocked ? 1 : 0)
     }
-    // Account actions have no Cloud Weasel rows until the audited moderation
-    // action model is ported, so a requested action filter has no matches.
-    if (input.accountActions?.length) filters.push('0 = 1')
+    if (input.accountActions?.length) {
+      const actionTypes = [
+        ...new Set(
+          input.accountActions.flatMap(
+            status => ACTION_TYPES_BY_FILTER[status] ?? []
+          )
+        )
+      ]
+      if (actionTypes.length === 0) {
+        filters.push('0 = 1')
+      } else {
+        filters.push(
+          `EXISTS (
+            SELECT 1 FROM player_account_actions action
+            WHERE action.account_user_id = settings.user_id
+              AND action.action_type IN (${actionTypes.map(() => '?').join(',')})
+          )`
+        )
+        bindings.push(...actionTypes)
+      }
+    }
 
     const size = pageSize(input.page)
     const offset = cursorOffset(input.page?.before ?? input.page?.after)
@@ -471,11 +515,16 @@ export class StaffRepository {
       .prepare(
         `SELECT id, match_id, reporter_user_id, signal_type, signal_status,
                 comment, created_at, updated_at
-         FROM player_account_reports
-         WHERE reported_user_id = ?
+         FROM player_account_reports WHERE reported_user_id = ?
+         UNION ALL
+         SELECT signal.id, NULL AS match_id, NULL AS reporter_user_id,
+                signal.signal_type, signal.signal_status, '' AS comment,
+                signal.created_at, signal.updated_at
+         FROM staff_account_action_signals signal
+         WHERE signal.account_user_id = ?
          ORDER BY signal_status ASC, created_at DESC, id DESC`
       )
-      .bind(userId)
+      .bind(userId, userId)
       .all<SignalRow>()
     return result.results.map(row => ({
       id: row.id,
@@ -483,11 +532,14 @@ export class StaffRepository {
       signalStatus: row.signal_status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      signalData: {
-        reportedBy: `identity:${row.reporter_user_id}`,
-        matchId: row.match_id,
-        comment: row.comment
-      },
+      signalData:
+        row.reporter_user_id && row.match_id
+          ? {
+              reportedBy: `identity:${row.reporter_user_id}`,
+              matchId: row.match_id,
+              comment: row.comment
+            }
+          : {},
       // The current source score table does not assign a raw weight to the
       // "user report" signal. Aggregate fraud probability belongs to a
       // separate analytics pipeline that Cloud Weasel has not fabricated.
@@ -505,7 +557,7 @@ export class StaffRepository {
     const filters: string[] = []
     const bindings: unknown[] = []
     if (input.accountAddress?.startsWith('identity:')) {
-      filters.push('reports.reported_user_id = ?')
+      filters.push('signals.user_id = ?')
       bindings.push(input.accountAddress.slice('identity:'.length))
     } else {
       const statuses = input.accountStatus?.length
@@ -540,17 +592,24 @@ export class StaffRepository {
     ].join(', ')
     const result = await this.database
       .prepare(
-        `SELECT reports.reported_user_id AS user_id,
-                MAX(reports.updated_at) AS updated_at,
+        `WITH all_signals AS (
+           SELECT reported_user_id AS user_id, updated_at
+           FROM player_account_reports
+           UNION ALL
+           SELECT account_user_id AS user_id, updated_at
+           FROM staff_account_action_signals
+         )
+         SELECT signals.user_id,
+                MAX(signals.updated_at) AS updated_at,
                 users.created_at AS account_created_at,
                 0.0 AS score
-         FROM player_account_reports reports
-         JOIN users ON users.id = reports.reported_user_id
+         FROM all_signals signals
+         JOIN users ON users.id = signals.user_id
          JOIN player_account_settings settings
-           ON settings.user_id = reports.reported_user_id
-         JOIN game_accounts game ON game.user_id = reports.reported_user_id
+           ON settings.user_id = signals.user_id
+         JOIN game_accounts game ON game.user_id = signals.user_id
          WHERE ${filters.join(' AND ')}
-         GROUP BY reports.reported_user_id, users.created_at, game.id
+         GROUP BY signals.user_id, users.created_at, game.id
          ORDER BY ${order}
          LIMIT ? OFFSET ?`
       )

@@ -4,9 +4,7 @@ import { ItemType, type Card, type PendingCardsResponse } from '@opensky/proto'
 const MAX_DELIVERIES_PER_RUN = 100
 const MAX_ATTEMPTS = 5
 
-const cardsById = new Map(
-  cardLibrary.cards.map(card => [card.id, card])
-)
+const cardsById = new Map(cardLibrary.cards.map(card => [card.id, card]))
 
 interface DeliveryRow {
   conquest_id: number
@@ -88,6 +86,11 @@ export const deliverDueConquestGold = async (
               attempt_count
        FROM player_conquest_gold_deliveries
        WHERE status = 'PENDING' AND deliver_at <= ?
+         AND NOT EXISTS (
+           SELECT 1 FROM player_account_settings settings
+           WHERE settings.user_id = player_conquest_gold_deliveries.user_id
+             AND settings.account_status IN ('BANNED', 'SUSPENDED', 'FLAGGED')
+         )
        ORDER BY deliver_at, conquest_id LIMIT ?`
     )
     .bind(deliveredAt, MAX_DELIVERIES_PER_RUN)
@@ -100,7 +103,9 @@ export const deliverDueConquestGold = async (
       const tokenIds = ids(row.token_ids_json)
       if (
         cardIds.length !== tokenIds.length ||
-        cardIds.some((cardId, index) => tokenIds[index] !== (2 << 16) + cardId) ||
+        cardIds.some(
+          (cardId, index) => tokenIds[index] !== (2 << 16) + cardId
+        ) ||
         cardIds.some(cardId => !cardsById.has(cardId))
       ) {
         throw new Error('Conquest Gold delivery contains invalid cards')

@@ -504,7 +504,8 @@ export class CompetitiveRepository {
          JOIN player_profiles profile ON profile.user_id = stats.user_id
          JOIN player_progression progression ON progression.user_id = stats.user_id
          JOIN player_account_settings account ON account.user_id = stats.user_id
-         WHERE stats.game_mode = ? AND stats.season = ?`
+         WHERE stats.game_mode = ? AND stats.season = ?
+           AND account.leaderboard_eligible = 1`
       )
       .bind(request.gameMode, season)
       .all<LeaderboardRow>()

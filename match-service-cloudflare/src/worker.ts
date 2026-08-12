@@ -10,6 +10,8 @@ import {
   parseAcceptedMatchDispatch
 } from './protocol'
 import { MatchRepository } from './repository'
+import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
+import { RpcError } from '../../cloudflare/src/errors'
 
 interface CreateMatchRequest {
   proposalId: string
@@ -147,6 +149,9 @@ const matchmakingProfile = async (
   }
 
   try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(
+      body.userId
+    )
     const repository = new MatchRepository(env.AUTH_DB)
     const profile = await repository.matchmakingProfile(
       body.userId,
@@ -167,6 +172,9 @@ const matchmakingProfile = async (
       profile
     })
   } catch (error) {
+    if (error instanceof RpcError && error.status === 403) {
+      return json({ error: error.message }, 403)
+    }
     if (error instanceof Error && error.message === 'player was not found') {
       return json({ error: error.message }, 404)
     }
@@ -270,6 +278,21 @@ export default {
     }
     if (existing?.status === 'ended') {
       return json({ error: 'accepted proposal has already ended' }, 409)
+    }
+
+    try {
+      const access = new AccountActionsRepository(env.AUTH_DB)
+      await Promise.all(
+        dispatch.participants
+          .map(participant => participant.identity?.userId)
+          .filter((userId): userId is string => typeof userId === 'string')
+          .map(userId => access.enforcePlayerAccess(userId))
+      )
+    } catch (error) {
+      if (error instanceof RpcError && error.status === 403) {
+        return json({ error: error.message }, 403)
+      }
+      throw error
     }
 
     const gameMode = dispatch.participants[0].player.mode

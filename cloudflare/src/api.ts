@@ -1,5 +1,6 @@
 import type {
   Account,
+  AccountAction,
   AccountRegistration,
   AccountStatus,
   Banner,
@@ -25,6 +26,7 @@ import {
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
+import { AccountActionsRepository } from './account-actions'
 import { AccountReportsRepository } from './account-reports'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import {
@@ -224,6 +226,7 @@ export const handleApiRequest = async (
 
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
+  const accountActions = new AccountActionsRepository(env.AUTH_DB)
   const accountReports = new AccountReportsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const competitive = new CompetitiveRepository(env.AUTH_DB)
@@ -552,6 +555,9 @@ export const handleApiRequest = async (
           conquestsUnlocked?: boolean
         }>(request)
         const result = await staff.listAccounts(body)
+        const actionsByUser = await accountActions.forUsers(
+          result.rows.map(row => row.user_id)
+        )
         const accounts = await Promise.all(
           result.rows.map(async row => {
             const account = await playerRpc.getAccountForAdmin(
@@ -562,7 +568,7 @@ export const handleApiRequest = async (
             return {
               account,
               conquestsUnlocked: row.conquests_unlocked === 1,
-              accountActions: [],
+              accountActions: actionsByUser.get(row.user_id) ?? [],
               ipHistory: []
             }
           })
@@ -591,6 +597,9 @@ export const handleApiRequest = async (
           accountAddress?: string
         }>(request)
         const result = await staff.signalSummaries(body)
+        const actionsByUser = await accountActions.forUsers(
+          result.rows.map(row => row.user_id)
+        )
         const signals = await Promise.all(
           result.rows.map(async row => {
             const accountAddress = identityReferenceFor(row.user_id)
@@ -604,7 +613,7 @@ export const handleApiRequest = async (
               score: row.score,
               updatedAt: row.updated_at,
               account,
-              accountActions: []
+              accountActions: actionsByUser.get(row.user_id) ?? []
             }
           })
         )
@@ -868,10 +877,38 @@ export const handleApiRequest = async (
         await staff.requireAdmin(principal.userId)
         const body = await requestBody<{ account?: string }>(request)
         if (!body.account) throw invalidArgument('account is required')
+        if (!body.account.startsWith('identity:')) {
+          throw notFound(
+            `account with the address '${body.account}' does not exist`
+          )
+        }
+        const userId = body.account.slice('identity:'.length)
+        const actions = await accountActions.forUser(userId, true)
         return json(request, env, {
-          banned: false,
+          banned: actions.length > 0,
           status: await staff.accountStatus(body.account),
-          accountActions: []
+          accountActions: actions
+        })
+      }
+
+      case 'GMListAccountActions': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ page?: Page }>(request)
+        const result = await accountActions.list(body.page)
+        return json(request, env, {
+          page: result.page,
+          accountActions: result.actions
+        })
+      }
+
+      case 'GMCreateAccountAction': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAccountActionWrite(principal.userId)
+        const body = await requestBody<{ action?: AccountAction }>(request)
+        if (!body.action) throw invalidArgument('missing action to create')
+        return json(request, env, {
+          action: await accountActions.create(principal.userId, body.action)
         })
       }
 
