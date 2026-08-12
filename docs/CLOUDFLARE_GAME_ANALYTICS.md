@@ -19,6 +19,8 @@ The legacy Google Cloud Functions entrypoint remains operational by injecting `s
 
 ## Remaining deployment adapter
 
-The next milestone replaces Google Cloud Storage and Pub/Sub with R2 and Cloudflare Queues. Queue delivery will be at least once, so output object keys and D1 processing receipts must be idempotent. The message must carry the replay's release version; a processor may only consume versions matching its state WASM build.
+The Cloudflare adapter archives the private source-shaped replay records and a manifest to R2, then sends a version-pinned reference through Cloudflare Queues. The consumer verifies the ended match ledger row, rejects a replay from a different state release, and writes the three legacy CSV tables beneath deterministic R2 keys. Queue delivery is at least once; a completed D1 receipt makes duplicate delivery a no-op.
 
-Analytics is observational and cannot grant gameplay items. All player-facing match, quest, conquest, and SkyPass rewards remain canonical off-chain inventory rows in D1; WalletConnect is not a dependency of this pipeline.
+The analytics Worker exposes only `/health`; replay archives and CSVs have no public retrieval route. Failed processing is retried at most 25 times and then retained as a failed D1 receipt/dead-letter message.
+
+Analytics is observational and cannot grant gameplay items. The off-chain build gate scans the Worker for player inventory writes or transaction calls. All player-facing match, quest, conquest, and SkyPass rewards remain canonical off-chain inventory rows in D1; WalletConnect is not a dependency of this pipeline.

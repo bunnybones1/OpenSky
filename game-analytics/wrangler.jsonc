@@ -1,0 +1,37 @@
+{
+  "name": "cloud-weasel-game-analytics",
+  "account_id": "528badc1c29c30196335df252a73c5a6",
+  "main": "src/cloudflareWorker.ts",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "opensky-auth",
+      "database_id": "2ac6fbbd-359b-407c-9d87-bd62b17a7548",
+      "migrations_dir": "../cloudflare/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "GAME_ANALYTICS",
+      "bucket_name": "cloud-weasel-game-analytics"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "cloud-weasel-game-analytics",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 25,
+        "dead_letter_queue": "cloud-weasel-game-analytics-dead-letter",
+        "max_concurrency": 5,
+        "retry_delay": 30
+      }
+    ]
+  },
+  "vars": {
+    "ANALYTICS_RELEASE_VERSION": "cloudflare"
+  }
+}

@@ -215,7 +215,7 @@ export class Game {
     }
   }
 
-  private lastPlayerAction: RawMoveData
+  private lastPlayerAction: RawMoveData | undefined
   private moveCount: number
   private turnCount: number | undefined = undefined
   private deckData: DeckData | undefined
@@ -271,6 +271,7 @@ export class Game {
               const instance = event.payload.instance[0]
 
               if (
+                this.lastPlayerAction &&
                 'cardID' in this.lastPlayerAction.data &&
                 id === this.lastPlayerAction.data.cardID
               ) {
@@ -488,7 +489,9 @@ export class Game {
                       secretCard ?? st.playerCards[0].hand[i]!
                     )
                   )
-                  .filter((b: BaseCard | '0') => b !== '0')
+                  .filter(
+                    (b): b is BaseCard => b !== undefined && b !== '0'
+                  )
                   .slice(
                     0,
                     state.state.gameParams.playerParams[0].mulliganChoiceSize
@@ -502,7 +505,9 @@ export class Game {
                       secretCard ?? st.playerCards[1].hand[i]!
                     )
                   )
-                  .filter((b: BaseCard | '0') => b !== '0')
+                  .filter(
+                    (b): b is BaseCard => b !== undefined && b !== '0'
+                  )
                   .slice(
                     0,
                     state.state.gameParams.playerParams[1].mulliganChoiceSize
@@ -542,25 +547,25 @@ export class Game {
                   ? this.lastPlayerAction.data.attackerID
                   : this.lastPlayerAction.data.type === 'PlayCard'
                   ? this.lastPlayerAction.data.cardID
-                  : undefined,
+                  : 0,
               toID:
                 this.lastPlayerAction.data.type === 'Attack'
                   ? this.lastPlayerAction.data.defenderID
                   : this.lastPlayerAction.data.type === 'PlayCard'
-                  ? this.lastPlayerAction.data.targetID
-                  : undefined
+                  ? this.lastPlayerAction.data.targetID ?? 0
+                  : 0
             }
 
             let convertedLastActionData: MoveData = {
               ...convertedData,
               matchID,
-              turnNumber: this.turnCount
+              turnNumber: this.turnCount ?? state.state.turnCount
             }
             this.gameStateData.push(
               getGameStateData(
                 st,
                 sec,
-                this.turnCount,
+                this.turnCount ?? state.state.turnCount,
                 this.lastPlayerAction.moveNumber
               )
             )

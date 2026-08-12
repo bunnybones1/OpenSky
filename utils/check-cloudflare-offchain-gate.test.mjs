@@ -54,7 +54,8 @@ const validInput = () => ({
   rewardSources: {
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
-  }
+  },
+  observationalSources: { analytics: 'INSERT INTO multiplayer_match_analytics' }
 })
 
 test('current Cloudflare identity routing satisfies the off-chain gate', async () => {
@@ -117,6 +118,16 @@ test('rejects a reward producer without D1 inventory and a receipt key', () => {
   assert.ok(errors.some(error => error.includes('canonical D1 inventory')))
   assert.ok(errors.some(error => error.includes('idempotent receipt key')))
   assert.ok(errors.some(error => error.includes('legacy transaction code')))
+})
+
+test('rejects player inventory writes from an observational pipeline', () => {
+  const input = validInput()
+  input.observationalSources = {
+    analytics: 'INSERT INTO player_items; wallet.sendTransaction([])'
+  }
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('mutate player rewards')))
+  assert.ok(errors.some(error => error.includes('transaction code')))
 })
 
 test('rejects player-facing mint language from Google Pending Gold UI', () => {

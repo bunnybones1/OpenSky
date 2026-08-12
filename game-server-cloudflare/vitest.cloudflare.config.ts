@@ -17,7 +17,14 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: './wrangler.test.jsonc' },
-        miniflare: { bindings: { TEST_MIGRATIONS: migrations } }
+        miniflare: {
+          bindings: { TEST_MIGRATIONS: migrations },
+          queueProducers: {
+            GAME_ANALYTICS_QUEUE: {
+              queueName: 'cloud-weasel-game-analytics-test'
+            }
+          }
+        }
       })
     ],
     test: {

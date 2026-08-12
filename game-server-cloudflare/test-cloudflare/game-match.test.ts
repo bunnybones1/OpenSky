@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GameMode, MatchStatus } from '@opensky/proto'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 
-import { GameMatch, GameServerEnv } from '../src/game-match'
+import {
+  archiveReplayRecords,
+  GameMatch,
+  GameServerEnv
+} from '../src/game-match'
 import { recordAbandonPenalty } from '../src/abandon-penalties'
 import {
   INTERNAL_AUTH_HEADER,
@@ -1165,6 +1169,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(init.players).toHaveLength(2)
     expect(init.secrets).toHaveLength(2)
+    expect(init.players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          initDeckString: expect.stringMatching(/^SWx[A-Z]{3}02/)
+        })
+      ])
+    )
 
     const player = await connect(PRINCIPAL_1)
     const joined = collectMessages(player, 2)
@@ -1191,6 +1202,39 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     const denied = await stub().fetch('https://match/internal/replay/0')
     expect(denied.status).toBe(404)
+  })
+
+  it('archives replay records and writes the manifest last', async () => {
+    const archived = await archiveReplayRecords(runtimeEnv.GAME_ANALYTICS, {
+      proposalId: 'archive-test',
+      replayId: 'archive-replay',
+      releaseVersion: 'test-release',
+      matchId: 42,
+      endedAt: '2026-08-12T00:00:00.000Z',
+      records: [
+        { index: 1, body: '[{"type":"gameplay"}]' },
+        { index: 0, body: '[{"type":"init"}]' }
+      ]
+    })
+    expect(archived).toMatchObject({
+      archivePrefix: 'replays/test-release/archive-test/',
+      replayRecordCount: 2
+    })
+    const manifest = await runtimeEnv.GAME_ANALYTICS.get(
+      `${archived.archivePrefix}manifest.json`
+    )
+    expect(await manifest?.json()).toMatchObject({
+      proposalId: 'archive-test',
+      replayId: 'archive-replay',
+      replayRecordCount: 2,
+      replayBytes: archived.replayBytes
+    })
+    expect(
+      await runtimeEnv.GAME_ANALYTICS.get(`${archived.archivePrefix}000000.json`)
+    ).not.toBeNull()
+    expect(
+      await runtimeEnv.GAME_ANALYTICS.get(`${archived.archivePrefix}000001.json`)
+    ).not.toBeNull()
   })
 
   it('authenticates players at the gateway boundary and sends private reconnect state', async () => {

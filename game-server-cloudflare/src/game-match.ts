@@ -1,4 +1,5 @@
 import { GameMode, MatchStatus, type Reward } from '@opensky/proto'
+import { encode, VERSION } from '@opensky/deck-string-codec'
 import {
   EmoteMessage,
   GameServerMessage,
@@ -7,6 +8,8 @@ import {
   SpectateServerMessage
 } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
+import { ReplayAnalyticsMessage } from '@opensky/shared/gameAnalytics'
+import { prismsToDeckClass } from '@opensky/shared/helpers'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
@@ -58,6 +61,8 @@ export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
   DECK_RANK_COORDINATOR: DurableObjectNamespace
   AUTH_DB: D1Database
+  GAME_ANALYTICS_QUEUE: Queue<ReplayAnalyticsMessage>
+  GAME_ANALYTICS: R2Bucket
   INTERNAL_AUTH_SECRET: string
   MATCH_OWNER_PRIVATE_KEY: string
   ALLOWED_ORIGINS?: string
@@ -83,6 +88,75 @@ interface MatchMetadata {
   result?: MatchResult
   expiredBeforeLoad?: boolean
   completionRecorded?: boolean
+  analyticsEnqueuedAt?: string
+}
+
+export interface ReplayArchiveResult {
+  archivePrefix: string
+  replayRecordCount: number
+  replayBytes: number
+}
+
+export const archiveReplayRecords = async (
+  bucket: R2Bucket,
+  input: {
+    proposalId: string
+    replayId: string
+    releaseVersion: string
+    matchId: number
+    endedAt: string
+    records: Array<{ index: number; body: string }>
+  }
+): Promise<ReplayArchiveResult> => {
+  const archive = [...input.records].sort((left, right) => left.index - right.index)
+  if (
+    archive.length < 1 ||
+    archive.length > 10_000 ||
+    archive.some((record, index) => record.index !== index)
+  ) {
+    throw new Error('match replay archive is incomplete')
+  }
+  const replayBytes = archive.reduce(
+    (total, record) => total + new TextEncoder().encode(record.body).byteLength,
+    0
+  )
+  if (replayBytes < 1 || replayBytes > 100 * 1024 * 1024) {
+    throw new Error('match replay archive size is invalid')
+  }
+  const archivePrefix =
+    `replays/${input.releaseVersion}/${input.proposalId}/`
+  for (let start = 0; start < archive.length; start += 10) {
+    await Promise.all(
+      archive.slice(start, start + 10).map(record =>
+        bucket.put(
+          `${archivePrefix}${String(record.index).padStart(6, '0')}.json`,
+          record.body,
+          {
+            httpMetadata: { contentType: 'application/json' },
+            customMetadata: {
+              proposalId: input.proposalId,
+              replayId: input.replayId,
+              releaseVersion: input.releaseVersion
+            }
+          }
+        )
+      )
+    )
+  }
+  await bucket.put(
+    `${archivePrefix}manifest.json`,
+    JSON.stringify({
+      proposalId: input.proposalId,
+      matchId: input.matchId,
+      replayId: input.replayId,
+      releaseVersion: input.releaseVersion,
+      endedAt: input.endedAt,
+      replayRecordCount: archive.length,
+      replayBytes
+    }),
+    { httpMetadata: { contentType: 'application/json' } }
+  )
+  return { archivePrefix, replayRecordCount: archive.length, replayBytes }
 }
 
 interface MatchResult {
@@ -373,6 +447,8 @@ export class GameMatch implements DurableObject {
               await this.questProgress()
             )
           }
+        } else if (!metadata.expiredBeforeLoad && !metadata.analyticsEnqueuedAt) {
+          await this.archiveAndEnqueueAnalyticsWithRetry(metadata, Date.now())
         }
         return
       }
@@ -501,7 +577,12 @@ export class GameMatch implements DurableObject {
           participant => ({
             id: participant.account.address,
             name: participant.account.name || 'unknown_name',
-            initDeckString: '',
+            initDeckString:
+              encode(
+                VERSION,
+                participant.privateSeed.cards,
+                prismsToDeckClass(participant.privateSeed.prisms)
+              ) ?? '',
             stats: participant.account.stats,
             heroSkinID: participant.account.deckEquipment?.heroSkin,
             cardBackID: participant.account.deckEquipment?.cardBack
@@ -608,6 +689,7 @@ export class GameMatch implements DurableObject {
       timers,
       state: stateInfo,
       questProgress: runtime.questProgress(),
+      analyticsEnqueuedAt: metadata.analyticsEnqueuedAt,
       sockets: this.state.getWebSockets().length
     })
   }
@@ -1442,9 +1524,76 @@ export class GameMatch implements DurableObject {
       }
       metadata.completionRecorded = true
       await this.state.storage.put(METADATA_KEY, metadata)
+      await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
     } catch (error) {
       console.error(
         'match completion recording failed',
+        metadata.proposalId,
+        error
+      )
+      await this.state.storage.setAlarm(now + 10_000)
+    }
+  }
+
+  private async archiveAndEnqueueAnalyticsWithRetry(
+    metadata: MatchMetadata,
+    now: number
+  ) {
+    if (
+      metadata.analyticsEnqueuedAt ||
+      metadata.expiredBeforeLoad ||
+      !metadata.completionRecorded
+    ) {
+      return
+    }
+    try {
+      const endedAt = new Date(metadata.endedAtMs ?? now).toISOString()
+      const records = await this.state.storage.list<string>({
+        prefix: REPLAY_RECORD_PREFIX
+      })
+      const archive = [...records.entries()]
+        .map(([key, body]) => ({
+          index: Number(key.slice(REPLAY_RECORD_PREFIX.length)),
+          body
+        }))
+        .filter(record => Number.isSafeInteger(record.index))
+        .sort((left, right) => left.index - right.index)
+      if (
+        archive.length < 1 ||
+        archive.length > 10_000 ||
+        archive.some((record, index) => record.index !== index)
+      ) {
+        throw new Error('match replay archive is incomplete')
+      }
+      const releaseVersion = metadata.releaseVersion ?? 'cloud-weasel'
+      const archived = await archiveReplayRecords(this.env.GAME_ANALYTICS, {
+        proposalId: metadata.proposalId,
+        replayId: metadata.match.replayID,
+        releaseVersion,
+        matchId: metadata.match.matchID,
+        endedAt,
+        records: archive
+      })
+      await this.env.GAME_ANALYTICS_QUEUE.send(
+        {
+          type: 'process-match-replay',
+          proposalId: metadata.proposalId,
+          matchId: metadata.match.matchID,
+          replayId: metadata.match.replayID,
+          releaseVersion,
+          endedAt,
+          archivePrefix: archived.archivePrefix,
+          replayRecordCount: archived.replayRecordCount,
+          replayBytes: archived.replayBytes
+        },
+        { contentType: 'json' }
+      )
+      metadata.analyticsEnqueuedAt = new Date(now).toISOString()
+      await this.state.storage.put(METADATA_KEY, metadata)
+      await this.state.storage.deleteAlarm()
+    } catch (error) {
+      console.error(
+        'match analytics archive/enqueue failed',
         metadata.proposalId,
         error
       )
@@ -1720,9 +1869,13 @@ export class GameMatch implements DurableObject {
   }
 
   private replayJson(value: unknown) {
-    const body = JSON.stringify(value, (_key, current) =>
-      current instanceof Uint8Array ? bytesToHex(current) : current
-    )
+    const body = JSON.stringify(value, function (key, current) {
+      const original = this[key]
+      if (original instanceof Map) {
+        return { dataType: 'Map', value: [...original.entries()] }
+      }
+      return original instanceof Uint8Array ? bytesToHex(original) : current
+    })
     if (new TextEncoder().encode(body).byteLength > MAX_REPLAY_RECORD_BYTES) {
       throw new Error('replay record is too large')
     }

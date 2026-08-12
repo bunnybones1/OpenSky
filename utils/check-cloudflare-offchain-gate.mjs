@@ -62,7 +62,8 @@ export const offchainGateErrors = ({
   heroExchangeUi = '',
   googleRewardUi = {},
   googleRewardCopy = [],
-  rewardSources = {}
+  rewardSources = {},
+  observationalSources = {}
 }) => {
   const errors = []
   if (webappConfig?.AUTH_MODE !== 'google') {
@@ -185,6 +186,18 @@ export const offchainGateErrors = ({
       }
     }
   }
+  for (const [name, source] of Object.entries(observationalSources)) {
+    if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
+      errors.push(`${name} observational pipeline can mutate player rewards`)
+    }
+    for (const pattern of TRANSACTION_PATTERNS) {
+      if (pattern.test(source)) {
+        errors.push(
+          `${name} observational pipeline contains transaction code: ${pattern.source}`
+        )
+      }
+    }
+  }
   return errors
 }
 
@@ -219,7 +232,8 @@ const main = async () => {
     conquestProgressTooltip,
     tradableBadge,
     skypassThumbnail,
-    englishLocaleSource
+    englishLocaleSource,
+    analyticsWorker
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -333,7 +347,8 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8')
+    readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8'),
+    readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8')
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
@@ -380,7 +395,8 @@ const main = async () => {
       stripeCheckout,
       mobileStoreFulfillment,
       skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`
-    }
+    },
+    observationalSources: { analyticsWorker }
   })
   if (errors.length) {
     for (const error of errors)

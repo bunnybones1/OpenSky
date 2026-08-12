@@ -556,6 +556,9 @@ importers:
       '@opensky/bot':
         specifier: workspace:*
         version: link:../bot
+      '@opensky/deck-string-codec':
+        specifier: workspace:*
+        version: link:../lib/deck-string-codec
       '@opensky/proto':
         specifier: workspace:*
         version: link:../lib/proto

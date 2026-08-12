@@ -393,6 +393,7 @@ export default class CardCache {
       case 'Attachment':
         return this.isZonePublic(this.getLocation(zone.parent)?.location?.[0])
     }
+    return false
   }
 
   isZoneSecret(zone?: Zone): boolean | undefined {
