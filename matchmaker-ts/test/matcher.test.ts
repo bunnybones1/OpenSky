@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   combinePlayers,
+  createBotForPlayer,
   createBotPlayer,
   createPlayer,
   MatchProposalStatus,
@@ -12,6 +13,20 @@ import {
 const now = 1_000_000
 
 describe('Go player combinator and proposal compatibility', () => {
+  it('copies the source release and queue timestamp into replacement bots', () => {
+    const player = createPlayer({
+      address: '0x01',
+      mode: GameMode.PRACTICE_BOT,
+      clientVersionHash: 'release-1',
+      initTimestampMs: now - 25_000
+    })
+    expect(createBotForPlayer(player)).toMatchObject({
+      mode: GameMode.PRACTICE_BOT,
+      clientVersionHash: 'release-1',
+      initTimestampMs: now - 25_000
+    })
+  })
+
   it('requires two players and skips duplicate addresses', () => {
     const player = createPlayer({ address: '0x01' })
     expect(() => combinePlayers([player], () => true, [], () => now)).toThrow(

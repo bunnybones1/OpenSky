@@ -1041,10 +1041,25 @@ describe('Cloudflare matchmaker Worker', () => {
     await runInDurableObject(
       pool() as DurableObjectStub<MatchmakerPool>,
       async (_instance, state) => {
-        const proposals = await state.storage.list<Record<string, unknown>>({
+        const proposals = await state.storage.list<{
+          participants: Array<{
+            player: {
+              address: string
+              clientVersionHash: string
+              initTimestampMs: number
+            }
+          }>
+          botAcceptAtMs?: number
+        }>({
           prefix: 'proposal:'
         })
         for (const [key, proposal] of proposals) {
+          const [human, bot] = proposal.participants
+          expect(human.player.clientVersionHash).toBe('release-1')
+          expect(bot.player.clientVersionHash).toBe('release-1')
+          expect(bot.player.initTimestampMs).toBe(
+            human.player.initTimestampMs
+          )
           await state.storage.put(key, {
             ...proposal,
             botAcceptAtMs: Date.now() - 1
@@ -1060,12 +1075,16 @@ describe('Cloudflare matchmaker Worker', () => {
       playerID: '0x0000000000000000000000000000000000000000'
     })
 
-    const playerAccepted = nextMessage(player)
+    const dispatched = collectMessages(player, 3)
     player.send(JSON.stringify({ type: 'accept_match', playerID: 'forged' }))
-    expect(await playerAccepted).toEqual({
-      type: 'accept_match',
-      playerID: PRINCIPAL_1
-    })
+    expect(await dispatched).toEqual([
+      { type: 'accept_match', playerID: PRINCIPAL_1 },
+      {
+        type: 'match_made',
+        serverAddress: 'wss://match.example/v1/matches/test'
+      },
+      { type: 'match_ready_to_start', mode: GameMode.PRACTICE_BOT }
+    ])
   })
 
   it('notifies both clients when a proposal is declined', async () => {

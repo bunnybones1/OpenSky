@@ -4,7 +4,11 @@ import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { hexToBytes } from '../src/encoding'
-import { BOT_PLACEHOLDER, INTERNAL_AUTH_HEADER } from '../src/protocol'
+import {
+  BOT_PLACEHOLDER,
+  INTERNAL_AUTH_HEADER,
+  parseAcceptedMatchDispatch
+} from '../src/protocol'
 import { MatchRepository } from '../src/repository'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
@@ -126,6 +130,41 @@ const profile = async (
       body: JSON.stringify({ userId, principal, mode, versionHash })
     }
   )
+
+const provisionSecondPlayer = async (level = 2) => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Second Player', 'second@example.com', NULL, ?, ?)`
+    ).bind(SECOND_USER_ID, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_profiles
+         (user_id, level, xp, next_level_xp, created_at, updated_at)
+       VALUES (?, ?, 0, 200, ?, ?)`
+    ).bind(SECOND_USER_ID, level, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_settings
+         (user_id, name, locale, warm_ups, created_at, updated_at)
+       VALUES (?, 'Second.Player', 'en', 0, ?, ?)`
+    ).bind(SECOND_USER_ID, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_progression
+         (user_id, basic_skypass_level, basic_skypass_xp,
+          basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+       VALUES (?, 1, 0, 200, 0, ?, ?)`
+    ).bind(SECOND_USER_ID, now, now),
+    ...STARTER_CARD_IDS.map(cardId =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'test', ?, ?)`
+      ).bind(SECOND_USER_ID, cardId, now, now)
+    )
+  ])
+}
 
 beforeEach(async () => {
   ;[PRINCIPAL, SECOND_PRINCIPAL] = await Promise.all([
@@ -517,10 +556,10 @@ describe('Cloud Weasel accepted-match service', () => {
       profile: { rankedEligible: false }
     })
 
-    const rankedDispatch = dispatch()
+    await provisionSecondPlayer()
+    const { accepted: rankedDispatch } = mixedDispatch()
     rankedDispatch.participants[0].player.mode = GameMode.RANKED_CONSTRUCTED
     rankedDispatch.participants[0].request!.mode = GameMode.RANKED_CONSTRUCTED
-    rankedDispatch.participants[1].player.mode = GameMode.RANKED_CONSTRUCTED
     const finalCheck = await create(rankedDispatch)
     expect(finalCheck.status).toBe(409)
     expect(await finalCheck.json()).toEqual({
@@ -820,13 +859,14 @@ describe('Cloud Weasel accepted-match service', () => {
   })
 
   it('rejects chosen discovery cards at the final service boundary', async () => {
-    const accepted = dispatch([6])
-    accepted.participants[0].player.mode = GameMode.CHALLENGE_DISCOVERY
-    accepted.participants[0].player.sessionId = 'WEASEL'
-    accepted.participants[0].request!.mode = GameMode.CHALLENGE_DISCOVERY
-    accepted.participants[0].request!.sessionID = 'WEASEL'
-    accepted.participants[1].player.mode = GameMode.CHALLENGE_DISCOVERY
-    accepted.participants[1].player.sessionId = 'WEASEL'
+    await provisionSecondPlayer()
+    const { accepted } = mixedDispatch()
+    for (const participant of accepted.participants) {
+      participant.player.mode = GameMode.CHALLENGE_DISCOVERY
+      participant.player.sessionId = 'WEASEL'
+      participant.request!.mode = GameMode.CHALLENGE_DISCOVERY
+      participant.request!.sessionID = 'WEASEL'
+    }
     const response = await create(accepted)
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'DECK_IS_NOT_RANDOM' })
@@ -886,6 +926,35 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(await rejected.json()).toEqual({ error: 'invalid matchmaker player' })
   })
 
+  it('limits bot placeholders to source bot-capable modes', async () => {
+    const ranked = dispatch()
+    ranked.participants[0].player.mode = GameMode.RANKED_CONSTRUCTED
+    ranked.participants[0].request!.mode = GameMode.RANKED_CONSTRUCTED
+    ranked.participants[1].player.mode = GameMode.RANKED_CONSTRUCTED
+
+    expect(() => parseAcceptedMatchDispatch(ranked)).toThrow(
+      'bots are disabled for this game mode'
+    )
+    expect(
+      parseAcceptedMatchDispatch(ranked, { enableRankedBots: true })
+        .participants[1].player.mode
+    ).toBe(GameMode.RANKED_CONSTRUCTED)
+
+    const challenge = dispatch()
+    challenge.proposalId = 'proposal-forged-challenge-bot'
+    for (const participant of challenge.participants) {
+      participant.player.mode = GameMode.CHALLENGE_CONSTRUCTED
+      participant.player.sessionId = 'FORGED-BOT-SESSION'
+    }
+    challenge.participants[0].request!.mode = GameMode.CHALLENGE_CONSTRUCTED
+    challenge.participants[0].request!.sessionID = 'FORGED-BOT-SESSION'
+    const rejected = await create(challenge)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toEqual({
+      error: 'bots are disabled for this game mode'
+    })
+  })
+
   it('rejects session mismatch and empty challenge sessions at final dispatch', async () => {
     const mismatched = dispatch()
     mismatched.participants[1].player.sessionId = 'OTHER-SESSION'
@@ -895,13 +964,12 @@ describe('Cloud Weasel accepted-match service', () => {
       error: 'participants use different sessions'
     })
 
-    const emptyChallenge = dispatch()
+    const { accepted: emptyChallenge } = mixedDispatch()
     emptyChallenge.proposalId = 'proposal-empty-challenge-session'
     for (const participant of emptyChallenge.participants) {
       participant.player.mode = GameMode.CHALLENGE_CONSTRUCTED
+      participant.request!.mode = GameMode.CHALLENGE_CONSTRUCTED
     }
-    emptyChallenge.participants[0].request!.mode =
-      GameMode.CHALLENGE_CONSTRUCTED
     const rejected = await create(emptyChallenge)
     expect(rejected.status).toBe(400)
     expect(await rejected.json()).toEqual({

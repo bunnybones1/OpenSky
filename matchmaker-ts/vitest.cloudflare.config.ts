@@ -161,8 +161,27 @@ export default defineConfig({
             }
             const dispatch = (await request.clone().json()) as {
               participants?: Array<{
-                player?: { address?: unknown }
+                player?: {
+                  address?: unknown
+                  clientVersionHash?: unknown
+                  initTimestampMs?: unknown
+                }
               }>
+            }
+            const releases = new Set(
+              dispatch.participants?.map(
+                participant => participant.player?.clientVersionHash
+              )
+            )
+            if (
+              dispatch.participants?.length !== 2 ||
+              releases.size !== 1 ||
+              [...releases][0] !== 'release-1'
+            ) {
+              return Response.json(
+                { error: 'participants use different releases' },
+                { status: 400 }
+              )
             }
             if (
               dispatch.participants?.some(

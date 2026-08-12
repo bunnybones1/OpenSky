@@ -58,6 +58,20 @@ export const createBotPlayer = (
   overrides: Partial<MatchmakerPlayer> = {}
 ) => createPlayer({ address: BOT_PLAYER_ADDRESS, mode, ...overrides })
 
+// Mirrors player/bot.Factory.CreateUnregistered in the Go matchmaker. The
+// accepted match must retain the human's release and original queue timestamp;
+// otherwise a bot replacement changes the proposal's compatibility contract.
+export const createBotForPlayer = (
+  player: MatchmakerPlayer,
+  overrides: Partial<MatchmakerPlayer> = {}
+) =>
+  createBotPlayer(player.mode, {
+    prisms: player.prisms,
+    clientVersionHash: player.clientVersionHash,
+    initTimestampMs: player.initTimestampMs,
+    ...overrides
+  })
+
 export const isBot = (player: MatchmakerPlayer) =>
   player.address === BOT_PLAYER_ADDRESS
 

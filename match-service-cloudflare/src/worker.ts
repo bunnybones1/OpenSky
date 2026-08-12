@@ -31,6 +31,7 @@ export interface MatchServiceEnv {
   INTERNAL_AUTH_SECRET: string
   CURRENT_SEASON?: string
   TURN_TIMER_ENABLED?: string
+  ENABLE_RANKED_BOTS?: string
   ENABLED_GAME_MODES?: string
 }
 
@@ -54,6 +55,9 @@ const season = (value: string | undefined) => {
 }
 
 const enabled = (value: string | undefined) => value?.toLowerCase() !== 'false'
+
+const explicitlyEnabled = (value: string | undefined) =>
+  value?.toLowerCase() === 'true'
 
 const DEFAULT_ENABLED_GAME_MODES = new Set<GameMode>([
   GameMode.PRACTICE_BOT,
@@ -257,7 +261,9 @@ export default {
       if (new TextEncoder().encode(text).byteLength > MAX_DISPATCH_BYTES) {
         return json({ error: 'request too large' }, 413)
       }
-      dispatch = parseAcceptedMatchDispatch(JSON.parse(text))
+      dispatch = parseAcceptedMatchDispatch(JSON.parse(text), {
+        enableRankedBots: explicitlyEnabled(env.ENABLE_RANKED_BOTS)
+      })
     } catch (error) {
       return json(
         {

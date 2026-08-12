@@ -30,6 +30,7 @@ import {
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
   BOT_PLAYER_ADDRESS,
+  createBotForPlayer,
   createBotPlayer,
   createPlayer,
   isBot,
@@ -808,7 +809,7 @@ export class MatchmakerPool implements DurableObject {
         continue
       const human = deserializePlayer(ticket.player)
       await this.createProposal(
-        [human, createBotPlayer(human.mode, { prisms: human.prisms })],
+        [human, createBotForPlayer(human)],
         byAddress,
         now
       )
@@ -892,8 +893,7 @@ export class MatchmakerPool implements DurableObject {
       () => now
     )
     const proposals = processCombinations(combinations, {
-      createRegistered: player =>
-        createBotPlayer(player.mode, { prisms: player.prisms })
+      createRegistered: player => createBotForPlayer(player)
     })
     for (const proposal of proposals) {
       await this.createProposal(proposal.players, byAddress, now)

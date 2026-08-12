@@ -41,6 +41,10 @@ export interface AcceptedMatchDispatch {
   createdAtMs: number
 }
 
+export interface AcceptedMatchDispatchPolicy {
+  enableRankedBots?: boolean
+}
+
 export class DispatchProtocolError extends Error {}
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -78,7 +82,8 @@ export const acceptedMatchFingerprint = async (
 }
 
 export const parseAcceptedMatchDispatch = (
-  value: unknown
+  value: unknown,
+  policy: AcceptedMatchDispatchPolicy = {}
 ): AcceptedMatchDispatch => {
   if (
     !record(value) ||
@@ -177,6 +182,36 @@ export const parseAcceptedMatchDispatch = (
     ])
   ) {
     throw new DispatchProtocolError('participants use incompatible game modes')
+  }
+  const botParticipant = participants.find(
+    participant => participant.player.address === BOT_PLACEHOLDER
+  )
+  if (botParticipant) {
+    const humanParticipant = participants.find(
+      participant => participant.player.address !== BOT_PLACEHOLDER
+    )
+    const alwaysBotModes = new Set<GameMode>([
+      GameMode.PRACTICE_BOT,
+      GameMode.WARM_UP
+    ])
+    const optionalBotModes = new Set<GameMode>([
+      GameMode.PRACTICE_PVP,
+      GameMode.RANKED_CONSTRUCTED,
+      GameMode.RANKED_DISCOVERY
+    ])
+    if (
+      !humanParticipant ||
+      humanParticipant.player.mode !== botParticipant.player.mode
+    ) {
+      throw new DispatchProtocolError('bot mode does not match human mode')
+    }
+    if (
+      !alwaysBotModes.has(botParticipant.player.mode) &&
+      !(policy.enableRankedBots &&
+        optionalBotModes.has(botParticipant.player.mode))
+    ) {
+      throw new DispatchProtocolError('bots are disabled for this game mode')
+    }
   }
   if (
     participants[0].player.clientVersionHash !==
