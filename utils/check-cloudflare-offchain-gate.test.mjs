@@ -17,6 +17,10 @@ const validInput = () => ({
     "env.AUTH_MODE !== 'google'; if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeSilverCardsForTickets(); return } ' +
     'AuthenticationClient.wallet',
+  heroExchangeUi:
+    "if (env.AUTH_MODE === 'google') { " +
+    'identityClient.exchangeGoldCardsForHeroSkins(); return } ' +
+    'getHeroMintTxns()',
   rewardSources: {
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
@@ -101,4 +105,14 @@ test('rejects a Google Silver exchange that can fall through to a wallet', () =>
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('legacy wallet path')))
   assert.ok(errors.some(error => error.includes('legacy payment catalog')))
+})
+
+test('rejects a Google Hero exchange that can fall through to a wallet', () => {
+  const input = validInput()
+  input.heroExchangeUi =
+    "if (env.AUTH_MODE === 'google') { " +
+    'identityClient.exchangeGoldCardsForHeroSkins() } getHeroMintTxns()'
+  assert.ok(
+    offchainGateErrors(input).some(error => error.includes('Hero exchange'))
+  )
 })

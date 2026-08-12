@@ -5,6 +5,7 @@ import AccountPage from '~/AccountPage/AccountPage'
 import AppLayout from '~/AppLayout/AppLayout'
 import { CreateDeckPage } from '~/CreateDeckPage/CreateDeckPage'
 import { DeckBuilder } from '~/DeckBuilder/DeckBuilder'
+import HeroFeaturePage from '~/HeroFeaturePage/HeroFeaturePage'
 import HomePage from '~/HomePage/HomePage'
 import InviteFriendsPage from '~/InviteFriendsPage/InviteFriendsPage'
 import InviteAFriendRewards from '~/InviteFriendsPage/outlets/InviteAFriendRewards'
@@ -14,6 +15,7 @@ import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
 import PendingGoldsPage from '~/PendingGoldsPage/PendingGoldsPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
 import { QuestsPage } from '~/QuestsPage/QuestsPage'
+import { SelectGoldCardsForSkinPage } from '~/SelectGoldCardsForSkinPage/SelectGoldCardsForSkinPage'
 import { SelectSilversPage } from '~/SelectSilversPage/SelectSilversPage'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import SkyPassPage from '~/SkyPassPage/SkyPassPage'
@@ -43,10 +45,18 @@ export const IdentityApp = memo(() => (
         path={ROUTES_CONFIG.routes.SELECT_SILVERS.path}
       />
       <Route
+        element={<SelectGoldCardsForSkinPage />}
+        path={ROUTES_CONFIG.routes.SELECT_GOLDS.path}
+      />
+      <Route
         element={<PendingGoldsPage />}
         path={ROUTES_CONFIG.routes.PENDING_GOLDS.path}
       />
       <Route element={<ItemsPage />} path={ROUTES_CONFIG.routes.ITEMS.path} />
+      <Route
+        element={<HeroFeaturePage />}
+        path={ROUTES_CONFIG.routes.HERO_FEATURE.path}
+      />
       <Route
         element={<CreateDeckPage />}
         path={ROUTES_CONFIG.routes.CREATE_DECK.path}

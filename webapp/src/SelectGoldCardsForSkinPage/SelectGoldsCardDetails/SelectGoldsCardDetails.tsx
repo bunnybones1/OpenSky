@@ -1,6 +1,7 @@
 import { ItemType } from '@opensky/proto'
 import { memo } from 'react'
 
+import env from '~/env'
 import { CardDetailsPage } from '~/shared/components/CardDetailsPage/CardDetailsPage'
 import { useSelector } from '~/shared/redux/index'
 
@@ -23,6 +24,7 @@ export const SelectGoldsCardDetails = memo(() => {
       Controls={SelectGoldCardDetailsControls}
       id={id}
       allowedGrades={ALLOWED_GRADE}
+      hideTokenInfo={env.AUTH_MODE === 'google'}
     />
   )
 })

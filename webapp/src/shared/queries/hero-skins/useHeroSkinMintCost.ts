@@ -9,6 +9,7 @@ import _fill from 'lodash-es/fill'
 import { useMemo } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { APIClient, AuthenticationClient } from '~/shared/clients'
 import { AllHeroSkinIds } from '~/shared/constants/hero-skins'
 import { getHeroSkinMintPriceKey } from '~/shared/constants/react-query-keys'
@@ -144,7 +145,8 @@ export const useHeroSkinMintCost = (
 
   const { data: cardsSortedByPrice } = useTokensSortedByPrice(
     SwapType.BUY,
-    ItemType.SW_GOLD_CARDS
+    ItemType.SW_GOLD_CARDS,
+    env.AUTH_MODE === 'google'
   )
 
   const cardsSortedByPriceAscending = useMemo(() => {
@@ -156,7 +158,11 @@ export const useHeroSkinMintCost = (
     getHeroSkinMintPriceKey(tokenId, quantity),
     heroSkinMintPriceFetcher(tokenId, quantity, cardsSortedByPriceAscending),
     {
-      enabled: !!userAddress && !!cardsSortedByPrice && !!tokenId,
+      enabled:
+        env.AUTH_MODE !== 'google' &&
+        !!userAddress &&
+        !!cardsSortedByPrice &&
+        !!tokenId,
       staleTime: THIRTY_SECONDS
     }
   )
@@ -166,7 +172,8 @@ export const useHeroSkinMintCosts = () => {
   const { userAddress } = useSnapshot(authenticationState)
   const { data: cardsSortedByPrice } = useTokensSortedByPrice(
     SwapType.BUY,
-    ItemType.SW_GOLD_CARDS
+    ItemType.SW_GOLD_CARDS,
+    env.AUTH_MODE === 'google'
   )
 
   const cardsSortedByPriceAscending = useMemo(() => {
@@ -178,7 +185,7 @@ export const useHeroSkinMintCosts = () => {
     queries: AllHeroSkinIds.map((id) => ({
       queryKey: getHeroSkinMintPriceKey(id, 1),
       queryFn: heroSkinMintPriceFetcher(id, 1, cardsSortedByPriceAscending),
-      enabled: !!userAddress && !!cardsSortedByPrice,
+      enabled: env.AUTH_MODE !== 'google' && !!userAddress && !!cardsSortedByPrice,
       staleTime: THIRTY_SECONDS
     }))
   })

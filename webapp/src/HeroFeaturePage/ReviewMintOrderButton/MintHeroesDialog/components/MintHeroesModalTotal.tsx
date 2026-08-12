@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { derivedHeroFeatureState } from '~/HeroFeaturePage/shared/state'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
@@ -33,6 +34,58 @@ export const MintHeroesModalTotal = memo(() => {
   }, [selectedCards])
 
   const TotalCostSection = useMemo(() => {
+    if (env.AUTH_MODE === 'google') {
+      return (
+        <div
+          className={Sprinkles({
+            display: 'flex',
+            width: 'full',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            paddingY: { base: '8px', tablet: '0px' }
+          })}
+        >
+          <div
+            className={Sprinkles({
+              display: 'flex',
+              width: 'full',
+              justifyContent: 'flex-end',
+              alignItems: 'center'
+            })}
+          >
+            <Tooltip
+              placement="top-start"
+              tooltip={t('heroFeature.offchainExchangeExplanation')}
+              tooltipClassName={TooltipStyle}
+            >
+              <Icon
+                type="info-empty"
+                height="14px"
+                color="purple9"
+                marginRight="4px"
+              />
+            </Tooltip>
+            <Text
+              color="purple9"
+              fontWeight={'600'}
+              fontSize={'16px'}
+              marginRight="4px"
+            >
+              {t('heroFeature.totalSkinsInOrder', {
+                total: totalSkinsInOrder
+              })}
+            </Text>
+            <Text color="white" fontWeight={'600'} fontSize={'16px'}>
+              {totalSkinsInOrder * 10} Gold
+            </Text>
+          </div>
+          <Text color="purple8" fontWeight={'600'} fontSize={'12px'}>
+            {numGoldsSelected} Gold selected
+          </Text>
+        </div>
+      )
+    }
     return (
       <div
         className={Sprinkles({
@@ -159,7 +212,11 @@ export const MintHeroesModalTotal = memo(() => {
       >
         <Tooltip
           placement="top-start"
-          tooltip={`${t('shop.tradableNature')} ${t('shop.noRefunds')}`}
+          tooltip={
+            env.AUTH_MODE === 'google'
+              ? t('heroFeature.offchainExchangeExplanation')
+              : `${t('shop.tradableNature')} ${t('shop.noRefunds')}`
+          }
           tooltipClassName={TooltipStyle}
         >
           <Icon type="info-empty" height="14px" color="purple9" />
@@ -170,7 +227,9 @@ export const MintHeroesModalTotal = memo(() => {
           fontSize={'14px'}
           className={Sprinkles({ marginLeft: '4px' })}
         >
-          {t('shop.salesAreFinal')}
+          {env.AUTH_MODE === 'google'
+            ? t('heroFeature.offchainExchangeFinal')
+            : t('shop.salesAreFinal')}
         </Text>
       </div>
       <div

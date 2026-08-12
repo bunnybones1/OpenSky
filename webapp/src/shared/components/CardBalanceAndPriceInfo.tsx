@@ -20,19 +20,28 @@ interface CardBalanceAndPriceProps {
   isSelected?: boolean
   grade?: CardSearchParams['grade']
   mode: MarketMode
+  isPriceDisabled?: boolean
   ButtonComponent?: ComponentType<{
     id: number
   }>
 }
 
 export const CardBalanceAndPriceInfo = memo(
-  ({ id, grade, mode, ButtonComponent, isSelected }: CardBalanceAndPriceProps) => {
+  ({
+    id,
+    grade,
+    mode,
+    ButtonComponent,
+    isSelected,
+    isPriceDisabled
+  }: CardBalanceAndPriceProps) => {
     const cardBalances = useBalancesForCard(id)
 
     const { data: priceAndSupply } = useTokenPriceAndSupply({
       id,
       mode,
-      quantity: 1
+      quantity: 1,
+      isDisabled: isPriceDisabled
     })
 
     const { getAssetUrl } = useGetAssetContext()
@@ -47,8 +56,8 @@ export const CardBalanceAndPriceInfo = memo(
           grade === ItemType.SW_BASE_CARDS
             ? 'base'
             : grade === ItemType.SW_GOLD_CARDS
-            ? 'gold'
-            : 'silver'
+              ? 'gold'
+              : 'silver'
 
         return [
           {

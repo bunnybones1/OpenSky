@@ -1,10 +1,12 @@
 import { SwapType } from '@0xsequence/metadata'
 import { ItemType } from '@opensky/proto'
-import { getLegacyHeroID } from '@opensky/shared/assetsIDs'
+import { getLegacyHeroID, getUngradedID } from '@opensky/shared/assetsIDs'
 import { useQueryClient } from '@tanstack/react-query'
 import { sequence } from '0xsequence'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
+import { identityClient } from '~/clients/IdentityClient/IdentityClient'
+import env from '~/env'
 import { getGoldCardsForHeroMint } from '~/HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/get-gold-cards-for-hero-mint'
 import {
   derivedHeroFeatureState,
@@ -27,6 +29,7 @@ import {
   selectGoldsState,
   updateSelectGoldsState
 } from '~/shared/state/select-golds/select-golds-state'
+import { addToast, clearAllToasts } from '~/shared/state/toast-state'
 import { CartItem } from '~/shared/types/market'
 
 import { getMintHeroRequestData } from './get-mint-hero-request-data'
@@ -35,7 +38,8 @@ import { prepareHeroMintOrder } from './prepare-hero-mint-order'
 const useGetHeroMintTxns = () => {
   const { data: cardsSortedByPriceDesc } = useTokensSortedByPrice(
     SwapType.BUY,
-    ItemType.SW_GOLD_CARDS
+    ItemType.SW_GOLD_CARDS,
+    env.AUTH_MODE === 'google'
   )
 
   const cardsSortedByPrice = useMemo(() => {
@@ -213,6 +217,7 @@ const { closeDialog } = controlDialog(MINT_HEROES_DIALOG_ID)
 
 export const useConfirmHeroMintOrder = () => {
   const [isConfirming, setIsConfirming] = useState(false)
+  const requestKey = useRef(crypto.randomUUID())
   const queryClient = useQueryClient()
   const { getHeroMintTxns } = useGetHeroMintTxns()
   const { sendTransactions } = useSendTransactions()
@@ -220,6 +225,49 @@ export const useConfirmHeroMintOrder = () => {
   const confirmHeroMintOrder = useCallback(async () => {
     try {
       setIsConfirming(true)
+      if (env.AUTH_MODE === 'google') {
+        const heroSkins = Object.entries(heroFeatureState.skinsToMint).map(
+          ([tokenId, quantity]) => ({ tokenId: Number(tokenId), quantity })
+        )
+        await identityClient.exchangeGoldCardsForHeroSkins({
+          requestKey: requestKey.current,
+          goldCards: selectGoldsState.selectedCards.map((card) => ({
+            tokenId: getUngradedID(card.tokenId),
+            quantity: card.amount
+          })),
+          heroSkins
+        })
+        if (authenticationState.userAddress) {
+          await Promise.all([
+            queryClient.invalidateQueries(
+              getTokenBalancesKey(
+                ItemType.SW_HERO_SKINS,
+                authenticationState.userAddress
+              )
+            ),
+            queryClient.invalidateQueries(
+              getTokenBalancesKey(
+                ItemType.SW_GOLD_CARDS,
+                authenticationState.userAddress
+              )
+            )
+          ])
+        }
+        addToast({
+          text: 'Hero skin unlocked',
+          secondaryText: `${heroSkins.reduce(
+            (total, heroSkin) => total + heroSkin.quantity,
+            0
+          )} Hero skin reward delivered to your Cloud Weasel inventory.`,
+          icon: 'check-circled',
+          iconColor: 'forest4'
+        })
+        closeDialog()
+        setIsConfirming(false)
+        resetHeroFeatureState()
+        updateSelectGoldsState('selectedCards', [])
+        return
+      }
       const txns = await getHeroMintTxns(authenticationState.userAddress)
 
       if (txns) {
@@ -247,6 +295,18 @@ export const useConfirmHeroMintOrder = () => {
         }
       }
     } catch (error) {
+      if (env.AUTH_MODE === 'google') {
+        clearAllToasts()
+        addToast({
+          text: 'Hero skin exchange failed',
+          secondaryText:
+            error instanceof Error
+              ? error.message
+              : 'Your Gold cards were not spent. Please try again.',
+          icon: 'close-circled',
+          iconColor: 'warm9'
+        })
+      }
       setIsConfirming(false)
     }
   }, [getHeroMintTxns, queryClient, sendTransactions])

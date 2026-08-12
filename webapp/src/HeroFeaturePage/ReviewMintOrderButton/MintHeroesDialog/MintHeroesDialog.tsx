@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { derivedHeroFeatureState } from '~/HeroFeaturePage/shared/state'
 import { TableHeader } from '~/shared/components/CartModal'
 import { Icon } from '~/shared/components/Icon/Icon'
@@ -36,7 +37,7 @@ export const MintHeroesDialog = memo(() => {
         size: 48
       },
       {
-        text: t('shop.price'),
+        text: env.AUTH_MODE === 'google' ? t('generic.Cost') : t('shop.price'),
         size: 13.25
       },
       {
@@ -44,7 +45,7 @@ export const MintHeroesDialog = memo(() => {
         size: 22.75
       },
       {
-        text: t('shop.subtotal'),
+        text: env.AUTH_MODE === 'google' ? t('generic.total') : t('shop.subtotal'),
         size: 9,
         flexType: 'flex-end'
       }

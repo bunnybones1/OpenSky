@@ -8,7 +8,7 @@ const silverFile =
 
 const reviewedSources = {
   'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts':
-    'useSendTransactions()',
+    "if (env.AUTH_MODE === 'google') { identityClient.exchangeGoldCardsForHeroSkins(); return } getHeroMintTxns(); useSendTransactions()",
   'MarketPage/ViewOrderButton/CartDialog/components/CartControlsRow.tsx':
     'wallet.sendTransaction()',
   'PurchaseConquestPage/PurchaseWithUSDCDialog/hooks/useProcessConquestUSDCOrder.ts':
@@ -44,6 +44,10 @@ test('rejects new, expanded, and Google-routable transaction surfaces', () => {
     '; wallet.sendTransaction()'
   sources[silverFile] =
     "if (env.AUTH_MODE === 'google') { identityClient.exchangeSilverCardsForTickets() } AuthenticationClient.wallet; prepareOnChainInItemsTransaction(); wallet.sendTransaction()"
+  sources[
+    'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts'
+  ] =
+    "if (env.AUTH_MODE === 'google') { identityClient.exchangeGoldCardsForHeroSkins() } getHeroMintTxns(); useSendTransactions()"
   const errors = browserTransactionAuditErrors({
     sources,
     identityRoutes: 'import { MarketPage } from "~/MarketPage/MarketPage"'
@@ -52,4 +56,5 @@ test('rejects new, expanded, and Google-routable transaction surfaces', () => {
   assert.ok(errors.some(error => error.includes('reviewed count')))
   assert.ok(errors.some(error => error.includes('MarketPage')))
   assert.ok(errors.some(error => error.includes('exits through D1 first')))
+  assert.ok(errors.some(error => error.includes('Hero callsite')))
 })

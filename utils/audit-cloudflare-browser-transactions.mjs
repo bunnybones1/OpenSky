@@ -8,8 +8,7 @@ const TRANSACTION_PATTERN =
 const EXPECTED_FILES = {
   'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts': {
     count: 1,
-    disposition: 'excluded-product-surface',
-    routeToken: 'HeroFeaturePage'
+    disposition: 'google-offchain-guarded-hero'
   },
   'MarketPage/ViewOrderButton/CartDialog/components/CartControlsRow.tsx': {
     count: 1,
@@ -45,8 +44,7 @@ const EXPECTED_FILES = {
   },
   'shared/hooks/market/useSendTransactions.ts': {
     count: 1,
-    disposition: 'excluded-product-surface',
-    routeToken: 'HeroFeaturePage'
+    disposition: 'guarded-consumer-helper'
   }
 }
 
@@ -116,6 +114,29 @@ export const browserTransactionAuditErrors = ({
     legacyWallet < googleReturn
   ) {
     errors.push('reviewed Silver callsite no longer exits through D1 first')
+  }
+
+  const heroFile = Object.entries(EXPECTED_FILES).find(
+    ([, review]) => review.disposition === 'google-offchain-guarded-hero'
+  )?.[0]
+  const heroSource = heroFile ? sources[heroFile] ?? '' : ''
+  const heroGoogleGuard = heroSource.indexOf("env.AUTH_MODE === 'google'")
+  const heroOffchainExchange = heroSource.indexOf(
+    'identityClient.exchangeGoldCardsForHeroSkins',
+    heroGoogleGuard
+  )
+  const heroGoogleReturn = heroSource.indexOf('return', heroOffchainExchange)
+  const heroLegacyWallet = heroSource.indexOf(
+    'getHeroMintTxns',
+    heroGoogleReturn
+  )
+  if (
+    heroGoogleGuard < 0 ||
+    heroOffchainExchange < heroGoogleGuard ||
+    heroGoogleReturn < heroOffchainExchange ||
+    heroLegacyWallet < heroGoogleReturn
+  ) {
+    errors.push('reviewed Hero callsite no longer exits through D1 first')
   }
 
   return errors

@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { memo, useCallback, useMemo } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import {
   derivedHeroFeatureState,
   heroFeatureState,
@@ -76,7 +77,11 @@ export const HeroToMintRow = memo(({ id, isFirst }: HeroToMintRowProps) => {
         </FlexBox>
       </FlexBox>
       <FlexBox type="centered-start-row" width="13.25%">
-        {!!subtotal ? (
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="white" fontWeight="medium" fontSize={[14, 14, 16]}>
+            10 Gold
+          </Text>
+        ) : !!subtotal ? (
           <Text color="white" fontWeight="medium" fontSize={[14, 14, 16]}>
             {`$${formatUSDCBalance(Math.floor(Number(subtotal) / skinToMint))}`}
           </Text>
@@ -116,7 +121,11 @@ export const HeroToMintRow = memo(({ id, isFirst }: HeroToMintRowProps) => {
         </FlexBox>
       </FlexBox>
       <FlexBox type="centered-end-row" width="9%">
-        {!!subtotal ? (
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="purple9" fontWeight="medium" fontSize={[14, 14, 16]}>
+            {skinToMint * 10} Gold
+          </Text>
+        ) : !!subtotal ? (
           <Text color="purple9" fontWeight="medium" fontSize={[14, 14, 16]}>
             {`$${formatUSDCBalance(subtotal)}`}
           </Text>

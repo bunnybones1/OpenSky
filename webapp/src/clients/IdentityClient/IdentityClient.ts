@@ -175,6 +175,44 @@ class IdentityClient {
     return { exchange: body.exchange }
   }
 
+  public exchangeGoldCardsForHeroSkins = async (input: {
+    requestKey: string
+    goldCards: Array<{ tokenId: number; quantity: number }>
+    heroSkins: Array<{ tokenId: number; quantity: number }>
+  }): Promise<{
+    exchange: {
+      goldCards: Array<{ tokenId: number; quantity: number }>
+      heroSkins: Array<{ tokenId: number; quantity: number }>
+      goldCardsSpent: number
+      heroSkinsGranted: number
+      createdAt: string
+    }
+  }> => {
+    const response = await fetch('/api/player/exchanges/gold-hero-skins', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(input)
+    })
+    const body = (await response.json()) as {
+      exchange?: {
+        goldCards: Array<{ tokenId: number; quantity: number }>
+        heroSkins: Array<{ tokenId: number; quantity: number }>
+        goldCardsSpent: number
+        heroSkinsGranted: number
+        createdAt: string
+      }
+      message?: string
+    }
+    if (!response.ok || !body.exchange) {
+      throw new Error(body.message || 'Unable to exchange Gold cards.')
+    }
+    return { exchange: body.exchange }
+  }
+
   public signOut = async (): Promise<void> => {
     const response = await fetch('/api/auth/logout', {
       method: 'POST',

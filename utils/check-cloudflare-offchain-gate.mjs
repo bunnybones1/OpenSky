@@ -4,9 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 const LEGACY_TRANSACTION_SURFACES = [
   'SkyPassPurchasePage',
-  'PurchaseConquestPage',
-  'HeroFeaturePage',
-  'SelectGoldCardsForSkinPage'
+  'PurchaseConquestPage'
 ]
 
 const TRANSACTION_PATTERNS = [
@@ -25,6 +23,7 @@ export const offchainGateErrors = ({
   policySource,
   pendingGoldSources = '',
   silverExchangeUi = '',
+  heroExchangeUi = '',
   rewardSources = {}
 }) => {
   const errors = []
@@ -91,6 +90,26 @@ export const offchainGateErrors = ({
       )
     }
   }
+  if (heroExchangeUi) {
+    const googleGuard = heroExchangeUi.indexOf("env.AUTH_MODE === 'google'")
+    const offchainExchange = heroExchangeUi.indexOf(
+      'identityClient.exchangeGoldCardsForHeroSkins',
+      googleGuard
+    )
+    const googleReturn = heroExchangeUi.indexOf('return', offchainExchange)
+    const legacyWallet = heroExchangeUi.indexOf(
+      'getHeroMintTxns',
+      googleReturn
+    )
+    if (
+      googleGuard < 0 ||
+      offchainExchange < googleGuard ||
+      googleReturn < offchainExchange ||
+      legacyWallet < googleReturn
+    ) {
+      errors.push('Google Hero exchange can reach the legacy wallet path')
+    }
+  }
   for (const [name, source] of Object.entries(rewardSources)) {
     if (!/INSERT(?: OR IGNORE)? INTO player_items/.test(source)) {
       errors.push(`${name} does not grant canonical D1 inventory`)
@@ -129,7 +148,8 @@ const main = async () => {
     mobileStoreFulfillment,
     pendingGoldPage,
     pendingGoldCard,
-    silverExchangeUi
+    silverExchangeUi,
+    heroExchangeUi
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -178,6 +198,13 @@ const main = async () => {
         'webapp/src/SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversControlsRow/components/ConfirmConvertSilverCardsDialog.tsx'
       ),
       'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts'
+      ),
+      'utf8'
     )
   ])
   const errors = offchainGateErrors({
@@ -187,6 +214,7 @@ const main = async () => {
     policySource,
     pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}`,
     silverExchangeUi,
+    heroExchangeUi,
     rewardSources: {
       conquestDelivery,
       leaderboardRewards,

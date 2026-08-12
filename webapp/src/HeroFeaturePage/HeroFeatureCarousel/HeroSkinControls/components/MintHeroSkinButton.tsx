@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
 import { AngledBox } from '~/__deprecated__/AngledBox'
+import env from '~/env'
 import { HeroSkinWithTokenId } from '~/HeroFeaturePage/shared/constants'
 import {
   addSkinToMint,
@@ -32,6 +33,7 @@ export const MintHeroSkinButton = memo(
     const { skinIdsInOrder } = useSnapshot(derivedHeroFeatureState)
 
     const { data: cost } = useHeroSkinMintCost(heroSkin.id, 1)
+    const isIdentityExchange = env.AUTH_MODE === 'google'
 
     const isSelected = useMemo(() => {
       // eslint-disable-next-line valtio/state-snapshot-rule
@@ -53,13 +55,17 @@ export const MintHeroSkinButton = memo(
         ml={padAmount}
         minHeight="10px"
       >
-        {heroSkin.grade === 'gold' && !isIOSNativeApp() && (
+        {heroSkin.grade === 'gold' && (isIdentityExchange || !isIOSNativeApp()) && (
           <>
             <FlexBox type="centered-row" mb="8px">
               <Box height={24} width={24}>
                 {!!getAssetUrl && (
                   <img
-                    src={getAssetUrl('webapp/icons/usdc.webp')}
+                    src={getAssetUrl(
+                      isIdentityExchange
+                        ? 'webapp/icons/gold-card-with-letter.webp'
+                        : 'webapp/icons/usdc.webp'
+                    )}
                     style={{
                       height: '100%',
                       width: '100%'
@@ -67,7 +73,17 @@ export const MintHeroSkinButton = memo(
                   />
                 )}
               </Box>
-              {!!cost ? (
+              {isIdentityExchange ? (
+                <Text
+                  color="white"
+                  fontSize={22}
+                  fontWeight="medium"
+                  fontFamily="mono"
+                  ml="6px"
+                >
+                  10 Gold
+                </Text>
+              ) : !!cost ? (
                 <Text
                   color="white"
                   fontSize={22}
@@ -90,11 +106,17 @@ export const MintHeroSkinButton = memo(
               position="relative"
             >
               <Button
-                disabled
                 frameType="default"
                 colorType={isSelected ? 'default' : 'secondary'}
-                text={t('generic.Unavailable')}
+                text={
+                  isIdentityExchange
+                    ? isSelected
+                      ? t('generic.Selected')
+                      : t('generic.Select')
+                    : t('generic.Unavailable')
+                }
                 onClick={toggleSkin}
+                disabled={!isIdentityExchange}
                 height="52px"
                 className={Sprinkles({ width: 'full' })}
               />

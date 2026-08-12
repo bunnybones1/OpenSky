@@ -3,6 +3,7 @@ import { ItemType } from '@opensky/proto'
 import { memo, useMemo } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { CardBalanceAndPriceInfo } from '~/shared/components/CardBalanceAndPriceInfo'
 import { selectGoldsState } from '~/shared/state/select-golds/select-golds-state'
 
@@ -25,6 +26,7 @@ export const SelectGoldBalance = memo(({ id }: MarketCardBalanceProps) => {
       mode={SwapType.SELL}
       id={id}
       grade={ItemType.SW_GOLD_CARDS}
+      isPriceDisabled={env.AUTH_MODE === 'google'}
       ButtonComponent={SelectGoldButton}
       isSelected={isSelected}
     />
