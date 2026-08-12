@@ -644,6 +644,22 @@ export const handleApiRequest = async (
         return json(request, env, { page: result.page, response })
       }
 
+      case 'GMListBanners': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        return json(request, env, {
+          banners: await content.listAllBanners()
+        })
+      }
+
+      case 'GMListOneTimeNotifications': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        return json(request, env, {
+          res: await content.listNotificationTemplates()
+        })
+      }
+
       case 'GMIsAccountBanned': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)

@@ -2,6 +2,7 @@ import type {
   Banner,
   ItemType,
   Notification,
+  NotificationOneTime,
   Sticker,
   StickerOwnershipResponse,
   TwitchFeaturedStreamer
@@ -32,6 +33,18 @@ interface NotificationRow {
   payload: string
 }
 
+interface NotificationTemplateRow {
+  id: number
+  name: string
+  data_json: string | null
+  filter_json: string | null
+  valid_from: string | null
+  expires_at: string | null
+  created_at: string
+  updated_at: string
+  updated_by_account_id: number | null
+}
+
 const parsePayload = (payload: string): Record<string, unknown> => {
   try {
     const value = JSON.parse(payload)
@@ -42,6 +55,27 @@ const parsePayload = (payload: string): Record<string, unknown> => {
     return {}
   }
 }
+
+const parseJson = (payload: string | null): unknown => {
+  if (payload === null) return undefined
+  try {
+    return JSON.parse(payload)
+  } catch {
+    return undefined
+  }
+}
+
+const bannerFromRow = (row: BannerRow): Banner => ({
+  id: row.id,
+  order: row.order_by,
+  type: row.banner_type,
+  ...(row.color ? { color: row.color } : {}),
+  msg: row.message,
+  dismissable: row.dismissable === 1,
+  ...(row.link ? { link: row.link } : {}),
+  ...(row.start_at ? { startAt: row.start_at } : {}),
+  ...(row.end_at ? { endAt: row.end_at } : {})
+})
 
 export class ContentRepository {
   constructor(private readonly database: D1Database) {}
@@ -59,17 +93,19 @@ export class ContentRepository {
       )
       .bind(now, now)
       .all<BannerRow>()
-    return rows.results.map(row => ({
-      id: row.id,
-      order: row.order_by,
-      type: row.banner_type,
-      ...(row.color ? { color: row.color } : {}),
-      msg: row.message,
-      dismissable: row.dismissable === 1,
-      ...(row.link ? { link: row.link } : {}),
-      ...(row.start_at ? { startAt: row.start_at } : {}),
-      ...(row.end_at ? { endAt: row.end_at } : {})
-    }))
+    return rows.results.map(bannerFromRow)
+  }
+
+  async listAllBanners(): Promise<Banner[]> {
+    const rows = await this.database
+      .prepare(
+        `SELECT id, order_by, banner_type, color, message, dismissable, link,
+                start_at, end_at
+         FROM content_banners
+         ORDER BY order_by DESC, id ASC`
+      )
+      .all<BannerRow>()
+    return rows.results.map(bannerFromRow)
   }
 
   async listFeaturedStreamers(): Promise<TwitchFeaturedStreamer[]> {
@@ -152,5 +188,37 @@ export class ContentRepository {
       .bind(new Date().toISOString(), userId, ...ids)
       .run()
     return true
+  }
+
+  async listNotificationTemplates(): Promise<NotificationOneTime[]> {
+    const rows = await this.database
+      .prepare(
+        `SELECT template.id, template.name, template.data_json,
+                template.filter_json, template.valid_from,
+                template.expires_at, template.created_at,
+                template.updated_at, game.id AS updated_by_account_id
+         FROM content_notification_templates template
+         LEFT JOIN game_accounts game
+           ON game.user_id = template.updated_by_user_id
+         ORDER BY template.id DESC`
+      )
+      .all<NotificationTemplateRow>()
+    return rows.results.map(row => {
+      const data = parseJson(row.data_json)
+      const filter = parseJson(row.filter_json)
+      return {
+        id: row.id,
+        name: row.name,
+        ...(data !== undefined ? { data } : {}),
+        ...(filter !== undefined ? { filter } : {}),
+        createdAt: row.created_at,
+        ...(row.valid_from ? { validFrom: row.valid_from } : {}),
+        ...(row.expires_at ? { expiresAt: row.expires_at } : {}),
+        updatedAt: row.updated_at,
+        ...(row.updated_by_account_id !== null
+          ? { updatedBy: row.updated_by_account_id }
+          : {})
+      } as NotificationOneTime
+    })
   }
 }

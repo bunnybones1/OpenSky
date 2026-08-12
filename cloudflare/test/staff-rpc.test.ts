@@ -41,6 +41,8 @@ beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM player_account_reports'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
+    env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
+    env.AUTH_DB.prepare('DELETE FROM content_banners'),
     env.AUTH_DB.prepare('DELETE FROM users')
   ])
   const now = new Date().toISOString()
@@ -484,5 +486,83 @@ describe('fail-closed Google identity staff authorization', () => {
         })
       ).status
     ).toBe(400)
+  })
+
+  it('lists all configured banners for staff while players see only active rows', async () => {
+    const now = Date.now()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO content_banners
+         (order_by, banner_type, message, dismissable, start_at, end_at)
+       VALUES (3, 'INFO', 'Expired', 1, ?, ?),
+              (2, 'WARNING', 'Active', 0, ?, ?),
+              (1, 'INFO', 'Scheduled', 1, ?, ?)`
+    )
+      .bind(
+        new Date(now - 2_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now + 1_000).toISOString(),
+        new Date(now + 1_000).toISOString(),
+        new Date(now + 2_000).toISOString()
+      )
+      .run()
+    expect((await rpcAs(PLAYER, 'GMListBanners')).status).toBe(403)
+    await grantAdmin()
+    expect(await (await rpcAs(ADMIN, 'GMListBanners')).json()).toMatchObject({
+      banners: [{ msg: 'Expired' }, { msg: 'Active' }, { msg: 'Scheduled' }]
+    })
+    expect(await (await rpcAs(PLAYER, 'GetBanners')).json()).toMatchObject({
+      banners: [{ msg: 'Active' }]
+    })
+  })
+
+  it('lists one-time notification templates newest first without player delivery rows', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO content_notification_templates
+         (name, data_json, filter_json, valid_from, expires_at,
+          created_at, updated_at, updated_by_user_id)
+       VALUES ('Older', '{"title":"Welcome"}',
+               '{"age":[{">":"0h"}]}', NULL, NULL, ?, ?, ?),
+              ('Newer', '["a","b"]', NULL, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        now,
+        now,
+        ADMIN,
+        '2026-08-13T00:00:00.000Z',
+        '2026-08-14T00:00:00.000Z',
+        now,
+        now,
+        ADMIN
+      )
+      .run()
+    expect((await rpcAs(PLAYER, 'GMListOneTimeNotifications')).status).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMListOneTimeNotifications')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      res: [
+        {
+          name: 'Newer',
+          data: ['a', 'b'],
+          validFrom: '2026-08-13T00:00:00.000Z',
+          expiresAt: '2026-08-14T00:00:00.000Z',
+          updatedBy: expect.any(Number)
+        },
+        {
+          name: 'Older',
+          data: { title: 'Welcome' },
+          filter: { age: [{ '>': '0h' }] }
+        }
+      ]
+    })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_notifications`
+        ).first<{ count: number }>()
+      )?.count
+    ).toBe(0)
   })
 })
