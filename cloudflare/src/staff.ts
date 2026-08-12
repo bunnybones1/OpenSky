@@ -273,6 +273,19 @@ export class StaffRepository {
     }
   }
 
+  async requireConquestConfigWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_conquest_config_permissions WHERE user_id = ?`
+      )
+      .bind(userId)
+      .first()
+    if (!permission) {
+      throw permissionDenied('Conquest config write access required')
+    }
+  }
+
   async setGameModeStatus(
     actorUserId: string,
     gameMode: GameMode,

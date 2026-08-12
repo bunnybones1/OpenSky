@@ -45,6 +45,7 @@ import {
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
+import { ConquestV2EconomyRepository } from './conquest-v2-economy'
 import { pendingConquestCards } from './conquest-delivery'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
@@ -247,6 +248,7 @@ export const handleApiRequest = async (
     : undefined
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
+  const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
@@ -1039,6 +1041,37 @@ export const handleApiRequest = async (
             accountName: row.account_name,
             progress: conquestTreasureProgress(row.current_points)
           }))
+        })
+      }
+
+      case 'GMSetConquestV2PoolConfig': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestConfigWrite(principal.userId)
+        const body = await requestBody<{
+          poolCeiling?: unknown
+          poolFloor?: unknown
+          topWeightUnitPrice?: unknown
+          bottomWeightUnitPrice?: unknown
+          weightPerSilverCard?: unknown
+        }>(request)
+        return json(request, env, {
+          ok: await conquestV2Economy.setConfig(principal.userId, body)
+        })
+      }
+
+      case 'GMGetConquestV2PoolConfig': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, { config: await conquestV2Economy.config() })
+      }
+
+      case 'GMGetConquestV2Summary': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        await requestBody<Record<string, never>>(request)
+        return json(request, env, {
+          summary: await conquestV2Economy.summary()
         })
       }
 
