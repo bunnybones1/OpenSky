@@ -19,6 +19,7 @@ import type {
   PaymentProvider,
   PaymentStatus,
   QuestPeriodicity,
+  SamsungGalaxyStorePaymentResponse,
   SearchDeckRanksRequest
 } from '@opensky/proto'
 import {
@@ -70,6 +71,10 @@ import { nextLeaderboardRewardTime } from './leaderboard-reward-worker'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
 import { listPaymentProviderProducts } from './payment-provider-products'
+import {
+  MobileStoreVerificationRepository,
+  type MobileStoreFetch
+} from './mobile-store-verification'
 import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
@@ -103,6 +108,7 @@ export interface AuthServices {
   skypassRewardFetch?: SkypassRewardFetch
   skypassRewardAllowedOrigins?: string
   socialFetch?: SocialInfoFetch
+  mobileStoreFetch?: MobileStoreFetch
 }
 
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
@@ -279,6 +285,11 @@ export const handleApiRequest = async (
     env.AUTH_DB,
     env,
     services.stripeFetch
+  )
+  const mobileStores = new MobileStoreVerificationRepository(
+    env.AUTH_DB,
+    env,
+    services.mobileStoreFetch
   )
 
   try {
@@ -2068,6 +2079,21 @@ export const handleApiRequest = async (
         return json(request, env, {
           products: listPaymentProviderProducts(body.provider, body.itemType)
         })
+      }
+
+      case 'VerifySamsungGalaxyStorePayment': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          providerResponse?: SamsungGalaxyStorePaymentResponse
+        }>(request)
+        if (!body.providerResponse) {
+          throw invalidArgument('providerResponse is required')
+        }
+        await mobileStores.verifySamsung(
+          principal.userId,
+          body.providerResponse
+        )
+        return json(request, env, { status: true })
       }
 
       case 'CreateStripePaymentIntent': {

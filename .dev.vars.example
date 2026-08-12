@@ -19,6 +19,11 @@ TWITCH_CLIENT_ID=replace-with-twitch-client-id
 TWITCH_CLIENT_SECRET=replace-with-twitch-client-secret
 TWITCH_GAME_ID=replace-with-cloud-weasel-game-id
 
+# Optional Samsung Galaxy Store verification. This non-secret value must equal
+# the Android package registered for Cloud Weasel. TEST receipts never grant
+# inventory; the Worker uses Samsung's fixed HTTPS production receipt API.
+SAMSUNG_IAP_PACKAGE_NAME=com.example.cloudweasel
+
 # Optional Stripe Checkout integration. Checkout remains disabled unless both
 # secrets, both redirect URLs, and the selected product's price ID are set.
 # Keep secret values in Wrangler secrets; price IDs and redirect URLs may be
