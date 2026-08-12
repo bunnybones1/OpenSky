@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:offchain && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:offchain && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -16,6 +16,8 @@
     "audit:fix": "pnpm dlx pnpm-audit-fix",
     "audit:cloudflare:rpcs": "node ./utils/audit-cloudflare-rpcs.mjs",
     "check:cloudflare:rpcs": "node --test ./utils/audit-cloudflare-rpcs.test.mjs && node ./utils/audit-cloudflare-rpcs.mjs --check",
+    "audit:cloudflare:worker-runners": "node ./utils/audit-cloudflare-worker-runners.mjs",
+    "check:cloudflare:worker-runners": "node --test ./utils/audit-cloudflare-worker-runners.test.mjs && node ./utils/audit-cloudflare-worker-runners.mjs",
     "generate:cloudflare:cards": "node ./utils/generate-cloudflare-card-library.mjs",
     "check:cloudflare:cards": "node --test ./utils/generate-cloudflare-card-library.test.mjs && node ./utils/generate-cloudflare-card-library.mjs --check",
     "check:cloudflare:conquest-gate": "node --test ./utils/check-cloudflare-conquest-gate.test.mjs && node ./utils/check-cloudflare-conquest-gate.mjs",
