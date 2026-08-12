@@ -13,6 +13,7 @@ export interface Env {
   STRIPE_CONQUEST_TICKET_PRICE_ID?: string
   STRIPE_SUCCESS_URL?: string
   STRIPE_CANCEL_URL?: string
+  SKYPASS_REWARDS_ALLOWED_ORIGINS?: string
   INTERNAL_AUTH_SECRET: string
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace

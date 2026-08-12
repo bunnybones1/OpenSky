@@ -73,6 +73,10 @@ import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { SkypassSupportRepository } from './skypass-support'
+import {
+  SkypassRewardUpdateRepository,
+  type SkypassRewardFetch
+} from './skypass-reward-update'
 import { StaffRepository } from './staff'
 import { StripeCheckoutRepository, type StripeFetch } from './stripe-checkout'
 import type { VerifiedProof } from './proof'
@@ -94,6 +98,8 @@ export interface AuthServices {
     sequenceApiHost: string
   ): Promise<VerifiedProof>
   stripeFetch?: StripeFetch
+  skypassRewardFetch?: SkypassRewardFetch
+  skypassRewardAllowedOrigins?: string
 }
 
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
@@ -1063,6 +1069,25 @@ export const handleApiRequest = async (
         if (!body.address) throw invalidArgument('address is required')
         return json(request, env, {
           has: await playerRpc.hasSkypassPremium(body.address, seasonFromDate())
+        })
+      }
+
+      case 'GMUpdateSkypassRewards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireSkypassRewardWrite(principal.userId)
+        const body = await requestBody<{ season?: number; url?: string }>(request)
+        const skypassRewardUpdates = new SkypassRewardUpdateRepository(
+          env.AUTH_DB,
+          services.skypassRewardFetch,
+          services.skypassRewardAllowedOrigins ??
+            env.SKYPASS_REWARDS_ALLOWED_ORIGINS
+        )
+        return json(request, env, {
+          rewards: await skypassRewardUpdates.update(
+            principal.userId,
+            body.season ?? 0,
+            body.url ?? ''
+          )
         })
       }
 
