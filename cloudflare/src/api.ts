@@ -16,6 +16,7 @@ import type {
   ItemType,
   NotificationOneTime,
   Page,
+  PaymentProvider,
   QuestPeriodicity,
   SearchDeckRanksRequest
 } from '@opensky/proto'
@@ -60,6 +61,7 @@ import {
 } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
+import { listPaymentProviderProducts } from './payment-provider-products'
 import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
@@ -1868,6 +1870,18 @@ export const handleApiRequest = async (
 
       case 'GetNextSeasonTime': {
         return json(request, env, { res: nextSeasonStart().toISOString() })
+      }
+
+      case 'ListPaymentProviderProducts': {
+        await identityPrincipal(request, env)
+        const body = await requestBody<{
+          provider?: PaymentProvider
+          itemType?: ItemType
+        }>(request)
+        if (!body.provider) throw invalidArgument('provider is required')
+        return json(request, env, {
+          products: listPaymentProviderProducts(body.provider, body.itemType)
+        })
       }
 
       case 'ListSkypassRewards': {
