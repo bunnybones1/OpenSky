@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`5a690489-47ec-4d67-b014-f4fecd949263`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
-- Match service Worker: `cloud-weasel-match-service` (`4ce3627e-69fb-48b2-9169-5f203ede55e9`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`a6f9470b-2c72-4428-8c5a-d11bd9bea3d2`)
+- Match service Worker: `cloud-weasel-match-service` (`04dd3921-94a6-4016-bd5a-0608d3025545`)
 - Game Worker: `cloud-weasel-game-server` (`3535d130-8e3d-47f4-bbe7-d730eeacb389`)
 - Deployed source includes `9fb4e7c` for the API and `c80d59b` for the webapp,
-  `013a246` for match service, `3a964c3` for matchmaker,
+  `cae1ea6` for match service and matchmaker,
   and `fbe7080` for game
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0044`
@@ -135,6 +135,10 @@
   locale/settings stay independent of Google profile data; rank state,
   cosmetics, card rarities, and private spectate codes are resolved by the
   service instead of trusted from the browser
+- Source-faithful Conquest matchmaking preconditions: active-run progress is
+  hydrated into the queue, mode and locked-hero deck class are validated at
+  admission and re-read at final dispatch, the game receives both Conquest
+  snapshots, and terminal 4xx rejections do not leave retrying proposals
 - Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
   match rewards, private/public spectators, and capability-protected replays
 
@@ -151,7 +155,7 @@ settlement and delayed delivery against that pool.
 - API Worker: 22 files, 145 tests
 - Match service: 11 Worker tests
 - Game Worker: 24 unit and 46 Worker tests
-- Matchmaker: 26 unit and 12 Worker tests
+- Matchmaker: 26 unit and 16 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
 - Card-library generator, source-RPC inventory, and production Conquest gates
@@ -292,6 +296,11 @@ settlement and delayed delivery against that pool.
   passed. Completed practice matches now advance the source 0-3 warm-up counter
   through an idempotent receipt, including the source's practice-bot win and
   completed-draw edge cases
+- Match service version `04dd3921-94a6-4016-bd5a-0608d3025545` and matchmaker
+  version `a6f9470b-2c72-4428-8c5a-d11bd9bea3d2` contain source `cae1ea6`.
+  Their 11 match-service, 26 unit, and 16 Worker tests passed before deployment.
+  Live matchmaker protocol-v3 health, public API `Ping`, and the API-to-match-
+  service mode-status binding passed; both Conquest queues remained disabled.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

@@ -206,6 +206,12 @@ and progress are not migrated.
   profile fields, derives playable card rarity and hero ability server-side,
   includes current rank/cosmetic state, and shares the same persistent private
   spectate-code rotation contract as the public API.
+  Conquest queue admission now hydrates the active run and its win/loss/draw
+  progress, rejects a missing run or deck class that differs from the locked
+  hero, and passes the authoritative Conquest snapshot to the game Worker.
+  Final dispatch re-reads those preconditions (and ranked eligibility) from D1;
+  a stale proposal is terminated with a typed client error instead of being
+  retried indefinitely.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active
