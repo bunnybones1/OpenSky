@@ -102,6 +102,29 @@ class IdentityClient {
     )
   }
 
+  public startAccountDeletion = async (
+    accountName: string,
+    returnTo: string
+  ): Promise<void> => {
+    const response = await fetch('/api/auth/account-deletion/start', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ accountName, returnTo })
+    })
+    const body = (await response.json()) as {
+      authorizationUrl?: string
+      message?: string
+    }
+    if (!response.ok || !body.authorizationUrl) {
+      throw new Error(body.message || 'Unable to start account deletion.')
+    }
+    window.location.assign(body.authorizationUrl)
+  }
+
   public bootstrapPlayer = async (): Promise<{
     player: PlayerState
     created: boolean

@@ -389,6 +389,7 @@
   "deleteAccount": {
     "areYouSure": "Are you sure? All your progress will be lost.",
     "enterYourUsername": "Enter your username to confirm",
+    "googleConfirmation": "Google will ask you to confirm your identity. Account access stops immediately; personal profile data is anonymized after 30 days.",
     "onceDeleted": "Once you delete your account, there is no going back. Please be certain.",
     "walletAccess": "(You will still have wallet access)"
   },

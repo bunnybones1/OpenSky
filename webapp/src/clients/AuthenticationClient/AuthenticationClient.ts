@@ -14,6 +14,7 @@ import { getOrCreateSubkey } from '@opensky/shared/subkey'
 import { sequence } from '0xsequence'
 import { ethers } from 'ethers'
 
+import { identityClient } from '~/clients/IdentityClient/IdentityClient'
 import env from '~/env'
 import { APIClient, MobileClient } from '~/shared/clients'
 import { TAG_ART } from '~/shared/constants/tag-art'
@@ -526,6 +527,15 @@ export class _AuthenticationClient_DONT_USE_DIRECTLY {
 
   public deleteAccount = async (onDelete?: () => void) => {
     try {
+      if (env.AUTH_MODE === 'google') {
+        const account = getAuthedAccount()
+        if (!account) throw new Error('Unable to find the signed-in account.')
+        await identityClient.startAccountDeletion(
+          account.name,
+          `${window.location.pathname}${window.location.search}${window.location.hash}`
+        )
+        return
+      }
       if (!this.wallet) return
 
       if (this.wallet.isBurnerWallet) {
