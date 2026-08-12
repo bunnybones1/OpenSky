@@ -1201,6 +1201,75 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
   })
 
+  it('keeps the joined player until a replacement completes join_server', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+
+    const pendingReplacement = await connect(PRINCIPAL_1)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(first.readyState).toBe(WebSocket.OPEN)
+    const timeSync = nextMessage(first)
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 777 }))
+    expect(await timeSync).toMatchObject({
+      type: 'timesync',
+      clientTime: 777
+    })
+
+    pendingReplacement.close(1000, 'replacement abandoned before join')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const beforeHandoff = await stub().fetch(
+      'https://match/internal/status',
+      { headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' } }
+    )
+    const beforeHandoffBody = await beforeHandoff.json<{
+      players: Record<
+        string,
+        { connected: boolean; joined: boolean; abandonAtMs?: number }
+      >
+    }>()
+    expect(beforeHandoffBody.players[PRINCIPAL_1]).toMatchObject({
+      connected: true,
+      joined: true
+    })
+    expect(beforeHandoffBody.players[PRINCIPAL_1]).not.toHaveProperty(
+      'abandonAtMs'
+    )
+
+    const replacement = await connect(PRINCIPAL_1)
+    const displaced = nextMessage(first)
+    const replacementJoined = collectMessages(replacement, 2)
+    join(replacement, 0x31)
+    expect(await displaced).toMatchObject({
+      type: 'error',
+      message: 'connected in another location'
+    })
+    expect(await replacementJoined).toEqual([
+      expect.objectContaining({ type: 'reconnect' }),
+      expect.objectContaining({ type: 'opponent_loading_progress' })
+    ])
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const afterHandoff = await stub().fetch(
+      'https://match/internal/status',
+      { headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' } }
+    )
+    const afterHandoffBody = await afterHandoff.json<{
+      players: Record<
+        string,
+        { connected: boolean; joined: boolean; abandonAtMs?: number }
+      >
+    }>()
+    expect(afterHandoffBody.players[PRINCIPAL_1]).toMatchObject({
+      connected: true,
+      joined: true
+    })
+    expect(afterHandoffBody.players[PRINCIPAL_1]).not.toHaveProperty(
+      'abandonAtMs'
+    )
+  })
+
   it('rejects player stickers outside the accepted match equipment', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)

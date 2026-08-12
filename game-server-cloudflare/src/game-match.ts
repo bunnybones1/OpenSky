@@ -731,14 +731,6 @@ export class GameMatch implements DurableObject {
     }
     server.serializeAttachment(attachment)
     this.state.acceptWebSocket(server, [principal])
-    for (const previous of previousSockets) {
-      this.safeSend(previous, {
-        type: 'error',
-        level: 'user',
-        message: 'connected in another location'
-      })
-      previous.close(4001, 'Duplicate connection')
-    }
     return new Response(null, { status: 101, webSocket: client })
   }
 
@@ -811,6 +803,7 @@ export class GameMatch implements DurableObject {
     if (metadata.ended) {
       attachment.joined = true
       socket.serializeAttachment(attachment)
+      this.displaceOtherSockets(socket, attachment.principal)
       const index = this.playerIndex(metadata.match, attachment.principal)
       this.safeSend(
         socket,
@@ -845,6 +838,7 @@ export class GameMatch implements DurableObject {
 
     attachment.joined = true
     socket.serializeAttachment(attachment)
+    this.displaceOtherSockets(socket, attachment.principal)
     const players = await this.players()
     const player = players[attachment.principal]
     player.connected = true
@@ -945,6 +939,7 @@ export class GameMatch implements DurableObject {
     attachment.spectatedPlayer = targetIndex as Player
     attachment.knowledge = knowledge as 0 | 1 | 2 | 3
     socket.serializeAttachment(attachment)
+    this.displaceOtherSockets(socket, attachment.principal)
 
     const runtime = await this.ensureRuntime()
     const timers = await this.timers()
@@ -1892,6 +1887,18 @@ export class GameMatch implements DurableObject {
   private requirePlayer(role: 'player' | 'spectator') {
     if (role !== 'player')
       throw new GameProtocolError('spectator cannot send player actions')
+  }
+
+  private displaceOtherSockets(current: WebSocket, principal: string) {
+    for (const previous of this.state.getWebSockets(principal)) {
+      if (previous === current) continue
+      this.safeSend(previous, {
+        type: 'error',
+        level: 'user',
+        message: 'connected in another location'
+      })
+      previous.close(4001, 'Duplicate connection')
+    }
   }
 
   private broadcast(message: GameServerMessage) {
