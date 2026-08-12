@@ -201,10 +201,18 @@ and progress are not migrated.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
-- The authoritative game Worker now records Conquest win/loss/draw results by
+- The authoritative game Worker records Conquest win/loss/draw results by
   durable match ID and performs the source first-loss/third-win transition with
-  a per-proposal retry receipt. Zero-win losses complete immediately; earned
-  card bundles remain reward-pending.
+  a per-proposal retry receipt. Zero-win losses complete immediately. Earned
+  runs draw the exact source bundle from an active versioned pool, grant Silver
+  immediately, persist source-shaped feed receipts, and complete through an
+  immutable settlement receipt.
+- Gold remains source-compatible delayed inventory: a D1 delivery record is
+  visible through `GetPendingCards` and card-ownership counters for 24 hours,
+  then the API Worker's minute scheduler atomically grants it to the Google
+  identity inventory. Receipt-keyed claims prevent concurrent grants, failures
+  roll back the batch, and five attempts dead-letter malformed or repeatedly
+  failing deliveries.
 - Conquest matches also award the source event-2 treasure points exactly once:
   four base points, owned Silver/Gold deck-card points, the rounded-up hero-skin
   bonus, the source abandon eligibility rule, and the 13,750-point cap.
@@ -230,17 +238,20 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Conquest random card selection/settlement, seasonal invite-sticker redemption,
-  marketplace writes, and administrative APIs still require ports. Conquest
-  matchmaking remains disabled until authoritative completion can settle the
-  remaining card rewards transactionally.
+- Seasonal invite-sticker redemption, marketplace writes, and administrative
+  APIs still require ports. Conquest settlement is implemented, but production
+  has no active reward-pool rows; matchmaking remains disabled until an
+  explicitly approved pool and a pre-enable delivery drill pass.
 - Existing Go/Postgres account data is not automatically migrated into D1.
 
 ## Suggested next slice
 
-Finish Conquest card selection and settlement before enabling its queues.
-The source-derived transaction and rollout gates are captured in
-[`CONQUEST_SETTLEMENT_PORT.md`](./CONQUEST_SETTLEMENT_PORT.md).
+Approve and load a versioned Conquest reward pool, then run the source-derived
+enablement drill in
+[`CONQUEST_SETTLEMENT_PORT.md`](./CONQUEST_SETTLEMENT_PORT.md) before enabling
+either queue. Selection, settlement, pending-card reads, and delayed delivery
+are deployed, so this is now a product-configuration and rollout gate rather
+than an unported code path.
 WalletConnect can then be added independently in account settings: connect a
 wallet, sign a session-owned nonce, persist the verified address, and merge
 wallet contents at read boundaries without granting the wallet authority over

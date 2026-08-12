@@ -55,8 +55,8 @@ not only handler translations:
 
 ## Recommended order
 
-1. Finish deterministic Conquest card reward selection and settlement; this is
-   the remaining blocker before its matchmaking modes can be enabled.
+1. Approve a versioned production Conquest pool and run the pre-enable
+   settlement/delayed-delivery drill; the code path is implemented and deployed.
 2. Finish public content discovery (deck-rank search and the reward-schedule
    read). Card/deck search and validation, the card library, and both lookup
    RPCs now follow the source contracts and generated card migration.

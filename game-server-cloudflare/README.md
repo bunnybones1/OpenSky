@@ -28,7 +28,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
   capability-protected same-origin archive URLs; and
 - source-compatible, release-scoped ranked/Conquest abandon counts and
   cooldowns bridged through D1 to the matchmaker, with idempotent completion
-  markers.
+  markers; and
+- retry-safe Conquest progress, points, exact source reward bundles, versioned
+  card selection, immediate Silver settlement, and persisted 24-hour Gold
+  delivery tasks consumed by the API Worker's scheduler.
 
 The gateway, not the browser, is the identity authority. It validates the
 Google session, maps the user to the stable 20-byte game principal, then adds
@@ -37,10 +40,10 @@ fields remain on source-compatible client messages but are not trusted.
 
 ## Deliberately pending
 
-Conquest state/rewards and anonymous public spectator entry remain pending.
-Wallet-backed item merging is intentionally an API/account integration rather
-than game-server authentication. These gaps must be closed before the
-Cloudflare service replaces every source production mode.
+An approved production Conquest reward pool and anonymous public spectator
+entry remain pending. Wallet-backed item merging is intentionally an
+API/account integration rather than game-server authentication. Conquest modes
+remain disabled until a bounded pool and end-to-end delivery drill are approved.
 
 ## Configuration
 

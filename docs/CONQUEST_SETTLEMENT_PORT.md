@@ -1,9 +1,8 @@
 # Conquest settlement port contract
 
-This is the remaining gate before Cloud Weasel may enable Conquest matchmaking.
-It records the source behavior in `api/lib/conquest/state_manager.go` and the
-Cloudflare safety boundary so reward pools are not inferred from UI copy or old
-assets.
+This records the implemented source behavior in
+`api/lib/conquest/state_manager.go` and the remaining production enablement
+gate. Reward pools are never inferred from UI copy or old assets.
 
 ## Source behavior
 
@@ -25,7 +24,7 @@ feed event for Silvers and a `DELAYED_REWARD` event for Gold, enqueues one exit
 task containing sorted Silver token IDs and Gold token IDs, and completes the
 run only after that task settles.
 
-## Already ported
+## Implemented
 
 - `applyConquestProgress` records both players and its per-proposal receipt in
   one D1 batch.
@@ -34,29 +33,41 @@ run only after that task settles.
 - Event-2 treasure points and their retry receipt are independent of card
   settlement.
 - Production Conquest modes are false in both the match service and API status.
+- Versioned Silver/Gold pool storage fails closed for missing, expired, or
+  malformed pools.
+- The zero-through-three-win source bundle, independent Silver draws, sorted
+  token IDs, immutable settlement receipt, inventory grants, feed receipts,
+  and terminal status update share an atomic D1 batch.
+- Silver is granted immediately. Gold is exposed as pending for 24 hours and a
+  minute Worker schedule delivers it atomically to identity inventory.
+- Concurrent delivery claims are receipt-keyed; retries are idempotent;
+  malformed or repeatedly failing deliveries dead-letter after five attempts.
 
-## Missing authoritative inputs
+## Remaining authoritative input
 
-Cloud Weasel has no approved equivalents for:
+Cloud Weasel still has no approved production values for:
 
-- `rewards_excluded_card_sets`;
-- the current weekly Gold token-ID pool and its validity window;
-- the delayed-Gold delivery policy now that wallet ownership is optional;
-- the operational retry/dead-letter policy for failed settlement.
+- the Silver-eligible card IDs equivalent to the source's current-season index
+  after `rewards_excluded_card_sets` filtering; and
+- the weekly Gold card IDs and validity window.
 
 These are product configuration, not derivable source constants. Until they are
 provided, selecting from all 856 active cards or advertising an arbitrary Gold
 pool would be incompatible behavior.
 
+The delayed-Gold policy is now the source default of 24 hours, with five
+attempts before dead-lettering. Rewards belong to Google identity inventory;
+WalletConnect remains optional.
+
 ## Cloudflare transaction boundary
 
-Add a settlement receipt keyed by the Conquest run ID, containing the source
+The settlement receipt is keyed by the Conquest run ID and contains the source
 bundle counts, selected base card IDs, configured pool version, and timestamps.
 The settlement operation must atomically:
 
 1. require a terminal `REWARDS_PENDING` run with no receipt;
 2. validate that every selected ID belongs to the versioned eligible pool;
-3. insert/increment the player's Silver and Gold inventory rows;
+3. insert/increment Silver inventory and create a pending Gold delivery;
 4. append source-shaped immediate/delayed feed receipts;
 5. insert the immutable settlement receipt; and
 6. move the run to `COMPLETED`.
@@ -65,7 +76,7 @@ Retries must return the stored receipt without drawing again. A pool-version
 change must not alter a receipt already chosen. No HTTP request or Durable
 Object alarm may partially grant inventory before the receipt is durable.
 
-## Required tests and rollout gates
+## Verified tests and remaining rollout gates
 
 - Differential bundle counts for 0, 1, 2, and 3 wins.
 - Independent Silver draws, sorted settlement token IDs, and weekly-Gold-only
@@ -77,6 +88,12 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Production read-only probes show no pre-enable Conquest rows or grants.
 - Conquest mode flags remain false until all checks pass against the deployed
   Worker version and an explicit pool configuration.
+
+The implementation and tests above are deployed. Before enabling either mode,
+operations must create and review a bounded active pool, exercise one isolated
+three-win settlement through delayed delivery, verify inventory/feed/receipt
+agreement, and re-run the production mode gate. Production currently has zero
+active pool rows and zero Conquest settlement/delivery rows.
 
 `pnpm deploy:cloudflare:match-service` runs the gate before Wrangler. The gate
 reads the actual production match-service config and fails if either Conquest

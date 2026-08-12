@@ -3,14 +3,15 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`a977155e-70ce-4744-b6e6-61acfce431e1`)
+- API/web Worker: `opensky-webapp` (`ce8ba934-3858-4764-ae3c-bae473985c7d`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
-- Match service Worker: `cloud-weasel-match-service` (`dc2b0617-e805-4564-b6b7-dd582021a114`)
-- Game Worker: `cloud-weasel-game-server` (`dc82be9f-5cd1-48f5-bb46-ab346a1f1b7e`)
-- Deployed component commits: web/API `4b5c550`; game `c7a7f00`; matchmaker
-  `c9e2201`; match service `dbd4ea2`
-- Deployed: 2026-08-11
-- Applied D1 migrations: `0001` through `0026`
+- Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
+- Game Worker: `cloud-weasel-game-server` (`cb372ca3-de89-4135-a1d2-f3fc40a999ed`)
+- Deployed source includes `6f00087` for web/API and game, plus the match-service
+  inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
+- Deployed: 2026-08-11 PDT
+- Applied D1 migrations: `0001` through `0028`
+- Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
 
@@ -32,6 +33,11 @@
 - Durable Conquest entry, status, statistics, points, and source treasure thresholds
 - Retry-safe authoritative Conquest win/loss/draw and terminal-state progression
 - Source Conquest treasure points from matches, owned deck cards, and hero skins
+- Versioned Conquest card pools, exact zero-through-three-win source bundles,
+  independent Silver draws, and immutable retry-safe settlement receipts
+- Immediate identity-inventory Silver grants plus source-compatible 24-hour
+  delayed Gold delivery, pending-card reads/counters, feed receipts, and
+  five-attempt dead-letter safety
 - Write-once identity referrals, top-five friend points, inviter gifts, and the
   original Invite Friends screens
 - Profile reward/rank feed and competitive match history
@@ -47,21 +53,26 @@
 
 WalletConnect remains an optional future integration. Captcha is deployed but
 remains disabled until Cloud Weasel hCaptcha credentials are provisioned.
-Conquest card reward selection and settlement, seasonal invite-sticker
-redemption, marketplace writes, legacy data migration, and administrative RPCs
-remain pending. Conquest queues stay disabled until the remaining card rewards
-are transactionally connected to authoritative completion.
+Seasonal invite-sticker redemption, marketplace writes, legacy data migration,
+and administrative RPCs remain pending. Conquest queues stay disabled until an
+explicit production reward pool is approved and the enablement drill validates
+settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 16 files, 89 tests
-- Match service: 8 tests
-- Game Worker: 24 unit and 24 Worker tests
+- API Worker: 17 files, 95 tests
+- Match service: 9 Worker tests
+- Game Worker: 24 unit and 36 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
-- API, match service, game Worker, matchmaker, and original webapp type-checks
+- API, match service, and game Worker type-checks; original webapp/game
+  production build
 - Card-library generator, source-RPC inventory, and production Conquest gates
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
-- Remote D1 Conquest tables: zero rows and `changed_db: false` after read-only
-  production verification
+- Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
+  reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
+  the read-only verification reported `changed_db: false`
+- The full legacy monorepo typecheck still has unrelated baseline failures in
+  old ES-target, sheet-editor, and chain-contract packages; the affected
+  Cloudflare packages are clean.

@@ -11,8 +11,9 @@ endpoint verifies the identity-to-game-principal binding and resolves current
 rank/MMR, card rarities, recent-match state, enabled modes, and active-match
 reconnection data from D1. Ranked queues additionally enforce the source's
 200-total-XP requirement on the server; the original UI lock is not treated as
-an authorization boundary. Conquest modes are deliberately disabled until the
-Conquest state/reward port is complete.
+an authorization boundary. Conquest settlement and delayed delivery are
+ported, but its modes remain deliberately disabled until an approved production
+reward pool passes the end-to-end enablement drill.
 
 The endpoint is not public. `cloud-weasel-matchmaker` calls
 `POST /internal/matches` over a Cloudflare service binding. Both Workers must
