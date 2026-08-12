@@ -114,6 +114,7 @@ interface MatchRow {
   created_at: string
   updated_at: string
   ended_at: string | null
+  reviewed?: number
 }
 
 interface MatchPayloadParticipant {
@@ -678,19 +679,16 @@ export class CompetitiveRepository {
     if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
       throw invalidArgument('match duration range is invalid')
     }
-    if (req.reviewed === true) {
-      return {
-        page: { pageSize: pageSize(page), hasBefore: false, hasAfter: false },
-        res: []
-      }
-    }
-
     const result = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
-                player2_user_id, match_payload_json, winner_player,
-                result_json, created_at, updated_at, ended_at
-         FROM multiplayer_matches`
+        `SELECT matches.id, matches.proposal_id, matches.replay_id,
+                matches.mode, matches.status, matches.player1_user_id,
+                matches.player2_user_id, matches.match_payload_json,
+                matches.winner_player, matches.result_json,
+                matches.created_at, matches.updated_at, matches.ended_at,
+                COALESCE(review.reviewed, 0) AS reviewed
+         FROM multiplayer_matches matches
+         LEFT JOIN match_reviews review ON review.match_id = matches.id`
       )
       .all<MatchRow>()
     const mapped = result.results
@@ -728,7 +726,9 @@ export class CompetitiveRepository {
           (minimum === undefined ||
             (value.duration !== undefined && value.duration >= minimum)) &&
           (maximum === undefined ||
-            (value.duration !== undefined && value.duration <= maximum))
+            (value.duration !== undefined && value.duration <= maximum)) &&
+          (req.reviewed === undefined ||
+            (value.row.reviewed === 1) === req.reviewed)
       )
 
     const sort = page?.sort?.length
@@ -778,10 +778,50 @@ export class CompetitiveRepository {
       },
       res: slice.map(value => ({
         match: value.match,
-        reviewed: false,
+        reviewed: value.row.reviewed === 1,
         ...(value.duration !== undefined ? { duration: value.duration } : {})
       }))
     }
+  }
+
+  async setReviewed(
+    actorUserId: string,
+    matchId: number,
+    reviewed: boolean
+  ): Promise<boolean> {
+    if (!Number.isSafeInteger(matchId) || matchId <= 0) {
+      throw invalidArgument('matchId is invalid')
+    }
+    if (typeof reviewed !== 'boolean') {
+      throw invalidArgument('reviewed is invalid')
+    }
+    const now = new Date().toISOString()
+    const desired = reviewed ? 1 : 0
+    const results = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO match_review_audit
+             (match_id, previous_reviewed, reviewed, actor_user_id, created_at)
+           SELECT matches.id, COALESCE(review.reviewed, 0), ?, ?, ?
+           FROM multiplayer_matches matches
+           LEFT JOIN match_reviews review ON review.match_id = matches.id
+           WHERE matches.id = ? AND COALESCE(review.reviewed, 0) <> ?`
+        )
+        .bind(desired, actorUserId, now, matchId, desired),
+      this.database
+        .prepare(
+          `INSERT INTO match_reviews
+             (match_id, reviewed, reviewer_user_id, created_at, updated_at)
+           SELECT id, ?, ?, ?, ? FROM multiplayer_matches WHERE id = ?
+           ON CONFLICT(match_id) DO UPDATE SET
+             reviewed = excluded.reviewed,
+             reviewer_user_id = excluded.reviewer_user_id,
+             updated_at = excluded.updated_at`
+        )
+        .bind(desired, actorUserId, now, now, matchId)
+    ])
+    if (results[1].meta.changes !== 1) throw notFound('match not found')
+    return true
   }
 
   async getMatch(userId: string, matchId: number): Promise<Match> {

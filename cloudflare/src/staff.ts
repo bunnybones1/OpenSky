@@ -165,6 +165,17 @@ export class StaffRepository {
     if (!permission) throw permissionDenied('content write access required')
   }
 
+  async requireModerationWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(`SELECT 1 FROM staff_moderation_permissions WHERE user_id = ?`)
+      .bind(userId)
+      .first()
+    if (!permission) {
+      throw permissionDenied('moderation write access required')
+    }
+  }
+
   async stats(): Promise<GMStatsResponse> {
     const rows = await this.database
       .prepare(

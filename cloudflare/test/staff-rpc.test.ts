@@ -40,6 +40,8 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM match_reviews'),
+    env.AUTH_DB.prepare('DELETE FROM staff_moderation_permissions'),
     env.AUTH_DB.prepare('DELETE FROM player_account_reports'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
@@ -76,6 +78,16 @@ const grantContentWrite = async () => {
     `INSERT INTO staff_permissions
        (user_id, permission, granted_by_user_id, reason, created_at)
      VALUES (?, 'CONTENT_WRITE', NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantModerationWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_moderation_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
   )
     .bind(ADMIN, new Date().toISOString())
     .run()
@@ -464,6 +476,80 @@ describe('fail-closed Google identity staff authorization', () => {
         })
       ).status
     ).toBe(400)
+  })
+
+  it('requires moderation-write permission and audits match review transitions', async () => {
+    await seedReport()
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetReviewed', {
+          matchId: 901,
+          reviewed: true
+        })
+      ).status
+    ).toBe(403)
+    await grantModerationWrite()
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMSetReviewed', {
+          matchId: 901,
+          reviewed: true
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListMatches', { req: { reviewed: true } })
+      ).json()
+    ).toMatchObject({ res: [{ reviewed: true, match: { id: 901 } }] })
+    // Idempotent retries update the reviewer timestamp but do not fabricate a
+    // second state-transition audit row.
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMSetReviewed', {
+          matchId: 901,
+          reviewed: true
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMSetReviewed', {
+          matchId: 901,
+          reviewed: false
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT previous_reviewed, reviewed, actor_user_id
+         FROM match_review_audit WHERE match_id = 901 ORDER BY id ASC`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { previous_reviewed: 0, reviewed: 1, actor_user_id: ADMIN },
+        { previous_reviewed: 1, reviewed: 0, actor_user_id: ADMIN }
+      ]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListMatches', { req: { reviewed: true } })
+      ).json()
+    ).toMatchObject({ res: [] })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetReviewed', {
+          matchId: 999999,
+          reviewed: true
+        })
+      ).status
+    ).toBe(404)
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM match_review_audit WHERE match_id = 901`
+      ).run()
+    ).rejects.toThrow('match review audit rows are immutable')
   })
 
   it('lists pending Gold while counting all recent delivered card quantities', async () => {

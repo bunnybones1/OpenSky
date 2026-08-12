@@ -624,6 +624,25 @@ export const handleApiRequest = async (
         )
       }
 
+      case 'GMSetReviewed': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireModerationWrite(principal.userId)
+        const body = await requestBody<{
+          matchId?: number
+          reviewed?: boolean
+        }>(request)
+        if (body.matchId === undefined || body.reviewed === undefined) {
+          throw invalidArgument('matchId and reviewed are required')
+        }
+        return json(request, env, {
+          ok: await competitive.setReviewed(
+            principal.userId,
+            body.matchId,
+            body.reviewed
+          )
+        })
+      }
+
       case 'GMListPendingCards': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
