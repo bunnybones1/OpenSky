@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`58127ee0-0c68-4dd2-9a67-f8dde44f9b0c`)
+- API/web Worker: `opensky-webapp` (`e0d19426-c3f3-4d59-9e23-58c54de6425a`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -30,7 +30,8 @@
   `1b141eb` for Google Play verification, and `e713f20` for explicit legacy
   mobile/early-access tombstones, and `0442374` for Apple App Store Server API
   verification, plus `0fc801e`/`0895054` for the off-chain Gold-to-Hero-skin
-  exchange and its preserved original-product interface
+  exchange and its preserved original-product interface, and `a8b8d89` for
+  Google-mode off-chain reward presentation and regression guards
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0063`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
@@ -1071,6 +1072,19 @@ settlement and delayed delivery against that pool.
   errors. The anonymous endpoint probe returned `401`; migration `0063` exists
   once, Hero exchanges remained zero, inventory remained 31 rows, and both
   read-only D1 checks reported zero writes and `changed_db: false`.
+- API/web Worker version `e0d19426-c3f3-4d59-9e23-58c54de6425a` contains
+  off-chain reward-presentation milestone `a8b8d89`. Google-auth Conquest,
+  SkyPass, referral, profile-card, and reward-feed surfaces now describe
+  identity inventory, collectibles, claims, and delayed delivery rather than
+  minting, tradability, or blockchain-wallet ownership. The original wording
+  and visual badges remain conditional legacy-wallet behavior. The off-chain
+  release gate now inventories those Google reward surfaces and rejects either
+  a missing auth guard or legacy ownership language. Nine gate tests,
+  touched-file lint, webapp TypeScript, every release/RPC/transaction audit,
+  and the complete 472-file browser/game build passed. Signed-in production
+  checks found no visible mint/tradable language or console errors on Conquest
+  and SkyPass. The final D1 query reported 31 inventory rows, zero Hero
+  exchanges, zero writes, and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
