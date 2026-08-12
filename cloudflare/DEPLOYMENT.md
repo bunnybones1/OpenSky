@@ -913,6 +913,23 @@ settlement and delayed delivery against that pool.
   referral awards, and 31 existing inventory rows; migration `0058` existed
   once with all four guards, and the read-only verification reported
   `changed_db: false`.
+- API/web Worker version `15c51a4b-c27d-49cf-91c4-6f31760b8088` contains source
+  `30ca55a`. Migration `0059_skypass_offchain_delivery.sql` completes the
+  source SkyPass reward applier for Conquest tickets, stickers, sticker points,
+  Silver cards, card backs, and titles, alongside the already-ported base cards
+  and heroes. Source earning, amounts, content IDs, response payloads, and feed
+  evidence remain compatible, but the three original mint-queue families now
+  write identity-owned D1 inventory. A unique per-request delivery key makes
+  every inventory statement conditional on the winning immutable claim receipt,
+  so duplicate, retried, and simultaneous requests grant each reward once. The
+  rollout passed all 238 API tests, the focused 33-test player RPC suite,
+  Cloudflare TypeScript checking, release and off-chain gates, and production
+  deployment. Live homepage, canonical Google provider discovery, and `Ping`
+  returned `200`; the staff SkyPass definition RPC returned `401` anonymously.
+  Production had zero existing claims before migration and retained zero claims
+  and 31 inventory rows after the read-only probes. Migration `0059`, its unique
+  delivery-key index, column, and two receipt guards each exist once, and the
+  final D1 verification reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
