@@ -23,6 +23,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   reviewed flow, not revive the source migration RPCs.
 - Mobile-store receipts, if Cloud Weasel ships them, must fulfill the same
   off-chain inventory contract as Stripe. Store verification never mints.
+- Source-only operator grants follow the same rule. The legacy `grant-cards`
+  command's contract mint is replaced by the capability-gated player-support
+  grant into `player_items`; it never becomes a Cloudflare contract call.
 
 ## Required grant invariants
 
@@ -78,6 +81,14 @@ have an explicit disposition and reviewed callsite count. A new callsite, a
 newly reachable legacy product surface, or an identity exchange that can fall
 through to the wallet branch fails the production build.
 
+The source chain-effect audit is broader than the transaction-queue and browser
+audits. It discovers executable Go calls that mint, send a transaction, compose
+a token transfer, or compose an on-chain payment. Every current callsite has an
+exact count and an off-chain or zero-user-retirement disposition. Contract ABI
+wrappers are excluded because they do not execute a product action themselves;
+any new use of one from product code is discovered and fails the build until it
+has an explicit Cloud Weasel replacement.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
@@ -89,7 +100,9 @@ implementation remains excluded.
 
 ## Source RPC disposition
 
-The four `PrepareOnChain*`/burner-transfer RPCs are superseded by this policy,
+`PrepareOnChainTransaction`, `PrepareOnChainInCurrencyTransaction`,
+`PrepareOnChainInItemsTransaction`, and
+`PrepareTransferAssetsFromBurnerTransaction` are superseded by this policy,
 not waiting to be copied. `MigrateAccount` and `MigrateFromBurner` are retired.
 `RequestAccountDeletion` is already replaced by the Google OIDC step-up web
 flow. The mechanical audit keeps these source names visible and separately
