@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 130 |
-| Remaining source RPCs | 42 |
+| Ported source RPCs | 131 |
+| Remaining source RPCs | 41 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 12 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 11 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -151,3 +151,12 @@ rank/stage thresholds, winning Glicko state, ranked-only score hook, and the
 deterministic top-100 Grandweaver recalculation across both ranked modes. The
 capability is the per-identity replacement for the source's global
 `AllowRankEloChange` switch; production has no grants.
+
+Premium SkyPass toggles now have a separate dormant `ENTITLEMENT_WRITE`
+capability. The entitlement is stored per Google identity and season, alongside
+the source-shaped `SW_SKYPASS` item balance, without making a wallet or premium
+status part of login. Source production ordering is preserved: an explicit
+per-season giveaway cap is checked before choosing grant or removal, so a
+missing or exhausted cap fails both directions. D1 triggers enforce that cap
+and reject stale concurrent toggles, and every successful change is recorded in
+an immutable before/after ledger. Production has no writer grants or season cap.

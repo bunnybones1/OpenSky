@@ -308,6 +308,14 @@ and progress are not migrated.
   identity, defaults to false without creating a row, and is independent of
   authentication and any future WalletConnect link; the basic track stays
   wallet-free.
+- Premium toggles require both `ADMIN` and a separately dormant
+  `ENTITLEMENT_WRITE` capability. The source production giveaway limit is an
+  explicit per-season D1 row and is checked before grant-versus-removal, while
+  database triggers serialize the cap and reject stale state. The entitlement
+  audit is immutable and atomic with both the per-season premium flag and
+  `SW_SKYPASS` item balance. Production has no capability grants or season cap,
+  so this operation is deployed but fails closed without affecting the free
+  SkyPass track.
 - The staff Conquest progress table reads only event-2 points from the same D1
   ledger and uses the same treasure thresholds as the player RPC. It preserves
   source descending-point pagination and joins the Google identity's numeric

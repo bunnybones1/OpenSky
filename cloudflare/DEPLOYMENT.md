@@ -3,15 +3,15 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`fc31b8f1-6f23-4677-b885-c52de1629b31`)
+- API/web Worker: `opensky-webapp` (`ff595b05-c845-4c78-aa2f-c6a1589db46f`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
 - Match service Worker: `cloud-weasel-match-service` (`177a62e5-e7ad-4142-b029-f9f4d87123d8`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `cf2a43b` for web/API, `3a964c3` for match service
+- Deployed source includes `0dae6c1` for web/API, `3a964c3` for match service
   and matchmaker,
   and `b612af3` for game, plus the match-service inventory fix from `3c57de5`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0041`
+- Applied D1 migrations: `0001` through `0042`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -112,6 +112,12 @@
   score behavior, deterministic top-100 Grandweaver recalculation, and an
   immutable before/after ledger. The capability also replaces the source's
   global rank-change switch and production currently has no grants
+- Source premium SkyPass toggle behind both `ADMIN` and a dormant
+  `ENTITLEMENT_WRITE` capability, with identity-owned per-season state,
+  wallet-independent item balance, an explicit source-style giveaway cap,
+  atomic immutable audits, and database guards against concurrent stale
+  toggles. No production season cap or entitlement-writer grant is seeded, so
+  both grants and removals currently fail closed
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -131,7 +137,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 139 tests
+- API Worker: 21 files, 140 tests
 - Match service: 11 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -243,6 +249,14 @@ settlement and delayed delivery against that pool.
   execution under the wrong OAuth account; explicitly removing the optional
   account override selected the repository-pinned account and applied `0041`
   once
+- The live `GMToggleSkypassPremium` probe returned `401` without a session;
+  migration `0042` existed exactly once, API `Ping` passed, and the exact
+  4.3 MB practice-game entry remained JavaScript. Production retained zero
+  entitlement-writer grants, season giveaway caps, entitlement audits, premium
+  item balances, or premium stats, so the deployed operation is dormant and
+  fails closed. API version `ff595b05-c845-4c78-aa2f-c6a1589db46f` contains
+  source `0dae6c1`, all 498 static assets were recognized, and the D1
+  verification read reported `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
