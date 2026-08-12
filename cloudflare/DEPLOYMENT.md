@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`d0c2f800-7ea9-43b5-8e1f-bc51ca590ed3`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`f0e4cde3-00c5-4c47-93e7-54e898ed7e2f`)
 - Match service Worker: `cloud-weasel-match-service` (`cae5bc9e-6619-4e32-9d62-de62e6e6fcc4`)
 - Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
 - Deployed source includes `492cd47` across the API/web and game Workers,
-  `cd4832d` for the matchmaker, and `4071faa` for the match service
+  `ba36911` for the matchmaker, and `4071faa` for the match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -338,6 +338,16 @@ settlement and delayed delivery against that pool.
   available for matchmaking quality. Type checking and all 17 Worker tests
   passed before deployment. Live API `Ping`, public mode status, and both
   protocol-v3 health probes passed; both Conquest queues remain disabled.
+- Matchmaker version `f0e4cde3-00c5-4c47-93e7-54e898ed7e2f` contains source
+  `ba36911`. Its Google-session admission now overwrites browser player bytes
+  with the trusted principal, validates and canonicalizes private-seed key,
+  prism, and card wire data before durable queueing, and discards rarity claims
+  while retaining wallet-free zero signatures. All 38 unit and 21 Worker tests,
+  TypeScript type checking, the release gate, and scoped Go auth/private-seed
+  source suites passed. The broader recursive Go player run additionally hit
+  the untouched legacy bot package's fixed-signature expectation; it was not
+  changed. Live protocol-v3 health, API `Ping`, public mode status, and game
+  client HTML passed; both Conquest queues remain disabled.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
