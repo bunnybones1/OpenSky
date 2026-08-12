@@ -203,6 +203,11 @@ and progress are not migrated.
   the source weekly snapshots/floors/RD inflation or the week-four next-season
   carry, score averaging, and Grandweaver recalculation. Immutable reset receipts
   make retries and concurrent cron ticks idempotent.
+- Authenticated identities can load the original payment-provider product
+  catalog, including the Stripe SkyPass product code used by the preserved UI.
+  This is discovery only: checkout creation, provider webhooks, fulfillment,
+  mobile receipt verification, and Sequence/on-chain transaction composition
+  remain disabled until their secrets and idempotency boundaries are ported.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`181c3d6f-adb9-4770-89d6-215167e1ec74`)
+- API/web Worker: `opensky-webapp` (`77fe71c2-59f2-4835-98aa-e08888707101`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -14,7 +14,8 @@
   Conquest settlement retry recovery, `dab4ba6` for anonymous public
   spectating, `aa53dc7` for leaderboard reward projections, `6cb51bf` for the
   dormant leaderboard reward worker, `82be98f` for source rank rollovers, and
-  `309861e` for the matchmaker and match service
+  `c9f358c` for the source payment catalog; matchmaker and match service include
+  `309861e`
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0050`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
@@ -35,6 +36,8 @@
 - Starter quest claims and the original quest progression chain
 - Source epic-chain history, active assignment, and future-step previews
 - Basic SkyPass card claims for the ported season data
+- Authenticated source payment-provider product discovery for the preserved
+  SkyPass UI; checkout and fulfillment remain disabled rollout gates
 - Legacy deck listing, creation, update, deletion, and deck-string encoding
 - Private source deck search with exact/class/name filters and cursor pagination
 - Public source deck leaderboard plus authenticated rank search, with current
@@ -719,6 +722,20 @@ settlement and delayed delivery against that pool.
   tick, schedules, cycles, entries, awards, feed events, linked notifications,
   and reset receipts all remained zero with `changed_db: false`. The schedule
   and `GetNextRewardsTime` remain explicit product rollout gates.
+- API/web Worker version `77fe71c2-59f2-4835-98aa-e08888707101` contains source
+  `c9f358c`. Authenticated Google identities can again load the exact source
+  payment-provider matrix for Google Play, Apple App Store, Stripe, Sequence,
+  and Samsung, including item types, product codes, and code-derived quantities.
+  The preserved browser can therefore discover Stripe's `skypass_0001` without
+  treating wallet state as authentication. This milestone is read-only:
+  `CreateStripePaymentIntent`, webhook verification, idempotent fulfillment,
+  and all on-chain/mobile purchase paths remain unported and fail closed. The
+  rollout passed all 171 API tests, TypeScript checking, the improved 132/172
+  RPC guard, all card/release/Conquest gates, and a 1.25 MiB Wrangler dry-run
+  bundle. Live version metadata, API `Ping`, and app HTML passed; the catalog
+  returned `401` without a session as required. A read-only D1 regression check
+  kept the leaderboard schedule, cycle, and reset counts at zero with migration
+  `0050` present once and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
