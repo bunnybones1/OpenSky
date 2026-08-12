@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`aefc18ec-ee27-4b49-8149-c57f95d23632`)
+- API/web Worker: `opensky-webapp` (`7f6d027b-fe52-43c6-8607-4f789ed25912`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -18,10 +18,11 @@
   checkout, `6dc5e12` for staff payment reads, and `284f1da` for optional
   wallet ownership proofs, and `f19fd20`/`b1597c6` for the fail-closed R2
   feedback port, `3113d17` for the gated Conquest V2 economy previews, and
-  `bd1a236` for dormant App Developer Key management; matchmaker and match
-  service include `309861e`
+  `bd1a236` for dormant App Developer Key management, `051e83a` for guarded
+  SkyPass reward-definition updates, and `03fd8ca` for the off-chain reward
+  policy; matchmaker and match service include `309861e`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0056`
+- Applied D1 migrations: `0001` through `0057`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -205,7 +206,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 31 files, 220 tests
+- API Worker: 32 files, 228 tests
 - Match service: 14 Worker tests
 - Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
@@ -868,6 +869,26 @@ settlement and delayed delivery against that pool.
   probes returned `401`. Production has zero keys, grants, or audits; migration
   `0056` exists once with two enabled-uniqueness indexes and all four guards,
   and every post-probe D1 read reported `changed_db: false`.
+- API/web Worker version `7f6d027b-fe52-43c6-8607-4f789ed25912` contains source
+  `051e83a` plus policy milestone `03fd8ca`. Migration
+  `0057_skypass_reward_updates.sql` ports the final source admin RPC,
+  `GMUpdateSkypassRewards`, with the source eight-column CSV shape, reward
+  identity/ID reuse, last-row infinity, item validation, and off-chain content
+  IDs. Cloud Weasel additionally requires `ADMIN`, the separately dormant
+  `SKYPASS_REWARD_WRITE` capability, and an explicit HTTPS-origin allowlist;
+  fetches are bounded and redirects are revalidated. Whole-season replacement
+  uses optimistic concurrency and immutable before/after audits, while seven D1
+  guards freeze an entire season after its first claim. The rollout passed all
+  228 API tests, Cloudflare TypeScript checking, the revised 146 direct / 15
+  superseded / 2 retired RPC audit, release and card gates, the 472-file
+  browser/game production build, and a 1.60-MiB/231-KiB-gzip Wrangler dry run.
+  Live app/version and canonical Google session discovery returned `200`,
+  Google OAuth start returned a PKCE `302`, and the new anonymous RPC returned
+  `401`. Production has zero staff roles, reward-write grants, update versions,
+  or audits; its 127 reward definitions were unchanged, migration `0057` exists
+  once with all seven guards, and the post-probe D1 read reported
+  `changed_db: false`. No reward CSV origin is configured, so the mutation
+  remains doubly fail-closed even if a capability were granted accidentally.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
