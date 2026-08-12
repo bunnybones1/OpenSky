@@ -73,7 +73,8 @@ const humanParticipant = async (
     identity.userId,
     identity.principal,
     prisms,
-    currentSeason
+    currentSeason,
+    request.mode
   )
   const cards = normalizeCards(seed.cards, profile.unlockedCards, request.mode)
   if (
@@ -112,6 +113,7 @@ const humanParticipant = async (
       privateSeed,
       gameMode: request.mode,
       account: profile.account,
+      ...(profile.conquestInfo ? { conquestInfo: profile.conquestInfo } : {}),
       playerSessionID: request.playerSessionID,
       botSubkey: false,
       spectateCode: profile.spectateCode,

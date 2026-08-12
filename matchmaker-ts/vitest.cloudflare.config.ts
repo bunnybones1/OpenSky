@@ -31,8 +31,14 @@ export default defineConfig({
               ) {
                 return new Response('invalid profile body', { status: 400 })
               }
+              const conquestEnabled =
+                body.versionHash.startsWith('release-conquest')
+              const conquestFixture =
+                conquestEnabled &&
+                body.versionHash !== 'release-conquest-missing'
               return Response.json({
-                gameModeEnabled: !body.mode.startsWith('CONQUEST_'),
+                gameModeEnabled:
+                  !body.mode.startsWith('CONQUEST_') || conquestEnabled,
                 profile: {
                   score: body.userId.includes('1111') ? 450 : 500,
                   rank: 'APPRENTICE',
@@ -47,6 +53,22 @@ export default defineConfig({
                         : '0x1111111111111111111111111111111111111111'
                     }
                   ],
+                  ...(conquestFixture
+                    ? {
+                        conquest: {
+                          id: 41,
+                          status: 'IN_PROGRESS',
+                          nonce: 1,
+                          mode: body.mode,
+                          hero: 'ADA',
+                          deckClass: body.versionHash.endsWith('-mismatch')
+                            ? 'HRT'
+                            : 'STR',
+                          matchProgress: { 39: 'WIN', 40: 'DRAW' },
+                          createdAt: '2026-08-12T00:00:00.000Z'
+                        }
+                      }
+                    : {}),
                   ...(body.userId.includes('3333')
                     ? {
                         activeMatch: {
@@ -66,6 +88,26 @@ export default defineConfig({
                 'matchmaker-test-secret'
             ) {
               return new Response('invalid dispatch request', { status: 400 })
+            }
+            const dispatch = (await request.clone().json()) as {
+              participants?: Array<{
+                player?: { clientVersionHash?: unknown }
+              }>
+            }
+            if (
+              dispatch.participants?.some(
+                participant =>
+                  participant.player?.clientVersionHash ===
+                  'release-terminal-reject'
+              )
+            ) {
+              return Response.json(
+                {
+                  error: 'ranked play is not unlocked',
+                  reason: 'RANK_TOO_LOW'
+                },
+                { status: 409 }
+              )
             }
             return Response.json({
               serverAddress: 'wss://match.example/v1/matches/test'

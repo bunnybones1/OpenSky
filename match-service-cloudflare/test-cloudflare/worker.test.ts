@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { hexToBytes } from '../src/encoding'
 import { BOT_PLACEHOLDER, INTERNAL_AUTH_HEADER } from '../src/protocol'
+import { MatchRepository } from '../src/repository'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const PRINCIPAL = '0x1111111111111111111111111111111111111111'
@@ -391,8 +392,56 @@ describe('Cloud Weasel accepted-match service', () => {
 
   it('disables unfinished conquest queues and rejects forged identity bindings', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at)
+       VALUES ('match-service-conquest', ?, 'IN_PROGRESS', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+               '{"41":"WIN","42":"DRAW"}', ?)`
+    )
+      .bind(USER_ID, now)
+      .run()
     const disabled = await profile(GameMode.CONQUEST_CONSTRUCTED, principal)
-    expect(await disabled.json()).toMatchObject({ gameModeEnabled: false })
+    expect(await disabled.json()).toMatchObject({
+      gameModeEnabled: false,
+      profile: {
+        conquest: {
+          id: expect.any(Number),
+          status: 'IN_PROGRESS',
+          nonce: 1,
+          mode: GameMode.CONQUEST_CONSTRUCTED,
+          hero: 'ADA',
+          deckClass: 'STR',
+          matchProgress: { 41: 'WIN', 42: 'DRAW' }
+        }
+      }
+    })
+
+    const repository = new MatchRepository(env.AUTH_DB)
+    const accepted = await repository.humanAccount(
+      USER_ID,
+      principal,
+      ['str'],
+      126,
+      GameMode.CONQUEST_CONSTRUCTED
+    )
+    expect(accepted.conquestInfo).toMatchObject({
+      mode: GameMode.CONQUEST_CONSTRUCTED,
+      deckClass: 'STR'
+    })
+    await expect(
+      repository.humanAccount(
+        USER_ID,
+        principal,
+        ['hrt'],
+        126,
+        GameMode.CONQUEST_CONSTRUCTED
+      )
+    ).rejects.toMatchObject({
+      reason: 'CONQUEST_DECK_CLASS_MISMATCH'
+    })
 
     const forged = await profile(GameMode.PRACTICE_BOT, PRINCIPAL)
     expect(forged.status).toBe(403)
@@ -419,6 +468,17 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(await practice.json()).toMatchObject({
       gameModeEnabled: true,
       profile: { rankedEligible: false }
+    })
+
+    const rankedDispatch = dispatch()
+    rankedDispatch.participants[0].player.mode = GameMode.RANKED_CONSTRUCTED
+    rankedDispatch.participants[0].request!.mode = GameMode.RANKED_CONSTRUCTED
+    rankedDispatch.participants[1].player.mode = GameMode.RANKED_CONSTRUCTED
+    const finalCheck = await create(rankedDispatch)
+    expect(finalCheck.status).toBe(409)
+    expect(await finalCheck.json()).toEqual({
+      error: 'ranked play is not unlocked',
+      reason: 'RANK_TOO_LOW'
     })
   })
 

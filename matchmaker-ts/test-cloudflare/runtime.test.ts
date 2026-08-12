@@ -102,7 +102,10 @@ const findCommand = (
   playerSessionID: crypto.randomUUID()
 })
 
-const pairPlayers = async (mode = GameMode.RANKED_CONSTRUCTED) => {
+const pairPlayers = async (
+  mode = GameMode.RANKED_CONSTRUCTED,
+  versionHash = 'release-1'
+) => {
   const first = await connect(PRINCIPAL_1, '192.0.2.1')
   const second = await connect(PRINCIPAL_2, '192.0.2.2')
   const sessionID =
@@ -110,10 +113,10 @@ const pairPlayers = async (mode = GameMode.RANKED_CONSTRUCTED) => {
     mode === GameMode.CHALLENGE_DISCOVERY
       ? 'CLOUD-WEASEL-CHALLENGE'
       : ''
-  first.send(JSON.stringify(findCommand(mode, sessionID)))
+  first.send(JSON.stringify(findCommand(mode, sessionID, versionHash)))
   const firstFound = nextMessage(first)
   const secondFound = nextMessage(second)
-  second.send(JSON.stringify(findCommand(mode, sessionID)))
+  second.send(JSON.stringify(findCommand(mode, sessionID, versionHash)))
   expect(await firstFound).toMatchObject({
     type: 'match_found',
     mode,
@@ -335,6 +338,108 @@ describe('Cloudflare matchmaker Worker', () => {
       message: 'GAME_MODE_DISABLED',
       level: 'server'
     })
+  })
+
+  it('hydrates and validates active conquest progress before queueing', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(
+      JSON.stringify(
+        findCommand(GameMode.CONQUEST_CONSTRUCTED, '', 'release-conquest')
+      )
+    )
+
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          {
+            headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+          }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const ticket = await state.storage.get<{
+          player: { conquestProgress: string[] }
+        }>(`ticket:${PRINCIPAL_1}`)
+        expect(ticket?.player.conquestProgress).toEqual(['WIN', 'DRAW'])
+      }
+    )
+  })
+
+  it('rejects a deck that differs from the hero locked in conquest', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const error = nextMessage(player)
+    player.send(
+      JSON.stringify(
+        findCommand(
+          GameMode.CONQUEST_CONSTRUCTED,
+          '',
+          'release-conquest-mismatch'
+        )
+      )
+    )
+    expect(await error).toMatchObject({
+      type: 'error',
+      reason: 'CONQUEST_DECK_CLASS_MISMATCH'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('rejects an enabled conquest queue without an active run', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const error = nextMessage(player)
+    player.send(
+      JSON.stringify(
+        findCommand(
+          GameMode.CONQUEST_CONSTRUCTED,
+          '',
+          'release-conquest-missing'
+        )
+      )
+    )
+    expect(await error).toMatchObject({
+      type: 'error',
+      reason: 'INVALID_ACCOUNT'
+    })
+  })
+
+  it('terminates proposals rejected by final match preconditions', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.RANKED_CONSTRUCTED,
+      'release-terminal-reject'
+    )
+    track(first, second)
+    const firstAcceptance = nextMessage(first)
+    const secondAcceptance = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    await firstAcceptance
+    await secondAcceptance
+
+    const firstResult = collectMessages(first, 2)
+    const secondResult = collectMessages(second, 2)
+    second.send(JSON.stringify({ type: 'accept_match' }))
+    for (const messages of [await firstResult, await secondResult]) {
+      expect(messages).toEqual([
+        { type: 'accept_match', playerID: PRINCIPAL_2 },
+        {
+          type: 'error',
+          reason: 'RANK_TOO_LOW',
+          message: 'ranked play is not unlocked',
+          level: 'server'
+        }
+      ])
+    }
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ activeProposals: 0 })
   })
 
   it('persists queue state and socket identity through Durable Object eviction', async () => {

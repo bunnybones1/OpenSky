@@ -9,7 +9,7 @@ import {
   MAX_DISPATCH_BYTES,
   parseAcceptedMatchDispatch
 } from './protocol'
-import { MatchRepository } from './repository'
+import { MatchPreconditionError, MatchRepository } from './repository'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
 import { RpcError } from '../../cloudflare/src/errors'
 
@@ -355,9 +355,16 @@ export default {
       return json(
         {
           error:
-            error instanceof Error ? error.message : 'match creation failed'
+            error instanceof Error ? error.message : 'match creation failed',
+          ...(error instanceof MatchPreconditionError
+            ? { reason: error.reason }
+            : {})
         },
-        error instanceof DispatchProtocolError ? 400 : 502
+        error instanceof DispatchProtocolError
+          ? 400
+          : error instanceof MatchPreconditionError
+            ? 409
+            : 502
       )
     }
   }

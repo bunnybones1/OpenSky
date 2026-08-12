@@ -1,6 +1,8 @@
 import {
   AccountStats,
   AccountStat,
+  Conquest,
+  DeckClass,
   DeckEquipment,
   GameMode,
   ItemType,
@@ -13,6 +15,7 @@ import {
   hasUnlockedRanked,
   INITIAL_RANK_STATE_JSON
 } from '@opensky/shared/ranked-progression'
+import { ConquestRepository } from '../../cloudflare/src/conquest'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
 
 type OwnedCardRarity = 'base' | 'silver' | 'gold'
@@ -76,6 +79,7 @@ interface ActiveQuestRow {
 
 export interface HumanMatchAccount {
   account: AccountWithPrismsAndCosmeticsInfo
+  conquestInfo?: Conquest
   level: number
   unlockedCards: Map<number, OwnedCardRarity>
   spectateCode: string
@@ -115,9 +119,22 @@ export interface MatchmakingProfile {
   recentMatches: Array<{ opponentId: string }>
   rankedEligible: boolean
   abandonPenaltyMs: number
+  conquest?: Conquest
   activeMatch?: {
     mode: GameMode
     serverAddress: string
+  }
+}
+
+export class MatchPreconditionError extends Error {
+  constructor(
+    readonly reason:
+      | 'CONQUEST_DECK_CLASS_MISMATCH'
+      | 'INVALID_ACCOUNT'
+      | 'RANK_TOO_LOW',
+    message: string
+  ) {
+    super(message)
   }
 }
 
@@ -302,7 +319,10 @@ export class MatchRepository {
     now = Date.now()
   ): Promise<MatchmakingProfile> {
     const statsMode = statsModeFor(mode)
-    const [user, stats, items, recent, active, abandonPenalty] =
+    const isConquest =
+      mode === GameMode.CONQUEST_CONSTRUCTED ||
+      mode === GameMode.CONQUEST_DISCOVERY
+    const [user, stats, items, recent, active, abandonPenalty, conquest] =
       await Promise.all([
         this.database
           .prepare(
@@ -361,7 +381,10 @@ export class MatchRepository {
            WHERE principal = ? AND release_version = ?`
           )
           .bind(principal, releaseVersion)
-          .first<AbandonPenaltyRow>()
+          .first<AbandonPenaltyRow>(),
+        isConquest
+          ? new ConquestRepository(this.database).status(userId)
+          : Promise.resolve(null)
       ])
     if (!user) throw new Error('player was not found')
 
@@ -396,6 +419,7 @@ export class MatchRepository {
       recentMatches,
       rankedEligible: hasUnlockedRanked(user.level, user.xp),
       abandonPenaltyMs: Math.max(0, cooldownExpiresAt - now),
+      ...(conquest ? { conquest } : {}),
       ...(active
         ? {
             activeMatch: {
@@ -423,9 +447,13 @@ export class MatchRepository {
     userId: string,
     principal: string,
     prisms: string[],
-    currentSeason: number
+    currentSeason: number,
+    gameMode: GameMode
   ): Promise<HumanMatchAccount> {
     const now = new Date().toISOString()
+    const isConquest =
+      gameMode === GameMode.CONQUEST_CONSTRUCTED ||
+      gameMode === GameMode.CONQUEST_DISCOVERY
     await this.database.batch([
       this.database
         .prepare(
@@ -465,7 +493,8 @@ export class MatchRepository {
       quests,
       statRows,
       equipped,
-      spectateCode
+      spectateCode,
+      conquest
     ] = await Promise.all([
       this.database
         .prepare(
@@ -536,10 +565,39 @@ export class MatchRepository {
         )
         .bind(userId)
         .all<EquippedItemRow>(),
-      refreshPrivateSpectateCode(this.database, userId, false)
+      refreshPrivateSpectateCode(this.database, userId, false),
+      isConquest
+        ? new ConquestRepository(this.database).status(userId)
+        : Promise.resolve(null)
     ])
     if (!profile || !gameAccount)
       throw new Error('player profile is not initialized')
+
+    if (
+      (gameMode === GameMode.RANKED_CONSTRUCTED ||
+        gameMode === GameMode.RANKED_DISCOVERY) &&
+      !hasUnlockedRanked(profile.level, profile.xp)
+    ) {
+      throw new MatchPreconditionError(
+        'RANK_TOO_LOW',
+        'ranked play is not unlocked'
+      )
+    }
+    if (isConquest && (!conquest || conquest.mode !== gameMode)) {
+      throw new MatchPreconditionError(
+        'INVALID_ACCOUNT',
+        'no active conquest matches the game mode'
+      )
+    }
+    if (
+      isConquest &&
+      conquest!.deckClass !== (deckClassForPrisms(prisms) as DeckClass)
+    ) {
+      throw new MatchPreconditionError(
+        'CONQUEST_DECK_CLASS_MISMATCH',
+        'deck class does not match the active conquest'
+      )
+    }
 
     const cards = new Map<number, OwnedCardRarity>()
     for (const item of inventory.results) {
@@ -583,6 +641,7 @@ export class MatchRepository {
     }
     return {
       level: profile.level,
+      ...(isConquest ? { conquestInfo: conquest! } : {}),
       unlockedCards: cards,
       spectateCode,
       quests: quests.results.map(quest => ({

@@ -27,7 +27,7 @@ export interface MatchmakerPlayer {
   rank: PlayerRank
   lostLastMatch: boolean
   cards?: Map<number, Rarity>
-  conquestProgress: Array<'WIN' | 'LOSS' | 'NONE'>
+  conquestProgress: Array<'UNKNOWN' | 'WIN' | 'LOSS' | 'DRAW'>
   recentMatches: PlayerMatchStat[]
   shadowBannedUntilMs?: number
   matchProposalId?: string
@@ -68,7 +68,7 @@ export const matchmakingScore = (player: MatchmakerPlayer) =>
   Math.min(1600, player.score)
 
 export const currentConquestWins = (player: MatchmakerPlayer) =>
-  player.conquestProgress.filter((result) => result === 'WIN').length
+  player.conquestProgress.filter(result => result === 'WIN').length
 
 export const isRankedMatch = (player: MatchmakerPlayer) =>
   player.mode === GameMode.RANKED_CONSTRUCTED ||
@@ -103,7 +103,9 @@ export const prismsToDeckClass = (prisms: CardClass[]): DeckClass => {
     return prisms[0] as unknown as DeckClass
   }
   if (prisms.length === 2) {
-    return dualDeckClasses[`${prisms[0]}:${prisms[1]}`] ?? DeckClass.UNKNOWN_CLASS
+    return (
+      dualDeckClasses[`${prisms[0]}:${prisms[1]}`] ?? DeckClass.UNKNOWN_CLASS
+    )
   }
   return DeckClass.UNKNOWN_CLASS
 }

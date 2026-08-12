@@ -1,4 +1,13 @@
-import { CardClass, GameMode, PlayerRank } from '@opensky/proto'
+import {
+  CardClass,
+  ConquestMatchResult,
+  ConquestStatus,
+  DeckClass,
+  GameMode,
+  Hero,
+  PlayerRank,
+  type Conquest
+} from '@opensky/proto'
 import { CLOUDFLARE_MATCHMAKER_POOL_VERSION } from '@opensky/shared/cloudflare-multiplayer'
 
 import {
@@ -23,6 +32,7 @@ import {
   isChallengeMatch,
   isConquestMatch,
   MatchmakerPlayer,
+  prismsToDeckClass,
   Rarity
 } from './model'
 import { PenaltyTracker, readPenaltyConfig } from './penalties'
@@ -125,6 +135,7 @@ interface MatchmakingProfile {
   cards: Array<[number, Rarity]>
   recentMatches: Array<{ opponentId: string }>
   abandonPenaltyMs: number
+  conquest?: Conquest
   activeMatch?: {
     mode: GameMode
     serverAddress: string
@@ -133,6 +144,9 @@ interface MatchmakingProfile {
 
 const playerRanks = new Set(Object.values(PlayerRank))
 const gameModes = new Set(Object.values(GameMode))
+const deckClasses = new Set(Object.values(DeckClass))
+const heroes = new Set(Object.values(Hero))
+const conquestResults = new Set(Object.values(ConquestMatchResult))
 const rarities = new Set<Rarity>(['base', 'silver', 'gold'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -433,10 +447,32 @@ export class MatchmakerPool implements DurableObject {
       return
     }
 
+    const prisms = prismsFromPrivateSeed(command.privateSeed)
+    if (
+      command.mode === GameMode.CONQUEST_CONSTRUCTED ||
+      command.mode === GameMode.CONQUEST_DISCOVERY
+    ) {
+      if (!profile.conquest) {
+        throw new ProtocolError('INVALID_ACCOUNT', 'conquest info is missing')
+      }
+      if (profile.conquest.mode !== command.mode) {
+        throw new ProtocolError(
+          'INVALID_ACCOUNT',
+          'active conquest does not match the game mode'
+        )
+      }
+      if (profile.conquest.deckClass !== prismsToDeckClass(prisms)) {
+        throw new ProtocolError(
+          'CONQUEST_DECK_CLASS_MISMATCH',
+          'deck class does not match the active conquest'
+        )
+      }
+    }
+
     const player = createPlayer({
       address: attachment.principal,
       mode: command.mode,
-      prisms: prismsFromPrivateSeed(command.privateSeed),
+      prisms,
       sessionId: command.sessionID,
       playerSessionId: command.playerSessionID,
       clientVersionHash: command.versionHash,
@@ -446,6 +482,9 @@ export class MatchmakerPool implements DurableObject {
       rank: profile.rank,
       lostLastMatch: profile.lostLastMatch,
       cards: new Map(profile.cards),
+      conquestProgress: profile.conquest
+        ? Object.values(profile.conquest.matchProgress)
+        : [],
       recentMatches: profile.recentMatches
     })
     const ticket: StoredTicket = {
@@ -573,6 +612,38 @@ export class MatchmakerPool implements DurableObject {
       }
     }
 
+    let conquest: Conquest | undefined
+    if (profile.conquest !== undefined) {
+      if (
+        !isRecord(profile.conquest) ||
+        !Number.isSafeInteger(profile.conquest.id) ||
+        (profile.conquest.id as number) <= 0 ||
+        profile.conquest.status !== ConquestStatus.IN_PROGRESS ||
+        ![GameMode.CONQUEST_CONSTRUCTED, GameMode.CONQUEST_DISCOVERY].includes(
+          profile.conquest.mode as GameMode
+        ) ||
+        !Number.isSafeInteger(profile.conquest.nonce) ||
+        (profile.conquest.nonce as number) <= 0 ||
+        !heroes.has(profile.conquest.hero as Hero) ||
+        profile.conquest.hero === Hero.UNKNOWN ||
+        !deckClasses.has(profile.conquest.deckClass as DeckClass) ||
+        profile.conquest.deckClass === DeckClass.UNKNOWN_CLASS ||
+        !isRecord(profile.conquest.matchProgress) ||
+        Object.keys(profile.conquest.matchProgress).length > 1_000 ||
+        Object.keys(profile.conquest.matchProgress).some(
+          key => !/^\d+$/.test(key)
+        ) ||
+        Object.values(profile.conquest.matchProgress).some(
+          result =>
+            !conquestResults.has(result as ConquestMatchResult) ||
+            result === ConquestMatchResult.UNKNOWN
+        )
+      ) {
+        throw new ProtocolError('SERVER_ERROR', 'invalid conquest profile')
+      }
+      conquest = profile.conquest as unknown as Conquest
+    }
+
     return {
       score: profile.score as number,
       rank: profile.rank as PlayerRank,
@@ -580,6 +651,7 @@ export class MatchmakerPool implements DurableObject {
       cards,
       recentMatches,
       abandonPenaltyMs: profile.abandonPenaltyMs as number,
+      ...(conquest ? { conquest } : {}),
       ...(activeMatch ? { activeMatch } : {})
     }
   }
@@ -905,6 +977,34 @@ export class MatchmakerPool implements DurableObject {
           })
         })
       )
+      if (!response.ok && response.status >= 400 && response.status < 500) {
+        let body: unknown
+        try {
+          body = await response.json()
+        } catch {
+          body = undefined
+        }
+        const serviceReason =
+          isRecord(body) && typeof body.reason === 'string'
+            ? body.reason
+            : undefined
+        const serviceError =
+          isRecord(body) && typeof body.error === 'string'
+            ? body.error
+            : 'match creation failed'
+        const reason =
+          serviceReason ??
+          (response.status === 403
+            ? 'INVALID_ACCOUNT'
+            : serviceError === 'game mode is disabled'
+              ? 'GAME_MODE_DISABLED'
+              : response.status === 400
+                ? 'INVALID_OPERATION'
+                : 'MATCH_CREATION_FAILED')
+        this.broadcastProposal(proposal, errorMessage(reason, serviceError))
+        await this.deleteProposal(proposal)
+        return
+      }
       if (!response.ok)
         throw new Error(`match service returned ${response.status}`)
       const result = (await response.json()) as { serverAddress?: unknown }
