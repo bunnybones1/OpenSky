@@ -288,6 +288,13 @@ and progress are not migrated.
   size/shape validated, banner links accept only HTTP(S), and every mutation
   writes an immutable before/after audit snapshot atomically. No production
   identity currently has this permission.
+- One-time notification templates use the same `CONTENT_WRITE` boundary and
+  their own immutable create/update/delete audit. `ListNotifications`
+  materializes currently valid eligible definitions using the source age,
+  identity-reference, and UTC creation-date comparisons. Existing currently
+  valid deliveries suppress edits; after expiry, a revised definition can issue
+  once under a revision-keyed receipt. Template CRUD never directly inserts a
+  player inbox row and remains independent of wallets.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
