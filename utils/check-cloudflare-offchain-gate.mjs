@@ -124,6 +124,7 @@ const main = async () => {
     playerRpc,
     referralStickerRewards,
     silverTicketExchange,
+    heroSkinExchange,
     stripeCheckout,
     mobileStoreFulfillment,
     pendingGoldPage,
@@ -149,6 +150,10 @@ const main = async () => {
     ),
     readFile(
       path.join(root, 'cloudflare/src/silver-ticket-exchange.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/hero-skin-exchange.ts'),
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
@@ -188,6 +193,7 @@ const main = async () => {
       playerRpc,
       referralStickerRewards,
       silverTicketExchange,
+      heroSkinExchange,
       stripeCheckout,
       mobileStoreFulfillment
     }

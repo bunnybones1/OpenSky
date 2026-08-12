@@ -260,4 +260,159 @@ describe('Cloudflare player API', () => {
       .first<{ count: number }>()
     expect(receipts?.count).toBe(1)
   })
+
+  it('replaces the source Hero mint with an atomic off-chain Gold exchange', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 42, 12, 1, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 43, 8, 1, 'test', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+    const input = {
+      requestKey: 'hero-exchange-request-0001',
+      goldCards: [
+        { tokenId: 43, quantity: 8 },
+        { tokenId: 42, quantity: 12 }
+      ],
+      heroSkins: [
+        { tokenId: 2, quantity: 1 },
+        { tokenId: 1, quantity: 1 }
+      ]
+    }
+    const exchange = () =>
+      request('/api/player/exchanges/gold-hero-skins', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://opensky.example',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(input)
+      })
+
+    const [first, simultaneousRetry] = await Promise.all([
+      exchange(),
+      exchange()
+    ])
+    expect([first.status, simultaneousRetry.status]).toEqual([200, 200])
+    expect(await first.json()).toMatchObject({
+      exchange: {
+        goldCards: [
+          { tokenId: 42, quantity: 12 },
+          { tokenId: 43, quantity: 8 }
+        ],
+        heroSkins: [
+          { tokenId: 1, quantity: 1 },
+          { tokenId: 2, quantity: 1 }
+        ],
+        goldCardsSpent: 20,
+        heroSkinsGranted: 2
+      }
+    })
+    expect((await exchange()).status).toBe(200)
+
+    const inventory = await env.AUTH_DB.prepare(
+      `SELECT item_type, token_id, balance FROM player_items
+       WHERE user_id = ? AND (
+         item_type = 'SW_HERO_SKINS' OR
+         (item_type = 'SW_GOLD_CARDS' AND token_id IN (42, 43))
+       ) ORDER BY item_type, token_id`
+    )
+      .bind(userId)
+      .all<{ item_type: string; token_id: number; balance: number }>()
+    expect(inventory.results).toEqual([
+      { item_type: 'SW_GOLD_CARDS', token_id: 42, balance: 0 },
+      { item_type: 'SW_GOLD_CARDS', token_id: 43, balance: 0 },
+      { item_type: 'SW_HERO_SKINS', token_id: 1, balance: 1 },
+      { item_type: 'SW_HERO_SKINS', token_id: 2, balance: 1 }
+    ])
+    const receipt = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
+       FROM player_hero_skin_exchanges WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ count: number; keys: number }>()
+    expect(receipt).toEqual({ count: 1, keys: 1 })
+  })
+
+  it('rejects invalid Hero rewards and concurrent Gold spends safely', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_GOLD_CARDS', 99, 10, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    const exchange = (
+      requestKey: string,
+      heroTokenId = 1,
+      goldQuantity = 10,
+      origin = 'https://opensky.example'
+    ) =>
+      request('/api/player/exchanges/gold-hero-skins', {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestKey,
+          goldCards: [{ tokenId: 99, quantity: goldQuantity }],
+          heroSkins: [{ tokenId: heroTokenId, quantity: 1 }]
+        })
+      })
+
+    expect(
+      (
+        await exchange(
+          'hero-cross-origin-0001',
+          1,
+          10,
+          'https://evil.example'
+        )
+      ).status
+    ).toBe(403)
+    expect((await exchange('hero-invalid-id-0001', 999999)).status).toBe(400)
+    expect((await exchange('hero-wrong-price-0001', 1, 9)).status).toBe(400)
+
+    const concurrent = await Promise.all([
+      exchange('hero-concurrent-0001'),
+      exchange('hero-concurrent-0002')
+    ])
+    expect(concurrent.map(response => response.status).sort()).toEqual([200, 400])
+    const skins = await env.AUTH_DB.prepare(
+      `SELECT COALESCE(SUM(balance), 0) AS balance FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_HERO_SKINS'`
+    )
+      .bind(userId)
+      .first<{ balance: number }>()
+    expect(skins?.balance).toBe(1)
+    const winningRequest =
+      concurrent[0].status === 200
+        ? 'hero-concurrent-0001'
+        : 'hero-concurrent-0002'
+    expect((await exchange(winningRequest, 2)).status).toBe(400)
+    const receipts = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM player_hero_skin_exchanges
+       WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ count: number }>()
+    expect(receipts?.count).toBe(1)
+  })
 })

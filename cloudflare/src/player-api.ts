@@ -8,6 +8,10 @@ import { PlayerRepository } from './player'
 import { AccountActionsRepository } from './account-actions'
 import { RpcError } from './errors'
 import {
+  HeroSkinExchangeRepository,
+  type HeroSkinExchangeInput
+} from './hero-skin-exchange'
+import {
   SilverTicketExchangeRepository,
   type SilverCardExchangeInput
 } from './silver-ticket-exchange'
@@ -114,6 +118,35 @@ export const handlePlayerRequest = async (
       }
       const input = (await request.json()) as SilverCardExchangeInput
       const exchange = await new SilverTicketExchangeRepository(
+        env.AUTH_DB
+      ).exchange(userId, input)
+      return json({ exchange })
+    }
+    if (
+      url.pathname === '/api/player/exchanges/gold-hero-skins' &&
+      request.method === 'POST'
+    ) {
+      if (!sameOrigin(request)) {
+        return json(
+          {
+            code: 'player.forbidden',
+            message: 'Cross-origin requests are not allowed.'
+          },
+          403
+        )
+      }
+      const contentType = request.headers.get('Content-Type') || ''
+      if (!contentType.toLowerCase().startsWith('application/json')) {
+        return json(
+          {
+            code: 'player.invalid_argument',
+            message: 'JSON request body is required.'
+          },
+          400
+        )
+      }
+      const input = (await request.json()) as HeroSkinExchangeInput
+      const exchange = await new HeroSkinExchangeRepository(
         env.AUTH_DB
       ).exchange(userId, input)
       return json({ exchange })

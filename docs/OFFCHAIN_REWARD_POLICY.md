@@ -44,6 +44,13 @@ scans every producer module for both canonical `player_items` writes and an
 idempotent receipt/delivery key, in addition to excluding transaction code from
 the Google-identity route tree.
 
+The Legacy Hero exchange is also governed by this policy. It retains the
+source product's price of ten identity-owned Gold cards per Hero skin, but D1
+atomically debits the selected Gold inventory and credits `SW_HERO_SKINS`.
+There is no USDC fee, wallet transfer, contract call, or minted asset. An
+immutable request receipt makes retries safe, and database triggers validate
+the complete price and available inventory before any balance changes.
+
 The mobile-store fulfillment ledger is also part of this boundary. It accepts
 only server-verified provider facts, binds the provider transaction to one
 Google identity with a database uniqueness constraint, stores only receipt
@@ -73,8 +80,9 @@ out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
 USDC/silver mint controls are removed and Checkout continues to fulfill the
 off-chain receipt contract. The same rule applies to any future paid Conquest
-ticket UI. Hero-skin minting remains a legacy-wallet surface, not a Cloud
-Weasel reward path.
+ticket UI. The Hero-skin interface may be exposed to Google identities only
+through the off-chain Gold exchange; its legacy wallet transaction
+implementation remains excluded.
 
 ## Source RPC disposition
 
