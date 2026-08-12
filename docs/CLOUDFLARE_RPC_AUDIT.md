@@ -6,6 +6,11 @@ Audited 2026-08-12 with:
 pnpm check:cloudflare:rpcs
 ```
 
+Production migration `0066_offchain_operator_card_grants.sql` and Worker
+version `12b6a229-89d7-45be-9671-986de5390569` were deployed on 2026-08-12.
+The public smoke check confirmed the new adapter exists and rejects an
+unauthenticated request with `401` before reading or changing player state.
+
 The audit discovers exported Go `*Server` methods from `api/rpc`, compares them
 with the TypeScript cases in `cloudflare/src/api.ts`, and fails if the ported
 count or the critical player-facing compatibility set regresses.
