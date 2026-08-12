@@ -3,11 +3,12 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
+- API/web Worker: `opensky-webapp` (`05ef2754-c0d9-4c4f-ab67-de25457e36c7`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`1972e669-c857-4981-b185-2ed849d01254`)
-- Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
+- Game Worker: `cloud-weasel-game-server` (`199f6e0c-ab1b-4e48-8c3e-cb9ca34d8c95`)
+- Deployed source includes `ea989a4` for the API/web and game Workers,
+  `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
   deadline milestone, `f5775cc` for half-open socket handling, `0438095` for
   Conquest settlement retry recovery, and `309861e` for the matchmaker and
@@ -616,6 +617,21 @@ settlement and delayed delivery against that pool.
   a read-only production aggregate remained one active and nine ended matches
   with no creating/failed rows, zero active Conquest pools, settlements, or
   Gold deliveries, and `changed_db: false`.
+- API/web Worker version `05ef2754-c0d9-4c4f-ab67-de25457e36c7` and game Worker
+  version `199f6e0c-ab1b-4e48-8c3e-cb9ca34d8c95` contain source `ea989a4`.
+  Conquest status/stat reads, authoritative match progression, and settlement
+  now share one decoder matching the source JSONB-to-`map[uint64]` contract:
+  nil maps, uint64 key canonicalization, and unknown enum normalization are
+  preserved, while invalid JSON, non-object shapes, nonnumeric/out-of-range
+  keys, and invalid value types fail closed. Progression rejects before either
+  player or the per-match receipt changes; settlement rejects before inventory,
+  feed, delivery, receipt, or status changes. The rollout passed all 25 unit,
+  67 game-Worker, and 149 API tests, both affected TypeScript checks, all
+  compatibility/safety gates, and both Wrangler bundles. Live app HTML, API
+  `Ping`, game protocol-v3 health, and both version records passed. A read-only
+  production scan found zero Conquest runs or malformed progress rows and
+  retained one active and nine ended matches, no creating/failed rows, no
+  active Conquest pool/reward rows, and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

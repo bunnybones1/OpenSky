@@ -28,6 +28,10 @@ run only after that task settles.
 
 - `applyConquestProgress` records both players and its per-proposal receipt in
   one D1 batch.
+- Player reads, authoritative progression, and settlement use one typed-map
+  decoder matching the source JSONB scan into
+  `map[uint64]ConquestMatchResult`. Source nil-map/key/enum normalization is
+  preserved; malformed shapes and value types fail closed.
 - A loss or third win ends the run exactly once; zero-win losses become
   `COMPLETED`, while earned bundles become `REWARDS_PENDING`.
 - Event-2 treasure points and their retry receipt are independent of card
@@ -86,6 +90,8 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Independent Silver draws, sorted settlement token IDs, and weekly-Gold-only
   selection.
 - Empty, expired, or malformed pools fail closed without changing the run.
+- Malformed persisted progress fails before player state, receipts, inventory,
+  feed events, or delayed deliveries can change.
 - Concurrent and alarm-retry settlement grants exactly one bundle.
 - A match-finalization retry after settlement returns the original reward
   payload with one settlement, one delayed delivery, and no duplicate feed or
