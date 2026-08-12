@@ -21,6 +21,19 @@ export interface WalletConnection {
   verifiedAt: string
 }
 
+export const providerSubjectHash = async (
+  provider: string,
+  subject: string
+): Promise<string> => {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`${provider}\u0000${subject}`)
+  )
+  return [...new Uint8Array(digest)]
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 interface UserRow {
   id: string
   display_name: string
@@ -76,6 +89,20 @@ export class IdentitiesRepository {
     return row ? toUser(row) : undefined
   }
 
+  async findProviderSubject(
+    userId: string,
+    provider: string
+  ): Promise<string | undefined> {
+    const row = await this.database
+      .prepare(
+        `SELECT provider_subject FROM auth_identities
+         WHERE user_id = ? AND provider = ?`
+      )
+      .bind(userId, provider)
+      .first<{ provider_subject: string }>()
+    return row?.provider_subject
+  }
+
   async upsertGoogle(profile: GoogleIdentityProfile): Promise<IdentityUser> {
     if (!profile.subject || profile.subject.length > 255) {
       throw new Error('Google identity subject is invalid')
@@ -90,9 +117,26 @@ export class IdentitiesRepository {
       ? profile.avatarUrl.slice(0, 2048)
       : null
     const now = new Date().toISOString()
+    const tombstone = await this.database
+      .prepare(
+        `SELECT 1 FROM identity_provider_tombstones
+         WHERE provider = 'google' AND provider_subject_hash = ?`
+      )
+      .bind(await providerSubjectHash('google', profile.subject))
+      .first()
+    if (tombstone) throw new Error('Google identity was deleted')
     const existing = await this.findUserByIdentity('google', profile.subject)
 
     if (existing) {
+      const status = await this.database
+        .prepare(
+          `SELECT account_status FROM player_account_settings WHERE user_id = ?`
+        )
+        .bind(existing.id)
+        .first<{ account_status: string }>()
+      if (status && ['TO_DELETE', 'DELETED'].includes(status.account_status)) {
+        throw new Error('Google identity is pending deletion')
+      }
       await this.database.batch([
         this.database
           .prepare(

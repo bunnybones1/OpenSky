@@ -89,7 +89,9 @@ export const deliverDueConquestGold = async (
          AND NOT EXISTS (
            SELECT 1 FROM player_account_settings settings
            WHERE settings.user_id = player_conquest_gold_deliveries.user_id
-             AND settings.account_status IN ('BANNED', 'SUSPENDED', 'FLAGGED')
+             AND settings.account_status IN (
+               'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'
+             )
          )
        ORDER BY deliver_at, conquest_id LIMIT ?`
     )

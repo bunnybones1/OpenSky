@@ -1,4 +1,5 @@
 import { handleApiRequest } from './api'
+import { AccountDeletionRepository } from './account-deletion'
 import { deliverDueConquestGold } from './conquest-delivery'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
@@ -26,6 +27,11 @@ export default {
     return env.ASSETS.fetch(request)
   },
   async scheduled(_controller, env, ctx): Promise<void> {
-    ctx.waitUntil(deliverDueConquestGold(env.AUTH_DB).then(() => undefined))
+    ctx.waitUntil(
+      Promise.all([
+        deliverDueConquestGold(env.AUTH_DB),
+        new AccountDeletionRepository(env.AUTH_DB).finalizeDue()
+      ]).then(() => undefined)
+    )
   }
 } satisfies ExportedHandler<Env>

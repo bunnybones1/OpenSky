@@ -18,13 +18,16 @@ import {
 } from './identity-session'
 import { IdentitiesRepository } from './identities'
 import { AccountActionsRepository } from './account-actions'
+import { AccountDeletionRepository } from './account-deletion'
 import { RpcError } from './errors'
 
 const OAUTH_STATE_COOKIE = 'opensky_google_state'
 const OAUTH_VERIFIER_COOKIE = 'opensky_google_verifier'
 const OAUTH_RETURN_COOKIE = 'opensky_google_return'
+const OAUTH_PURPOSE_COOKIE = 'opensky_google_purpose'
 const OAUTH_COOKIE_PATH = '/api/auth/google/callback'
 const OAUTH_COOKIE_SECONDS = 10 * 60
+const ACCOUNT_DELETION_PURPOSE = 'account-deletion'
 
 const json = (body: unknown, status = 200, extraHeaders?: HeadersInit) => {
   const headers = new Headers(extraHeaders)
@@ -62,7 +65,8 @@ const clearOAuthCookies = (request: Request, headers: Headers) => {
   for (const name of [
     OAUTH_STATE_COOKIE,
     OAUTH_VERIFIER_COOKIE,
-    OAUTH_RETURN_COOKIE
+    OAUTH_RETURN_COOKIE,
+    OAUTH_PURPOSE_COOKIE
   ]) {
     headers.append(
       'Set-Cookie',
@@ -91,6 +95,145 @@ const callbackRedirect = (
     headers,
     response: () => new Response(null, { status: 302, headers })
   }
+}
+
+const accountDeletionRedirect = (
+  request: Request,
+  returnTo: string,
+  result: 'scheduled' | 'cancelled' | 'failed'
+) => {
+  const url = new URL(
+    result === 'scheduled' ? '/deleted-account' : returnTo,
+    new URL(request.url).origin
+  )
+  if (result === 'scheduled') url.searchParams.set('deletion', 'scheduled')
+  else url.searchParams.set('deletion_error', result)
+  const headers = new Headers({
+    Location: url.toString(),
+    'Cache-Control': 'no-store'
+  })
+  clearOAuthCookies(request, headers)
+  if (result === 'scheduled') {
+    headers.append(
+      'Set-Cookie',
+      clearCookie(IDENTITY_SESSION_COOKIE, { secure: secureRequest(request) })
+    )
+  }
+  return new Response(null, { status: 302, headers })
+}
+
+const requestUserId = async (
+  request: Request,
+  env: Env
+): Promise<string | undefined> => {
+  const token = readCookies(request).get(IDENTITY_SESSION_COOKIE)
+  if (!token) return
+  return verifyIdentitySession(token, env.SESSION_SIGNING_KEY)
+}
+
+const sameOrigin = (request: Request): boolean => {
+  const origin = request.headers.get('Origin')
+  return origin === new URL(request.url).origin
+}
+
+const beginAccountDeletion = async (
+  request: Request,
+  env: Env
+): Promise<Response> => {
+  if (!sameOrigin(request)) {
+    return json(
+      {
+        code: 'auth.forbidden',
+        message: 'Cross-origin account deletion is not allowed.'
+      },
+      403
+    )
+  }
+  if (!isGoogleConfigured(env)) {
+    return json(
+      {
+        code: 'auth.provider_not_configured',
+        message: 'Google sign-in is not configured yet.'
+      },
+      503
+    )
+  }
+  const userId = await requestUserId(request, env)
+  if (!userId) {
+    return json(
+      { code: 'auth.unauthenticated', message: 'Sign in is required.' },
+      401
+    )
+  }
+  let body: { accountName?: unknown; returnTo?: unknown }
+  try {
+    body = (await request.json()) as typeof body
+  } catch {
+    return json(
+      { code: 'auth.invalid_request', message: 'A JSON body is required.' },
+      400
+    )
+  }
+  const accountName =
+    typeof body.accountName === 'string' ? body.accountName : ''
+  try {
+    await new AccountDeletionRepository(env.AUTH_DB).confirmAccountName(
+      userId,
+      accountName
+    )
+  } catch (error) {
+    if (error instanceof RpcError) {
+      return json({ code: error.code, message: error.message }, error.status)
+    }
+    throw error
+  }
+  const identities = new IdentitiesRepository(env.AUTH_DB)
+  if (!(await identities.findProviderSubject(userId, 'google'))) {
+    return json(
+      {
+        code: 'auth.identity_not_linked',
+        message: 'This account does not have a Google identity.'
+      },
+      409
+    )
+  }
+
+  const requestUrl = new URL(request.url)
+  const redirectUri = new URL(OAUTH_COOKIE_PATH, requestUrl.origin).toString()
+  const state = randomToken()
+  const verifier = randomToken(48)
+  const returnTo = safeReturnTo(
+    typeof body.returnTo === 'string' ? body.returnTo : '/',
+    requestUrl.origin
+  )
+  const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_ENDPOINT)
+  authorizationUrl.search = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID!,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    code_challenge: await pkceChallenge(verifier),
+    code_challenge_method: 'S256',
+    access_type: 'online',
+    prompt: 'select_account',
+    max_age: '0'
+  }).toString()
+  const headers = new Headers()
+  headers.append('Set-Cookie', oauthCookie(request, OAUTH_STATE_COOKIE, state))
+  headers.append(
+    'Set-Cookie',
+    oauthCookie(request, OAUTH_VERIFIER_COOKIE, verifier)
+  )
+  headers.append(
+    'Set-Cookie',
+    oauthCookie(request, OAUTH_RETURN_COOKIE, base64UrlEncode(returnTo))
+  )
+  headers.append(
+    'Set-Cookie',
+    oauthCookie(request, OAUTH_PURPOSE_COOKIE, ACCOUNT_DELETION_PURPOSE)
+  )
+  return json({ authorizationUrl: authorizationUrl.toString() }, 200, headers)
 }
 
 const sessionResponse = async (
@@ -124,7 +267,11 @@ const sessionResponse = async (
     return json(
       {
         authenticated: true,
-        code: 'auth.account_banned',
+        code:
+          error.message === 'account flagged for deletion' ||
+          error.message === 'account deleted'
+            ? 'auth.account_deleted'
+            : 'auth.account_banned',
         message: error instanceof Error ? error.message : 'account banned'
       },
       403
@@ -193,6 +340,13 @@ const beginGoogleLogin = async (
     'Set-Cookie',
     oauthCookie(request, OAUTH_RETURN_COOKIE, base64UrlEncode(returnTo))
   )
+  headers.append(
+    'Set-Cookie',
+    clearCookie(OAUTH_PURPOSE_COOKIE, {
+      path: OAUTH_COOKIE_PATH,
+      secure: secureRequest(request)
+    })
+  )
   return new Response(null, { status: 302, headers })
 }
 
@@ -203,6 +357,8 @@ const finishGoogleLogin = async (
 ): Promise<Response> => {
   const requestUrl = new URL(request.url)
   const cookies = readCookies(request)
+  const deletionFlow =
+    cookies.get(OAUTH_PURPOSE_COOKIE) === ACCOUNT_DELETION_PURPOSE
   let returnTo = '/'
   try {
     const encodedReturnTo = cookies.get(OAUTH_RETURN_COOKIE)
@@ -217,7 +373,9 @@ const finishGoogleLogin = async (
   }
 
   if (requestUrl.searchParams.has('error')) {
-    return callbackRedirect(request, returnTo, 'cancelled').response()
+    return deletionFlow
+      ? accountDeletionRedirect(request, returnTo, 'cancelled')
+      : callbackRedirect(request, returnTo, 'cancelled').response()
   }
 
   const state = requestUrl.searchParams.get('state')
@@ -231,10 +389,14 @@ const finishGoogleLogin = async (
     state !== expectedState ||
     !verifier
   ) {
-    return callbackRedirect(request, returnTo, 'failed').response()
+    return deletionFlow
+      ? accountDeletionRedirect(request, returnTo, 'failed')
+      : callbackRedirect(request, returnTo, 'failed').response()
   }
   if (!isGoogleConfigured(env)) {
-    return callbackRedirect(request, returnTo, 'failed').response()
+    return deletionFlow
+      ? accountDeletionRedirect(request, returnTo, 'failed')
+      : callbackRedirect(request, returnTo, 'failed').response()
   }
 
   try {
@@ -246,6 +408,17 @@ const finishGoogleLogin = async (
       redirectUri: new URL(OAUTH_COOKIE_PATH, requestUrl.origin).toString()
     })
     const identities = new IdentitiesRepository(env.AUTH_DB)
+    if (deletionFlow) {
+      const userId = await requestUserId(request, env)
+      const linkedSubject = userId
+        ? await identities.findProviderSubject(userId, 'google')
+        : undefined
+      if (!userId || !linkedSubject || linkedSubject !== profile.subject) {
+        return accountDeletionRedirect(request, returnTo, 'failed')
+      }
+      await new AccountDeletionRepository(env.AUTH_DB).request(userId)
+      return accountDeletionRedirect(request, returnTo, 'scheduled')
+    }
     const user = await identities.upsertGoogle(profile)
     const token = await createIdentitySession(user.id, env.SESSION_SIGNING_KEY)
     const redirect = callbackRedirect(request, returnTo, 'success')
@@ -259,7 +432,9 @@ const finishGoogleLogin = async (
     return redirect.response()
   } catch (error) {
     console.error('Google authentication failed', error)
-    return callbackRedirect(request, returnTo, 'failed').response()
+    return deletionFlow
+      ? accountDeletionRedirect(request, returnTo, 'failed')
+      : callbackRedirect(request, returnTo, 'failed').response()
   }
 }
 
@@ -294,6 +469,12 @@ export const handleIdentityRequest = async (
   }
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
     return logout(request)
+  }
+  if (
+    url.pathname === '/api/auth/account-deletion/start' &&
+    request.method === 'POST'
+  ) {
+    return beginAccountDeletion(request, env)
   }
   if (url.pathname === '/api/auth/google/start' && request.method === 'GET') {
     return beginGoogleLogin(request, env)

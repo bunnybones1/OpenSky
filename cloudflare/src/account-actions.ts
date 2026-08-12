@@ -88,6 +88,12 @@ export class AccountActionsRepository {
       .bind(userId)
       .first<AccountStatusRow>()
     if (!status) return
+    if (status.account_status === 'TO_DELETE') {
+      throw permissionDenied('account flagged for deletion')
+    }
+    if (status.account_status === 'DELETED') {
+      throw permissionDenied('account deleted')
+    }
     if (!['BANNED', 'SUSPENDED'].includes(status.account_status)) return
 
     const active = await this.database
