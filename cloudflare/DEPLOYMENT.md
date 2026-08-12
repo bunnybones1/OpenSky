@@ -6,9 +6,9 @@
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`49bd05fd-6fcd-4f8e-aa31-00ec0d115140`)
 - Match service Worker: `cloud-weasel-match-service` (`16934ac3-15b6-4e4e-9581-86b0a2646610`)
-- Game Worker: `cloud-weasel-game-server` (`f5ea16d9-42fa-45ed-b4f3-f409469c9448`)
+- Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `18e66c1` for the matchmaker and match service, and `6574a62` for the game
+  `18e66c1` for the matchmaker and match service, and `7c91592` for the game
   Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
@@ -413,6 +413,16 @@ settlement and delayed delivery against that pool.
   game Worker tests and TypeScript checking passed. Live game and matcher
   protocol-v3 health passed; a read-only production aggregate remained one
   active and nine ended matches with no creating/failed rows and reported
+  `changed_db: false`.
+- Game Worker version `9e2bdf2b-489e-45cc-9ef1-2e9df16bd801` contains source
+  `7c91592`. The authoritative match-creation boundary now independently
+  decodes both player-session IDs with the same source `google/uuid` contract
+  used upstream, persists canonical lowercase text, and rejects malformed
+  service payloads before installing a match. This completes defense in depth
+  across matcher, final allocation, and game Durable Object. All 24 game unit
+  and 50 game Worker tests and TypeScript checking passed. Live game health and
+  API `Ping` passed; a read-only production aggregate remained one active and
+  nine ended matches with no creating/failed rows and reported
   `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
