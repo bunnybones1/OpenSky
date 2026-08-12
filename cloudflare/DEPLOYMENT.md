@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`7f6d027b-fe52-43c6-8607-4f789ed25912`)
+- API/web Worker: `opensky-webapp` (`bddb78e7-5f12-40d1-96e7-78e22142baac`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -20,7 +20,8 @@
   feedback port, `3113d17` for the gated Conquest V2 economy previews, and
   `bd1a236` for dormant App Developer Key management, `051e83a` for guarded
   SkyPass reward-definition updates, and `03fd8ca` for the off-chain reward
-  policy; matchmaker and match service include `309861e`
+  policy, plus `44e6797` for the shared next-reward schedule read; matchmaker
+  and match service include `309861e`
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0057`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
@@ -54,7 +55,8 @@
 - A retry-safe, immutable weekly leaderboard reward snapshot and delivery
   worker, deployed dormant until an explicit Cloud Weasel schedule is reviewed;
   the exact source weekly/monthly rank rollovers run only after delivery
-  completes, while the next-reward countdown remains gated with the schedule
+  completes. The source-compatible next-reward read uses that same immutable
+  schedule and fails explicitly while production has no configured cadence
 - Retry-safe ranked-constructed deck aggregation, including source Glicko
   transitions, Apprentice eligibility, match-status counters, current-season
   highest-player wins, a global Durable Object serializer, and D1 receipts
