@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`8eae3f01-d69f-4e5f-a7b3-1adbe4f06d12`)
+- API/web Worker: `opensky-webapp` (`9dd1c47d-845e-46ae-9d4d-26d4bdfa331f`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -16,9 +16,10 @@
   dormant leaderboard reward worker, `82be98f` for source rank rollovers, and
   `c9f358c` for the source payment catalog, `5902915` for dormant Stripe
   checkout, `6dc5e12` for staff payment reads, and `284f1da` for optional
-  wallet ownership proofs; matchmaker and match service include `309861e`
+  wallet ownership proofs, and `f19fd20`/`b1597c6` for the fail-closed R2
+  feedback port; matchmaker and match service include `309861e`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0053`
+- Applied D1 migrations: `0001` through `0054`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -150,6 +151,12 @@
   ERC-191 EOA signature recovery, concurrent replay rejection, database-level
   prevention of address reassignment, and account-deletion cleanup. Wallet
   proofs neither create login sessions nor authorize transactions
+- Source client-feedback ingestion ported from private S3 to private R2, with
+  authenticated identity-scoped keys, bounded JSON and JPEG payloads,
+  collision resistance, an optimistic ten-submission-per-hour D1 guard, and
+  account-deletion cleanup. Production currently returns `503` after
+  authentication because R2 has not been enabled on the Cloudflare account;
+  payloads are never accepted and discarded silently
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -167,7 +174,10 @@
 - Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
   match rewards, private/public spectators, and capability-protected replays
 
-The WalletConnect browser UI remains an optional future integration pending a
+R2 activation is pending an account-level Cloudflare choice; once enabled, add
+the private `cloud-weasel-client-feedback` binding and a reviewed retention
+lifecycle before accepting feedback. The WalletConnect browser UI remains an
+optional future integration pending a
 public WalletConnect/Reown project ID and origin allowlist. Contract-account
 ERC-1271 verification also remains pending an approved chain RPC; the deployed
 proof boundary currently accepts EOAs only. Captcha is deployed but remains
@@ -180,7 +190,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 28 files, 197 tests
+- API Worker: 29 files, 206 tests
 - Match service: 14 Worker tests
 - Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
@@ -794,6 +804,23 @@ settlement and delayed delivery against that pool.
   reported `changed_db: false`. The browser WalletConnect adapter is not exposed
   until its public project ID is provisioned; ERC-1271 contract wallets remain
   fail-closed until an approved chain RPC is configured.
+- API/web Worker version `9dd1c47d-845e-46ae-9d4d-26d4bdfa331f` contains source
+  `f19fd20` plus fail-closed rollout commit `b1597c6`. The source
+  `RecordGameClientFeedback` contract is ported from AWS S3 to a private R2
+  binding with identity-scoped random object keys, 512-KiB JSON and 5-MiB JPEG
+  caps, signature-byte JPEG validation, cleanup on partial writes, and private
+  feedback deletion during account anonymization. Migration
+  `0054_client_feedback_limits.sql` adds a guarded, optimistic ten-upload/hour
+  identity limiter; simultaneous tests admit exactly ten and delete rejected
+  objects. The rollout passed all 206 API tests, Cloudflare TypeScript checking,
+  the 137/172 RPC guard, release gates, the production build, and a
+  1.55-MiB/221-KiB-gzip Wrangler bundle. Cloudflare returned `10042` because R2
+  is not enabled for this account, so no bucket was created and no R2 binding
+  was deployed. The live RPC still requires authentication and then fails with
+  explicit `503` rather than discarding feedback. Anonymous RPC access returned
+  `401`; Google provider discovery and app HTML returned `200`. Production has
+  zero limiter rows, migration `0054` exists once with its transition guard,
+  and the post-probe D1 check reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
