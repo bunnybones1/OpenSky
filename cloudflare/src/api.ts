@@ -60,6 +60,7 @@ import {
 } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
+import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { StaffRepository } from './staff'
@@ -237,6 +238,7 @@ export const handleApiRequest = async (
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const playerSupport = new PlayerSupportRepository(env.AUTH_DB)
+  const progressionSupport = new ProgressionSupportRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
@@ -600,6 +602,40 @@ export const handleApiRequest = async (
           ok: await playerSupport.resetStarterDecks(
             principal.userId,
             body.address
+          )
+        })
+      }
+
+      case 'GMGiveLevels': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireProgressionWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          levels?: number
+        }>(request)
+        return json(request, env, {
+          ok: await progressionSupport.giveLevels(
+            principal.userId,
+            body.accountAddress,
+            body.levels
+          )
+        })
+      }
+
+      case 'GMSetRP': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireProgressionWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          mode?: GameMode
+          rankPoints?: number
+        }>(request)
+        return json(request, env, {
+          ok: await progressionSupport.setRP(
+            principal.userId,
+            body.accountAddress,
+            body.mode,
+            body.rankPoints
           )
         })
       }

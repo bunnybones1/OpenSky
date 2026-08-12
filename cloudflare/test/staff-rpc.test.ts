@@ -44,6 +44,7 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM staff_progression_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_player_support_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_account_action_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_game_mode_permissions'),
@@ -133,6 +134,16 @@ const grantAccountActionWrite = async () => {
 const grantPlayerSupportWrite = async () => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_player_support_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantProgressionWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_progression_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
@@ -732,6 +743,387 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(playerQuest!.id)
         .first()
     ).toEqual({ present: 1 })
+  })
+
+  it('ports guarded level grants with source SkyPass and referral effects', async () => {
+    const inviter = 'staff-progression-inviter'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Progression Inviter', 'progression-inviter@example.com', ?, ?)`
+    )
+      .bind(inviter, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(inviter)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_invites
+         (invitee_user_id, inviter_user_id, created_at) VALUES (?, ?, ?)`
+    )
+      .bind(PLAYER, inviter, now)
+      .run()
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGiveLevels', {
+          accountAddress: `identity:${PLAYER}`,
+          levels: 3
+        })
+      ).status
+    ).toBe(403)
+    await grantProgressionWrite()
+    for (const levels of [-1, 65_536, 1.5]) {
+      expect(
+        (
+          await rpcAs(ADMIN, 'GMGiveLevels', {
+            accountAddress: `identity:${PLAYER}`,
+            levels
+          })
+        ).status
+      ).toBe(400)
+    }
+
+    const granted = await rpcAs(ADMIN, 'GMGiveLevels', {
+      accountAddress: `identity:${PLAYER}`,
+      levels: 3
+    })
+    expect(granted.status).toBe(200)
+    expect(await granted.json()).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT profile.level, profile.xp,
+                progression.basic_skypass_level AS skypass_level,
+                progression.basic_skypass_xp AS skypass_xp
+         FROM player_profiles profile
+         JOIN player_progression progression
+           ON progression.user_id = profile.user_id
+         WHERE profile.user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ level: 4, xp: 0, skypass_level: 4, skypass_xp: 0 })
+    const season = seasonFromDate()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels, points_carried, points_spent
+         FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, inviter, season)
+        .first()
+    ).toEqual({ levels: 3, points_carried: 0, points_spent: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviter)
+        .first()
+    ).toEqual({ balance: 3 })
+    const ranks = await env.AUTH_DB.prepare(
+      `SELECT game_mode, player_rank, player_rank_stage
+       FROM player_account_stats WHERE user_id = ? AND season = ?
+       ORDER BY game_mode ASC`
+    )
+      .bind(PLAYER, season)
+      .all()
+    expect(ranks.results).toEqual([
+      {
+        game_mode: 'RANKED_CONSTRUCTED',
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I'
+      },
+      {
+        game_mode: 'RANKED_DISCOVERY',
+        player_rank: 'WANDERER',
+        player_rank_stage: 'STAGE_I'
+      }
+    ])
+    const audit = await env.AUTH_DB.prepare(
+      `SELECT operation, actor_user_id, target_user_id, before_json, after_json
+       FROM staff_progression_audit WHERE target_user_id = ? ORDER BY id ASC`
+    )
+      .bind(PLAYER)
+      .first<{
+        operation: string
+        actor_user_id: string
+        target_user_id: string
+        before_json: string
+        after_json: string
+      }>()
+    expect(audit).toMatchObject({
+      operation: 'GIVE_LEVELS',
+      actor_user_id: ADMIN,
+      target_user_id: PLAYER
+    })
+    expect(JSON.parse(audit!.before_json)).toMatchObject({
+      requestedLevels: 3,
+      grantedLevels: 3,
+      level: 1,
+      skypassLevel: 1,
+      inviterUserId: inviter
+    })
+    expect(JSON.parse(audit!.after_json)).toMatchObject({
+      level: 4,
+      skypassLevel: 4
+    })
+
+    // The source accepts zero levels as a successful state no-op.
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGiveLevels', {
+          accountAddress: `identity:${PLAYER}`,
+          levels: 0
+        })
+      ).status
+    ).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_progression_audit
+         WHERE target_user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ count: 1 })
+    expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_progression_audit SET actor_user_id = ? WHERE target_user_id = ?`
+      )
+        .bind(PLAYER, PLAYER)
+        .run()
+    ).rejects.toThrow(/immutable/i)
+    expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_progression_audit WHERE target_user_id = ?`
+      )
+        .bind(PLAYER)
+        .run()
+    ).rejects.toThrow(/immutable/i)
+  })
+
+  it('ports RP overrides, level-15 promotion, and grandweaver recalculation', async () => {
+    const inviter = 'staff-rp-inviter'
+    const invitationTime = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'RP Inviter', 'rp-inviter@example.com', ?, ?)`
+    )
+      .bind(inviter, invitationTime, invitationTime)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(inviter)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_invites
+         (invitee_user_id, inviter_user_id, created_at) VALUES (?, ?, ?)`
+    )
+      .bind(PLAYER, inviter, invitationTime)
+      .run()
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetRP', {
+          accountAddress: `identity:${PLAYER}`,
+          mode: 'RANKED_CONSTRUCTED',
+          rankPoints: 200
+        })
+      ).status
+    ).toBe(403)
+    await grantProgressionWrite()
+    for (const [mode, rankPoints] of [
+      ['UNKNOWN', 200],
+      ['PRACTICE_BOT', 200],
+      ['RANKED_CONSTRUCTED', 199],
+      ['RANKED_CONSTRUCTED', 2_147_483_648]
+    ]) {
+      expect(
+        (
+          await rpcAs(ADMIN, 'GMSetRP', {
+            accountAddress: `identity:${PLAYER}`,
+            mode,
+            rankPoints
+          })
+        ).status
+      ).toBe(400)
+    }
+
+    const season = seasonFromDate()
+    for (const [rankPoints, rank, stage] of [
+      [200, 'WANDERER', 'STAGE_III'],
+      [340, 'TRAINEE', 'STAGE_I'],
+      [769, 'APPRENTICE', 'STAGE_II']
+    ] as const) {
+      const response = await rpcAs(ADMIN, 'GMSetRP', {
+        accountAddress: `identity:${PLAYER}`,
+        mode: 'RANKED_CONSTRUCTED',
+        rankPoints
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true })
+      expect(
+        await env.AUTH_DB.prepare(
+          `SELECT score, player_rank, player_rank_stage, player_rank_state
+           FROM player_account_stats
+           WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+             AND season = ?`
+        )
+          .bind(PLAYER, season)
+          .first()
+      ).toEqual({
+        score: rankPoints,
+        player_rank: rank,
+        player_rank_stage: stage,
+        player_rank_state: JSON.stringify([1, 1750, 350, rankPoints])
+      })
+    }
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT profile.level, profile.xp,
+                progression.basic_skypass_level AS skypass_level
+         FROM player_profiles profile
+         JOIN player_progression progression
+           ON progression.user_id = profile.user_id
+         WHERE profile.user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ level: 16, xp: 0, skypass_level: 16 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, inviter, season)
+        .first()
+    ).toEqual({ levels: 15 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviter)
+        .first()
+    ).toEqual({ balance: 15 })
+
+    const conquest = await rpcAs(ADMIN, 'GMSetRP', {
+      accountAddress: `identity:${PLAYER}`,
+      mode: 'CONQUEST_CONSTRUCTED',
+      rankPoints: 700
+    })
+    expect(conquest.status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT score, player_rank, player_rank_stage, player_rank_state
+         FROM player_account_stats
+         WHERE user_id = ? AND game_mode = 'CONQUEST_CONSTRUCTED'
+           AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({
+      score: 0,
+      player_rank: 'APPRENTICE',
+      player_rank_stage: 'STAGE_II',
+      player_rank_state: '[1,1750,350,700]'
+    })
+
+    const masterUsers: string[] = []
+    const statements: D1PreparedStatement[] = []
+    const createdAt = new Date().toISOString()
+    for (let index = 0; index < 100; index++) {
+      const userId = `gm-master-${String(index).padStart(3, '0')}`
+      masterUsers.push(userId)
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO users
+             (id, display_name, primary_email, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`
+        ).bind(
+          userId,
+          `Master${String(index).padStart(3, '0')}`,
+          `${userId}@example.com`,
+          createdAt,
+          createdAt
+        ),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_settings
+             (user_id, name, locale, created_at, updated_at)
+           VALUES (?, ?, 'en', ?, ?)`
+        ).bind(
+          userId,
+          `Master${String(index).padStart(3, '0')}`,
+          createdAt,
+          createdAt
+        ),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, player_rank_state, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', ?, ?, 'MASTER', 'STAGE_NONE', ?, ?, ?)`
+        ).bind(
+          userId,
+          season,
+          2000 - index,
+          JSON.stringify([1, 1750, 350, 2000 - index]),
+          createdAt,
+          new Date(Date.parse(createdAt) + index).toISOString()
+        )
+      )
+    }
+    await env.AUTH_DB.batch(statements)
+    const master = await rpcAs(ADMIN, 'GMSetRP', {
+      accountAddress: `identity:${PLAYER}`,
+      mode: 'RANKED_CONSTRUCTED',
+      rankPoints: 1300
+    })
+    expect(master.status).toBe(200)
+    const rankCounts = await env.AUTH_DB.prepare(
+      `SELECT player_rank, COUNT(*) AS count FROM player_account_stats
+       WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = ?
+         AND player_rank IN ('MASTER', 'GRANDWEAVER')
+       GROUP BY player_rank ORDER BY player_rank ASC`
+    )
+      .bind(season)
+      .all()
+    expect(rankCounts.results).toEqual([
+      { player_rank: 'GRANDWEAVER', count: 100 },
+      { player_rank: 'MASTER', count: 1 }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT player_rank FROM player_account_stats
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ player_rank: 'MASTER' })
+
+    const audits = await env.AUTH_DB.prepare(
+      `SELECT operation, before_json, after_json FROM staff_progression_audit
+       WHERE target_user_id = ? AND operation = 'SET_RP' ORDER BY id ASC`
+    )
+      .bind(PLAYER)
+      .all<{ operation: string; before_json: string; after_json: string }>()
+    expect(audits.results).toHaveLength(5)
+    expect(audits.results.every(row => row.operation === 'SET_RP')).toBe(true)
+    expect(JSON.parse(audits.results[0].before_json)).toMatchObject({
+      requestedRankPoints: 200,
+      level: 1,
+      stat: {
+        score: 0,
+        playerRank: 'UNRANKED',
+        playerRankStage: 'STAGE_NONE',
+        playerRankState: ''
+      }
+    })
+    expect(JSON.parse(audits.results[0].after_json)).toMatchObject({
+      level: 16,
+      stat: {
+        score: 200,
+        playerRank: 'WANDERER',
+        playerRankStage: 'STAGE_III',
+        playerRankState: '[1,1750,350,200]'
+      }
+    })
   })
 
   it('lists filtered staff account rows with source-shaped cursor metadata', async () => {
