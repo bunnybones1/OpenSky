@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`e5660e23-6306-49c9-996e-3cbdfa1b9b43`)
+- API/web Worker: `opensky-webapp` (`31db4f6c-4515-43a0-8799-8556aaed3037`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -22,9 +22,11 @@
   SkyPass reward-definition updates, and `03fd8ca` for the off-chain reward
   policy, plus `44e6797` for the shared next-reward schedule read; matchmaker
   and match service include `309861e`. The API also includes `08bcd4d` for
-  off-chain referral-sticker delivery
+  off-chain referral-sticker delivery, `30ca55a` for complete off-chain
+  SkyPass delivery, `c88a7a2`/`6fa9d05` for Silver-to-ticket exchange, and
+  `bc9adc7` for the original Pending Gold delivery screen
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0058`
+- Applied D1 migrations: `0001` through `0060`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -949,6 +951,21 @@ settlement and delayed delivery against that pool.
   `401` anonymously. Production retains zero exchange receipts and 31 inventory
   rows, migration `0060` exists once with all four guards, and the final D1 read
   reported `changed_db: false`.
+- API/web Worker version `31db4f6c-4515-43a0-8799-8556aaed3037` contains source
+  `bc9adc7` and restores the original Pending Gold route for Google identities.
+  Delayed Conquest Gold was already delivered to off-chain D1 inventory; this
+  milestone exposes the preserved pending-card screen and changes only its
+  Google-mode player copy from minting to delivery while retaining legacy copy
+  for legacy authentication builds. The off-chain release gate now rejects a
+  regression to player-facing mint language, while source transaction-queue
+  audit milestone `aaf9308` inventories all 13 legacy queues and requires every
+  active producer to retain off-chain evidence or an explicit dormant gate.
+  Six off-chain gate tests, two queue-audit tests, touched-file lint, webapp
+  TypeScript checking, and the complete 498-file browser/game build passed.
+  Live `/pending-golds` and Google provider discovery returned `200`, while
+  anonymous `GetPendingCards` returned `401`. The release needed no migration;
+  production remained at zero Gold deliveries, zero Silver exchanges, and 31
+  inventory rows after read-only verification.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
