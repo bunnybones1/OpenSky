@@ -31,6 +31,7 @@ import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { AccountsRepository } from './accounts'
 import { AccountActionsRepository } from './account-actions'
 import { AccountReportsRepository } from './account-reports'
+import { AppDevKeyRepository } from './app-dev-keys'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import {
   allLibraryCards,
@@ -240,6 +241,7 @@ export const handleApiRequest = async (
 
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
+  const appDevKeys = new AppDevKeyRepository(env.AUTH_DB)
   const accountActions = new AccountActionsRepository(env.AUTH_DB)
   const accountReports = new AccountReportsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
@@ -549,6 +551,53 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
         return json(request, env, { stats: await staff.stats() })
+      }
+
+      case 'GMCreateAppDevKey': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAppDevKeyWrite(principal.userId)
+        const body = await requestBody<{
+          req?: { name?: unknown; email?: unknown }
+        }>(request)
+        return json(request, env, {
+          appDevKey: await appDevKeys.create(principal.userId, body.req)
+        })
+      }
+
+      case 'GMListAppDevKeys': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAppDevKeyWrite(principal.userId)
+        const body = await requestBody<{ page?: Page }>(request)
+        return json(request, env, await appDevKeys.list(body.page))
+      }
+
+      case 'GMDisableAppDevKey':
+      case 'GMEnableAppDevKey': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAppDevKeyWrite(principal.userId)
+        const body = await requestBody<{ appDevKeyId?: number }>(request)
+        return json(request, env, {
+          ok: await appDevKeys.setDisabled(
+            principal.userId,
+            body.appDevKeyId ?? 0,
+            method === 'GMDisableAppDevKey'
+          )
+        })
+      }
+
+      case 'GMGetAppDevKeyToken': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAppDevKeyWrite(principal.userId)
+        const body = await requestBody<{ appDevKeyId?: number }>(request)
+        return json(
+          request,
+          env,
+          await appDevKeys.token(
+            principal.userId,
+            body.appDevKeyId ?? 0,
+            env.SESSION_SIGNING_KEY
+          )
+        )
       }
 
       case 'GMFindAccount': {

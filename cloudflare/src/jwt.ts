@@ -1,4 +1,11 @@
-import { base64UrlDecode, base64UrlDecodeText, base64UrlEncode, utf8 } from './encoding'
+import type { AppDevKey } from '@opensky/proto'
+
+import {
+  base64UrlDecode,
+  base64UrlDecodeText,
+  base64UrlEncode,
+  utf8
+} from './encoding'
 import { unauthenticated } from './errors'
 
 export interface SessionClaims {
@@ -24,6 +31,28 @@ export const signSession = async (
   const key = await importKey(secret, ['sign'])
   const signature = await crypto.subtle.sign(algorithm, key, utf8(unsigned))
 
+  return `${unsigned}.${base64UrlEncode(new Uint8Array(signature))}`
+}
+
+export const APP_DEV_SESSION_SECONDS = 365 * 24 * 60 * 60
+
+export const signAppDevSession = async (
+  appDevKey: AppDevKey,
+  secret: string,
+  now = Math.floor(Date.now() / 1_000)
+): Promise<string> => {
+  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  // Preserve the source wire claim, including the full AppDevKey object and a
+  // one-year expiry from token issuance. The source iat is key creation time.
+  const claims = {
+    app: appDevKey,
+    iat: Math.floor(new Date(appDevKey.createdAt).getTime() / 1_000),
+    exp: now + APP_DEV_SESSION_SECONDS
+  }
+  const payload = base64UrlEncode(JSON.stringify(claims))
+  const unsigned = `${header}.${payload}`
+  const key = await importKey(secret, ['sign'])
+  const signature = await crypto.subtle.sign(algorithm, key, utf8(unsigned))
   return `${unsigned}.${base64UrlEncode(new Uint8Array(signature))}`
 }
 

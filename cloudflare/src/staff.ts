@@ -286,6 +286,17 @@ export class StaffRepository {
     }
   }
 
+  async requireAppDevKeyWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(`SELECT 1 FROM staff_app_dev_key_permissions WHERE user_id = ?`)
+      .bind(userId)
+      .first()
+    if (!permission) {
+      throw permissionDenied('app developer key write access required')
+    }
+  }
+
   async setGameModeStatus(
     actorUserId: string,
     gameMode: GameMode,
