@@ -19,6 +19,7 @@ import {
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
+import { AccountReportsRepository } from './account-reports'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import {
   allLibraryCards,
@@ -210,6 +211,7 @@ export const handleApiRequest = async (
 
   const method = url.pathname.slice(RPC_PREFIX.length)
   const accounts = new AccountsRepository(env.AUTH_DB)
+  const accountReports = new AccountReportsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
@@ -663,6 +665,21 @@ export const handleApiRequest = async (
         const body = await requestBody<{ matchID?: number }>(request)
         return json(request, env, {
           match: await competitive.getMatch(principal.userId, body.matchID ?? 0)
+        })
+      }
+
+      case 'ReportAccount': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          report?: {
+            reportedAddress?: string
+            matchId?: number
+            reporterComment?: string
+          }
+        }>(request)
+        if (!body.report) throw invalidArgument('missing report data')
+        return json(request, env, {
+          ok: await accountReports.report(principal.userId, body.report)
         })
       }
 
