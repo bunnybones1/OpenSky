@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:offchain && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:offchain && pnpm check:cloudflare:mint-queues && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -20,6 +20,7 @@
     "check:cloudflare:cards": "node --test ./utils/generate-cloudflare-card-library.test.mjs && node ./utils/generate-cloudflare-card-library.mjs --check",
     "check:cloudflare:conquest-gate": "node --test ./utils/check-cloudflare-conquest-gate.test.mjs && node ./utils/check-cloudflare-conquest-gate.mjs",
     "check:cloudflare:offchain": "node --test ./utils/check-cloudflare-offchain-gate.test.mjs && node ./utils/check-cloudflare-offchain-gate.mjs",
+    "check:cloudflare:mint-queues": "node --test ./utils/audit-cloudflare-mint-queues.test.mjs && node ./utils/audit-cloudflare-mint-queues.mjs",
     "check:cloudflare:release": "node --test ./utils/check-cloudflare-release-gate.test.mjs && node ./utils/check-cloudflare-release-gate.mjs",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",

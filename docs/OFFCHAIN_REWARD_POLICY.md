@@ -44,6 +44,13 @@ scans all five producer modules for both canonical `player_items` writes and an
 idempotent receipt/delivery key, in addition to excluding transaction code from
 the Google-identity route tree.
 
+The source transaction-queue audit also inventories all 13 queues consumed by
+`SendTxnsRunner`. Nine have an active source producer and must remain linked to
+an off-chain implementation or an explicit dormant product gate; four have no
+production producer and must stay producerless unless reviewed. A newly added
+queue, a revived producerless task, or missing Cloudflare evidence fails the
+production build.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
