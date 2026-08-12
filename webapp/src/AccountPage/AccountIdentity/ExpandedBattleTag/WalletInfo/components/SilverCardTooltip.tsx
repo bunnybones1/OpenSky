@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Text } from '~/__deprecated__/Text'
+import env from '~/env'
 import { Asset } from '~/shared/components/Asset'
 import { FlexBox } from '~/shared/components/Base/FlexBox'
 
@@ -31,8 +32,20 @@ const SilverCardTooltip = memo(() => {
           alignItems: 'flex-start'
         }}
       >
-        <Text color="purple8">{t('tooltip.silverCardsExplainerLineOne')}</Text>
-        <Text color="purple8">{t('tooltip.silverCardsExplainerLineTwo')}</Text>
+        <Text color="purple8">
+          {t(
+            env.AUTH_MODE === 'google'
+              ? 'tooltip.silverCardsExplainerLineOneOffchain'
+              : 'tooltip.silverCardsExplainerLineOne'
+          )}
+        </Text>
+        <Text color="purple8">
+          {t(
+            env.AUTH_MODE === 'google'
+              ? 'tooltip.silverCardsExplainerLineTwoOffchain'
+              : 'tooltip.silverCardsExplainerLineTwo'
+          )}
+        </Text>
       </FlexBox>
     </div>
   )

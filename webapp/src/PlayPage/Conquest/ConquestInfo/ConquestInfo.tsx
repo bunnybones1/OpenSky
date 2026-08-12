@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import env from '~/env'
 import { Box, FlexBox, Grid, Text } from '~/shared/components/Base'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { ImageIcon } from '~/shared/components/ImageIcon/ImageIcon'
@@ -112,7 +113,11 @@ const ConquestInfo = memo(() => {
             tooltip={
               <>
                 <Text color="purple8" fontSize="14px">
-                  {t('play.delayedGoldMinting')}
+                  {t(
+                    env.AUTH_MODE === 'google'
+                      ? 'play.delayedGoldDelivery'
+                      : 'play.delayedGoldMinting'
+                  )}
                 </Text>
                 <Text color="purple8" fontSize="14px" width="100%" textAlign="left">
                   {t('play.wonInConquest')}
@@ -235,7 +240,7 @@ const ConquestInfo = memo(() => {
             weeklyGolds?.map((reward) => {
               return (
                 <WeeklyGoldCard
-                  mintedAmount={reward.totalSupply}
+                  collectedAmount={reward.totalSupply}
                   id={reward.tokenId}
                   key={reward.tokenId}
                 />
@@ -433,7 +438,12 @@ const ConquestInfo = memo(() => {
             fontSize={['12px', '14px', '14px', '16px']}
             fontWeight="500"
           >
-            *{t('tooltip.conquestRulesLineSeven')}
+            *
+            {t(
+              env.AUTH_MODE === 'google'
+                ? 'tooltip.conquestRulesLineSevenOffchain'
+                : 'tooltip.conquestRulesLineSeven'
+            )}
           </Text>
         </FlexBox>
       </InnerContainer>
@@ -540,7 +550,12 @@ const ConquestInfo = memo(() => {
           textAlign={'center'}
         >
           {t('play.rewards.levelWeeklyTreasureLineOne')}
-          <br /> {t('play.rewards.levelWeeklyTreasureLineTwo')}
+          <br />{' '}
+          {t(
+            env.AUTH_MODE === 'google'
+              ? 'play.rewards.levelWeeklyTreasureLineTwoOffchain'
+              : 'play.rewards.levelWeeklyTreasureLineTwo'
+          )}
         </SectionHeader>
 
         <Box

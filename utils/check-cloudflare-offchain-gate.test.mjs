@@ -11,7 +11,8 @@ const validInput = () => ({
   policySource:
     'D1 inventory is the canonical authority. ' +
     'No game flow asks a player to mint a reward. ' +
-    'Apply the inventory change and fulfillment receipt in one D1 transaction.',
+    'Apply the inventory change and fulfillment receipt in one D1 transaction. ' +
+    'Google-auth product copy describes these items.',
   pendingGoldSources: "env.AUTH_MODE === 'google'; Delivery in progress",
   silverExchangeUi:
     "env.AUTH_MODE !== 'google'; if (env.AUTH_MODE === 'google') { " +
@@ -21,6 +22,35 @@ const validInput = () => ({
     "if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeGoldCardsForHeroSkins(); return } ' +
     'getHeroMintTxns()',
+  googleRewardUi: {
+    conquestInfo:
+      "env.AUTH_MODE === 'google'; play.delayedGoldDelivery; " +
+      'tooltip.conquestRulesLineSevenOffchain; ' +
+      'play.rewards.levelWeeklyTreasureLineTwoOffchain',
+    weeklyGoldCard:
+      "env.AUTH_MODE === 'google'; generic.Collected; " +
+      'play.conquestWeeklyGoldsOffchain',
+    rewardFeed:
+      "env.AUTH_MODE === 'google'; play.delayedDelivery; " +
+      'play.completedDeliveryNumCards; play.completedDeliverySpecificCard',
+    goldCardTooltip:
+      "env.AUTH_MODE === 'google'; " +
+      'tooltip.goldCardsExplainerLineOneOffchain; ' +
+      'tooltip.goldCardsExplainerLineTwoOffchain',
+    silverCardTooltip:
+      "env.AUTH_MODE === 'google'; " +
+      'tooltip.silverCardsExplainerLineOneOffchain; ' +
+      'tooltip.silverCardsExplainerLineTwoOffchain',
+    conquestProgressTooltip:
+      "env.AUTH_MODE === 'google'; tooltip.progressionInfoOffchain",
+    tradableBadge: "if (env.AUTH_MODE === 'google') return null",
+    skypassThumbnail: "env.AUTH_MODE !== 'google'"
+  },
+  googleRewardCopy: [
+    'Collected',
+    'Cards were delivered',
+    'Collectible items are stored in Cloud Weasel inventory'
+  ],
   rewardSources: {
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
@@ -115,4 +145,13 @@ test('rejects a Google Hero exchange that can fall through to a wallet', () => {
   assert.ok(
     offchainGateErrors(input).some(error => error.includes('Hero exchange'))
   )
+})
+
+test('rejects legacy ownership language from Google reward surfaces', () => {
+  const input = validInput()
+  input.googleRewardUi.tradableBadge = 'return <TradableBadge />'
+  input.googleRewardCopy = ['This reward is minted to your blockchain wallet']
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('tradableBadge')))
+  assert.ok(errors.some(error => error.includes('ownership language')))
 })

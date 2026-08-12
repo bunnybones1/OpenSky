@@ -12,6 +12,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   scoped entitlement/ledger.
 - No game flow asks a player to mint a reward or prepares a transaction that
   transfers a game reward to a wallet.
+- Google-auth product copy describes these items as Cloud Weasel inventory,
+  collectibles, exchanges, claims, or deliveries. Mint/tradable badges and
+  blockchain-wallet reward copy remain confined to the legacy-wallet product.
 - WalletConnect remains optional. A verified wallet may contribute read-only
   external ownership to content views, but it does not authenticate the player,
   own the Cloud Weasel account, or become the destination for earned rewards.

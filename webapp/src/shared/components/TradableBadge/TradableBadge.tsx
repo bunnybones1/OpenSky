@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { memo, useMemo } from 'react'
 
+import env from '~/env'
 import { ItemType } from '~/lib/proto'
 import { Box, FlexBox } from '~/shared/components/Base'
 import { Tooltip } from '~/shared/components/Tooltip/Tooltip'
@@ -39,6 +40,8 @@ export const TradableBadge = memo(
       if (TRADABLE_REWARDS_LIMITED.includes(itemType)) return 0.69
       return 0.51
     }, [itemType])
+
+    if (env.AUTH_MODE === 'google') return null
 
     if (
       !TRADABLE_REWARDS_LIMITED.includes(itemType) &&

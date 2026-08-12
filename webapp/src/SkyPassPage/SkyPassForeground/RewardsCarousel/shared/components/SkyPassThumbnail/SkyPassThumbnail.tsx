@@ -4,6 +4,7 @@ import { BASE_HERO_SKINS, ID_HEROES } from '@opensky/shared/constants'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { CardSet, DeckClass, DeckType, ItemType, SkypassReward } from '~/lib/proto'
 import { SoundClient } from '~/shared/clients'
 import { Box, FlexBox } from '~/shared/components/Base'
@@ -101,8 +102,9 @@ export const SkyPassThumbnail = memo(
 
     const isTradable = useCallback(
       (itemType: ItemType) =>
-        TRADABLE_REWARDS.includes(itemType) ||
-        TRADABLE_REWARDS_LIMITED.includes(itemType),
+        env.AUTH_MODE !== 'google' &&
+        (TRADABLE_REWARDS.includes(itemType) ||
+          TRADABLE_REWARDS_LIMITED.includes(itemType)),
       []
     )
 
@@ -144,17 +146,17 @@ export const SkyPassThumbnail = memo(
       (reward: SkypassReward) => {
         const cardSet = getCardSet(reward)
         if (reward?.itemType === ItemType.SW_STICKERS) {
-          return `stickers/6x/${AllStickers.get(
-            getStickerID(reward.attributes.tokenIDs[0])
-          )?.artID}.webp`
+          return `stickers/6x/${
+            AllStickers.get(getStickerID(reward.attributes.tokenIDs[0]))?.artID
+          }.webp`
         } else if (reward?.itemType === ItemType.SW_HERO) {
-          return `heroes/thumbnails/${BASE_HERO_SKINS[
-            ID_HEROES[reward.attributes.tokenIDs[0]]
-          ]?.artID}.webp`
+          return `heroes/thumbnails/${
+            BASE_HERO_SKINS[ID_HEROES[reward.attributes.tokenIDs[0]]]?.artID
+          }.webp`
         } else if (reward?.itemType === ItemType.SW_HERO_SKINS) {
-          return `heroes/thumbnails/${AllHeroSkins.get(
-            getLegacyHeroID(reward.attributes.tokenIDs[0])
-          )?.artID}.webp`
+          return `heroes/thumbnails/${
+            AllHeroSkins.get(getLegacyHeroID(reward.attributes.tokenIDs[0]))?.artID
+          }.webp`
         } else if (reward?.itemType === ItemType.SW_CARD_BACKS) {
           return `${THUMBNAILS_IMAGES[reward.itemType]}${cardBackName}.webp`
         }
@@ -325,10 +327,10 @@ export const SkyPassThumbnail = memo(
                   selectedLevelAndReward.level === levelData.level
                     ? 'selected'
                     : isClaimed(reward)
-                    ? 'claimed'
-                    : isClaimable(reward)
-                    ? 'claim'
-                    : 'primary'
+                      ? 'claimed'
+                      : isClaimable(reward)
+                        ? 'claim'
+                        : 'primary'
                 ]
               }
               style={{
@@ -438,12 +440,12 @@ export const SkyPassThumbnail = memo(
                     isClaimed(reward)
                       ? 'claimed'
                       : isClaimable(reward) &&
-                        selectedLevelAndReward?.reward === i &&
-                        selectedLevelAndReward.level === levelData.level
-                      ? 'claimSelected'
-                      : isClaimable(reward)
-                      ? 'claim'
-                      : 'primary'
+                          selectedLevelAndReward?.reward === i &&
+                          selectedLevelAndReward.level === levelData.level
+                        ? 'claimSelected'
+                        : isClaimable(reward)
+                          ? 'claim'
+                          : 'primary'
                   ]
                 }
                 width={

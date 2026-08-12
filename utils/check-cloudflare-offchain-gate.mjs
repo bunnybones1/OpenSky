@@ -16,6 +16,42 @@ const TRANSACTION_PATTERNS = [
   /ProcessSPUSDC/i
 ]
 
+const GOOGLE_REWARD_UI_REQUIREMENTS = {
+  conquestInfo: [
+    "env.AUTH_MODE === 'google'",
+    'play.delayedGoldDelivery',
+    'tooltip.conquestRulesLineSevenOffchain',
+    'play.rewards.levelWeeklyTreasureLineTwoOffchain'
+  ],
+  weeklyGoldCard: [
+    "env.AUTH_MODE === 'google'",
+    'generic.Collected',
+    'play.conquestWeeklyGoldsOffchain'
+  ],
+  rewardFeed: [
+    "env.AUTH_MODE === 'google'",
+    'play.delayedDelivery',
+    'play.completedDeliveryNumCards',
+    'play.completedDeliverySpecificCard'
+  ],
+  goldCardTooltip: [
+    "env.AUTH_MODE === 'google'",
+    'tooltip.goldCardsExplainerLineOneOffchain',
+    'tooltip.goldCardsExplainerLineTwoOffchain'
+  ],
+  silverCardTooltip: [
+    "env.AUTH_MODE === 'google'",
+    'tooltip.silverCardsExplainerLineOneOffchain',
+    'tooltip.silverCardsExplainerLineTwoOffchain'
+  ],
+  conquestProgressTooltip: [
+    "env.AUTH_MODE === 'google'",
+    'tooltip.progressionInfoOffchain'
+  ],
+  tradableBadge: ["env.AUTH_MODE === 'google') return null"],
+  skypassThumbnail: ["env.AUTH_MODE !== 'google'"]
+}
+
 export const offchainGateErrors = ({
   webappConfig,
   identityRoutes,
@@ -24,6 +60,8 @@ export const offchainGateErrors = ({
   pendingGoldSources = '',
   silverExchangeUi = '',
   heroExchangeUi = '',
+  googleRewardUi = {},
+  googleRewardCopy = [],
   rewardSources = {}
 }) => {
   const errors = []
@@ -55,7 +93,8 @@ export const offchainGateErrors = ({
   for (const required of [
     'D1 inventory is the canonical authority',
     'No game flow asks a player to mint a reward',
-    'Apply the inventory change and fulfillment receipt in one D1 transaction'
+    'Apply the inventory change and fulfillment receipt in one D1 transaction',
+    'Google-auth product copy describes these items'
   ]) {
     if (!policySource.includes(required)) {
       errors.push(`off-chain reward policy is missing: ${required}`)
@@ -110,6 +149,27 @@ export const offchainGateErrors = ({
       errors.push('Google Hero exchange can reach the legacy wallet path')
     }
   }
+  if (Object.keys(googleRewardUi).length) {
+    for (const [name, requiredTokens] of Object.entries(
+      GOOGLE_REWARD_UI_REQUIREMENTS
+    )) {
+      const source = googleRewardUi[name]
+      if (!source) {
+        errors.push(`Google reward UI source is missing: ${name}`)
+        continue
+      }
+      for (const token of requiredTokens) {
+        if (!source.includes(token)) {
+          errors.push(`Google reward UI ${name} is missing guard: ${token}`)
+        }
+      }
+    }
+  }
+  for (const copy of googleRewardCopy) {
+    if (/\b(?:mint|minted|minting|tradable|blockchain|wallet)\b/i.test(copy)) {
+      errors.push(`Google reward copy contains legacy ownership language: ${copy}`)
+    }
+  }
   for (const [name, source] of Object.entries(rewardSources)) {
     if (!/INSERT(?: OR IGNORE)? INTO player_items/.test(source)) {
       errors.push(`${name} does not grant canonical D1 inventory`)
@@ -149,7 +209,16 @@ const main = async () => {
     pendingGoldPage,
     pendingGoldCard,
     silverExchangeUi,
-    heroExchangeUi
+    heroExchangeUi,
+    conquestInfo,
+    weeklyGoldCard,
+    rewardFeed,
+    goldCardTooltip,
+    silverCardTooltip,
+    conquestProgressTooltip,
+    tradableBadge,
+    skypassThumbnail,
+    englishLocaleSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -205,8 +274,66 @@ const main = async () => {
         'webapp/src/HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts'
       ),
       'utf8'
-    )
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PlayPage/Conquest/ConquestInfo/ConquestInfo.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PlayPage/Conquest/ConquestInfo/components/WeeklyGoldCard.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AccountPage/AccountStats/RewardsFeed/FeedList/FeedRow/components/FeedRowText.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/WalletInfo/components/GoldCardTooltip.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/WalletInfo/components/SilverCardTooltip.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PlayPage/Conquest/ConquestProgressBar/components/ConquestProgressBarTooltip.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/shared/components/TradableBadge/TradableBadge.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPage/SkyPassForeground/RewardsCarousel/shared/components/SkyPassThumbnail/SkyPassThumbnail.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8')
   ])
+  const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
     webappConfig: JSON.parse(configSource),
     identityRoutes,
@@ -215,6 +342,32 @@ const main = async () => {
     pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}`,
     silverExchangeUi,
     heroExchangeUi,
+    googleRewardUi: {
+      conquestInfo,
+      weeklyGoldCard,
+      rewardFeed,
+      goldCardTooltip,
+      silverCardTooltip,
+      conquestProgressTooltip,
+      tradableBadge,
+      skypassThumbnail
+    },
+    googleRewardCopy: [
+      englishLocale.generic.Collected,
+      englishLocale.play.completedDeliverySpecificCard,
+      englishLocale.play.completedDeliveryNumCards,
+      englishLocale.play.conquestWeeklyGoldsOffchain,
+      englishLocale.play.delayedGoldDelivery,
+      englishLocale.play.delayedDelivery_one,
+      englishLocale.play.delayedDelivery_other,
+      englishLocale.play.rewards.levelWeeklyTreasureLineTwoOffchain,
+      englishLocale.tooltip.conquestRulesLineSevenOffchain,
+      englishLocale.tooltip.goldCardsExplainerLineOneOffchain,
+      englishLocale.tooltip.goldCardsExplainerLineTwoOffchain,
+      englishLocale.tooltip.progressionInfoOffchain,
+      englishLocale.tooltip.silverCardsExplainerLineOneOffchain,
+      englishLocale.tooltip.silverCardsExplainerLineTwoOffchain
+    ],
     rewardSources: {
       conquestDelivery,
       leaderboardRewards,
