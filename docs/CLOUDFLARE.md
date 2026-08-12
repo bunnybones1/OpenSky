@@ -251,6 +251,11 @@ and progress are not migrated.
   probe used by the original admin route are behind that check; the source's
   unimplemented `AdminListAccounts`/`AdminSearchAccounts` remain admin-only
   `501` tombstones.
+- The original admin account table and direct lookup now have role-gated reads:
+  `GMListAccounts` supports bounded cursors, source status and creation filters,
+  and rank-derived Conquest eligibility; `GMFindAccount` accepts a username or
+  identity reference and includes private settings for staff. Account-action
+  and IP histories remain empty until those audited models are ported.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.

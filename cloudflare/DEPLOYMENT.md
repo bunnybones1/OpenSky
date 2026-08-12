@@ -3,11 +3,11 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`c79d766d-9d0b-4b09-ae3c-2b451275cdb4`)
+- API/web Worker: `opensky-webapp` (`c9d21893-3819-4e3e-8ed3-1bfd375fbc6f`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `27b7c05` for web/API and `b612af3` for game, plus the
+- Deployed source includes `b67056b` for web/API and `b612af3` for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
 - Applied D1 migrations: `0001` through `0031`
@@ -56,6 +56,9 @@
 - Fail-closed Google-identity staff roles, source account-status aggregates,
   the original admin-UI authorization probe, and admin-gated tombstones for the
   source-unimplemented account-list methods
+- Admin-only source account discovery by username or identity reference, plus
+  cursor-paginated account lists with status, creation-window, and Conquest
+  eligibility filters; absent action/IP models return truthful empty histories
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -75,7 +78,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 112 tests
+- API Worker: 21 files, 115 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -98,6 +101,10 @@ settlement and delayed delivery against that pool.
 - Remote D1 after migration `0031`: zero staff grants and one existing `ACTIVE`
   player; anonymous admin probes returned `401`, version metadata matched the
   deployment, and the read-only verification reported `changed_db: false`
+- Live `GMFindAccount` and `GMListAccounts` probes both returned `401` without a
+  session, production still had zero staff grants, version metadata matched
+  `c9d21893-3819-4e3e-8ed3-1bfd375fbc6f`, and the D1 read reported
+  `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`
