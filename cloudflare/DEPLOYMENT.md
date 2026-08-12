@@ -5,13 +5,13 @@
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`49bd05fd-6fcd-4f8e-aa31-00ec0d115140`)
-- Match service Worker: `cloud-weasel-match-service` (`16934ac3-15b6-4e4e-9581-86b0a2646610`)
+- Match service Worker: `cloud-weasel-match-service` (`1e0c236f-292a-40c3-9600-9f28522d2888`)
 - Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `18e66c1` for the matchmaker and match service, and `7c91592` for the game
-  Worker
+  `18e66c1` for the matchmaker, `bd34e6e` for the match service, and `7c91592`
+  for the game Worker
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0045`
+- Applied D1 migrations: `0001` through `0046`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
   anonymization
 
@@ -424,6 +424,21 @@ settlement and delayed delivery against that pool.
   API `Ping` passed; a read-only production aggregate remained one active and
   nine ended matches with no creating/failed rows and reported
   `changed_db: false`.
+- Match service version `1e0c236f-292a-40c3-9600-9f28522d2888` contains source
+  `bd34e6e`. Migration `0046` adds a checked nullable accepted-dispatch
+  fingerprint. New allocations bind a proposal ID to the canonical SHA-256 of
+  its normalized players, identities, requests, modes, release, and acceptance
+  time; active, failed, and creating retries must match before profile or game
+  work. `INSERT OR IGNORE` races are rechecked after the first writer, identical
+  concurrent requests coalesce to one replay/allocation, and a conflicting
+  loser cannot mark the winner failed. Historical rows remain compatible via
+  conservative comparison of their stored allocation fields. The rollout
+  passed 23 match-service, 146 API, and 50 game Worker tests plus match-service
+  TypeScript checking and the Conquest gate. Migration `0046` existed exactly
+  once; all ten historical rows retained null fingerprints, zero rows were
+  creating/failed, and the read-only verification reported `changed_db: false`.
+  Live API `Ping`, authoritative mode status, and both multiplayer health probes
+  passed with Conquest disabled.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
