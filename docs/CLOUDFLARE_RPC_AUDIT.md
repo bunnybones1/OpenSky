@@ -59,11 +59,12 @@ game UI only as a match-local lookup, never as authentication.
    and are absent from this repository, so inventing them would not be a
    faithful port. Deck-rank writes, public listing, and authenticated search are
    now implemented and deployed.
-3. Define the destructive confirmation and recovery contract for
-   identity-native account deletion; match-scoped reporting is now deployed.
-   The source invite-request setting is deployed, and its deprecated `SignIn`
-   method remains an explicit compatibility error rather than a second login
-   authority.
+3. Define the confirmation and recovery contract for any future hard deletion.
+   Identity-native soft deletion is now deployed: the original settings dialog
+   uses fresh Google OIDC step-up, access stops immediately, and scheduled
+   anonymization follows the source delay. The source invite-request setting is
+   deployed, and its deprecated `SignIn` method remains an explicit
+   compatibility error rather than a second login authority.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.
 5. Provision staff only through an audited out-of-band procedure, then add
@@ -160,3 +161,13 @@ per-season giveaway cap is checked before choosing grant or removal, so a
 missing or exhausted cap fails both directions. D1 triggers enforce that cap
 and reject stale concurrent toggles, and every successful change is recorded in
 an immutable before/after ledger. Production has no writer grants or season cap.
+
+The source wallet-proof `RequestAccountDeletion` transport remains visible in
+the raw missing-method list because Cloud Weasel deliberately does not pretend
+a Google identity is a wallet. Its product behavior is nevertheless deployed
+through `/api/auth/account-deletion/start` and the existing settings UI: exact
+account-name confirmation, same-origin POST, fresh Google PKCE/state step-up,
+subject matching, immediate `TO_DELETE` enforcement, the source 30-days-minus-
+one-hour scheduled soft deletion, personal-field anonymization, optional-wallet
+unlinking, private user-storage removal, immutable request/tombstone evidence,
+and duplicate-provider prevention. Game and moderation history remain intact.

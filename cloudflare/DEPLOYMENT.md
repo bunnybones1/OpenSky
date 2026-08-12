@@ -3,16 +3,17 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`ff595b05-c845-4c78-aa2f-c6a1589db46f`)
+- API/web Worker: `opensky-webapp` (`5a690489-47ec-4d67-b014-f4fecd949263`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
 - Match service Worker: `cloud-weasel-match-service` (`177a62e5-e7ad-4142-b029-f9f4d87123d8`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `0dae6c1` for web/API, `3a964c3` for match service
-  and matchmaker,
+- Deployed source includes `9fb4e7c` for the API and `c80d59b` for the webapp,
+  `3a964c3` for match service and matchmaker,
   and `b612af3` for game, plus the match-service inventory fix from `3c57de5`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0042`
-- Scheduled trigger: every minute for due Conquest Gold delivery
+- Applied D1 migrations: `0001` through `0043`
+- Scheduled trigger: every minute for due Conquest Gold delivery and account
+  anonymization
 
 ## Verified scope
 
@@ -118,6 +119,12 @@
   atomic immutable audits, and database guards against concurrent stale
   toggles. No production season cap or entitlement-writer grant is seeded, so
   both grants and removals currently fail closed
+- Identity-native account deletion through the original settings dialog and a
+  fresh Google OIDC step-up. Access stops immediately at `TO_DELETE`; the
+  minute scheduler performs the source's soft anonymization after 30 days
+  minus one hour, unlinks optional wallets, removes private user storage, and
+  retains opaque provider tombstones so the deleted identity cannot be
+  recreated. Game and audit history remain referentially intact
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -137,7 +144,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 140 tests
+- API Worker: 22 files, 145 tests
 - Match service: 11 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -257,6 +264,16 @@ settlement and delayed delivery against that pool.
   fails closed. API version `ff595b05-c845-4c78-aa2f-c6a1589db46f` contains
   source `0dae6c1`, all 498 static assets were recognized, and the D1
   verification read reported `changed_db: false`
+- The live identity-native deletion start returned `401` without a session and
+  `403` for a cross-origin request; migration `0043` existed exactly once,
+  API `Ping`, original webapp HTML, and the exact 4.3 MB practice-game entry
+  all passed. Production retained zero deletion requests, provider tombstones,
+  `TO_DELETE`, or `DELETED` accounts, and its one existing user was unchanged.
+  Final API version `5a690489-47ec-4d67-b014-f4fecd949263` contains backend
+  source `9fb4e7c` and webapp source `c80d59b`; the final safety pass also
+  prevents a ban or suspension applied during Google step-up from racing the
+  deletion transition. All 498 static assets were recognized,
+  and the D1 verification read reported `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

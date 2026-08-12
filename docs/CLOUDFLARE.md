@@ -151,6 +151,8 @@ The identity-native routes are:
 - `GET /api/auth/google/start` begins Google OIDC with state and PKCE.
 - `GET /api/auth/google/callback` completes Google OIDC and creates or updates the D1 identity.
 - `POST /api/auth/logout` clears the OpenSky identity session.
+- `POST /api/auth/account-deletion/start` validates the original username
+  confirmation and begins a fresh Google OIDC step-up for delayed soft deletion.
 
 The earlier Sequence ETHAuth-compatible RPC routes remain temporarily for legacy clients, but the
 Cloudflare webapp no longer calls them, includes a Sequence project key, creates burner wallets, or
@@ -251,6 +253,17 @@ and progress are not migrated.
 - The source `RequestMoreInvites` opt-in is now an idempotent Google-identity
   settings write. The already-deprecated source `SignIn` RPC remains a faithful
   error tombstone and does not reintroduce wallet authentication alongside OIDC.
+- The original delete-account settings flow now uses Google as the confirmation
+  authority instead of silently requiring a Sequence wallet. Its same-origin
+  POST starts a fresh PKCE/state-protected Google exchange and verifies the
+  returned subject belongs to the active identity. Successful confirmation
+  immediately marks the player `TO_DELETE`, clears the session, blocks stale
+  sessions at API/player/matchmaking/game boundaries, and suspends delayed Gold.
+  After the source delay of 30 days minus one hour, the minute scheduler soft-
+  deletes the profile: personal identity/settings fields are anonymized,
+  optional wallets and private user storage are removed, and an opaque provider
+  tombstone prevents duplicate re-registration. Game and audit history remain
+  attached to the anonymized user for referential integrity.
 - Staff authority now uses a D1 `ADMIN` role bound to a Google identity and is
   denied by default. There is no player-facing grant endpoint and production
   has no role rows. The source `GMStats` aggregate and the `GMIsAccountBanned`
