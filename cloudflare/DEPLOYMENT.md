@@ -3,16 +3,17 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`05ef2754-c0d9-4c4f-ab67-de25457e36c7`)
+- API/web Worker: `opensky-webapp` (`85179357-10e9-44c1-b996-601de266a448`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`199f6e0c-ab1b-4e48-8c3e-cb9ca34d8c95`)
+- Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
   deadline milestone, `f5775cc` for half-open socket handling, `0438095` for
-  Conquest settlement retry recovery, and `309861e` for the matchmaker and
-  match service
+  Conquest settlement retry recovery, `dab4ba6` for anonymous public
+  spectating, `aa53dc7` for leaderboard reward projections, and `309861e` for
+  the matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0048`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -37,6 +38,9 @@
 - Public source deck leaderboard plus authenticated rank search, with current
   card-library scoping, score/class/card filters, highest-player accounts, and
   score-zero rows for newly saved complete decks
+- Source-ranked player leaderboard reward projections, including the exact
+  Silver curve and Conquest-ticket rank boundaries; these are display-only
+  until the weekly distribution worker and schedule are ported
 - Retry-safe ranked-constructed deck aggregation, including source Glicko
   transitions, Apprentice eligibility, match-status counters, current-season
   highest-player wins, a global Durable Object serializer, and D1 receipts
@@ -661,6 +665,19 @@ settlement and delayed delivery against that pool.
   rejected with `401`. A read-only production aggregate remained one active
   and nine ended matches, zero active Conquest pools/runs/settlements/Gold
   deliveries, and `changed_db: false`.
+- API/web Worker version `85179357-10e9-44c1-b996-601de266a448` contains source
+  `aa53dc7`. Ranked-constructed and ranked-discovery leaderboard entries now
+  project the exact source rewards: ranks 1-100 use the original
+  `floor(1.7^(120/(rank+26)))` Silver curve, ranks 1-100 show two Conquest
+  tickets, ranks 101-250 show one, and no rewards appear after rank 500. The
+  helper matches the source totals of 250 Silver cards and 350 tickets per
+  leaderboard. It performs no grants and does not expose a countdown; the
+  weekly distribution worker, idempotent delivery, and explicit Cloud Weasel
+  schedule remain separate rollout gates. The rollout passed all 153 API tests,
+  TypeScript checking, release/RPC/card/Conquest safety gates, the production
+  asset build, and the 1.2 MB Wrangler dry-run bundle. Live Worker metadata
+  reported the deployed version, app HTML returned `200`, and a public,
+  no-store production query returned rank 1 with 10 Silver and two tickets.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

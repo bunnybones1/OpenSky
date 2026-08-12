@@ -193,6 +193,10 @@ and progress are not migrated.
   atomicity. Private deck search preserves the source name/class/deck-string
   filters and cursor limits; deck checks preserve partial-deck normalization,
   card ownership, and hero/class unlock behavior.
+- Ranked player leaderboard rows project the source Silver-card curve and
+  Conquest-ticket boundaries for ranks 1 through 500. These values are
+  display-only: Cloud Weasel does not yet run the source weekly reset/reward
+  worker or advertise a next-reward countdown.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
@@ -437,11 +441,11 @@ than an unported code path.
 WalletConnect can then be added independently in account settings: connect a
 wallet, sign a session-owned nonce, persist the verified address, and merge
 wallet contents at read boundaries without granting the wallet authority over
-the user's login session. The remaining content compatibility read is
-leaderboard reward timing once Cloud Weasel has an explicit UTC weekday/time
-configuration; the original
-deployment's reward schedule is not present in this repository and must not be
-invented.
+the user's login session. Leaderboard reward timing should be exposed only
+after the weekly distribution worker, retry/idempotency behavior, and an
+explicit Cloud Weasel UTC weekday/time configuration are deployed together;
+the committed example configurations disagree, so production policy must not
+be inferred from either one.
 
 The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
