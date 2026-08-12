@@ -45,7 +45,7 @@ const deletionRequest = (row: AccountDeletionRow): AccountDeletionRequest => ({
 export class AccountDeletionRepository {
   constructor(
     private readonly database: D1Database,
-    private readonly feedbackBucket: R2Bucket
+    private readonly feedbackBucket?: R2Bucket
   ) {}
 
   async target(userId: string): Promise<AccountDeletionTarget> {
@@ -146,10 +146,12 @@ export class AccountDeletionRepository {
     for (const row of due.results) {
       // R2 has no cross-service transaction with D1. Delete private feedback
       // first; this is idempotent, so a later D1 failure safely retries.
-      await new ClientFeedbackRepository(
-        this.database,
-        this.feedbackBucket
-      ).deleteForUser(row.user_id)
+      if (this.feedbackBucket) {
+        await new ClientFeedbackRepository(
+          this.database,
+          this.feedbackBucket
+        ).deleteForUser(row.user_id)
+      }
       const identities = await this.database
         .prepare(
           `SELECT provider, provider_subject FROM auth_identities

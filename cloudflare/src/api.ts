@@ -242,10 +242,9 @@ export const handleApiRequest = async (
   const accountActions = new AccountActionsRepository(env.AUTH_DB)
   const accountReports = new AccountReportsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
-  const clientFeedback = new ClientFeedbackRepository(
-    env.AUTH_DB,
-    env.CLIENT_FEEDBACK
-  )
+  const clientFeedback = env.CLIENT_FEEDBACK
+    ? new ClientFeedbackRepository(env.AUTH_DB, env.CLIENT_FEEDBACK)
+    : undefined
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
@@ -1890,6 +1889,13 @@ export const handleApiRequest = async (
 
       case 'RecordGameClientFeedback': {
         const principal = await identityPrincipal(request, env)
+        if (!clientFeedback) {
+          throw new RpcError(
+            503,
+            'webrpc.unavailable',
+            'client feedback storage is not configured'
+          )
+        }
         const contentLength = request.headers.get('Content-Length')
         if (
           contentLength &&

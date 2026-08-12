@@ -78,6 +78,33 @@ describe('source client-feedback RPC on private R2', () => {
     })
   })
 
+  it('fails closed when the production R2 binding is absent', async () => {
+    const token = await createIdentitySession(
+      userId,
+      testEnv.SESSION_SIGNING_KEY
+    )
+    const response = await handleApiRequest(
+      new Request(
+        'https://opensky.example/api/rpc/SkyWeaverAPI/RecordGameClientFeedback',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: `${IDENTITY_SESSION_COOKIE}=${token}`
+          },
+          body: JSON.stringify({
+            req: { sentiment: 'positive', dump: {}, screenshotImageURI: '' }
+          })
+        }
+      ),
+      { ...testEnv, CLIENT_FEEDBACK: undefined }
+    )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      code: 'webrpc.unavailable'
+    })
+  })
+
   it('stores feedback JSON under a private identity-scoped key', async () => {
     const response = await rpc({
       req: {
