@@ -5,10 +5,10 @@
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`b5b68d91-7eb3-4aa6-a6c6-c72cb48442b9`)
-- Match service Worker: `cloud-weasel-match-service` (`ed5d2d3c-6618-4e71-88bc-7930c3a647c7`)
+- Match service Worker: `cloud-weasel-match-service` (`51087d54-7b34-4696-91dc-cd33d77f6f71`)
 - Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `f734491` for the matchmaker, `1a86cfb` for the match service, and `7c91592`
+  `f734491` for the matchmaker, `2a51215` for the match service, and `7c91592`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -464,6 +464,19 @@ settlement and delayed delivery against that pool.
   with Conquest disabled; a read-only production aggregate remained one active
   and nine ended matches with no creating/failed rows and reported
   `changed_db: false`.
+- Match service version `51087d54-7b34-4696-91dc-cd33d77f6f71` contains source
+  `2a51215`. Final accepted dispatch now independently preserves the source's
+  global session validator for all modes and the challenge criterion's nonempty
+  code requirement before any D1 allocation. Each participant's request was
+  already checked against its own normalized player snapshot; the added cross-
+  participant check prevents a bypassed matcher from pairing different
+  challenge/session cohorts. Client IP compatibility intentionally stays in the
+  authenticated matcher and is not copied into the internal dispatch payload.
+  The rollout passed all 25 match-service Worker tests, TypeScript checking, the
+  Go session/challenge-validator suites, and the Conquest gate. Live matcher/
+  game health, API `Ping`, and authoritative mode status passed with Conquest
+  disabled; a read-only production aggregate remained one active and nine
+  ended matches with no creating/failed rows and reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
