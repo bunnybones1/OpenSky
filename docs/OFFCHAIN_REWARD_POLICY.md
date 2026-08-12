@@ -40,9 +40,15 @@ Existing SkyPass claim receipts, Conquest delivery keys, leaderboard award
 receipts, referral-sticker award batches, and Stripe webhook receipts are the
 reference implementations. New reward paths must test duplicate, concurrent,
 rollback, and retry behavior before production deployment. The release gate
-scans all five producer modules for both canonical `player_items` writes and an
+scans every producer module for both canonical `player_items` writes and an
 idempotent receipt/delivery key, in addition to excluding transaction code from
 the Google-identity route tree.
+
+The mobile-store fulfillment ledger is also part of this boundary. It accepts
+only server-verified provider facts, binds the provider transaction to one
+Google identity with a database uniqueness constraint, stores only receipt
+digests, and grants tickets or the current season's premium SkyPass directly in
+D1. Provider credentials and raw purchase tokens never enter reward evidence.
 
 The source transaction-queue audit also inventories all 13 queues consumed by
 `SendTxnsRunner`. Eight have an active source producer and must remain linked to

@@ -86,7 +86,9 @@ export const offchainGateErrors = ({
       errors.push('Google Silver exchange can reach the legacy wallet path')
     }
     if (!silverExchangeUi.includes("env.AUTH_MODE !== 'google'")) {
-      errors.push('Google Silver exchange still loads the legacy payment catalog')
+      errors.push(
+        'Google Silver exchange still loads the legacy payment catalog'
+      )
     }
   }
   for (const [name, source] of Object.entries(rewardSources)) {
@@ -123,6 +125,7 @@ const main = async () => {
     referralStickerRewards,
     silverTicketExchange,
     stripeCheckout,
+    mobileStoreFulfillment,
     pendingGoldPage,
     pendingGoldCard,
     silverExchangeUi
@@ -149,9 +152,19 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/PendingGoldsPage/PendingGoldsPage.tsx'), 'utf8'),
     readFile(
-      path.join(root, 'webapp/src/PendingGoldsPage/components/PendingGoldCard.tsx'),
+      path.join(root, 'cloudflare/src/mobile-store-fulfillment.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'webapp/src/PendingGoldsPage/PendingGoldsPage.tsx'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PendingGoldsPage/components/PendingGoldCard.tsx'
+      ),
       'utf8'
     ),
     readFile(
@@ -175,7 +188,8 @@ const main = async () => {
       playerRpc,
       referralStickerRewards,
       silverTicketExchange,
-      stripeCheckout
+      stripeCheckout,
+      mobileStoreFulfillment
     }
   })
   if (errors.length) {
