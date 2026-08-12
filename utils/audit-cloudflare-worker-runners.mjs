@@ -103,14 +103,14 @@ export const EXPECTED_RUNNERS = {
     evidence: ['All 13 source transaction queues', 'offchain']
   },
   SkypassAutoClaimRunner: {
-    disposition: 'actionable',
-    evidenceFile: 'api/lib/jobqueue/skypass_autoclaim_runner.go',
-    evidence: ['ClaimRewards', 'Autoclaimed Rewards']
+    disposition: 'ported',
+    evidenceFile: 'cloudflare/src/skypass-auto-claim.ts',
+    evidence: ['claimSkypassRewards', 'player_skypass_auto_claims']
   },
   SkypassEndOfSeasonRunner: {
-    disposition: 'actionable',
-    evidenceFile: 'api/lib/jobqueue/skypass_end_of_season_runner.go',
-    evidence: ['CurrentSeasonEnd', 'SkypassAutoClaimTask']
+    disposition: 'ported',
+    evidenceFile: 'cloudflare/src/skypass-auto-claim.ts',
+    evidence: ['seasonStart', 'skypass_season_close_cycles']
   },
   StripeEventRunner: {
     disposition: 'ported',

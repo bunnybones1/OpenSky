@@ -32,8 +32,8 @@ mint. WalletConnect remains an optional ownership integration only.
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `RankPointsSoftResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; live reward producers deliver off chain. |
-| `SkypassAutoClaimRunner` | Actionable | Remaining faithful product gap: atomically claim all earned season rewards off chain. |
-| `SkypassEndOfSeasonRunner` | Actionable | Remaining faithful product gap: schedule season-end auto-claim exactly once. |
+| `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward off chain. |
+| `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds and complete once. |
 | `StripeEventRunner` | Ported | Verified Stripe webhooks fulfill purchases idempotently in D1. |
 | `TxnStatusRunner` | Retired | There are no reward-mint transactions whose chain status controls inventory. |
 
@@ -41,6 +41,7 @@ mint. WalletConnect remains an optional ownership integration only.
 a runner without review, if mapped implementation evidence disappears, or if a
 commented-out runner is accidentally counted as active.
 
-The next implementation milestone is the two-part SkyPass season close. It must
-reuse the existing immutable SkyPass claim receipts and off-chain reward
-delivery paths rather than recreate the source mint queues.
+SkyPass season close reuses the existing immutable claim receipts and off-chain
+reward delivery paths rather than recreating the source mint queues. The only
+optional worker integration left is external device push; in-app notifications
+are already authoritative and do not depend on it.

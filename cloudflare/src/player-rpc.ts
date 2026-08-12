@@ -2676,6 +2676,7 @@ export class PlayerRpcRepository {
         .first<{ has_premium: number }>()
     ])
     const progress = progression?.basic_skypass_level || 0
+    const hasPremium = seasonStats?.has_premium === 1
     const rewards = rewardsResult.results
       .filter(row => !row.is_infinite || row.level <= progress + 1)
       .map<SkypassReward>(row => ({
@@ -2688,7 +2689,7 @@ export class PlayerRpcRepository {
         isStarter: row.is_starter === 1,
         isInfinite: row.is_infinite === 1,
         attributes: parseAttributes(row.attributes),
-        claimable: row.tier === 1,
+        claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
         claimed: row.claimed === 1,
         ...(row.gained_rewards
           ? { gainedRewards: JSON.parse(row.gained_rewards) }
@@ -2712,7 +2713,7 @@ export class PlayerRpcRepository {
     }
 
     return {
-      hasPremium: seasonStats?.has_premium === 1,
+      hasPremium,
       levels: [...grouped.entries()]
         .sort(([left], [right]) => left - right)
         .map(([level, levelRewards]) => ({
@@ -3258,7 +3259,8 @@ export class PlayerRpcRepository {
 
   async claimSkypassRewards(
     userId: string,
-    ids: number[]
+    ids: number[],
+    options: { autoClaimSeason?: number; now?: Date } = {}
   ): Promise<Array<Record<string, unknown>>> {
     const uniqueIds = [...new Set(ids)]
     if (!uniqueIds.length) return []
@@ -3291,7 +3293,7 @@ export class PlayerRpcRepository {
     const rawById = new Map(rawResult.results.map(row => [row.id, row]))
     const gainedRewards: Array<Record<string, unknown>> = []
     const statements: D1PreparedStatement[] = []
-    const now = new Date().toISOString()
+    const now = (options.now ?? new Date()).toISOString()
 
     for (const id of uniqueIds) {
       const rawReward = rawById.get(id)
@@ -3387,10 +3389,18 @@ export class PlayerRpcRepository {
         this.database
           .prepare(
             `INSERT OR IGNORE INTO player_skypass_claims
-               (user_id, reward_id, rewards, claimed_at, delivery_key)
-             VALUES (?, ?, ?, ?, ?)`
+               (user_id, reward_id, rewards, claimed_at, delivery_key,
+                auto_claim_season)
+             VALUES (?, ?, ?, ?, ?, ?)`
           )
-          .bind(userId, id, JSON.stringify(applied), now, deliveryKey)
+          .bind(
+            userId,
+            id,
+            JSON.stringify(applied),
+            now,
+            deliveryKey,
+            options.autoClaimSeason ?? null
+          )
       )
       statements.push(...rewardStatements)
     }

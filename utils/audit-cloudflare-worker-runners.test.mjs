@@ -30,16 +30,15 @@ test('extracts active runner registrations while ignoring commented Go', () => {
   )
 })
 
-test('accepts the complete reviewed runner map and preserves actionable gaps', () => {
+test('accepts the complete reviewed runner map with no actionable gaps', () => {
   const audit = auditWorkerRunners({
     source: sourceFor(Object.keys(EXPECTED_RUNNERS)),
     evidenceSources: completeEvidence()
   })
   assert.deepEqual(audit.errors, [])
-  assert.deepEqual(audit.byDisposition.actionable.sort(), [
-    'SkypassAutoClaimRunner',
-    'SkypassEndOfSeasonRunner'
-  ])
+  assert.deepEqual(audit.byDisposition.actionable, [])
+  assert.ok(audit.byDisposition.ported.includes('SkypassAutoClaimRunner'))
+  assert.ok(audit.byDisposition.ported.includes('SkypassEndOfSeasonRunner'))
 })
 
 test('rejects unknown runners, removed reviews, and lost evidence', () => {

@@ -206,6 +206,7 @@ const main = async () => {
     heroSkinExchange,
     stripeCheckout,
     mobileStoreFulfillment,
+    skypassAutoClaim,
     pendingGoldPage,
     pendingGoldCard,
     silverExchangeUi,
@@ -250,6 +251,7 @@ const main = async () => {
       path.join(root, 'cloudflare/src/mobile-store-fulfillment.ts'),
       'utf8'
     ),
+    readFile(path.join(root, 'cloudflare/src/skypass-auto-claim.ts'), 'utf8'),
     readFile(
       path.join(root, 'webapp/src/PendingGoldsPage/PendingGoldsPage.tsx'),
       'utf8'
@@ -376,7 +378,8 @@ const main = async () => {
       silverTicketExchange,
       heroSkinExchange,
       stripeCheckout,
-      mobileStoreFulfillment
+      mobileStoreFulfillment,
+      skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`
     }
   })
   if (errors.length) {
