@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`77fe71c2-59f2-4835-98aa-e08888707101`)
+- API/web Worker: `opensky-webapp` (`8eae3f01-d69f-4e5f-a7b3-1adbe4f06d12`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -14,13 +14,15 @@
   Conquest settlement retry recovery, `dab4ba6` for anonymous public
   spectating, `aa53dc7` for leaderboard reward projections, `6cb51bf` for the
   dormant leaderboard reward worker, `82be98f` for source rank rollovers, and
-  `c9f358c` for the source payment catalog; matchmaker and match service include
-  `309861e`
+  `c9f358c` for the source payment catalog, `5902915` for dormant Stripe
+  checkout, `6dc5e12` for staff payment reads, and `284f1da` for optional
+  wallet ownership proofs; matchmaker and match service include `309861e`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0050`
+- Applied D1 migrations: `0001` through `0053`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
-  anonymization, and explicitly configured leaderboard reward cycles. No
-  leaderboard schedule is configured in production.
+  anonymization, expired wallet-proof cleanup, and explicitly configured
+  leaderboard reward cycles. No leaderboard schedule is configured in
+  production.
 
 ## Verified scope
 
@@ -143,6 +145,11 @@
   minus one hour, unlinks optional wallets, removes private user storage, and
   retains opaque provider tombstones so the deleted identity cannot be
   recreated. Game and audit history remain referentially intact
+- Optional EVM wallet ownership links attached to an existing Google identity,
+  using exact origin-bound ERC-4361 messages, ten-minute single-use nonces,
+  ERC-191 EOA signature recovery, concurrent replay rejection, database-level
+  prevention of address reassignment, and account-deletion cleanup. Wallet
+  proofs neither create login sessions nor authorize transactions
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -160,8 +167,11 @@
 - Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
   match rewards, private/public spectators, and capability-protected replays
 
-WalletConnect remains an optional future integration. Captcha is deployed but
-remains disabled until Cloud Weasel hCaptcha credentials are provisioned.
+The WalletConnect browser UI remains an optional future integration pending a
+public WalletConnect/Reown project ID and origin allowlist. Contract-account
+ERC-1271 verification also remains pending an approved chain RPC; the deployed
+proof boundary currently accepts EOAs only. Captcha is deployed but remains
+disabled until Cloud Weasel hCaptcha credentials are provisioned.
 Seasonal invite-sticker redemption, marketplace writes, legacy data migration,
 and most administrative RPCs remain pending. No production staff identity is
 provisioned. Conquest queues stay disabled until an
@@ -170,7 +180,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 22 files, 148 tests
+- API Worker: 28 files, 197 tests
 - Match service: 14 Worker tests
 - Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
@@ -767,6 +777,23 @@ settlement and delayed delivery against that pool.
   returned `401` anonymously. Production retained zero payments, events,
   numeric staff IDs, or logs with all five creation/immutability guards present
   and the verification reported `changed_db: false`.
+- API/web Worker version `8eae3f01-d69f-4e5f-a7b3-1adbe4f06d12` contains source
+  `284f1da`. Migration `0053_optional_wallet_links.sql` adds optional,
+  Google-identity-scoped EVM wallet ownership proofs without enabling wallet
+  login. The Worker constructs and persists the exact origin-bound ERC-4361
+  message, verifies ERC-191 EOA signatures, atomically consumes each ten-minute
+  challenge once, refuses cross-account transfers, and unlinks wallet and
+  pending-proof data during account deletion. D1 independently prevents
+  challenge tampering and verified-address reassignment; the scheduler removes
+  proof records one day after expiry. The rollout passed all 197 API tests,
+  Cloudflare TypeScript checking, release gates, the production asset build,
+  and a 1.55 MiB/220 KiB-gzip Wrangler bundle. Live anonymous and cross-origin
+  challenge probes returned `401` and `403`; Google provider discovery and app
+  HTML returned `200`. Production has zero challenges or links, migration
+  `0053` exists once with both guards, and the read-only post-probe check
+  reported `changed_db: false`. The browser WalletConnect adapter is not exposed
+  until its public project ID is provisioned; ERC-1271 contract wallets remain
+  fail-closed until an approved chain RPC is configured.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
