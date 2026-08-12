@@ -688,6 +688,7 @@ describe('Cloudflare matchmaker Worker', () => {
           prefix: 'proposal:'
         })
         expect(proposals.size).toBe(1)
+        expect(await state.storage.getAlarm()).toEqual(expect.any(Number))
         for (const [key, proposal] of proposals) {
           expect(proposal).toMatchObject({ dispatchAttempts: 1 })
           await state.storage.put(key, {
@@ -802,6 +803,190 @@ describe('Cloudflare matchmaker Worker', () => {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
     expect(await status.json()).toMatchObject({ activeProposals: 0 })
+  })
+
+  it('recovers a legacy dispatch crash with no persisted retry deadline', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        const [key, proposal] = [...proposals.entries()][0]
+        await state.storage.put(key, {
+          ...proposal,
+          status: 'DISPATCHING',
+          accepted: [PRINCIPAL_1, PRINCIPAL_2],
+          dispatchAttempts: 1,
+          nextDispatchAtMs: undefined
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const firstDispatch = collectMessages(first, 2)
+    const secondDispatch = collectMessages(second, 2)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    for (const messages of [await firstDispatch, await secondDispatch]) {
+      expect(messages).toEqual([
+        {
+          type: 'match_made',
+          serverAddress: 'wss://match.example/v1/matches/test'
+        },
+        {
+          type: 'match_ready_to_start',
+          mode: GameMode.RANKED_CONSTRUCTED
+        }
+      ])
+    }
+  })
+
+  it('finishes a persisted allocated handoff without redispatching the game', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    const allocatedAddress = 'wss://match.example/v1/matches/persisted-handoff'
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        const [key, proposal] = [...proposals.entries()][0]
+        await state.storage.put(key, {
+          ...proposal,
+          status: 'ALLOCATED',
+          accepted: [PRINCIPAL_1, PRINCIPAL_2],
+          serverAddress: allocatedAddress,
+          nextDispatchAtMs: undefined
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const firstDispatch = collectMessages(first, 2)
+    const secondDispatch = collectMessages(second, 2)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    for (const messages of [await firstDispatch, await secondDispatch]) {
+      expect(messages).toEqual([
+        { type: 'match_made', serverAddress: allocatedAddress },
+        {
+          type: 'match_ready_to_start',
+          mode: GameMode.RANKED_CONSTRUCTED
+        }
+      ])
+    }
+  })
+
+  it('does not cancel a match for a decline after acceptance completed', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        const [key, proposal] = [...proposals.entries()][0]
+        await state.storage.put(key, {
+          ...proposal,
+          status: 'ACCEPTED',
+          accepted: [PRINCIPAL_1, PRINCIPAL_2],
+          nextDispatchAtMs: Date.now() + 60_000
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const rejected = nextMessage(first)
+    first.send(JSON.stringify({ type: 'decline_match' }))
+    expect(await rejected).toMatchObject({
+      type: 'error',
+      reason: 'INVALID_OPERATION'
+    })
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        for (const [key, proposal] of proposals) {
+          await state.storage.put(key, {
+            ...proposal,
+            nextDispatchAtMs: Date.now() - 1
+          })
+        }
+      }
+    )
+    const firstDispatch = collectMessages(first, 2)
+    const secondDispatch = collectMessages(second, 2)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect((await firstDispatch)[0]).toMatchObject({ type: 'match_made' })
+    expect((await secondDispatch)[0]).toMatchObject({ type: 'match_made' })
+  })
+
+  it('does not cancel an accepted proposal when a player disconnects', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        const [key, proposal] = [...proposals.entries()][0]
+        await state.storage.put(key, {
+          ...proposal,
+          status: 'DISPATCHING',
+          accepted: [PRINCIPAL_1, PRINCIPAL_2],
+          dispatchAttempts: 1,
+          nextDispatchAtMs: Date.now() + 60_000
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    first.close(1000, 'disconnect during dispatch')
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return await status.json<{
+          activeProposals: number
+          connectedSockets: number
+        }>()
+      })
+      .toMatchObject({ activeProposals: 1, connectedSockets: 1 })
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        for (const [key, proposal] of proposals) {
+          await state.storage.put(key, {
+            ...proposal,
+            nextDispatchAtMs: Date.now() - 1
+          })
+        }
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    const secondDispatch = collectMessages(second, 2)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await secondDispatch).toEqual([
+      {
+        type: 'match_made',
+        serverAddress: 'wss://match.example/v1/matches/test'
+      },
+      {
+        type: 'match_ready_to_start',
+        mode: GameMode.RANKED_CONSTRUCTED
+      }
+    ])
   })
 
   it('persists queue state and socket identity through Durable Object eviction', async () => {

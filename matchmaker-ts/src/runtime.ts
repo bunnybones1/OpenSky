@@ -113,7 +113,11 @@ interface StoredParticipant {
   identity?: StoredIdentity
 }
 
-type StoredProposalStatus = 'FOUND' | 'ACCEPTED' | 'DISPATCHING'
+type StoredProposalStatus =
+  | 'FOUND'
+  | 'ACCEPTED'
+  | 'DISPATCHING'
+  | 'ALLOCATED'
 
 interface StoredProposal {
   id: string
@@ -125,6 +129,7 @@ interface StoredProposal {
   botAcceptAtMs?: number
   dispatchAttempts: number
   nextDispatchAtMs?: number
+  serverAddress?: string
 }
 
 interface RuntimeConfig {
@@ -246,6 +251,8 @@ const humanParticipants = (proposal: StoredProposal) =>
   proposal.participants.filter(
     participant => !isBot(deserializePlayer(participant.player))
   )
+
+const DISPATCH_WATCHDOG_MS = 30_000
 
 const gameModeStatusFields: Record<
   Exclude<GameMode, GameMode.UNKNOWN>,
@@ -755,6 +762,10 @@ export class MatchmakerPool implements DurableObject {
       await this.state.storage.delete(ticketKey(principal))
       return
     }
+    if (proposal.status !== 'FOUND') {
+      this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
+      return
+    }
     const player = proposal.participants.find(
       participant => participant.player.address === principal
     )
@@ -973,8 +984,8 @@ export class MatchmakerPool implements DurableObject {
         await this.expireProposal(proposal)
       } else if (
         proposal.status !== 'FOUND' &&
-        proposal.nextDispatchAtMs !== undefined &&
-        proposal.nextDispatchAtMs <= now
+        (proposal.nextDispatchAtMs === undefined ||
+          proposal.nextDispatchAtMs <= now)
       ) {
         await this.dispatchProposal(proposal)
       }
@@ -1012,22 +1023,28 @@ export class MatchmakerPool implements DurableObject {
 
   private async dispatchProposal(proposal: StoredProposal) {
     if (!this.env.MATCH_SERVICE) return
-    const enabledModes = await this.currentEnabledGameModes(Date.now())
-    if (!enabledModes) {
-      proposal.status = 'ACCEPTED'
-      proposal.nextDispatchAtMs = Date.now() + this.config.tickMs
-      await this.state.storage.put(proposalKey(proposal.id), proposal)
+    if (proposal.status === 'ALLOCATED' && proposal.serverAddress) {
+      await this.completeAllocatedProposal(proposal)
       return
     }
-    if (this.proposalUsesDisabledMode(proposal, enabledModes)) {
-      await this.drainAcceptedProposal(proposal)
-      return
+    if (proposal.status === 'ACCEPTED') {
+      const enabledModes = await this.currentEnabledGameModes(Date.now())
+      if (!enabledModes) {
+        proposal.nextDispatchAtMs = Date.now() + this.config.tickMs
+        await this.state.storage.put(proposalKey(proposal.id), proposal)
+        return
+      }
+      if (this.proposalUsesDisabledMode(proposal, enabledModes)) {
+        await this.drainAcceptedProposal(proposal)
+        return
+      }
     }
     proposal.status = 'DISPATCHING'
     proposal.dispatchAttempts += 1
-    proposal.nextDispatchAtMs = undefined
-    await this.state.storage.put(proposalKey(proposal.id), proposal)
+    proposal.nextDispatchAtMs = Date.now() + DISPATCH_WATCHDOG_MS
+    await this.persistProposalWithAlarm(proposal)
 
+    let allocationConfirmed = false
     try {
       if (
         !proposal.participants.some(participant =>
@@ -1092,19 +1109,20 @@ export class MatchmakerPool implements DurableObject {
       ) {
         throw new Error('match service omitted serverAddress')
       }
-      for (const participant of humanParticipants(proposal)) {
-        this.sendToPrincipal(participant.player.address, {
-          type: 'match_made',
-          serverAddress: result.serverAddress
-        })
-        this.sendToPrincipal(participant.player.address, {
-          type: 'match_ready_to_start',
-          mode: participant.player.mode
-        })
-      }
-      await this.deleteProposal(proposal)
+      allocationConfirmed = true
+      proposal.status = 'ALLOCATED'
+      proposal.serverAddress = result.serverAddress
+      proposal.nextDispatchAtMs = Date.now() + 1
+      await this.persistProposalWithAlarm(proposal)
+      await this.completeAllocatedProposal(proposal)
     } catch (error) {
       console.error('match dispatch failed', proposal.id, error)
+      // The service allocation is idempotent and authoritative. If local
+      // persistence or delivery fails after its 200 response, leave the
+      // already-persisted DISPATCHING watchdog (or ALLOCATED handoff) intact.
+      // Releasing these players could create a second proposal for an active
+      // game.
+      if (allocationConfirmed) return
       if (proposal.dispatchAttempts >= this.config.dispatchMaxAttempts) {
         await this.releaseProposalPlayers(proposal)
         return
@@ -1115,6 +1133,41 @@ export class MatchmakerPool implements DurableObject {
         Math.min(30_000, 1_000 * 2 ** Math.min(proposal.dispatchAttempts, 5))
       await this.state.storage.put(proposalKey(proposal.id), proposal)
     }
+  }
+
+  private async persistProposalWithAlarm(proposal: StoredProposal) {
+    const deadline = proposal.nextDispatchAtMs
+    if (deadline === undefined) {
+      await this.state.storage.put(proposalKey(proposal.id), proposal)
+      return
+    }
+    await this.state.storage.transaction(async transaction => {
+      const currentAlarm = await transaction.getAlarm()
+      await transaction.put(proposalKey(proposal.id), proposal)
+      await transaction.setAlarm(
+        currentAlarm === null ? deadline : Math.min(currentAlarm, deadline)
+      )
+    })
+  }
+
+  private async completeAllocatedProposal(proposal: StoredProposal) {
+    if (!proposal.serverAddress) {
+      proposal.status = 'DISPATCHING'
+      proposal.nextDispatchAtMs = Date.now()
+      await this.state.storage.put(proposalKey(proposal.id), proposal)
+      return
+    }
+    for (const participant of humanParticipants(proposal)) {
+      this.sendToPrincipal(participant.player.address, {
+        type: 'match_made',
+        serverAddress: proposal.serverAddress
+      })
+      this.sendToPrincipal(participant.player.address, {
+        type: 'match_ready_to_start',
+        mode: participant.player.mode
+      })
+    }
+    await this.deleteProposal(proposal)
   }
 
   // Source oracle: director/matchhandlers/match_handler.go calls ReleasePlayer
@@ -1214,7 +1267,7 @@ export class MatchmakerPool implements DurableObject {
     })
     for (const proposal of proposals.values()) {
       if (
-        proposal.status !== 'FOUND' &&
+        proposal.status === 'ACCEPTED' &&
         this.proposalUsesDisabledMode(proposal, enabledModes)
       ) {
         await this.drainAcceptedProposal(proposal)
@@ -1250,10 +1303,9 @@ export class MatchmakerPool implements DurableObject {
         if (proposal.botAcceptAtMs !== undefined)
           candidates.push(proposal.botAcceptAtMs)
       } else if (
-        proposal.nextDispatchAtMs !== undefined &&
         this.env.MATCH_SERVICE !== undefined
       ) {
-        candidates.push(proposal.nextDispatchAtMs)
+        candidates.push(proposal.nextDispatchAtMs ?? now + 1)
       }
     }
     if (
@@ -1304,6 +1356,16 @@ export class MatchmakerPool implements DurableObject {
       this.sendToPrincipal(principal, {
         type: 'accept_match',
         playerID: accepted
+      })
+    }
+    if (proposal.status === 'ALLOCATED' && proposal.serverAddress) {
+      this.sendToPrincipal(principal, {
+        type: 'match_made',
+        serverAddress: proposal.serverAddress
+      })
+      this.sendToPrincipal(principal, {
+        type: 'match_ready_to_start',
+        mode: participant.player.mode
       })
     }
   }
@@ -1360,7 +1422,7 @@ export class MatchmakerPool implements DurableObject {
     if (this.hasSocket(attachment.principal)) return
     await this.state.storage.delete(ticketKey(attachment.principal))
     const proposal = await this.proposalForPrincipal(attachment.principal)
-    if (proposal) {
+    if (proposal?.status === 'FOUND') {
       const participant = proposal.participants.find(
         current => current.player.address === attachment.principal
       )
