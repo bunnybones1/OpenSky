@@ -21,7 +21,8 @@ import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
-  applyMatchStats
+  applyMatchStats,
+  applyWarmUpProgress
 } from './progression'
 import {
   AcceptedClientMessage,
@@ -1107,6 +1108,14 @@ export class GameMatch implements DurableObject {
         this.env.AUTH_DB,
         metadata.proposalId,
         questProgress,
+        endedAt
+      )
+      await applyWarmUpProgress(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        [metadata.match.player1.gameMode, metadata.match.player2.gameMode],
+        metadata.result?.winner,
+        metadata.result?.status ?? MatchStatus.COMPLETED,
         endedAt
       )
       const conquestPoints = await applyConquestPoints(

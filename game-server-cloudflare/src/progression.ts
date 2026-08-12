@@ -106,6 +106,20 @@ interface ProgressionReceiptRow {
   processed_at: string
 }
 
+type WarmUpMatchRow = MatchPlayersRow
+
+interface WarmUpSettingsRow {
+  warm_ups: number
+}
+
+interface WarmUpReceiptRow {
+  credited_player: 0 | 1
+  user_id: string
+  warm_ups_before: number
+  warm_ups_after: number
+  processed_at: string
+}
+
 export interface MatchProgressionReceipt {
   questProgress: [Record<number, number>, Record<number, number>]
   rewards: [Array<Record<string, unknown>>, Array<Record<string, unknown>>]
@@ -124,6 +138,131 @@ export interface ConquestProgressReceipt {
   applied: boolean
   results: [ConquestMatchResult, ConquestMatchResult]
   processedAt: string
+}
+
+export interface WarmUpProgressReceipt {
+  applied: boolean
+  creditedPlayer?: 0 | 1
+  userId?: string
+  before: number
+  after: number
+  processedAt: string
+}
+
+const PRACTICE_MODES = new Set<GameMode>([
+  GameMode.PRACTICE_PVP,
+  GameMode.PRACTICE_BOT,
+  GameMode.WARM_UP
+])
+
+const warmUpReceipt = async (
+  database: D1Database,
+  proposalId: string,
+  applied: boolean
+): Promise<WarmUpProgressReceipt | undefined> => {
+  const row = await database
+    .prepare(
+      `SELECT credited_player, user_id, warm_ups_before, warm_ups_after,
+              processed_at
+       FROM multiplayer_match_warmups_applied WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<WarmUpReceiptRow>()
+  return row
+    ? {
+        applied,
+        creditedPlayer: row.credited_player,
+        userId: row.user_id,
+        before: row.warm_ups_before,
+        after: row.warm_ups_after,
+        processedAt: row.processed_at
+      }
+    : undefined
+}
+
+/**
+ * Applies the source 0-3 practice counter exactly once. Practice-bot only
+ * counts a human win. The Go source credits player one on a completed draw in
+ * practice PvP/Warm Up, so preserve that unusual legacy edge case too.
+ */
+export const applyWarmUpProgress = async (
+  database: D1Database,
+  proposalId: string,
+  gameModes: [GameMode, GameMode],
+  winner: 0 | 1 | undefined,
+  status: MatchStatus,
+  processedAt: string
+): Promise<WarmUpProgressReceipt> => {
+  const existing = await warmUpReceipt(database, proposalId, false)
+  if (existing) return existing
+
+  const practiceBot = gameModes.includes(GameMode.PRACTICE_BOT)
+  const creditedPlayer = winner ?? (!practiceBot ? 0 : undefined)
+  if (
+    status !== MatchStatus.COMPLETED ||
+    creditedPlayer === undefined ||
+    !gameModes.some(mode => PRACTICE_MODES.has(mode)) ||
+    (practiceBot && creditedPlayer !== 0)
+  ) {
+    return { applied: false, before: 0, after: 0, processedAt }
+  }
+
+  const match = await database
+    .prepare(
+      `SELECT player1_user_id, player2_user_id
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<WarmUpMatchRow>()
+  if (!match) throw new Error('match ledger row was not found')
+  const userId =
+    creditedPlayer === 0 ? match.player1_user_id : match.player2_user_id
+  if (!userId) {
+    return { applied: false, before: 0, after: 0, processedAt }
+  }
+  const settings = await database
+    .prepare(`SELECT warm_ups FROM player_account_settings WHERE user_id = ?`)
+    .bind(userId)
+    .first<WarmUpSettingsRow>()
+  if (!settings) throw new Error('winning player account settings are missing')
+  const before = Math.min(3, Math.max(0, settings.warm_ups))
+  const after = Math.min(3, before + 1)
+
+  await database.batch([
+    database
+      .prepare(
+        `UPDATE player_account_settings
+         SET warm_ups = ?, updated_at = ?
+         WHERE user_id = ? AND NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_warmups_applied
+           WHERE proposal_id = ?
+         )`
+      )
+      .bind(after, processedAt, userId, proposalId),
+    database
+      .prepare(
+        `INSERT INTO multiplayer_match_warmups_applied
+           (proposal_id, credited_player, user_id, warm_ups_before,
+            warm_ups_after, processed_at)
+         SELECT ?, ?, ?, ?, ?, ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_warmups_applied
+           WHERE proposal_id = ?
+         )`
+      )
+      .bind(
+        proposalId,
+        creditedPlayer,
+        userId,
+        before,
+        after,
+        processedAt,
+        proposalId
+      )
+  ])
+  const stored = await warmUpReceipt(database, proposalId, true)
+  if (!stored) throw new Error('warm-up progress receipt was not persisted')
+  return stored
 }
 
 const parseReceipt = (row: ProgressionReceiptRow): MatchProgressionReceipt => ({
@@ -234,8 +373,8 @@ export const applyConquestProgress = async (
     winner === undefined
       ? [ConquestMatchResult.DRAW, ConquestMatchResult.DRAW]
       : winner === 0
-      ? [ConquestMatchResult.WIN, ConquestMatchResult.LOSS]
-      : [ConquestMatchResult.LOSS, ConquestMatchResult.WIN]
+        ? [ConquestMatchResult.WIN, ConquestMatchResult.LOSS]
+        : [ConquestMatchResult.LOSS, ConquestMatchResult.WIN]
   const rows = await Promise.all(
     userIds.map(userId =>
       database
@@ -257,14 +396,15 @@ export const applyConquestProgress = async (
     const progress = parsedConquestProgress(rows[player]!.match_progress)
     progress[String(match.id)] = results[player]
     const values = Object.values(progress)
-    const wins = values.filter(value => value === ConquestMatchResult.WIN).length
-    const ended =
-      wins >= 3 || values.includes(ConquestMatchResult.LOSS)
+    const wins = values.filter(
+      value => value === ConquestMatchResult.WIN
+    ).length
+    const ended = wins >= 3 || values.includes(ConquestMatchResult.LOSS)
     const status = !ended
       ? ConquestStatus.IN_PROGRESS
       : wins === 0
-      ? ConquestStatus.COMPLETED
-      : ConquestStatus.REWARDS_PENDING
+        ? ConquestStatus.COMPLETED
+        : ConquestStatus.REWARDS_PENDING
     statements.push(
       database
         .prepare(

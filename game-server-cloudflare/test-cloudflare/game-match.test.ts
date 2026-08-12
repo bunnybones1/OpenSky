@@ -18,7 +18,8 @@ import {
 import {
   applyMatchExperience,
   applyMatchProgression,
-  applyMatchStats
+  applyMatchStats,
+  applyWarmUpProgress
 } from '../src/progression'
 import {
   createMatchFixture,
@@ -301,6 +302,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_experience'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_warmups_applied'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_rank_up_rewards'),
     env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
@@ -321,6 +323,147 @@ afterEach(() => {
 })
 
 describe('Cloudflare authoritative game Match Durable Object', () => {
+  it('advances the source practice-win counter at most once per match', async () => {
+    await insertExperiencePlayers()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, warm_ups, created_at, updated_at)
+         VALUES (?, 'Warmup.One', 'en', 2, ?, ?)`
+      ).bind(USER_ID_1, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, warm_ups, created_at, updated_at)
+         VALUES (?, 'Warmup.Two', 'en', 1, ?, ?)`
+      ).bind(USER_ID_2, now, now)
+    ])
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        proposalId,
+        [GameMode.PRACTICE_PVP, GameMode.PRACTICE_PVP],
+        0,
+        MatchStatus.COMPLETED,
+        now
+      )
+    ).toMatchObject({
+      applied: true,
+      creditedPlayer: 0,
+      userId: USER_ID_1,
+      before: 2,
+      after: 3
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT warm_ups FROM player_account_settings WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first('warm_ups')
+    ).toBe(3)
+
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        proposalId,
+        [GameMode.PRACTICE_PVP, GameMode.PRACTICE_PVP],
+        1,
+        MatchStatus.COMPLETED,
+        new Date(Date.now() + 1_000).toISOString()
+      )
+    ).toMatchObject({
+      applied: false,
+      creditedPlayer: 0,
+      before: 2,
+      after: 3
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT warm_ups FROM player_account_settings WHERE user_id = ?`
+      )
+        .bind(USER_ID_2)
+        .first('warm_ups')
+    ).toBe(1)
+
+    const draw = `${proposalId}-draw`
+    await insertActiveLedgerRow(draw, [USER_ID_1, USER_ID_2])
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        draw,
+        [GameMode.WARM_UP, GameMode.WARM_UP],
+        undefined,
+        MatchStatus.COMPLETED,
+        now
+      )
+    ).toMatchObject({
+      applied: true,
+      creditedPlayer: 0,
+      before: 3,
+      after: 3
+    })
+  })
+
+  it('only counts completed human wins in practice-bot matches', async () => {
+    await insertExperiencePlayers()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_account_settings
+         (user_id, name, locale, warm_ups, created_at, updated_at)
+       VALUES (?, 'Practice.Bot', 'en', 0, ?, ?)`
+    )
+      .bind(USER_ID_1, now, now)
+      .run()
+
+    const botWon = `${proposalId}-bot-won`
+    await insertActiveLedgerRow(botWon, [USER_ID_1, null])
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        botWon,
+        [GameMode.PRACTICE_BOT, GameMode.PRACTICE_BOT],
+        1,
+        MatchStatus.COMPLETED,
+        now
+      )
+    ).toMatchObject({ applied: false })
+
+    const abandoned = `${proposalId}-abandoned`
+    await insertActiveLedgerRow(abandoned, [USER_ID_1, null])
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        abandoned,
+        [GameMode.PRACTICE_BOT, GameMode.PRACTICE_BOT],
+        0,
+        MatchStatus.ABANDONED,
+        now
+      )
+    ).toMatchObject({ applied: false })
+
+    const humanWon = `${proposalId}-human-won`
+    await insertActiveLedgerRow(humanWon, [USER_ID_1, null])
+    expect(
+      await applyWarmUpProgress(
+        env.AUTH_DB,
+        humanWon,
+        [GameMode.PRACTICE_BOT, GameMode.PRACTICE_BOT],
+        0,
+        MatchStatus.COMPLETED,
+        now
+      )
+    ).toMatchObject({ applied: true, before: 0, after: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT warm_ups FROM player_account_settings WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first('warm_ups')
+    ).toBe(1)
+  })
+
   it('records fixed-window abandon counts and idempotent proposal markers', async () => {
     const principal = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     const releaseVersion = 'penalty-policy-release'
