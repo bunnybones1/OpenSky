@@ -23,6 +23,7 @@ import {
 } from '../src/progression'
 import {
   createMatchFixture,
+  PLAYER_SESSION_ID_1,
   PRINCIPAL_1,
   PRINCIPAL_2,
   PROPOSAL_ID
@@ -888,6 +889,32 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       fixture({ releaseVersion: 'different-release' })
     )
     expect(wrongRelease.status).toBe(409)
+  })
+
+  it('normalizes source UUID forms and rejects malformed player sessions', async () => {
+    const alternate = fixture()
+    alternate.match.player1.playerSessionID =
+      'URN:UUID:FCEA164C-7449-449C-9718-27B98BD18C64'
+    const response = await createMatch(alternate)
+    expect(response.status).toBe(200)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const metadata = await state.storage.get<{
+          match: MatchmakerStartMatchMessage
+        }>('match:metadata')
+        expect(metadata?.match.player1.playerSessionID).toBe(
+          PLAYER_SESSION_ID_1
+        )
+      }
+    )
+
+    proposalId = 'proposal-malformed-player-session'
+    const malformed = fixture()
+    malformed.match.player1.playerSessionID = 'player-session-1'
+    const rejected = await createMatch(malformed)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toEqual({ error: 'invalid player session ID' })
   })
 
   it('repairs interrupted initialization on an identical create retry', async () => {

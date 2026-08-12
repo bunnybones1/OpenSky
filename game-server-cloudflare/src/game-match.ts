@@ -7,6 +7,7 @@ import {
 } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
+import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
@@ -202,6 +203,9 @@ const validateCreateRequest = (request: CreateMatchRequest) => {
     if (participant.privateSeed.randomSeed.length !== 16) {
       throw new Error('invalid player random seed')
     }
+    if (!normalizeGoogleUUID(participant.playerSessionID)) {
+      throw new Error('invalid player session ID')
+    }
     if (
       participant.botSubkey !== false &&
       !/^(?:0x)?[0-9a-f]{64}$/i.test(participant.botSubkey)
@@ -219,12 +223,18 @@ const normalizeCreateRequest = (
     ...request.match,
     player1: {
       ...request.match.player1,
+      playerSessionID:
+        normalizeGoogleUUID(request.match.player1.playerSessionID) ??
+        request.match.player1.playerSessionID,
       privateSeed: normalizePrivateSeed(
         request.match.player1.privateSeed as PrivateSeed
       )
     },
     player2: {
       ...request.match.player2,
+      playerSessionID:
+        normalizeGoogleUUID(request.match.player2.playerSessionID) ??
+        request.match.player2.playerSessionID,
       privateSeed: normalizePrivateSeed(
         request.match.player2.privateSeed as PrivateSeed
       )

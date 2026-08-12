@@ -9,6 +9,8 @@ import { CreateMatchRequest } from '../src/protocol'
 export const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 export const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
 export const PROPOSAL_ID = 'proposal-test-1'
+export const PLAYER_SESSION_ID_1 = 'fcea164c-7449-449c-9718-27b98bd18c64'
+export const PLAYER_SESSION_ID_2 = 'a51d9958-b28c-4f0a-812f-4e622f387f31'
 export const BOT_SUBKEY_PRIVATE_KEY =
   '0x2222222222222222222222222222222222222222222222222222222222222222'
 const BOT_SUBKEY_ADDRESS = '0x1563915e194d8cfba1943570603f7606a3115508'
@@ -58,7 +60,7 @@ export const createMatchFixture = (
         ? GameMode.PRACTICE_BOT
         : GameMode.RANKED_CONSTRUCTED,
       account: account(1, PRINCIPAL_1, 'Player One'),
-      playerSessionID: 'session-1',
+      playerSessionID: PLAYER_SESSION_ID_1,
       botSubkey: false,
       spectateCode: 'spectate-1',
       quests: [
@@ -87,7 +89,7 @@ export const createMatchFixture = (
         ? GameMode.PRACTICE_BOT
         : GameMode.RANKED_CONSTRUCTED,
       account: account(2, PRINCIPAL_2, 'Player Two'),
-      playerSessionID: 'session-2',
+      playerSessionID: PLAYER_SESSION_ID_2,
       botSubkey: overrides.botPlayer2 ? BOT_SUBKEY_PRIVATE_KEY : false,
       spectateCode: 'spectate-2',
       quests: !overrides.botPlayer2
