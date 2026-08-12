@@ -224,7 +224,7 @@ const activePool = async (
   const pool = await database
     .prepare(
       `SELECT version, starts_at, ends_at FROM conquest_reward_pools
-       WHERE status = 'ACTIVE' AND starts_at <= ? AND ends_at > ?
+       WHERE status = 'ACTIVE' AND starts_at <= ? AND ends_at >= ?
        LIMIT 1`
     )
     .bind(at, at)
@@ -338,7 +338,7 @@ export const settlePendingConquest = async (
            AND EXISTS (
              SELECT 1 FROM conquest_reward_pools
              WHERE version = ? AND status = 'ACTIVE'
-               AND starts_at <= ? AND ends_at > ?
+               AND starts_at <= ? AND ends_at >= ?
            )`
       )
       .bind(

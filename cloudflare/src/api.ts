@@ -554,7 +554,7 @@ export const handleApiRequest = async (
 
       case 'ConquestRewards': {
         await requestBody<Record<string, never>>(request)
-        return json(request, env, { weeklyGolds: [] })
+        return json(request, env, { weeklyGolds: await conquest.rewards() })
       }
 
       case 'ConquestPoints': {

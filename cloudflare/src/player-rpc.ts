@@ -340,6 +340,13 @@ interface SkypassFeedRow {
   claimed_at: string
 }
 
+interface ConquestFeedRow {
+  row_id: number
+  event_type: FeedEvent['type']
+  token_ids_json: string
+  created_at: string
+}
+
 const FEED_PAGE_SIZE = 50
 const MAX_FEED_PAGE_SIZE = 100
 
@@ -525,7 +532,7 @@ export class PlayerRpcRepository {
       .first()
     if (!account) throw notFound('account was not found')
 
-    const [rankRows, skypassRows] = await Promise.all([
+    const [rankRows, skypassRows, conquestRows] = await Promise.all([
       this.database
         .prepare(
           `SELECT rowid AS row_id, game_mode, season, player_rank,
@@ -542,7 +549,15 @@ export class PlayerRpcRepository {
            WHERE user_id = ?`
         )
         .bind(userId)
-        .all<SkypassFeedRow>()
+        .all<SkypassFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT id AS row_id, event_type, token_ids_json, created_at
+           FROM player_conquest_feed_events
+           WHERE user_id = ?`
+        )
+        .bind(userId)
+        .all<ConquestFeedRow>()
     ])
 
     // The generated client type marks `match` as required, but the source Go
@@ -581,6 +596,18 @@ export class PlayerRpcRepository {
           heroes: []
         } as unknown as FeedEvent)
       }
+    }
+    for (const row of conquestRows.results) {
+      events.push({
+        // Keep source-shaped positive IDs while reserving a practically
+        // unreachable namespace above all SQLite row-derived event IDs.
+        id: 4_503_599_627_370_496 + row.row_id,
+        type: row.event_type,
+        createdAt: row.created_at,
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
+        cards: [],
+        heroes: []
+      } as unknown as FeedEvent)
     }
 
     const requestedTypes = types?.length ? new Set(types) : undefined

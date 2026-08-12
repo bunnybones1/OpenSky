@@ -443,6 +443,23 @@ describe('source Conquest reward settlement', () => {
     ).toEqual({ count: 0 })
   })
 
+  it('preserves the source pool end-time inclusivity', async () => {
+    const conquest = await setup(1)
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET ends_at = ? WHERE version = ?`
+    )
+      .bind(SETTLED_AT, POOL_VERSION)
+      .run()
+    await expect(
+      settlePendingConquest(
+        env.AUTH_DB,
+        conquest!.id,
+        SETTLED_AT,
+        sequenceDraw(0)
+      )
+    ).resolves.toMatchObject({ applied: true, silverCardIds: [6] })
+  })
+
   it('rolls back the receipt, feed, and status if any inventory grant fails', async () => {
     const conquest = await setup(1)
     await env.AUTH_DB.prepare(

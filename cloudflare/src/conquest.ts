@@ -6,7 +6,8 @@ import {
   Hero,
   type Conquest,
   type ConquestStats,
-  type ConquestV2TreasureProgress
+  type ConquestV2TreasureProgress,
+  type WeeklyGolds
 } from '@opensky/proto'
 
 import { invalidArgument } from './errors'
@@ -44,6 +45,13 @@ interface ConquestRow {
   match_progress: string
   created_at: string
   ended_at: string | null
+}
+
+interface WeeklyGoldRow {
+  starts_at: string
+  ends_at: string
+  card_id: number
+  total_supply: number
 }
 
 const matchProgress = (value: string): Record<number, ConquestMatchResult> => {
@@ -291,5 +299,33 @@ export class ConquestRepository {
       current: row?.current_points ?? 0,
       total: row?.total_points ?? 0
     }
+  }
+
+  async rewards(at = new Date()): Promise<WeeklyGolds[]> {
+    const timestamp = at.toISOString()
+    const rows = await this.database
+      .prepare(
+        `SELECT pool.starts_at, pool.ends_at, cards.card_id,
+                COALESCE(SUM(items.balance), 0) AS total_supply
+         FROM conquest_reward_pools pool
+         JOIN conquest_reward_pool_cards cards
+           ON cards.pool_version = pool.version
+          AND cards.item_type = 'SW_GOLD_CARDS'
+         LEFT JOIN player_items items
+           ON items.item_type = 'SW_GOLD_CARDS'
+          AND items.token_id = cards.card_id AND items.balance > 0
+         WHERE pool.status = 'ACTIVE'
+           AND pool.starts_at <= ? AND pool.ends_at >= ?
+         GROUP BY pool.version, pool.starts_at, pool.ends_at, cards.card_id
+         ORDER BY cards.card_id`
+      )
+      .bind(timestamp, timestamp)
+      .all<WeeklyGoldRow>()
+    return rows.results.map(row => ({
+      startAt: row.starts_at,
+      endAt: row.ends_at,
+      tokenId: (2 << 16) + row.card_id,
+      totalSupply: row.total_supply
+    }))
   }
 }

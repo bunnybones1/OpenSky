@@ -708,8 +708,25 @@ describe('legacy player RPC compatibility', () => {
           }
         ]),
         newer
-      )
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_conquests
+           (entry_key, user_id, status, nonce, mode, hero, deck_class,
+            match_progress, created_at, ended_at)
+         VALUES ('feed-conquest', ?, 'COMPLETED', 1,
+                 'CONQUEST_CONSTRUCTED', 'ADA', 'STR', '{"42":"WIN"}', ?, ?)`
+      ).bind(userId, newer, newer)
     ])
+    const conquest = await env.AUTH_DB.prepare(
+      `SELECT id FROM player_conquests WHERE entry_key = 'feed-conquest'`
+    ).first<{ id: number }>()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquest_feed_events
+         (user_id, conquest_id, event_type, token_ids_json, created_at)
+       VALUES (?, ?, 'DELAYED_REWARD', '[131208]', ?)`
+    )
+      .bind(userId, conquest!.id, new Date(Date.parse(newer) + 1_000).toISOString())
+      .run()
 
     const first = await rpc('GetFeed', {
       page: { pageSize: 1 },
@@ -722,23 +739,33 @@ describe('legacy player RPC compatibility', () => {
     }>()
     expect(firstPage).toMatchObject({
       page: { hasBefore: true },
-      res: [{ type: 'REWARD', tokenIds: [(0xff << 16) + 42] }]
+      res: [{ type: 'DELAYED_REWARD', tokenIds: [131208] }]
     })
 
     const second = await rpc('GetFeed', {
       page: { pageSize: 1, before: firstPage.page.after },
       req: { accountAddress: identityReference }
     })
-    expect(await second.json()).toMatchObject({
+    const secondPage = await second.json<{
+      page: { hasAfter: boolean; hasBefore: boolean; after: string }
+      res: Array<{ type: string; tokenIds?: number[] }>
+    }>()
+    expect(secondPage).toMatchObject({
+      page: { hasAfter: true, hasBefore: true },
+      res: [{ type: 'REWARD', tokenIds: [(0xff << 16) + 42] }]
+    })
+    const third = await rpc('GetFeed', {
+      page: { pageSize: 1, before: secondPage.page.after },
+      req: { accountAddress: identityReference }
+    })
+    expect(await third.json()).toMatchObject({
       page: { hasAfter: true, hasBefore: false },
-      res: [
-        {
-          type: 'RANKUP',
-          playerRank: 'APPRENTICE',
-          playerRankStage: 'STAGE_II',
-          gameMode: 'RANKED_CONSTRUCTED'
-        }
-      ]
+      res: [{
+        type: 'RANKUP',
+        playerRank: 'APPRENTICE',
+        playerRankStage: 'STAGE_II',
+        gameMode: 'RANKED_CONSTRUCTED'
+      }]
     })
 
     const filtered = await rpc('GetFeed', {

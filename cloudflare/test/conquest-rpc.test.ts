@@ -40,7 +40,10 @@ const rpc = async (method: string, body: object, signedIn = true) => {
 }
 
 beforeEach(async () => {
-  await env.AUTH_DB.prepare('DELETE FROM users').run()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools')
+  ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -95,6 +98,43 @@ describe('source conquest RPC foundation', () => {
         treasurePoints: 150,
         treasurePointsRequired: 600
       }
+    })
+  })
+
+  it('returns only the active versioned weekly Gold pool and current supply', async () => {
+    const now = new Date()
+    const startsAt = new Date(now.getTime() - 60_000).toISOString()
+    const endsAt = new Date(now.getTime() + 60_000).toISOString()
+    const createdAt = now.toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO conquest_reward_pools
+           (version, status, starts_at, ends_at, created_at)
+         VALUES ('rpc-active-pool', 'ACTIVE', ?, ?, ?)`
+      ).bind(startsAt, endsAt, createdAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO conquest_reward_pool_cards
+           (pool_version, item_type, card_id)
+         VALUES ('rpc-active-pool', 'SW_SILVER_CARDS', 6),
+                ('rpc-active-pool', 'SW_GOLD_CARDS', 136)`
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 136, 2, 1, 'test', ?, ?)`
+      ).bind(userId, createdAt, createdAt)
+    ])
+
+    expect(await (await rpc('ConquestRewards', {}, false)).json()).toEqual({
+      weeklyGolds: [
+        {
+          startAt: startsAt,
+          endAt: endsAt,
+          tokenId: 131_208,
+          totalSupply: 2
+        }
+      ]
     })
   })
 
