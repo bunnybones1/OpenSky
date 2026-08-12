@@ -185,6 +185,23 @@ export const parseAcceptedMatchDispatch = (
     throw new DispatchProtocolError('participants use different releases')
   }
   if (
+    participants[0].player.sessionId !== participants[1].player.sessionId
+  ) {
+    throw new DispatchProtocolError('participants use different sessions')
+  }
+  const challengeModes = new Set<GameMode>([
+    GameMode.CHALLENGE_CONSTRUCTED,
+    GameMode.CHALLENGE_DISCOVERY
+  ])
+  if (
+    participants.some(participant =>
+      challengeModes.has(participant.player.mode)
+    ) &&
+    participants[0].player.sessionId.length === 0
+  ) {
+    throw new DispatchProtocolError('challenge session is required')
+  }
+  if (
     participants[0].player.address !== BOT_PLACEHOLDER &&
     participants[0].player.address === participants[1].player.address
   ) {

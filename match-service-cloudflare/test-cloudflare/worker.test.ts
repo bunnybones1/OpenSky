@@ -886,6 +886,37 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(await rejected.json()).toEqual({ error: 'invalid matchmaker player' })
   })
 
+  it('rejects session mismatch and empty challenge sessions at final dispatch', async () => {
+    const mismatched = dispatch()
+    mismatched.participants[1].player.sessionId = 'OTHER-SESSION'
+    const response = await create(mismatched)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: 'participants use different sessions'
+    })
+
+    const emptyChallenge = dispatch()
+    emptyChallenge.proposalId = 'proposal-empty-challenge-session'
+    for (const participant of emptyChallenge.participants) {
+      participant.player.mode = GameMode.CHALLENGE_CONSTRUCTED
+    }
+    emptyChallenge.participants[0].request!.mode =
+      GameMode.CHALLENGE_CONSTRUCTED
+    const rejected = await create(emptyChallenge)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toEqual({
+      error: 'challenge session is required'
+    })
+
+    const count = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM multiplayer_matches
+       WHERE proposal_id IN (?, ?)`
+    )
+      .bind(PROPOSAL_ID, emptyChallenge.proposalId)
+      .first<{ count: number }>()
+    expect(count?.count).toBe(0)
+  })
+
   it('preserves the normalized challenge session as the matchmaking code', async () => {
     const { accepted, secondUserId } = mixedDispatch()
     accepted.participants[0].player.mode = GameMode.CHALLENGE_CONSTRUCTED
