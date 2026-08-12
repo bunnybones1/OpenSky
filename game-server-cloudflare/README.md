@@ -12,7 +12,8 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - authoritative `@skyweaver/state-browser-sys` WASM creation, signing,
   commit-reveal, gameplay application, turn timeout, abandon, and full-secret
   durable snapshots;
-- authenticated player WebSockets behind the Cloud Weasel API gateway;
+- authenticated player WebSockets and source-compatible anonymous public
+  spectator WebSockets behind the Cloud Weasel API gateway;
 - the existing join, reconnect, loading, gameplay, timer, emote, mute,
   timesync, disconnect, abandon, and match-ended messages;
 - WebSocket hibernation, duplicate-connection eviction, Durable Object alarms,
@@ -37,17 +38,20 @@ wire messages. It is a separate service from `matchmaker-ts`.
   card selection, immediate Silver settlement, and persisted 24-hour Gold
   delivery tasks consumed by the API Worker's scheduler.
 
-The gateway, not the browser, is the identity authority. It validates the
-Google session, maps the user to the stable 20-byte game principal, then adds
-the internal authentication and trusted identity headers. Legacy wallet auth
-fields remain on source-compatible client messages but are not trusted.
+The gateway, not the browser, is the identity authority. It validates a Google
+session and maps the user to the stable 20-byte game principal for player and
+authenticated-spectator sockets. For an unauthenticated public spectator it
+mints a short-lived `anonymous-*` identity that cannot matchmake, join as a
+player, recover a participant's ended match, or use account-owned stickers.
+Legacy wallet auth fields remain on source-compatible client messages but are
+not trusted.
 
 ## Deliberately pending
 
-An approved production Conquest reward pool and anonymous public spectator
-entry remain pending. Wallet-backed item merging is intentionally an
-API/account integration rather than game-server authentication. Conquest modes
-remain disabled until a bounded pool and end-to-end delivery drill are approved.
+An approved production Conquest reward pool remains pending. Wallet-backed item
+merging is intentionally an API/account integration rather than game-server
+authentication. Conquest modes remain disabled until a bounded pool and
+end-to-end delivery drill are approved.
 
 ## Configuration
 

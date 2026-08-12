@@ -42,6 +42,8 @@ const testEnv = {
       target: new URL(request.url).pathname,
       principal: request.headers.get('x-cloud-weasel-principal'),
       userId: request.headers.get('x-cloud-weasel-user-id'),
+      displayName: request.headers.get('x-cloud-weasel-display-name'),
+      anonymous: request.headers.get('x-cloud-weasel-anonymous-spectator'),
       internal: request.headers.get('x-cloud-weasel-internal-auth'),
       cookie: request.headers.get('cookie')
     })
@@ -108,9 +110,37 @@ describe('same-origin multiplayer gateway', () => {
       target: '/api/game/matches/proposal_123',
       principal: await deriveGamePrincipal(USER_ID),
       userId: USER_ID,
+      displayName: 'Gateway Player',
+      anonymous: null,
       internal: 'multiplayer-gateway-test-secret',
       cookie: null
     })
+  })
+
+  it('mints an isolated anonymous identity only for a game spectator socket', async () => {
+    const response = await gateway('/api/game/matches/proposal_123', {
+      Upgrade: 'websocket',
+      Origin: 'https://opensky.example',
+      Cookie: 'unrelated=value',
+      'x-cloud-weasel-principal':
+        '0xffffffffffffffffffffffffffffffffffffffff',
+      'x-cloud-weasel-user-id': 'forged-user',
+      'x-cloud-weasel-display-name': 'forged-name',
+      'x-cloud-weasel-anonymous-spectator': 'forged-marker'
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body).toMatchObject({
+      target: '/api/game/matches/proposal_123',
+      principal: expect.stringMatching(/^0x[0-9a-f]{40}$/),
+      userId: expect.stringMatching(
+        /^anonymous-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      ),
+      anonymous: '1',
+      internal: 'multiplayer-gateway-test-secret',
+      cookie: null
+    })
+    expect(body.displayName).toBe(body.userId)
   })
 
   it('restores the source match-info contract for the requested player', async () => {
@@ -402,7 +432,7 @@ describe('same-origin multiplayer gateway', () => {
     })
   })
 
-  it('allows an authenticated spectator to query another player without leaking unknown targets', async () => {
+  it('allows public live-match lookup without leaking ended or unknown matches', async () => {
     const playerId = '33333333-3333-4333-8333-333333333333'
     const playerPrincipal = await deriveGamePrincipal(playerId)
     const opponent = '0x4444444444444444444444444444444444444444'
@@ -449,11 +479,39 @@ describe('same-origin multiplayer gateway', () => {
       matchInfo: { replayID: 'spectated-replay' }
     })
 
+    const publicResponse = await gateway(
+      `/api/matchmaker/matchinfo/identity:${playerId}`,
+      {}
+    )
+    expect(await publicResponse.json()).toMatchObject({
+      type: 'in_progress_match_info',
+      matchInfo: { replayID: 'spectated-replay' }
+    })
+
     const unknown = await gateway(
       '/api/matchmaker/matchinfo/identity:unknown-player',
-      headers
+      {}
     )
     expect(await unknown.json()).toEqual({ type: 'no_match_found' })
+
+    let recentRequests = 0
+    recentMatchResponse = () => {
+      recentRequests += 1
+      return Response.json({ private: true })
+    }
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', result_json = '{}', ended_at = ?
+       WHERE proposal_id = 'spectated-proposal'`
+    )
+      .bind(new Date().toISOString())
+      .run()
+    const ended = await gateway(
+      `/api/matchmaker/matchinfo/identity:${playerId}`,
+      {}
+    )
+    expect(await ended.json()).toEqual({ type: 'no_match_found' })
+    expect(recentRequests).toBe(0)
   })
 
   it('rejects missing sessions and malformed match IDs before service dispatch', async () => {

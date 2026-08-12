@@ -4,6 +4,7 @@ import {
   CreateMatchRequest,
   INTERNAL_AUTH_HEADER,
   MATCH_PATH_PREFIX,
+  TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from './protocol'
@@ -107,6 +108,14 @@ export default {
         !(request.headers.get(TRUSTED_USER_ID_HEADER) ?? '').length
       ) {
         return json({ error: 'authenticated gateway required' }, 401)
+      }
+      if (
+        request.headers.get(TRUSTED_ANONYMOUS_SPECTATOR_HEADER) === '1' &&
+        !/^anonymous-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          request.headers.get(TRUSTED_USER_ID_HEADER) ?? ''
+        )
+      ) {
+        return json({ error: 'invalid anonymous spectator' }, 401)
       }
       let proposalId: string
       try {

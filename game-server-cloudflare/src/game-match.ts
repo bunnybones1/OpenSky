@@ -33,6 +33,7 @@ import {
   INTERNAL_AUTH_HEADER,
   parseClientMessage,
   stateError,
+  TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from './protocol'
@@ -123,6 +124,7 @@ interface PendingGameplay {
 interface SocketAttachment {
   principal: string
   userId: string
+  anonymousSpectator?: boolean
   // Optional for sockets hibernated before spectator roles were introduced.
   role?: 'player' | 'spectator'
   joined: boolean
@@ -712,6 +714,11 @@ export class GameMatch implements DurableObject {
     const role = this.playerAddresses(metadata.match).includes(principal)
       ? 'player'
       : 'spectator'
+    const anonymousSpectator =
+      request.headers.get(TRUSTED_ANONYMOUS_SPECTATOR_HEADER) === '1'
+    if (anonymousSpectator && role !== 'spectator') {
+      return new Response('Not authorized for match', { status: 401 })
+    }
     const previousSockets = this.state.getWebSockets(principal)
     if (
       role === 'spectator' &&
@@ -725,6 +732,7 @@ export class GameMatch implements DurableObject {
     const attachment: SocketAttachment = {
       principal,
       userId: userId.slice(0, 256),
+      anonymousSpectator,
       role,
       joined: false,
       connectedAtMs: Date.now()
@@ -1124,6 +1132,9 @@ export class GameMatch implements DurableObject {
       return
     if ((attachment.role ?? 'player') === 'spectator') {
       if (!('sticker' in message) || !attachment.spectatedPrincipal) return
+      if (attachment.anonymousSpectator) {
+        throw new GameProtocolError('player used unowned sticker')
+      }
       const owned = await this.env.AUTH_DB.prepare(
         `SELECT 1 FROM player_items
          WHERE user_id = ? AND item_type = 'SW_STICKERS'
@@ -1131,7 +1142,7 @@ export class GameMatch implements DurableObject {
       )
         .bind(attachment.userId, message.sticker)
         .first()
-      if (!owned) throw new GameProtocolError('spectator used unowned sticker')
+      if (!owned) throw new GameProtocolError('player used unowned sticker')
       const sanitized: EmoteMessage = {
         type: 'emote',
         sticker: message.sticker,
@@ -1886,7 +1897,9 @@ export class GameMatch implements DurableObject {
         const player = attachment.spectatedPlayer ?? 0
         return {
           id: 0,
-          address: `identity:${attachment.userId}`,
+          address: attachment.anonymousSpectator
+            ? attachment.userId
+            : `identity:${attachment.userId}`,
           canSeeHand: Boolean((attachment.knowledge ?? 0) & (1 << player))
         }
       })

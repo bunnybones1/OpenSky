@@ -18,6 +18,8 @@ const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
 const TRUSTED_DISPLAY_NAME_HEADER = 'x-cloud-weasel-display-name'
 const TRUSTED_CLIENT_IP_HEADER = 'x-cloud-weasel-client-ip'
+const TRUSTED_ANONYMOUS_SPECTATOR_HEADER =
+  'x-cloud-weasel-anonymous-spectator'
 const MATCH_INFO_PREFIX = '/api/matchmaker/matchinfo/'
 
 interface MatchInfoRow {
@@ -67,7 +69,8 @@ const trustedRequest = (
   userId: string,
   displayName: string,
   principal: string,
-  env: Env
+  env: Env,
+  anonymousSpectator = false
 ) => {
   const headers = new Headers(request.headers)
   headers.delete('authorization')
@@ -76,6 +79,11 @@ const trustedRequest = (
   headers.set(TRUSTED_PRINCIPAL_HEADER, principal)
   headers.set(TRUSTED_USER_ID_HEADER, userId)
   headers.set(TRUSTED_DISPLAY_NAME_HEADER, displayName.slice(0, 256))
+  if (anonymousSpectator) {
+    headers.set(TRUSTED_ANONYMOUS_SPECTATOR_HEADER, '1')
+  } else {
+    headers.delete(TRUSTED_ANONYMOUS_SPECTATOR_HEADER)
+  }
   headers.set(
     TRUSTED_CLIENT_IP_HEADER,
     (request.headers.get('CF-Connecting-IP') ?? '').slice(0, 128)
@@ -185,7 +193,7 @@ const recentMatchInfo = async (env: Env, principal: string) => {
 const matchInfo = async (
   env: Env,
   principal: string,
-  requesterPrincipal: string
+  requesterPrincipal?: string
 ) => {
   const row = await activeMatchFor(env, principal)
   if (!row) {
@@ -269,6 +277,15 @@ const matchInfo = async (
   }
 }
 
+const anonymousSpectator = () => {
+  const principalBytes = crypto.getRandomValues(new Uint8Array(20))
+  const principal = `0x${Array.from(principalBytes, byte =>
+    byte.toString(16).padStart(2, '0')
+  ).join('')}`
+  const userId = `anonymous-${crypto.randomUUID()}`
+  return { userId, displayName: userId, principal }
+}
+
 const matchInfoPrincipal = async (
   env: Env,
   requestedTarget: string
@@ -301,7 +318,6 @@ export const handleMultiplayerGateway = async (
       403
     )
   }
-  if (!authenticated) return json({ error: 'authentication required' }, 401)
   const url = new URL(request.url)
 
   if (request.method === 'GET' && url.pathname.startsWith(MATCH_INFO_PREFIX)) {
@@ -310,35 +326,63 @@ export const handleMultiplayerGateway = async (
       url.pathname.slice(MATCH_INFO_PREFIX.length)
     )
     return principal
-      ? matchInfo(env, principal, authenticated.principal)
+      ? matchInfo(env, principal, authenticated?.principal)
       : json({ type: 'no_match_found' }, 200)
   }
-  if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+  if (
+    authenticated &&
+    request.headers.get('Upgrade')?.toLowerCase() !== 'websocket'
+  ) {
     return json({ error: 'websocket upgrade required' }, 426)
   }
-  const common = [
-    authenticated.user.id,
-    authenticated.user.displayName,
-    authenticated.principal,
-    env
-  ] as const
-
   if (
     url.pathname === '/api/matchmaker' ||
     url.pathname === '/api/matchmaker/'
   ) {
+    if (!authenticated) return json({ error: 'authentication required' }, 401)
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return json({ error: 'websocket upgrade required' }, 426)
+    }
     return env.MATCHMAKER_POOLS.getByName(
       CLOUDFLARE_MATCHMAKER_POOL_NAME
-    ).fetch(trustedRequest(request, ...common))
+    ).fetch(
+      trustedRequest(
+        request,
+        authenticated.user.id,
+        authenticated.user.displayName,
+        authenticated.principal,
+        env
+      )
+    )
   }
   if (url.pathname.startsWith('/api/game/matches/')) {
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return json({ error: 'websocket upgrade required' }, 426)
+    }
     const proposal = url.pathname.slice('/api/game/matches/'.length)
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(proposal)) {
       return json({ error: 'invalid match ID' }, 400)
     }
+    const spectator = authenticated
+      ? {
+          userId: authenticated.user.id,
+          displayName: authenticated.user.displayName,
+          principal: authenticated.principal,
+          anonymous: false
+        }
+      : { ...anonymousSpectator(), anonymous: true }
     return env.GAME_MATCHES.getByName(`match:${proposal}`).fetch(
-      trustedRequest(request, ...common)
+      trustedRequest(
+        request,
+        spectator.userId,
+        spectator.displayName,
+        spectator.principal,
+        env,
+        spectator.anonymous
+      )
     )
   }
-  return json({ error: 'not found' }, 404)
+  return authenticated
+    ? json({ error: 'not found' }, 404)
+    : json({ error: 'authentication required' }, 401)
 }

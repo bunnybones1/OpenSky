@@ -7,6 +7,8 @@ import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-
 export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
+export const TRUSTED_ANONYMOUS_SPECTATOR_HEADER =
+  'x-cloud-weasel-anonymous-spectator'
 export const MATCH_PATH_PREFIX = '/v1/matches/'
 export const MAX_GAME_MESSAGE_BYTES = 256 * 1024
 

@@ -13,6 +13,7 @@ import { GameMatch, GameServerEnv } from '../src/game-match'
 import { recordAbandonPenalty } from '../src/abandon-penalties'
 import {
   INTERNAL_AUTH_HEADER,
+  TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
   TRUSTED_USER_ID_HEADER
 } from '../src/protocol'
@@ -48,6 +49,8 @@ const PRIVATE_SPECTATOR_USER_ID = '44444444-4444-4444-8444-444444444444'
 const SPECTATOR_PRINCIPAL = '0x3333333333333333333333333333333333333333'
 const PRIVATE_SPECTATOR_PRINCIPAL = '0x4444444444444444444444444444444444444444'
 const PLAYER_1_SPECTATE_CODE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const ANONYMOUS_SPECTATOR_ID =
+  'anonymous-55555555-5555-4555-8555-555555555555'
 
 const createMatch = (fixture = createMatchFixture({ proposalId })) =>
   SELF.fetch('https://game.example/internal/matches', {
@@ -176,6 +179,22 @@ const insertSpectateIdentities = async () => {
   ])
 }
 
+const insertSpectatedPlayers = async () => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Spectated One', 'spectated-one@example.com', NULL, ?, ?)`
+    ).bind(USER_ID_1, now, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Spectated Two', 'spectated-two@example.com', NULL, ?, ?)`
+    ).bind(USER_ID_2, now, now)
+  ])
+}
+
 const insertExperiencePlayers = async () => {
   const now = new Date().toISOString()
   const statements: D1PreparedStatement[] = []
@@ -222,7 +241,11 @@ const insertExperiencePlayers = async () => {
   await env.AUTH_DB.batch(statements)
 }
 
-const connectAs = async (principal: string, userId: string) => {
+const connectAs = async (
+  principal: string,
+  userId: string,
+  extraHeaders: Record<string, string> = {}
+) => {
   const response = await SELF.fetch(
     `https://game.example/v1/matches/${proposalId}`,
     {
@@ -231,7 +254,8 @@ const connectAs = async (principal: string, userId: string) => {
         Origin: 'https://opensky.example',
         [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
         [TRUSTED_PRINCIPAL_HEADER]: principal,
-        [TRUSTED_USER_ID_HEADER]: userId
+        [TRUSTED_USER_ID_HEADER]: userId,
+        ...extraHeaders
       }
     }
   )
@@ -1429,6 +1453,87 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       ])
     })
     expect(privateList.spectators).toHaveLength(2)
+  })
+
+  it('restores source anonymous public spectators without account capabilities', async () => {
+    await insertSpectatedPlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const playerCollision = await SELF.fetch(
+      `https://game.example/v1/matches/${proposalId}`,
+      {
+        headers: {
+          Upgrade: 'websocket',
+          Origin: 'https://opensky.example',
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: PRINCIPAL_1,
+          [TRUSTED_USER_ID_HEADER]: ANONYMOUS_SPECTATOR_ID,
+          [TRUSTED_ANONYMOUS_SPECTATOR_HEADER]: '1'
+        }
+      }
+    )
+    expect(playerCollision.status).toBe(401)
+    expect(await playerCollision.text()).toBe('Not authorized for match')
+
+    const first = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const second = await connectAs(PRINCIPAL_2, USER_ID_2)
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const viewer = await connectAs(
+      SPECTATOR_PRINCIPAL,
+      ANONYMOUS_SPECTATOR_ID,
+      { [TRUSTED_ANONYMOUS_SPECTATOR_HEADER]: '1' }
+    )
+    const spectatorMessages = collectMessages(viewer, 2)
+    spectate(viewer, `identity:${USER_ID_1}`)
+    const [reconnect, list] = await spectatorMessages
+    expect(reconnect).toMatchObject({
+      type: 'reconnect',
+      replayID: 'replay-test-42'
+    })
+    expect(list).toEqual({
+      type: 'spectators_list',
+      spectators: [
+        {
+          id: 0,
+          address: ANONYMOUS_SPECTATOR_ID,
+          canSeeHand: false
+        }
+      ]
+    })
+
+    const stickerError = nextMessage(viewer)
+    viewer.send(JSON.stringify({ type: 'emote', sticker: 1 }))
+    expect(await stickerError).toMatchObject({
+      type: 'error',
+      message: 'Error: player used unowned sticker'
+    })
+  })
+
+  it('rejects malformed anonymous identities at the public Worker boundary', async () => {
+    const response = await SELF.fetch(
+      `https://game.example/v1/matches/${proposalId}`,
+      {
+        headers: {
+          Upgrade: 'websocket',
+          Origin: 'https://opensky.example',
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: SPECTATOR_PRINCIPAL,
+          [TRUSTED_USER_ID_HEADER]: 'anonymous-not-a-uuid',
+          [TRUSTED_ANONYMOUS_SPECTATOR_HEADER]: '1'
+        }
+      }
+    )
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({
+      error: 'invalid anonymous spectator'
+    })
   })
 
   it('isolates spectator protocol errors and disconnects from player abandon state', async () => {
