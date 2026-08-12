@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`e9667be2-66ed-45d5-ad57-dc14564dac5a`)
-- Match service Worker: `cloud-weasel-match-service` (`80da4b3c-d476-442a-9b3f-a42cd8e3ef97`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`49bd05fd-6fcd-4f8e-aa31-00ec0d115140`)
+- Match service Worker: `cloud-weasel-match-service` (`16934ac3-15b6-4e4e-9581-86b0a2646610`)
 - Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
 - Deployed source includes `492cd47` across the API/web and game Workers,
-  `71818bc` for the matchmaker, and `2a192d6` for the match service
+  `18e66c1` for the matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -390,6 +390,19 @@ settlement and delayed delivery against that pool.
   service-bound mode status, and game client HTML passed; both Conquest queues
   remain disabled. A read-only production aggregate found one active and nine
   ended matches, no creating/failed rows, and reported `changed_db: false`.
+- Match service version `16934ac3-15b6-4e4e-9581-86b0a2646610` and matchmaker
+  version `49bd05fd-6fcd-4f8e-aa31-00ec0d115140` contain source `18e66c1`.
+  Human player-session IDs now follow the source Go `google/uuid` decoder at
+  both the browser-message and final-dispatch boundaries: canonical, compact,
+  braced, and UUID-URN forms are accepted and marshalled to canonical lowercase
+  text, while malformed or inconsistent values fail closed. The match service's
+  internally generated bot session is now a source-compatible UUID too. All 46
+  matcher unit, 27 matcher Worker, and 20 match-service Worker tests and both
+  TypeScript checks passed. Live matcher protocol-v3 health, API `Ping`, the
+  authoritative mode-status binding, and game client HTML passed; both Conquest
+  queues remain disabled. A read-only production aggregate remained one active
+  and nine ended matches with no creating/failed rows and reported
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
