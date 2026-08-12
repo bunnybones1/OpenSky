@@ -98,6 +98,7 @@ interface LeaderboardRow extends StatRow {
   xp: number
   next_level_xp: number
   basic_skypass_level: number
+  warm_ups: number
 }
 
 interface MatchRow {
@@ -498,7 +499,7 @@ export class CompetitiveRepository {
                 users.created_at AS user_created_at,
                 profile.updated_at AS profile_updated_at,
                 profile.level, profile.xp, profile.next_level_xp,
-                progression.basic_skypass_level
+                progression.basic_skypass_level, account.warm_ups
          FROM player_account_stats stats
          JOIN users ON users.id = stats.user_id
          JOIN player_profiles profile ON profile.user_id = stats.user_id
@@ -548,7 +549,7 @@ export class CompetitiveRepository {
         createdAt: row.user_created_at,
         updatedAt: row.profile_updated_at,
         experience: row.xp,
-        warmUps: 0,
+        warmUps: row.warm_ups,
         level: row.level,
         seasonLevel: row.basic_skypass_level,
         levelUpXP: row.next_level_xp,

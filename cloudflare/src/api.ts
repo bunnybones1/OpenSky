@@ -58,6 +58,7 @@ import {
   seasonName
 } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
+import { PlayerSupportRepository } from './player-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { StaffRepository } from './staff'
@@ -234,6 +235,7 @@ export const handleApiRequest = async (
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
+  const playerSupport = new PlayerSupportRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
@@ -541,6 +543,64 @@ export const handleApiRequest = async (
         )
         if (!account) throw notFound('account not found')
         return json(request, env, { account })
+      }
+
+      case 'GMRenameAccount': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          oldName?: string
+          accountAddress?: string
+          newName?: string
+          lockedUntil?: string
+        }>(request)
+        const userId = await playerSupport.renameAccount(principal.userId, body)
+        const account = await playerRpc.getAccountForAdmin(
+          undefined,
+          identityReferenceFor(userId)
+        )
+        if (!account) throw notFound('account not found')
+        return json(request, env, { account })
+      }
+
+      case 'GMUnlockAllBaseCards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{ accountAddress?: string }>(request)
+        return json(request, env, {
+          ok: await playerSupport.unlockAllBaseCards(
+            principal.userId,
+            body.accountAddress
+          )
+        })
+      }
+
+      case 'GMSetWarmupGamesCompleted': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          numGamesCompleted?: number
+        }>(request)
+        return json(request, env, {
+          ok: await playerSupport.setWarmups(
+            principal.userId,
+            body.accountAddress,
+            body.numGamesCompleted
+          )
+        })
+      }
+
+      case 'GMResetStarterDecks': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{ address?: string }>(request)
+        return json(request, env, {
+          ok: await playerSupport.resetStarterDecks(
+            principal.userId,
+            body.address
+          )
+        })
       }
 
       case 'GMListAccounts': {

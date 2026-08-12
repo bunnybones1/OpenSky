@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import { AccountActionsRepository } from '../src/account-actions'
+import { allLibraryCards } from '../src/card-library'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
-import { PlayerRepository } from '../src/player'
+import { PlayerRepository, STARTER_CARDS } from '../src/player'
 import { seasonFromDate } from '../src/legacy-seasons'
 
 const testEnv = env as unknown as Env
@@ -42,6 +43,7 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM staff_player_support_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_account_action_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_game_mode_permissions'),
     env.AUTH_DB.prepare('DELETE FROM match_reviews'),
@@ -120,6 +122,16 @@ const grantGameModeWrite = async () => {
 const grantAccountActionWrite = async () => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_account_action_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantPlayerSupportWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_player_support_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
@@ -281,6 +293,235 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(
       (await rpcAs(ADMIN, 'GMFindAccount', { name: 'Missing Player' })).status
     ).toBe(404)
+  })
+
+  it('gates and audits forced account renames and warm-up corrections', async () => {
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMRenameAccount', {
+          accountAddress: `identity:${PLAYER}`,
+          newName: 'CloudPlayer'
+        })
+      ).status
+    ).toBe(403)
+    for (const [method, body] of [
+      ['GMUnlockAllBaseCards', { accountAddress: `identity:${PLAYER}` }],
+      [
+        'GMSetWarmupGamesCompleted',
+        { accountAddress: `identity:${PLAYER}`, numGamesCompleted: 3 }
+      ],
+      ['GMResetStarterDecks', { address: `identity:${PLAYER}` }]
+    ] as const) {
+      expect((await rpcAs(ADMIN, method, body)).status).toBe(403)
+    }
+    await grantPlayerSupportWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMRenameAccount', {
+          accountAddress: `identity:${PLAYER}`,
+          newName: 'bad name'
+        })
+      ).status
+    ).toBe(400)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings SET name = 'StaffAdmin'
+       WHERE user_id = ?`
+    )
+      .bind(ADMIN)
+      .run()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMRenameAccount', {
+          accountAddress: `identity:${PLAYER}`,
+          newName: 'StaffAdmin'
+        })
+      ).status
+    ).toBe(409)
+
+    const lockedUntil = '2026-09-01T12:00:00.000Z'
+    const renamed = await rpcAs(ADMIN, 'GMRenameAccount', {
+      oldName: 'Staff Player',
+      newName: 'CloudPlayer',
+      lockedUntil
+    })
+    expect(renamed.status).toBe(200)
+    expect(await renamed.json()).toMatchObject({
+      account: {
+        address: `identity:${PLAYER}`,
+        name: 'CloudPlayer',
+        warmUps: 0,
+        settings: { renameLockedUntil: lockedUntil }
+      }
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetWarmupGamesCompleted', {
+          accountAddress: `identity:${PLAYER}`,
+          numGamesCompleted: 4
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMSetWarmupGamesCompleted', {
+          accountAddress: `identity:${PLAYER}`,
+          numGamesCompleted: 3
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMFindAccount', {
+          accountAddress: `identity:${PLAYER}`
+        })
+      ).json()
+    ).toMatchObject({ account: { name: 'CloudPlayer', warmUps: 3 } })
+
+    const audits = await env.AUTH_DB.prepare(
+      `SELECT operation, target_user_id, actor_user_id, before_json, after_json
+       FROM staff_player_support_audit
+       WHERE target_user_id = ? ORDER BY id ASC`
+    )
+      .bind(PLAYER)
+      .all<{
+        operation: string
+        target_user_id: string
+        actor_user_id: string
+        before_json: string
+        after_json: string
+      }>()
+    expect(audits.results.map(row => row.operation)).toEqual([
+      'RENAME_ACCOUNT',
+      'SET_WARMUPS'
+    ])
+    expect(audits.results[0]).toMatchObject({
+      target_user_id: PLAYER,
+      actor_user_id: ADMIN
+    })
+    expect(JSON.parse(audits.results[0].before_json)).toMatchObject({
+      name: 'Staff Player'
+    })
+    expect(JSON.parse(audits.results[1].after_json)).toEqual({ warmUps: 3 })
+  })
+
+  it('repairs starter decks and unlocks source-library base cards atomically', async () => {
+    const repairPlayer = 'staff-repair-player'
+    const createdAt = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Repair Player', 'repair-player@example.com', ?, ?)`
+    )
+      .bind(repairPlayer, createdAt, createdAt)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(repairPlayer)
+    await grantAdmin()
+    await grantPlayerSupportWrite()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_decks WHERE user_id = ? AND prism = 'agility'`
+      ).bind(repairPlayer),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO', 2, 1, 1, 'test', ?, ?)`
+      ).bind(repairPlayer, createdAt, createdAt)
+    ])
+
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMResetStarterDecks', {
+          address: `identity:${repairPlayer}`
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT deck_type, is_new FROM player_decks
+         WHERE user_id = ? AND prism = 'agility'`
+      )
+        .bind(repairPlayer)
+        .first()
+    ).toEqual({ deck_type: 'UNLOCKED_STARTER', is_new: 1 })
+    const agilityCards = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (
+           SELECT value FROM json_each((
+             SELECT card_ids FROM player_decks
+             WHERE user_id = ? AND prism = 'agility'
+           ))
+         ) AND balance > 0`
+    )
+      .bind(repairPlayer, repairPlayer)
+      .first<{ count: number }>()
+    expect(agilityCards?.count).toBe(30)
+
+    const starterCardIds = new Set<number>(STARTER_CARDS.map(([id]) => id))
+    const nonStarterCard = allLibraryCards().find(
+      card => !starterCardIds.has(card.id)
+    )!
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', ?, 1, 1, 'test', ?, ?)`
+    )
+      .bind(
+        repairPlayer,
+        nonStarterCard.id,
+        new Date().toISOString(),
+        new Date().toISOString()
+      )
+      .run()
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMUnlockAllBaseCards', {
+          accountAddress: `identity:${repairPlayer}`
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    const libraryCount = allLibraryCards().length
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(DISTINCT token_id) AS count FROM player_items
+         WHERE user_id = ? AND balance > 0
+           AND item_type IN ('SW_BASE_CARDS', 'SW_SILVER_CARDS',
+                             'SW_GOLD_CARDS')`
+      )
+        .bind(repairPlayer)
+        .first()
+    ).toEqual({ count: libraryCount })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT 1 FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_BASE_CARDS' AND token_id = ?`
+      )
+        .bind(repairPlayer, nonStarterCard.id)
+        .first()
+    ).toBeNull()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT operation FROM staff_player_support_audit
+         WHERE target_user_id = ? ORDER BY id ASC`
+      )
+        .bind(repairPlayer)
+        .all()
+    ).toMatchObject({
+      results: [
+        { operation: 'RESET_STARTER_DECKS' },
+        { operation: 'UNLOCK_ALL_BASE_CARDS' }
+      ]
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_player_support_audit WHERE target_user_id = ?`
+      )
+        .bind(repairPlayer)
+        .run()
+    ).rejects.toThrow('staff player support audit rows are immutable')
   })
 
   it('lists filtered staff account rows with source-shaped cursor metadata', async () => {

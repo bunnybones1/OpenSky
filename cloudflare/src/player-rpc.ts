@@ -214,6 +214,7 @@ interface AccountRow {
   request_more_invites: number | null
   twitch_profile: string | null
   rename_locked_until: string | null
+  warm_ups: number
   spectate_code: string | null
   spectate_code_expires_at: string | null
   user_created_at: string
@@ -678,6 +679,7 @@ export class PlayerRpcRepository {
                 account.request_more_invites,
                 account.twitch_profile,
                 account.rename_locked_until,
+                account.warm_ups,
                 account.spectate_code,
                 account.spectate_code_expires_at,
                 u.created_at AS user_created_at,
@@ -707,7 +709,7 @@ export class PlayerRpcRepository {
       createdAt: row.user_created_at,
       updatedAt: row.profile_updated_at,
       experience: row.xp,
-      warmUps: 0,
+      warmUps: row.warm_ups,
       level: row.level,
       seasonLevel: row.basic_skypass_level,
       levelUpXP: row.next_level_xp,
