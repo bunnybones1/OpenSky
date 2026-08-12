@@ -6,10 +6,11 @@
 - API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`00abd8fe-a501-4228-a579-edc9798c76a4`)
+- Game Worker: `cloud-weasel-game-server` (`930ff389-a51b-4002-a340-92a94a78e726`)
 - Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
-  Worker, and `309861e` for the matchmaker and match service
+  deadline milestone, `f5775cc` for the game Worker, and `309861e` for the
+  matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -157,7 +158,7 @@ settlement and delayed delivery against that pool.
 
 - API Worker: 22 files, 148 tests
 - Match service: 14 Worker tests
-- Game Worker: 25 unit and 57 Worker tests
+- Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
@@ -589,6 +590,16 @@ settlement and delayed delivery against that pool.
   normal state-transition timer calculation. This prevents disconnect from
   shortening or extending a reveal/turn window without an authoritative
   action. The rollout passed all 25 unit and 58 game-Worker tests, TypeScript
+  checking, and the 8.9 MB Wrangler dry-run bundle. Live game health passed; a
+  read-only production aggregate remained one active and nine ended matches and
+  reported `changed_db: false`.
+- Game Worker version `930ff389-a51b-4002-a340-92a94a78e726` contains source
+  `f5775cc`. Disconnect suppression now requires another open, successfully
+  joined player socket for that principal. A half-open replacement waiting for
+  `join_server` cannot keep the real player's durable state connected after the
+  joined socket closes, suppress the opponent disconnect notice, or prevent the
+  abandon deadline. The completed-handoff path remains atomic and deadline-
+  free. The rollout passed all 25 unit and 59 game-Worker tests, TypeScript
   checking, and the 8.9 MB Wrangler dry-run bundle. Live game health passed; a
   read-only production aggregate remained one active and nine ended matches and
   reported `changed_db: false`.
