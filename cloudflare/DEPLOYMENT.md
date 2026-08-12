@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`eddc0240-7eb6-4ceb-8798-6eb484b30779`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`599c8f8f-0c32-4d53-876c-5f9f40d13043`)
 - Match service Worker: `cloud-weasel-match-service` (`80e109e1-ba12-4858-8b67-2327a87e195f`)
 - Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
-- Deployed source includes `492cd47` across the API/web, matchmaker, match
-  service, and game Workers
+- Deployed source includes `492cd47` across the API/web, match service, and game
+  Workers, plus `d4b59c2` for the matchmaker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -157,7 +157,7 @@ settlement and delayed delivery against that pool.
 - API Worker: 22 files, 146 tests
 - Match service: 14 Worker tests
 - Game Worker: 24 unit and 48 Worker tests
-- Matchmaker: 26 unit and 17 Worker tests
+- Matchmaker: 26 unit and 18 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
 - Card-library generator, source-RPC inventory, and production Conquest gates
@@ -313,6 +313,14 @@ settlement and delayed delivery against that pool.
   both protocol-v3 health probes passed, with both Conquest queues still
   disabled. The rollout passed 146 API, 14 match-service, 24 game-unit, 48
   game-Worker, 26 matchmaker-unit, and 17 matchmaker-Worker tests.
+- Matchmaker version `599c8f8f-0c32-4d53-876c-5f9f40d13043` contains source
+  `d4b59c2`. The source `OUTDATED_CLIENT` admission check now rejects a browser
+  release other than the configured `cloudflare` release before captcha or D1
+  profile work, while a four-test deployment gate prevents browser/matchmaker
+  release drift. All 26 unit and 18 Worker tests, TypeScript type checking, and
+  the corresponding Go validator/matcher suites passed. Live protocol-v3
+  health, API `Ping`, and the `/game/cloudflare/` client path passed after
+  deployment.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
