@@ -22,6 +22,10 @@ import {
 const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
 const PRINCIPAL_3 = '0x3333333333333333333333333333333333333333'
+const PRINCIPAL_4 = '0x4444444444444444444444444444444444444444'
+const PRINCIPAL_5 = '0x5555555555555555555555555555555555555555'
+const PRINCIPAL_6 = '0x6666666666666666666666666666666666666666'
+const PRINCIPAL_7 = '0x7777777777777777777777777777777777777777'
 
 const runtimeEnv = env as unknown as MatchmakerEnv
 const pool = () =>
@@ -105,10 +109,11 @@ const findCommand = (
 
 const pairPlayers = async (
   mode = GameMode.RANKED_CONSTRUCTED,
-  versionHash = 'release-1'
+  versionHash = 'release-1',
+  principals: [string, string] = [PRINCIPAL_1, PRINCIPAL_2]
 ) => {
-  const first = await connect(PRINCIPAL_1, '192.0.2.1')
-  const second = await connect(PRINCIPAL_2, '192.0.2.2')
+  const first = await connect(principals[0], '192.0.2.1')
+  const second = await connect(principals[1], '192.0.2.2')
   const sessionID =
     mode === GameMode.CHALLENGE_CONSTRUCTED ||
     mode === GameMode.CHALLENGE_DISCOVERY
@@ -121,7 +126,7 @@ const pairPlayers = async (
   expect(await firstFound).toMatchObject({
     type: 'match_found',
     mode,
-    playerIDs: [PRINCIPAL_1, PRINCIPAL_2]
+    playerIDs: principals
   })
   expect(await secondFound).toMatchObject({ type: 'match_found' })
   return { first, second }
@@ -310,14 +315,30 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
-  it('applies the source game-abandon cooldown returned by the match service', async () => {
+  it('rejects a client release that differs from the deployed matchmaker', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
-    const cooldown = nextMessage(player)
+    const error = nextMessage(player)
     player.send(
       JSON.stringify(
-        findCommand(GameMode.RANKED_CONSTRUCTED, '', 'release-cooldown')
+        findCommand(GameMode.RANKED_CONSTRUCTED, '', 'stale-release')
       )
     )
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'OUTDATED_CLIENT',
+      message: 'OUTDATED_CLIENT',
+      level: 'server'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('applies the source game-abandon cooldown returned by the match service', async () => {
+    const [player] = track(await connect(PRINCIPAL_4, '192.0.2.4'))
+    const cooldown = nextMessage(player)
+    player.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))
     expect(await cooldown).toEqual({
       type: 'match_refusal_cooldown',
       durationSeconds: 5
@@ -360,12 +381,8 @@ describe('Cloudflare matchmaker Worker', () => {
   })
 
   it('hydrates and validates active conquest progress before queueing', async () => {
-    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
-    player.send(
-      JSON.stringify(
-        findCommand(GameMode.CONQUEST_CONSTRUCTED, '', 'release-conquest')
-      )
-    )
+    const [player] = track(await connect(PRINCIPAL_7, '192.0.2.7'))
+    player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))
 
     await expect
       .poll(async () => {
@@ -383,24 +400,16 @@ describe('Cloudflare matchmaker Worker', () => {
       async (_instance, state) => {
         const ticket = await state.storage.get<{
           player: { conquestProgress: string[] }
-        }>(`ticket:${PRINCIPAL_1}`)
+        }>(`ticket:${PRINCIPAL_7}`)
         expect(ticket?.player.conquestProgress).toEqual(['WIN', 'DRAW'])
       }
     )
   })
 
   it('rejects a deck that differs from the hero locked in conquest', async () => {
-    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const [player] = track(await connect(PRINCIPAL_5, '192.0.2.5'))
     const error = nextMessage(player)
-    player.send(
-      JSON.stringify(
-        findCommand(
-          GameMode.CONQUEST_CONSTRUCTED,
-          '',
-          'release-conquest-mismatch'
-        )
-      )
-    )
+    player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED, '')))
     expect(await error).toMatchObject({
       type: 'error',
       reason: 'CONQUEST_DECK_CLASS_MISMATCH'
@@ -412,17 +421,9 @@ describe('Cloudflare matchmaker Worker', () => {
   })
 
   it('rejects an enabled conquest queue without an active run', async () => {
-    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const [player] = track(await connect(PRINCIPAL_6, '192.0.2.6'))
     const error = nextMessage(player)
-    player.send(
-      JSON.stringify(
-        findCommand(
-          GameMode.CONQUEST_CONSTRUCTED,
-          '',
-          'release-conquest-missing'
-        )
-      )
-    )
+    player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED, '')))
     expect(await error).toMatchObject({
       type: 'error',
       reason: 'INVALID_ACCOUNT'
@@ -432,7 +433,8 @@ describe('Cloudflare matchmaker Worker', () => {
   it('terminates proposals rejected by final match preconditions', async () => {
     const { first, second } = await pairPlayers(
       GameMode.RANKED_CONSTRUCTED,
-      'release-terminal-reject'
+      'release-1',
+      [PRINCIPAL_5, PRINCIPAL_6]
     )
     track(first, second)
     const firstAcceptance = nextMessage(first)
@@ -446,7 +448,7 @@ describe('Cloudflare matchmaker Worker', () => {
     second.send(JSON.stringify({ type: 'accept_match' }))
     for (const messages of [await firstResult, await secondResult]) {
       expect(messages).toEqual([
-        { type: 'accept_match', playerID: PRINCIPAL_2 },
+        { type: 'accept_match', playerID: PRINCIPAL_6 },
         {
           type: 'error',
           reason: 'RANK_TOO_LOW',

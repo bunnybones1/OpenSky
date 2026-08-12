@@ -63,6 +63,7 @@ export interface MatchmakerEnv {
   MATCH_REFUSAL_PENALTY_SECONDS?: string
   MATCH_TICK_MS?: string
   RELAX_MATCHING_INTERVAL_MS?: string
+  EXPECTED_RELEASE_VERSION?: string
   ENABLE_RANKED_BOTS?: string
   ALLOW_SAME_IP_MATCH?: string
   STRICT_CONQUEST_MATCHING?: string
@@ -123,6 +124,7 @@ interface RuntimeConfig {
   acceptanceTimeoutMs: number
   tickMs: number
   relaxIntervalMs: number
+  expectedReleaseVersion: string
   enableRankedBots: boolean
   allowSameIpMatch: boolean
   strictConquestMatching: boolean
@@ -166,22 +168,36 @@ const parsePositiveInteger = (
 const bool = (value: string | undefined, fallback: boolean) =>
   value === undefined ? fallback : value.toLowerCase() === 'true'
 
-const readConfig = (env: MatchmakerEnv): RuntimeConfig => ({
-  acceptanceTimeoutMs: parsePositiveInteger(
-    env.MATCH_ACCEPTANCE_TIMEOUT_MS,
-    30_000,
-    120_000
-  ),
-  tickMs: parsePositiveInteger(env.MATCH_TICK_MS, 2_000, 30_000),
-  relaxIntervalMs: parsePositiveInteger(
-    env.RELAX_MATCHING_INTERVAL_MS,
-    30_000,
-    10 * 60_000
-  ),
-  enableRankedBots: bool(env.ENABLE_RANKED_BOTS, false),
-  allowSameIpMatch: bool(env.ALLOW_SAME_IP_MATCH, false),
-  strictConquestMatching: bool(env.STRICT_CONQUEST_MATCHING, false)
-})
+const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
+  const expectedReleaseVersion =
+    env.EXPECTED_RELEASE_VERSION?.trim().toLowerCase()
+  if (
+    !expectedReleaseVersion ||
+    expectedReleaseVersion.length > 128 ||
+    !/^[a-z0-9._-]+$/.test(expectedReleaseVersion)
+  ) {
+    throw new Error(
+      'EXPECTED_RELEASE_VERSION must be a valid release identifier'
+    )
+  }
+  return {
+    acceptanceTimeoutMs: parsePositiveInteger(
+      env.MATCH_ACCEPTANCE_TIMEOUT_MS,
+      30_000,
+      120_000
+    ),
+    tickMs: parsePositiveInteger(env.MATCH_TICK_MS, 2_000, 30_000),
+    relaxIntervalMs: parsePositiveInteger(
+      env.RELAX_MATCHING_INTERVAL_MS,
+      30_000,
+      10 * 60_000
+    ),
+    expectedReleaseVersion,
+    enableRankedBots: bool(env.ENABLE_RANKED_BOTS, false),
+    allowSameIpMatch: bool(env.ALLOW_SAME_IP_MATCH, false),
+    strictConquestMatching: bool(env.STRICT_CONQUEST_MATCHING, false)
+  }
+}
 
 const serializePlayer = (player: MatchmakerPlayer): StoredPlayer => ({
   ...player,
@@ -397,6 +413,12 @@ export class MatchmakerPool implements DurableObject {
       } else {
         await this.state.storage.delete(pendingKey(attachment.principal))
       }
+    }
+
+    // Source oracle: frontend/findmatch/validators/version.go rejects a stale
+    // release before authentication, captcha, profile hydration, or queueing.
+    if (command.versionHash !== this.config.expectedReleaseVersion) {
+      throw new ProtocolError('OUTDATED_CLIENT', 'OUTDATED_CLIENT')
     }
 
     let captchaValid: boolean

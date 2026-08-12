@@ -32,10 +32,11 @@ export default defineConfig({
                 return new Response('invalid profile body', { status: 400 })
               }
               const conquestEnabled =
-                body.versionHash.startsWith('release-conquest')
+                body.mode.startsWith('CONQUEST_') &&
+                body.principal !== '0x1111111111111111111111111111111111111111'
               const conquestFixture =
                 conquestEnabled &&
-                body.versionHash !== 'release-conquest-missing'
+                body.principal !== '0x6666666666666666666666666666666666666666'
               return Response.json({
                 gameModeEnabled:
                   !body.mode.startsWith('CONQUEST_') || conquestEnabled,
@@ -44,7 +45,10 @@ export default defineConfig({
                   rank: 'APPRENTICE',
                   lostLastMatch: body.userId.includes('1111'),
                   abandonPenaltyMs:
-                    body.versionHash === 'release-cooldown' ? 5_000 : 0,
+                    body.principal ===
+                    '0x4444444444444444444444444444444444444444'
+                      ? 5_000
+                      : 0,
                   cards: [[6, 'base']],
                   recentMatches: [
                     {
@@ -61,9 +65,11 @@ export default defineConfig({
                           nonce: 1,
                           mode: body.mode,
                           hero: 'ADA',
-                          deckClass: body.versionHash.endsWith('-mismatch')
-                            ? 'HRT'
-                            : 'STR',
+                          deckClass:
+                            body.principal ===
+                            '0x5555555555555555555555555555555555555555'
+                              ? 'HRT'
+                              : 'STR',
                           matchProgress: { 39: 'WIN', 40: 'DRAW' },
                           createdAt: '2026-08-12T00:00:00.000Z'
                         }
@@ -91,14 +97,14 @@ export default defineConfig({
             }
             const dispatch = (await request.clone().json()) as {
               participants?: Array<{
-                player?: { clientVersionHash?: unknown }
+                player?: { address?: unknown }
               }>
             }
             if (
               dispatch.participants?.some(
                 participant =>
-                  participant.player?.clientVersionHash ===
-                  'release-terminal-reject'
+                  participant.player?.address ===
+                  '0x6666666666666666666666666666666666666666'
               )
             ) {
               return Response.json(

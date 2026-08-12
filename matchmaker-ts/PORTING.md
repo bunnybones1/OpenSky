@@ -51,11 +51,17 @@ of creating a competing ticket. The longest live abandon, refusal, or
 acceptance-timeout penalty is returned through the original cooldown message.
 Malformed, unavailable, or identity-mismatched profile data fails closed and is
 never replaced by client-provided values.
+The source release validator is also preserved: `EXPECTED_RELEASE_VERSION`
+must equal the normalized `versionHash` embedded in the browser build or the
+queue request receives `OUTDATED_CLIENT` before captcha/profile work. The root
+release gate prevents the browser and matchmaker deployment configs from
+drifting.
 
 ## Deployment gates
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
+- `pnpm check:cloudflare:release`
 - `go test ./matchmaker/lib/matchmaker/matching/matchers/...`
 - Set the same long `INTERNAL_AUTH_SECRET` on the gateway and matchmaker.
 - Do not enable production queue routing until `MATCH_SERVICE` is bound. Fully
@@ -64,9 +70,9 @@ never replaced by client-provided values.
 
 ## Remaining source behavior
 
-Conquest state still needs a Cloudflare adapter. The same-origin gateway already
-provides the source match-info response for reconnects. Conquest queues remain
-operationally disabled until their state and rewards are ported; the matchmaker
-does not pretend an incomplete mode is available. Captcha remains disabled in
-production until a Cloud Weasel hCaptcha site is configured and its secret
-provisioned.
+The same-origin gateway provides source match-info responses for reconnects,
+and Conquest queue profiles now include the active run, locked deck class, and
+progress. Conquest queues remain operationally disabled until a production
+reward pool is approved and the settlement/delayed-delivery drill passes.
+Captcha remains disabled in production until a Cloud Weasel hCaptcha site is
+configured and its secret provisioned.

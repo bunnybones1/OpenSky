@@ -46,6 +46,12 @@ Set `RELEASE_VERSION` to use a different immutable game path:
 RELEASE_VERSION=my-release pnpm build:cloudflare
 ```
 
+The matchmaker also pins `EXPECTED_RELEASE_VERSION` in its Wrangler config and
+faithfully rejects stale clients with `OUTDATED_CLIENT`. A custom browser
+release therefore requires updating that value and deploying the matchmaker;
+`pnpm check:cloudflare:release` fails before build/deploy if the embedded browser
+`GITCOMMIT` and matchmaker release differ.
+
 The build also fails if an emitted file exceeds Cloudflare Workers' 25 MiB static-asset limit.
 
 ## Google OAuth configuration
