@@ -6,9 +6,9 @@
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`380ef699-ecc0-4297-8167-86d65eaf00a9`)
+- Game Worker: `cloud-weasel-game-server` (`9c00e461-5632-4924-8c2e-60fc949abc4f`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `309861e` for the matchmaker and match service, and `2eafebb`
+  `309861e` for the matchmaker and match service, and `a652b95`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -516,6 +516,17 @@ settlement and delayed delivery against that pool.
   tests plus TypeScript checking. Live game health and authoritative mode
   status passed with Conquest disabled; the read-only production aggregate
   remained one active and nine ended matches and reported `changed_db: false`.
+- Game Worker version `9c00e461-5632-4924-8c2e-60fc949abc4f` contains source
+  `a652b95`. The internal `abandon_match` event is no longer accepted as a
+  browser WebSocket command: the original outer server generated it only after
+  its disconnect timeout, while voluntary concessions travel through signed
+  gameplay diffs. Cloudflare now preserves that boundary, and the completion
+  integration exercises disconnect, durable abandon deadline, authoritative
+  game-over, rewards, and penalty recording instead of a client-forged event.
+  The rollout passed all 24 game unit and 53 game Worker tests plus TypeScript
+  checking. Live game health and API `Ping` passed; a read-only production
+  aggregate remained one active and nine ended matches and reported
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
