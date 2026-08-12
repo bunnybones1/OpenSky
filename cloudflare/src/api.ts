@@ -12,6 +12,7 @@ import type {
   GameMode,
   GameModesStatus,
   GMListMatchesRequest,
+  GooglePlayPaymentResponse,
   Hero,
   ItemType,
   NotificationOneTime,
@@ -2093,6 +2094,18 @@ export const handleApiRequest = async (
           principal.userId,
           body.providerResponse
         )
+        return json(request, env, { status: true })
+      }
+
+      case 'VerifyGooglePlayPayment': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          providerResponse?: GooglePlayPaymentResponse
+        }>(request)
+        if (!body.providerResponse) {
+          throw invalidArgument('providerResponse is required')
+        }
+        await mobileStores.verifyGoogle(principal.userId, body.providerResponse)
         return json(request, env, { status: true })
       }
 

@@ -24,6 +24,12 @@ TWITCH_GAME_ID=replace-with-cloud-weasel-game-id
 # inventory; the Worker uses Samsung's fixed HTTPS production receipt API.
 SAMSUNG_IAP_PACKAGE_NAME=com.example.cloudweasel
 
+# Optional Google Play verification. Create a dedicated Play Console service
+# account with Android Publisher access, then keep its complete JSON key in a
+# Wrangler secret. This is separate from the Google login OAuth client above.
+GOOGLE_PLAY_PACKAGE_NAME=com.example.cloudweasel
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON={"type":"service_account","client_email":"replace-with-play-service-account@example.iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\\nreplace-with-private-key\\n-----END PRIVATE KEY-----\\n"}
+
 # Optional Stripe Checkout integration. Checkout remains disabled unless both
 # secrets, both redirect URLs, and the selected product's price ID are set.
 # Keep secret values in Wrangler secrets; price IDs and redirect URLs may be

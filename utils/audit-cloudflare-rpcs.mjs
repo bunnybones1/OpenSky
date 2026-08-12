@@ -97,8 +97,7 @@ export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([
   'IAPVerifyAppleProducts2',
   'IAPVerifyGoogleProducts2',
   'JoinEarlyAccessList',
-  'VerifyAppleAppStorePayment',
-  'VerifyGooglePlayPayment'
+  'VerifyAppleAppStorePayment'
 ])
 
 export const partitionRpcGaps = methods => ({

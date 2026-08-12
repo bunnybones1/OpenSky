@@ -18,6 +18,8 @@ export interface Env {
   TWITCH_CLIENT_ID?: string
   TWITCH_CLIENT_SECRET?: string
   TWITCH_GAME_ID?: string
+  GOOGLE_PLAY_PACKAGE_NAME?: string
+  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?: string
   SAMSUNG_IAP_PACKAGE_NAME?: string
   INTERNAL_AUTH_SECRET: string
   MATCHMAKER_POOLS: DurableObjectNamespace
