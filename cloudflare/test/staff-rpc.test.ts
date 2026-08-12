@@ -44,6 +44,8 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM skypass_giveaway_limits'),
+    env.AUTH_DB.prepare('DELETE FROM staff_entitlement_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_progression_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_player_support_permissions'),
     env.AUTH_DB.prepare('DELETE FROM staff_account_action_permissions'),
@@ -144,6 +146,16 @@ const grantPlayerSupportWrite = async () => {
 const grantProgressionWrite = async () => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_progression_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantEntitlementWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_entitlement_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
@@ -1920,6 +1932,167 @@ describe('fail-closed Google identity staff authorization', () => {
         ).first<{ count: number }>()
       )?.count
     ).toBe(1)
+  })
+
+  it('gates and audits optional SkyPass entitlement toggles under a season cap', async () => {
+    const season = seasonFromDate()
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+          address: `identity:${PLAYER}`
+        })
+      ).status
+    ).toBe(403)
+    await grantEntitlementWrite()
+    const missingCap = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+      address: `identity:${PLAYER}`
+    })
+    expect(missingCap.status).toBe(500)
+    expect(await missingCap.json()).toMatchObject({
+      msg: 'skypass giveaway limit is not configured'
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+          address: 'identity:missing'
+        })
+      ).status
+    ).toBe(404)
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO skypass_giveaway_limits
+         (season, giveaway_limit, set_by_user_id, reason, created_at, updated_at)
+       VALUES (?, 2, ?, 'test-approved season cap', ?, ?)`
+    )
+      .bind(season, ADMIN, now, now)
+      .run()
+    const granted = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+      address: `identity:${PLAYER}`
+    })
+    expect(granted.status).toBe(200)
+    expect(await granted.json()).toEqual({ has: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT has_premium FROM player_skypass_season_stats
+         WHERE user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ has_premium: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance, unlock_source FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_SKYPASS' AND token_id = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ balance: 1, unlock_source: 'gm-skypass-giveaway' })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMHasSkypassPremium', {
+          address: `identity:${PLAYER}`
+        })
+      ).json()
+    ).toEqual({ has: true })
+
+    const removed = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+      address: `identity:${PLAYER}`
+    })
+    expect(removed.status).toBe(200)
+    expect(await removed.json()).toEqual({ has: false })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT stats.has_premium, item.balance
+         FROM player_skypass_season_stats stats
+         JOIN player_items item ON item.user_id = stats.user_id
+          AND item.item_type = 'SW_SKYPASS' AND item.token_id = stats.season
+         WHERE stats.user_id = ? AND stats.season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ has_premium: 0, balance: 0 })
+
+    const regranted = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+      address: `identity:${PLAYER}`
+    })
+    expect(regranted.status).toBe(200)
+    expect(await regranted.json()).toEqual({ has: true })
+    const capped = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+      address: `identity:${PLAYER}`
+    })
+    expect(capped.status).toBe(500)
+    expect(await capped.json()).toMatchObject({
+      msg: 'too many skypasses given away'
+    })
+    // Preserve the source order: reaching the giveaway count also prevents a
+    // removal toggle, so the existing entitlement remains intact.
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT has_premium FROM player_skypass_season_stats
+         WHERE user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ has_premium: 1 })
+
+    const audits = await env.AUTH_DB.prepare(
+      `SELECT id, actor_user_id, target_user_id, season, before_json, after_json
+       FROM staff_skypass_entitlement_audit ORDER BY id ASC`
+    ).all<{
+      id: number
+      actor_user_id: string
+      target_user_id: string
+      season: number
+      before_json: string
+      after_json: string
+    }>()
+    expect(audits.results).toHaveLength(3)
+    expect(audits.results[0]).toMatchObject({
+      actor_user_id: ADMIN,
+      target_user_id: PLAYER,
+      season
+    })
+    expect(JSON.parse(audits.results[0].before_json)).toEqual({
+      hasPremium: false,
+      balance: 0
+    })
+    expect(JSON.parse(audits.results[0].after_json)).toEqual({
+      hasPremium: true,
+      balance: 1
+    })
+    expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_skypass_entitlement_audit
+           (operation, target_user_id, actor_user_id, season, before_json,
+            after_json, created_at)
+         VALUES ('TOGGLE_SKYPASS_PREMIUM', ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          PLAYER,
+          ADMIN,
+          season,
+          JSON.stringify({ hasPremium: false, balance: 0 }),
+          JSON.stringify({ hasPremium: true, balance: 1 }),
+          now
+        )
+        .run()
+    ).rejects.toThrow(/state changed/i)
+    expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_skypass_entitlement_audit SET actor_user_id = ? WHERE id = ?`
+      )
+        .bind(PLAYER, audits.results[0].id)
+        .run()
+    ).rejects.toThrow(/immutable/i)
+    expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_skypass_entitlement_audit WHERE id = ?`
+      )
+        .bind(audits.results[0].id)
+        .run()
+    ).rejects.toThrow(/immutable/i)
   })
 
   it('paginates event-2 Conquest treasure progress using source thresholds', async () => {

@@ -63,6 +63,7 @@ import { PlayerSupportRepository } from './player-support'
 import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
+import { SkypassSupportRepository } from './skypass-support'
 import { StaffRepository } from './staff'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
@@ -239,6 +240,7 @@ export const handleApiRequest = async (
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const playerSupport = new PlayerSupportRepository(env.AUTH_DB)
   const progressionSupport = new ProgressionSupportRepository(env.AUTH_DB)
+  const skypassSupport = new SkypassSupportRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
@@ -993,6 +995,18 @@ export const handleApiRequest = async (
         if (!body.address) throw invalidArgument('address is required')
         return json(request, env, {
           has: await playerRpc.hasSkypassPremium(body.address, seasonFromDate())
+        })
+      }
+
+      case 'GMToggleSkypassPremium': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireEntitlementWrite(principal.userId)
+        const body = await requestBody<{ address?: string }>(request)
+        return json(request, env, {
+          has: await skypassSupport.togglePremium(
+            principal.userId,
+            body.address
+          )
         })
       }
 
