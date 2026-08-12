@@ -6,9 +6,10 @@
 - API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`cbbb929a-2724-4a9b-bf62-a5b9fde17bf8`)
+- Game Worker: `cloud-weasel-game-server` (`3847ce54-550f-4b7d-8c47-552af1833485`)
 - Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
-  game Worker, and `309861e` for the matchmaker and match service
+  loading-timer milestone, `1e31b4f` for the game Worker, and `309861e` for the
+  matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -156,7 +157,7 @@ settlement and delayed delivery against that pool.
 
 - API Worker: 22 files, 148 tests
 - Match service: 14 Worker tests
-- Game Worker: 25 unit and 56 Worker tests
+- Game Worker: 25 unit and 57 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
@@ -568,6 +569,16 @@ settlement and delayed delivery against that pool.
   can no longer reset a turn or commit/reveal deadline, and fractional progress
   cannot refresh the original loading grace alarm. The rollout passed all 25
   unit and 56 game-Worker tests, TypeScript checking, and the 8.9 MB Wrangler
+  dry-run bundle. Live game health passed; a read-only production aggregate
+  remained one active and nine ended matches and reported `changed_db: false`.
+- Game Worker version `3847ce54-550f-4b7d-8c47-552af1833485` contains source
+  `1e31b4f`. A second authenticated WebSocket no longer displaces the joined
+  player during upgrade; ownership transfers only after the replacement
+  successfully completes its role bootstrap. Closing an unjoined replacement
+  leaves the original socket and player state intact, while a completed handoff
+  closes the old socket only after the new durable attachment is joined, so its
+  close callback cannot create an abandon deadline. The rollout passed all 25
+  unit and 57 game-Worker tests, TypeScript checking, and the 8.9 MB Wrangler
   dry-run bundle. Live game health passed; a read-only production aggregate
   remained one active and nine ended matches and reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
