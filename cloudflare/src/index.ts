@@ -1,4 +1,5 @@
 import { handleApiRequest } from './api'
+import { deliverDueConquestGold } from './conquest-delivery'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
@@ -23,5 +24,8 @@ export default {
       return handleReplayRequest(request, env)
     if (url.pathname.startsWith('/api/')) return handleApiRequest(request, env)
     return env.ASSETS.fetch(request)
+  },
+  async scheduled(_controller, env, ctx): Promise<void> {
+    ctx.waitUntil(deliverDueConquestGold(env.AUTH_DB).then(() => undefined))
   }
 } satisfies ExportedHandler<Env>

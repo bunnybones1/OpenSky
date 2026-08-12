@@ -19,6 +19,8 @@ import {
   INITIAL_RANK_STATE_JSON
 } from '@opensky/shared/ranked-progression'
 
+import { allLibraryCards } from './card-library'
+import { pendingConquestCards } from './conquest-delivery'
 import {
   decodeDeckString,
   encodeDeckString,
@@ -61,6 +63,9 @@ const CARD_CLASS_TOTALS: Record<(typeof CARD_CLASSES)[number], number> = {
 const TOTAL_ACTIVE_CARDS = Object.values(CARD_CLASS_TOTALS).reduce(
   (sum, count) => sum + count,
   0
+)
+const CARD_CLASS_BY_ID = new Map(
+  allLibraryCards().map(card => [card.id, card.class])
 )
 
 const ITEM_TYPE_BY_ID: Record<number, ItemType> = {
@@ -215,12 +220,10 @@ interface AccountRow {
   inviter_user_id: string | null
 }
 
-interface CardRow {
-  row_id: number
+interface OwnedCardRow {
   card_id: number
-  prism: string
   item_type: ItemType
-  unlocked_at: string
+  balance: number
   is_new: number
 }
 
@@ -409,13 +412,6 @@ const rewardTokenIds = (value: string) => {
     tokenIds.push((typeCode << 16) + (Number(card.id) & 0x00ffff))
   }
   return { tokenIds, unlockedStarterDeck }
-}
-
-const prismClass = (prism: string): (typeof CARD_CLASSES)[number] => {
-  const value = prism.slice(0, 3).toUpperCase()
-  return CARD_CLASSES.includes(value as (typeof CARD_CLASSES)[number])
-    ? (value as (typeof CARD_CLASSES)[number])
-    : 'STR'
 }
 
 const parseNumberArray = (value: string): number[] => {
@@ -1303,17 +1299,18 @@ export class PlayerRpcRepository {
     ])
   }
 
-  private async listCardRows(userId: string): Promise<CardRow[]> {
+  private async listCardRows(userId: string): Promise<OwnedCardRow[]> {
     await this.applyDeferredItemUpdates(userId)
     const result = await this.database
       .prepare(
-        `SELECT rowid AS row_id, card_id, prism, item_type, unlocked_at, is_new
-         FROM player_card_unlocks
-         WHERE user_id = ?
-         ORDER BY card_id ASC`
+        `SELECT token_id AS card_id, item_type, balance, is_new
+         FROM player_items
+         WHERE user_id = ? AND balance > 0
+           AND item_type IN ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')
+         ORDER BY token_id, item_type`
       )
       .bind(userId)
-      .all<CardRow>()
+      .all<OwnedCardRow>()
     return result.results
   }
 
@@ -1692,7 +1689,10 @@ export class PlayerRpcRepository {
   }
 
   async cardOwnership(userId: string): Promise<CardOwnershipResponse> {
-    const rows = await this.listCardRows(userId)
+    const [rows, pendingRows] = await Promise.all([
+      this.listCardRows(userId),
+      pendingConquestCards(this.database, userId)
+    ])
     const unlockedByClass = Object.fromEntries(
       CARD_CLASSES.map(cardClass => [cardClass, 0])
     ) as Record<string, number>
@@ -1714,21 +1714,25 @@ export class PlayerRpcRepository {
       ) {
         continue
       }
-      const cardClass = prismClass(row.prism)
+      const cardClass = CARD_CLASS_BY_ID.get(row.card_id)
+      if (!CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])) {
+        continue
+      }
+      const activeClass = cardClass as (typeof CARD_CLASSES)[number]
       if (!cardBalances[row.card_id]) {
         cardBalances[row.card_id] = Object.fromEntries(
           CARD_FRAMES.map(frame => [frame, { balance: '0', isNew: false }])
         )
       }
       cardBalances[row.card_id][row.item_type] = {
-        balance: '1',
+        balance: String(row.balance),
         isNew: row.is_new === 1
       }
       unlockedByFrame[row.item_type]++
-      unlockedByClassAndFrame[cardClass][row.item_type]++
+      unlockedByClassAndFrame[activeClass][row.item_type]++
       if (!seenCards.has(row.card_id)) {
         seenCards.add(row.card_id)
-        unlockedByClass[cardClass]++
+        unlockedByClass[activeClass]++
       }
     }
 
@@ -1765,6 +1769,24 @@ export class PlayerRpcRepository {
         CARD_CLASSES.map(cardClass => [cardClass, emptyFrameCounts()])
       )
 
+    const pendingByClass = emptyClassCounts()
+    const pendingByFrame = emptyFrameCounts()
+    const pendingByClassAndFrame = emptyMatrix()
+    let pendingCards = 0
+    for (const pending of pendingRows) {
+      for (const card of pending.cards) {
+        const cardClass = CARD_CLASS_BY_ID.get(card.id)
+        if (!CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])) {
+          continue
+        }
+        const activeClass = cardClass as (typeof CARD_CLASSES)[number]
+        pendingCards++
+        pendingByClass[activeClass]++
+        pendingByFrame.SW_GOLD_CARDS++
+        pendingByClassAndFrame[activeClass].SW_GOLD_CARDS++
+      }
+    }
+
     return {
       cardBalances,
       lockedCards: TOTAL_ACTIVE_CARDS - seenCards.size,
@@ -1775,10 +1797,10 @@ export class PlayerRpcRepository {
       unlockedCardsByClass: unlockedByClass,
       unlockedCardsByFrame: unlockedByFrame,
       unlockedCardsByClassAndFrame: unlockedByClassAndFrame,
-      pendingCards: 0,
-      pendingCardsByClass: emptyClassCounts(),
-      pendingCardsByFrame: emptyFrameCounts(),
-      pendingCardsByClassAndFrame: emptyMatrix()
+      pendingCards,
+      pendingCardsByClass: pendingByClass,
+      pendingCardsByFrame: pendingByFrame,
+      pendingCardsByClassAndFrame: pendingByClassAndFrame
     }
   }
 

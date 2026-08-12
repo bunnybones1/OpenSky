@@ -124,6 +124,7 @@ const inventory = () =>
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_conquest_inventory').run()
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM player_conquest_gold_deliveries'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_feed_events'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_settlements'),
     env.AUTH_DB.prepare('DELETE FROM conquest_reward_pool_cards'),
@@ -232,9 +233,24 @@ describe('source Conquest reward settlement', () => {
       goldTokenIds: [131_208]
     })
     expect((await inventory()).results).toMatchObject([
-      { item_type: ItemType.SW_GOLD_CARDS, token_id: 136, balance: 1 },
       { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 1 }
     ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT card_ids_json, token_ids_json, deliver_at, status,
+                attempt_count, delivery_key
+         FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({
+      card_ids_json: '[136]',
+      token_ids_json: '[131208]',
+      deliver_at: '2026-08-13T12:00:00.000Z',
+      status: 'PENDING',
+      attempt_count: 0,
+      delivery_key: null
+    })
     const events = await env.AUTH_DB.prepare(
       `SELECT event_type, token_ids_json FROM player_conquest_feed_events
        ORDER BY id`
@@ -292,9 +308,16 @@ describe('source Conquest reward settlement', () => {
       gold_card_ids_json: '[136]'
     })
     expect((await inventory()).results).toMatchObject([
-      { item_type: ItemType.SW_GOLD_CARDS, token_id: 136 },
       { item_type: ItemType.SW_SILVER_CARDS, token_id: 6 }
     ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_conquest_gold_deliveries
+         WHERE conquest_id = ? AND status = 'PENDING'`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({ count: 1 })
     expect(rewards[0].map(reward => reward.card?.card.id)).toEqual([6, 136])
     expect(rewards[1]).toEqual([])
   })
@@ -460,8 +483,8 @@ describe('source Conquest reward settlement', () => {
     ).resolves.toMatchObject({ applied: true, silverCardIds: [6] })
   })
 
-  it('rolls back the receipt, feed, and status if any inventory grant fails', async () => {
-    const conquest = await setup(1)
+  it('rolls back the receipt, delayed delivery, feed, and status if any inventory grant fails', async () => {
+    const conquest = await setup(3)
     await env.AUTH_DB.prepare(
       `CREATE TRIGGER reject_conquest_inventory
        BEFORE INSERT ON player_items
@@ -476,7 +499,7 @@ describe('source Conquest reward settlement', () => {
         env.AUTH_DB,
         conquest!.id,
         SETTLED_AT,
-        sequenceDraw(0)
+        sequenceDraw(0, 0)
       )
     ).rejects.toThrow('injected Conquest grant failure')
     expect((await inventory()).results).toEqual([])
@@ -484,6 +507,7 @@ describe('source Conquest reward settlement', () => {
       await env.AUTH_DB.prepare(
         `SELECT
            (SELECT COUNT(*) FROM player_conquest_settlements) AS settlements,
+           (SELECT COUNT(*) FROM player_conquest_gold_deliveries) AS deliveries,
            (SELECT COUNT(*) FROM player_conquest_feed_events) AS events,
            (SELECT status FROM player_conquests WHERE id = ?) AS status`
       )
@@ -491,6 +515,7 @@ describe('source Conquest reward settlement', () => {
         .first()
     ).toEqual({
       settlements: 0,
+      deliveries: 0,
       events: 0,
       status: ConquestStatus.REWARDS_PENDING
     })

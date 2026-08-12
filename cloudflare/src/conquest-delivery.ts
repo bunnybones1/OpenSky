@@ -1,0 +1,206 @@
+import cardLibrary from './generated/card-library.json'
+import { ItemType, type Card, type PendingCardsResponse } from '@opensky/proto'
+
+const MAX_DELIVERIES_PER_RUN = 100
+const MAX_ATTEMPTS = 5
+
+const cardsById = new Map(
+  cardLibrary.cards.map(card => [card.id, card])
+)
+
+interface DeliveryRow {
+  conquest_id: number
+  user_id: string
+  card_ids_json: string
+  token_ids_json: string
+  deliver_at: string
+  attempt_count: number
+}
+
+const ids = (value: string): number[] => {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (
+      Array.isArray(parsed) &&
+      parsed.length > 0 &&
+      parsed.every(id => Number.isSafeInteger(id) && id > 0)
+    ) {
+      return parsed as number[]
+    }
+  } catch {
+    // Persisted rows are validated below and failed closed on corruption.
+  }
+  throw new Error('Conquest Gold delivery is malformed')
+}
+
+export const pendingConquestCards = async (
+  database: D1Database,
+  userId: string
+): Promise<PendingCardsResponse[]> => {
+  const rows = await database
+    .prepare(
+      `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+              attempt_count
+       FROM player_conquest_gold_deliveries
+       WHERE user_id = ? AND status = 'PENDING'
+       ORDER BY deliver_at, conquest_id`
+    )
+    .bind(userId)
+    .all<DeliveryRow>()
+  return rows.results.map(row => {
+    const cardIds = ids(row.card_ids_json)
+    const tokenIDs = ids(row.token_ids_json)
+    const cards = cardIds.map(cardId => cardsById.get(cardId))
+    if (
+      cards.some(card => !card) ||
+      cardIds.length !== tokenIDs.length ||
+      cardIds.some((cardId, index) => tokenIDs[index] !== (2 << 16) + cardId)
+    ) {
+      throw new Error('Conquest Gold delivery contains an invalid card')
+    }
+    return {
+      cards: cards.map(card => ({
+        ...card!,
+        itemType: ItemType.SW_GOLD_CARDS,
+        isNew: true
+      })) as unknown as Card[],
+      tokenIDs,
+      mintAt: row.deliver_at
+    }
+  })
+}
+
+export interface ConquestDeliveryRun {
+  delivered: number
+  failed: number
+  remaining: number
+}
+
+/** Claims due Gold deliveries through an atomic receipt-keyed D1 batch. */
+export const deliverDueConquestGold = async (
+  database: D1Database,
+  now = new Date()
+): Promise<ConquestDeliveryRun> => {
+  const deliveredAt = now.toISOString()
+  const due = await database
+    .prepare(
+      `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+              attempt_count
+       FROM player_conquest_gold_deliveries
+       WHERE status = 'PENDING' AND deliver_at <= ?
+       ORDER BY deliver_at, conquest_id LIMIT ?`
+    )
+    .bind(deliveredAt, MAX_DELIVERIES_PER_RUN)
+    .all<DeliveryRow>()
+  let delivered = 0
+  let failed = 0
+  for (const row of due.results) {
+    try {
+      const cardIds = ids(row.card_ids_json)
+      const tokenIds = ids(row.token_ids_json)
+      if (
+        cardIds.length !== tokenIds.length ||
+        cardIds.some((cardId, index) => tokenIds[index] !== (2 << 16) + cardId) ||
+        cardIds.some(cardId => !cardsById.has(cardId))
+      ) {
+        throw new Error('Conquest Gold delivery contains invalid cards')
+      }
+      const counts = new Map<number, number>()
+      for (const cardId of cardIds) {
+        counts.set(cardId, (counts.get(cardId) ?? 0) + 1)
+      }
+      const deliveryKey = crypto.randomUUID()
+      const statements: D1PreparedStatement[] = [
+        database
+          .prepare(
+            `UPDATE player_conquest_gold_deliveries
+             SET status = 'DELIVERED', delivery_key = ?, delivered_at = ?,
+                 attempt_count = attempt_count + 1, last_error = NULL
+             WHERE conquest_id = ? AND status = 'PENDING'
+               AND deliver_at <= ?`
+          )
+          .bind(deliveryKey, deliveredAt, row.conquest_id, deliveredAt)
+      ]
+      for (const [cardId, count] of counts) {
+        statements.push(
+          database
+            .prepare(
+              `INSERT INTO player_items
+                 (user_id, item_type, token_id, balance, is_new, unlock_source,
+                  created_at, updated_at)
+               SELECT ?, 'SW_GOLD_CARDS', ?, ?, 1, ?, ?, ?
+               WHERE EXISTS (
+                 SELECT 1 FROM player_conquest_gold_deliveries
+                 WHERE conquest_id = ? AND status = 'DELIVERED'
+                   AND delivery_key = ?
+               )
+               ON CONFLICT(user_id, item_type, token_id)
+               DO UPDATE SET balance = balance + excluded.balance,
+                             is_new = 1, updated_at = excluded.updated_at`
+            )
+            .bind(
+              row.user_id,
+              cardId,
+              count,
+              `conquest:${row.conquest_id}:gold`,
+              deliveredAt,
+              deliveredAt,
+              row.conquest_id,
+              deliveryKey
+            )
+        )
+      }
+      statements.push(
+        database
+          .prepare(
+            `INSERT INTO player_conquest_feed_events
+               (user_id, conquest_id, event_type, token_ids_json, created_at)
+             SELECT user_id, conquest_id, 'DELAYED_REWARD_MINTED',
+                    token_ids_json, ?
+             FROM player_conquest_gold_deliveries
+             WHERE conquest_id = ? AND status = 'DELIVERED'
+               AND delivery_key = ?
+             ON CONFLICT(conquest_id, event_type) DO NOTHING`
+          )
+          .bind(deliveredAt, row.conquest_id, deliveryKey)
+      )
+      await database.batch(statements)
+      const claimed = await database
+        .prepare(
+          `SELECT 1 FROM player_conquest_gold_deliveries
+           WHERE conquest_id = ? AND delivery_key = ?`
+        )
+        .bind(row.conquest_id, deliveryKey)
+        .first()
+      if (claimed) delivered++
+    } catch (error) {
+      const failure = await database
+        .prepare(
+          `UPDATE player_conquest_gold_deliveries
+           SET attempt_count = attempt_count + 1,
+               status = CASE WHEN attempt_count + 1 >= ?
+                             THEN 'FAILED' ELSE 'PENDING' END,
+               last_error = ?
+           WHERE conquest_id = ? AND status = 'PENDING'`
+        )
+        .bind(
+          MAX_ATTEMPTS,
+          (error instanceof Error ? error.message : 'delivery failed').slice(
+            0,
+            1_000
+          ),
+          row.conquest_id
+        )
+        .run()
+      if (failure.meta.changes > 0) failed++
+    }
+  }
+  const remaining = await database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM player_conquest_gold_deliveries
+       WHERE status = 'PENDING' AND deliver_at <= ?`
+    )
+    .bind(deliveredAt)
+    .first<{ count: number }>()
+  return { delivered, failed, remaining: remaining?.count ?? 0 }
+}

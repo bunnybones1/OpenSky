@@ -28,6 +28,7 @@ import {
 import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
+import { pendingConquestCards } from './conquest-delivery'
 import { ContentRepository } from './content'
 import type { Env } from './env'
 import { invalidArgument, notFound, RpcError, unimplemented } from './errors'
@@ -922,8 +923,10 @@ export const handleApiRequest = async (
       }
 
       case 'GetPendingCards': {
-        await identityPrincipal(request, env)
-        return json(request, env, { res: [] })
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          res: await pendingConquestCards(env.AUTH_DB, principal.userId)
+        })
       }
 
       case 'GetBanners': {

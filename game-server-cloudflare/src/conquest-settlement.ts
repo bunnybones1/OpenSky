@@ -321,6 +321,9 @@ export const settlePendingConquest = async (
     .map(cardId => SILVER_OFFSET + cardId)
     .sort((left, right) => left - right)
   const goldTokenIds = goldCardIds.map(cardId => GOLD_OFFSET + cardId)
+  const goldDeliverAt = new Date(
+    Date.parse(settledAt) + 24 * 60 * 60 * 1_000
+  ).toISOString()
   const settlementKey = crypto.randomUUID()
   const statements: D1PreparedStatement[] = [
     database
@@ -360,14 +363,28 @@ export const settlePendingConquest = async (
   ]
   const grants = new Map<string, { itemType: ItemType; cardId: number; count: number }>()
   for (const [itemType, ids] of [
-    [ItemType.SW_SILVER_CARDS, silverCardIds],
-    [ItemType.SW_GOLD_CARDS, goldCardIds]
+    [ItemType.SW_SILVER_CARDS, silverCardIds]
   ] as const) {
     for (const cardId of ids) {
       const key = `${itemType}:${cardId}`
       const current = grants.get(key)
       grants.set(key, { itemType, cardId, count: (current?.count ?? 0) + 1 })
     }
+  }
+  if (goldCardIds.length > 0) {
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO player_conquest_gold_deliveries
+             (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+              status, attempt_count, created_at)
+           SELECT conquest_id, user_id, gold_card_ids_json,
+                  gold_token_ids_json, ?, 'PENDING', 0, settled_at
+           FROM player_conquest_settlements
+           WHERE conquest_id = ? AND settlement_key = ?`
+        )
+        .bind(goldDeliverAt, conquestId, settlementKey)
+    )
   }
   for (const grant of grants.values()) {
     statements.push(
