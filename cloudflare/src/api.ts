@@ -52,6 +52,7 @@ import {
 import { PlayerRpcRepository } from './player-rpc'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
+import { StaffRepository } from './staff'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import {
@@ -227,6 +228,7 @@ export const handleApiRequest = async (
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
+  const staff = new StaffRepository(env.AUTH_DB)
 
   try {
     switch (method) {
@@ -498,6 +500,31 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
           status: await playerRpc.requestMoreInvites(principal.userId)
+        })
+      }
+
+      case 'AdminListAccounts':
+      case 'AdminSearchAccounts': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        throw unimplemented()
+      }
+
+      case 'GMStats': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        return json(request, env, { stats: await staff.stats() })
+      }
+
+      case 'GMIsAccountBanned': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ account?: string }>(request)
+        if (!body.account) throw invalidArgument('account is required')
+        return json(request, env, {
+          banned: false,
+          status: await staff.accountStatus(body.account),
+          accountActions: []
         })
       }
 
