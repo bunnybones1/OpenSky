@@ -91,14 +91,15 @@ const findCommand = (
   mode = GameMode.RANKED_CONSTRUCTED,
   sessionID = '',
   versionHash = 'release-1',
-  prisms: string[] = ['str']
+  prisms: string[] = ['str'],
+  cards: string[] = []
 ) => ({
   type: 'find_match',
   authToken: 'legacy-token-is-not-trusted',
   privateSeed: {
     player: '0xffffffffffffffffffffffffffffffffffffffff',
     prisms,
-    cards: [],
+    cards,
     randomSeed: Array(16).fill(1)
   },
   sessionID,
@@ -327,6 +328,46 @@ describe('Cloudflare matchmaker Worker', () => {
       type: 'error',
       reason: 'OUTDATED_CLIENT',
       message: 'OUTDATED_CLIENT',
+      level: 'server'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('rejects a chosen deck from discovery before queueing', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const error = nextMessage(player)
+    player.send(
+      JSON.stringify(
+        findCommand(GameMode.RANKED_DISCOVERY, '', 'release-1', ['str'], [
+          '6'
+        ])
+      )
+    )
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'DECK_IS_NOT_RANDOM',
+      message: 'DECK_IS_NOT_RANDOM',
+      level: 'server'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('rejects an empty challenge session before queueing', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const error = nextMessage(player)
+    player.send(
+      JSON.stringify(findCommand(GameMode.CHALLENGE_CONSTRUCTED, ''))
+    )
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'SESSION_IS_EMPTY',
+      message: 'SESSION_IS_EMPTY',
       level: 'server'
     })
     const status = await pool().fetch('https://pool.example/internal/status', {

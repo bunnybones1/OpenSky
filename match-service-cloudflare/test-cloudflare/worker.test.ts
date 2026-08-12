@@ -36,6 +36,7 @@ const dispatch = (cards: number[] = STARTER_CARD_IDS) => ({
       player: {
         address: PRINCIPAL,
         mode: GameMode.PRACTICE_BOT,
+        sessionId: '',
         playerSessionId: 'player-session-1',
         clientVersionHash: 'release-1'
       },
@@ -57,6 +58,7 @@ const dispatch = (cards: number[] = STARTER_CARD_IDS) => ({
       player: {
         address: BOT_PLACEHOLDER,
         mode: GameMode.PRACTICE_BOT,
+        sessionId: '',
         playerSessionId: '',
         clientVersionHash: 'release-1'
       }
@@ -72,6 +74,7 @@ const mixedDispatch = () => {
     player: {
       address: SECOND_PRINCIPAL,
       mode: GameMode.RANKED_CONSTRUCTED,
+      sessionId: '',
       playerSessionId: 'player-session-2',
       clientVersionHash: 'release-1'
     },
@@ -607,6 +610,90 @@ describe('Cloud Weasel accepted-match service', () => {
       'SELECT COUNT(*) AS count FROM multiplayer_matches'
     ).first<{ count: number }>()
     expect(count?.count).toBe(1)
+  })
+
+  it('rejects chosen discovery cards at the final service boundary', async () => {
+    const accepted = dispatch([6])
+    accepted.participants[0].player.mode = GameMode.CHALLENGE_DISCOVERY
+    accepted.participants[0].player.sessionId = 'WEASEL'
+    accepted.participants[0].request!.mode = GameMode.CHALLENGE_DISCOVERY
+    accepted.participants[0].request!.sessionID = 'WEASEL'
+    accepted.participants[1].player.mode = GameMode.CHALLENGE_DISCOVERY
+    accepted.participants[1].player.sessionId = 'WEASEL'
+    const response = await create(accepted)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'DECK_IS_NOT_RANDOM' })
+  })
+
+  it('preserves the normalized challenge session as the matchmaking code', async () => {
+    const { accepted, secondUserId } = mixedDispatch()
+    accepted.participants[0].player.mode = GameMode.CHALLENGE_CONSTRUCTED
+    accepted.participants[0].player.sessionId = 'CLOUD-WEASEL'
+    accepted.participants[0].request!.mode = GameMode.CHALLENGE_CONSTRUCTED
+    accepted.participants[0].request!.sessionID = 'CLOUD-WEASEL'
+    accepted.participants[1].player.mode = GameMode.CHALLENGE_CONSTRUCTED
+    accepted.participants[1].player.sessionId = 'CLOUD-WEASEL'
+    accepted.participants[1].request!.mode = GameMode.CHALLENGE_CONSTRUCTED
+    accepted.participants[1].request!.sessionID = 'CLOUD-WEASEL'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, avatar_url, created_at, updated_at)
+         VALUES (?, 'Challenge Player', 'challenge@example.com', NULL, ?, ?)`
+      ).bind(secondUserId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_profiles
+           (user_id, level, xp, next_level_xp, created_at, updated_at)
+         VALUES (?, 1, 0, 200, ?, ?)`
+      ).bind(secondUserId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, warm_ups, created_at, updated_at)
+         VALUES (?, 'Challenge.Player', 'en', 0, ?, ?)`
+      ).bind(secondUserId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_progression
+           (user_id, basic_skypass_level, basic_skypass_xp,
+            basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+         VALUES (?, 1, 0, 200, 0, ?, ?)`
+      ).bind(secondUserId, now, now),
+      ...STARTER_CARD_IDS.map(cardId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'test', ?, ?)`
+        ).bind(secondUserId, cardId, now, now)
+      )
+    ])
+
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ match_payload_json: string }>()
+    const payload = JSON.parse(row!.match_payload_json)
+    expect(payload.match.matchSettings.matchmakingCode).toBe('CLOUD-WEASEL')
+  })
+
+  it('rejects duplicate and oversized constructed decks', async () => {
+    const duplicate = await create(dispatch([6, 6]))
+    expect(duplicate.status).toBe(400)
+    expect(await duplicate.json()).toEqual({
+      error: 'invalid deck: duplicate cards'
+    })
+
+    const oversized = dispatch([...STARTER_CARD_IDS, 30])
+    oversized.proposalId = 'proposal-oversized-deck'
+    const response = await create(oversized)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: 'invalid deck: more than 30 cards'
+    })
   })
 
   it('preserves the source mixed practice-PVP/ranked participant modes', async () => {

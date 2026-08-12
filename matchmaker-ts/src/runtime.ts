@@ -1,5 +1,4 @@
 import {
-  CardClass,
   ConquestMatchResult,
   ConquestStatus,
   DeckClass,
@@ -22,6 +21,10 @@ import {
   versionValidator,
   WaitTimeScoreCalculator
 } from './criteria'
+import {
+  prismsFromPrivateSeed,
+  validateGameModeDataConsistency
+} from './admission'
 import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
@@ -213,28 +216,6 @@ const ticketKey = (principal: string) => `${TICKET_PREFIX}${principal}`
 const proposalKey = (proposalId: string) => `${PROPOSAL_PREFIX}${proposalId}`
 const pendingKey = (principal: string) => `${PENDING_PREFIX}${principal}`
 
-const prismMap: Record<string, CardClass> = {
-  str: CardClass.STR,
-  hrt: CardClass.HRT,
-  agy: CardClass.AGY,
-  int: CardClass.INT,
-  wis: CardClass.WIS,
-  tok: CardClass.TOK,
-  STR: CardClass.STR,
-  HRT: CardClass.HRT,
-  AGY: CardClass.AGY,
-  INT: CardClass.INT,
-  WIS: CardClass.WIS,
-  TOK: CardClass.TOK
-}
-
-const prismsFromPrivateSeed = (privateSeed: Record<string, unknown>) => {
-  const values = Array.isArray(privateSeed.prisms) ? privateSeed.prisms : []
-  return values
-    .map(value => (typeof value === 'string' ? prismMap[value] : undefined))
-    .filter((value): value is CardClass => value !== undefined)
-}
-
 const participantFromTicket = (ticket: StoredTicket): StoredParticipant => ({
   player: ticket.player,
   request: ticket.request,
@@ -420,6 +401,8 @@ export class MatchmakerPool implements DurableObject {
     if (command.versionHash !== this.config.expectedReleaseVersion) {
       throw new ProtocolError('OUTDATED_CLIENT', 'OUTDATED_CLIENT')
     }
+
+    validateGameModeDataConsistency(command)
 
     let captchaValid: boolean
     try {

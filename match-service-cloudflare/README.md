@@ -9,6 +9,11 @@ Human match snapshots come from game-owned D1 state rather than Google identity
 metadata or browser claims: account alias/settings, current ranked stats,
 crystal/title/tag art, equipped cosmetics, inventory card rarity, hero ability,
 quests, and the persistent private spectate code are resolved before dispatch.
+Final dispatch independently rejects chosen cards in discovery and invalid
+constructed decks, including duplicate cards, more than 30 cards, more than two
+card prisms, or cards absent from the account collection. Challenge sessions
+are validated against the queued player snapshot and preserved as the game
+server's `matchmakingCode`, matching the Go custom-game-server client.
 
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current

@@ -40,22 +40,36 @@ const normalizeCards = (
   unlocked: Map<number, unknown>,
   mode: GameMode
 ) => {
-  if (!Array.isArray(value) || value.length > 60) {
+  const values = value === undefined ? [] : value
+  if (!Array.isArray(values)) {
     throw new DispatchProtocolError('invalid private seed cards')
   }
-  const cards = value.map(card => String(card) as BaseCard)
-  if (!discoveryModes.has(mode) && cards.length === 0) {
-    throw new DispatchProtocolError('constructed decks cannot be empty')
+  if (discoveryModes.has(mode) && values.length !== 0) {
+    throw new DispatchProtocolError('DECK_IS_NOT_RANDOM')
   }
+  if (values.length > 30) {
+    throw new DispatchProtocolError('invalid deck: more than 30 cards')
+  }
+  const cards = values.map(card => String(card) as BaseCard)
+  if (new Set(cards).size !== cards.length) {
+    throw new DispatchProtocolError('invalid deck: duplicate cards')
+  }
+  const cardPrisms = new Set<string>()
   for (const card of cards) {
     const numeric = Number(card)
+    const metadata = CardLibrary.get(card)
     if (
-      !CardLibrary.has(card) ||
+      !/^\d+$/.test(card) ||
+      !metadata ||
       !Number.isSafeInteger(numeric) ||
       !unlocked.has(numeric)
     ) {
       throw new DispatchProtocolError(`card ${card} is not unlocked`)
     }
+    cardPrisms.add(metadata.prism)
+  }
+  if (cardPrisms.size > 2) {
+    throw new DispatchProtocolError('invalid deck: more than two prisms')
   }
   return cards
 }
@@ -162,7 +176,9 @@ export const buildMatch = async (
       matchSettings: {
         turnTimer,
         season,
-        matchmakingCode: undefined,
+        // Source customgameservers/client.go uses player one's normalized
+        // session verbatim, including the empty non-challenge value.
+        matchmakingCode: dispatch.participants[0].player.sessionId,
         ...(hasBot ? { botDifficulty: botDifficultyForLevel(humanLevel) } : {})
       }
     }

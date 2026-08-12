@@ -8,6 +8,7 @@ export const MAX_DISPATCH_BYTES = 512 * 1024
 export interface AcceptedMatchPlayer {
   address: string
   mode: GameMode
+  sessionId: string
   playerSessionId: string
   clientVersionHash: string
 }
@@ -15,6 +16,7 @@ export interface AcceptedMatchPlayer {
 export interface AcceptedMatchRequest {
   type: 'find_match'
   privateSeed: Record<string, unknown>
+  sessionID: string
   playerSessionID: string
   mode: GameMode
   versionHash: string
@@ -71,6 +73,8 @@ export const parseAcceptedMatchDispatch = (
     if (
       !/^0x[0-9a-f]{40}$/.test(String(player.address ?? '')) ||
       !gameModes.has(player.mode as GameMode) ||
+      typeof player.sessionId !== 'string' ||
+      player.sessionId.length > 128 ||
       typeof player.playerSessionId !== 'string' ||
       player.playerSessionId.length > 128 ||
       typeof player.clientVersionHash !== 'string' ||
@@ -81,6 +85,7 @@ export const parseAcceptedMatchDispatch = (
     const normalizedPlayer: AcceptedMatchPlayer = {
       address: player.address as string,
       mode: player.mode as GameMode,
+      sessionId: player.sessionId as string,
       playerSessionId: player.playerSessionId as string,
       clientVersionHash: player.clientVersionHash as string
     }
@@ -107,6 +112,8 @@ export const parseAcceptedMatchDispatch = (
       raw.request.type !== 'find_match' ||
       raw.request.mode !== player.mode ||
       !record(raw.request.privateSeed) ||
+      typeof raw.request.sessionID !== 'string' ||
+      raw.request.sessionID !== player.sessionId ||
       typeof raw.request.playerSessionID !== 'string' ||
       raw.request.playerSessionID !== player.playerSessionId ||
       raw.request.versionHash !== player.clientVersionHash

@@ -10,6 +10,7 @@ the client wire contract or combining it with the game server.
 | `src/criteria.ts`  | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators`                               |
 | `src/matcher.ts`   | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go`                         |
 | `src/protocol.ts`  | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts`                     |
+| `src/admission.ts` | `frontend/findmatch/validators/game_mode_data_consistency.go`                              |
 | `src/runtime.ts`   | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
 | `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go`                                                  |
 | `src/captcha.ts`   | `frontend/findmatch/validators/captcha.go`, `matching/matchers/player_validator.go`         |
@@ -56,6 +57,10 @@ must equal the normalized `versionHash` embedded in the browser build or the
 queue request receives `OUTDATED_CLIENT` before captcha/profile work. The root
 release gate prevents the browser and matchmaker deployment configs from
 drifting.
+The source game-mode data contract is also enforced before captcha/profile
+work: discovery queues accept only an empty random-deck card list, challenge
+queues require a nonempty normalized session, and challenge discovery preserves
+the source's `SESSION_IS_EMPTY`-before-`DECK_IS_NOT_RANDOM` error ordering.
 
 ## Deployment gates
 
