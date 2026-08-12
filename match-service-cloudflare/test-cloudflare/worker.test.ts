@@ -138,9 +138,17 @@ beforeEach(async () => {
     ).bind(USER_ID, now, now),
     env.AUTH_DB.prepare(
       `INSERT INTO player_account_settings
-         (user_id, name, locale, account_status, created_at, updated_at)
-       VALUES (?, 'Cloud Player', 'en', 'ACTIVE', ?, ?)`
-    ).bind(USER_ID, now, now),
+         (user_id, name, locale, region, tag_art_id, title_id, warm_ups,
+          spectate_code, spectate_code_expires_at, account_status,
+          created_at, updated_at)
+       VALUES (?, 'WeaselAlias', 'fr', 'CA', 'bg-mind-03', 77, 2,
+               'shared-spectate-code', ?, 'ACTIVE', ?, ?)`
+    ).bind(
+      USER_ID,
+      new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString(),
+      now,
+      now
+    ),
     env.AUTH_DB.prepare(
       `INSERT INTO player_progression
          (user_id, basic_skypass_level, basic_skypass_xp,
@@ -172,7 +180,28 @@ beforeEach(async () => {
             created_at, updated_at)
          VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'starter-deck', ?, ?)`
       ).bind(USER_ID, cardId, now, now)
-    )
+    ),
+    ...[
+      ['SW_STICKERS', 5],
+      ['SW_CARD_BACKS', 7],
+      ['SW_CARD_BACKS', 8],
+      ['SW_HERO_SKINS', 1],
+      ['SW_CRYSTALS', 7],
+      ['SW_CRYSTALS', 1]
+    ].map(([itemType, tokenId]) =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 1, 0, 'test-fixture', ?, ?)`
+      ).bind(USER_ID, itemType, tokenId, now, now)
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_items_equipped
+         (user_id, item_id, item_type, token_id, updated_at)
+       SELECT user_id, id, item_type, token_id, ? FROM player_items
+       WHERE user_id = ? AND item_type IN ('SW_STICKERS', 'SW_CARD_BACKS')`
+    ).bind(now, USER_ID)
   ])
 })
 
@@ -394,7 +423,9 @@ describe('Cloud Weasel accepted-match service', () => {
   })
 
   it('builds an authoritative source-compatible practice match idempotently', async () => {
-    const first = await create()
+    const accepted = dispatch()
+    accepted.participants[0].request!.privateSeed.cardRarities = { 6: 'gold' }
+    const first = await create(accepted)
     expect(first.status).toBe(200)
     const firstBody = (await first.json()) as {
       matchId: number
@@ -418,10 +449,38 @@ describe('Cloud Weasel accepted-match service', () => {
       matchID: firstBody.matchId,
       player1: {
         gameMode: GameMode.PRACTICE_BOT,
-        account: { address: PRINCIPAL, name: 'Cloud Player' },
+        spectateCode: 'shared-spectate-code',
+        account: {
+          address: PRINCIPAL,
+          name: 'WeaselAlias',
+          locale: 'fr',
+          region: 'CA',
+          tagArtID: 'bg-mind-03',
+          titleID: 77,
+          crystalID: 7,
+          warmUps: 2,
+          stats: {
+            rankedConstructed: {
+              gameMode: GameMode.RANKED_CONSTRUCTED,
+              score: 1700,
+              playerRank: 'EXPERT',
+              playerRankStage: 'STAGE_II',
+              lossStreak: 1
+            }
+          },
+          deckEquipment: {
+            stickers: [5],
+            heroSkin: 1,
+            cardBack: expect.toSatisfy((value: number) =>
+              [7, 8].includes(value)
+            )
+          }
+        },
         privateSeed: {
           player: hexToBytes(PRINCIPAL),
-          subkey: Array(20).fill(0x31)
+          subkey: Array(20).fill(0x31),
+          heroAbility: '25000',
+          cardRarities: { 6: 'base' }
         },
         botSubkey: false,
         quests: [
@@ -447,7 +506,7 @@ describe('Cloud Weasel accepted-match service', () => {
       STARTER_CARD_IDS.map(String)
     )
 
-    const second = await create()
+    const second = await create(accepted)
     expect(second.status).toBe(200)
     expect(await second.json()).toEqual(firstBody)
     const count = await env.AUTH_DB.prepare(

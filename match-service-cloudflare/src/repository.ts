@@ -1,15 +1,61 @@
-import { GameMode, ItemType, PlayerRank, Quest } from '@opensky/proto'
+import {
+  AccountStats,
+  AccountStat,
+  DeckEquipment,
+  GameMode,
+  ItemType,
+  PlayerRank,
+  PlayerRankStage,
+  Quest
+} from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
-import { hasUnlockedRanked } from '@opensky/shared/ranked-progression'
+import {
+  hasUnlockedRanked,
+  INITIAL_RANK_STATE_JSON
+} from '@opensky/shared/ranked-progression'
+import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
+
+type OwnedCardRarity = 'base' | 'silver' | 'gold'
 
 interface HumanProfileRow {
-  display_name: string
+  account_name: string
+  locale: string
+  region: string | null
+  tag_art_id: string | null
+  title_id: number | null
+  warm_ups: number
   user_created_at: string
-  profile_updated_at: string
+  account_updated_at: string
   level: number
   xp: number
   next_level_xp: number
   basic_skypass_level: number
+}
+
+interface HumanStatRow {
+  game_mode: GameMode
+  season: number
+  win_count: number
+  loss_count: number
+  tie_count: number
+  forfeit_count: number
+  abandon_count: number
+  score: number
+  player_rank: PlayerRank
+  player_rank_stage: PlayerRankStage
+  player_rank_state: string
+  win_streak: number
+  loss_streak: number
+  created_at: string
+}
+
+interface EquippedItemRow {
+  item_type: ItemType
+  token_id: number
+}
+
+interface InventoryItemRow extends EquippedItemRow {
+  balance: number
 }
 
 interface ActiveQuestRow {
@@ -31,7 +77,8 @@ interface ActiveQuestRow {
 export interface HumanMatchAccount {
   account: AccountWithPrismsAndCosmeticsInfo
   level: number
-  unlockedCards: Set<number>
+  unlockedCards: Map<number, OwnedCardRarity>
+  spectateCode: string
   quests: Quest[]
 }
 
@@ -125,6 +172,108 @@ const rarityPriority = {
   silver: 1,
   gold: 2
 } as const
+
+const currentStatModes = [
+  GameMode.RANKED_CONSTRUCTED,
+  GameMode.RANKED_DISCOVERY,
+  GameMode.CONQUEST_CONSTRUCTED,
+  GameMode.CONQUEST_DISCOVERY
+] as const
+
+const heroSkinForDeckClass: Record<string, number> = {
+  STR: 1,
+  AGY: 2,
+  STA: 3,
+  WIS: 4,
+  STW: 5,
+  AGW: 6,
+  HRT: 7,
+  STH: 8,
+  HRA: 9,
+  HRW: 10,
+  INT: 11,
+  STI: 12,
+  AGI: 13,
+  INW: 14,
+  HRI: 15
+}
+
+const crystalPriority = new Map([
+  [7, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  [8, 5],
+  [4, 6],
+  [5, 7],
+  [6, 8]
+])
+
+const deckClassForPrisms = (prisms: string[]) =>
+  (prisms.length === 2
+    ? `${prisms[0].slice(0, 2)}${prisms[1].slice(0, 1)}`
+    : prisms[0]
+  ).toUpperCase()
+
+const totalExperience = (level: number, xp: number) =>
+  Math.max(0, level - 1) * 200 + Math.max(0, xp)
+
+const accountStat = (
+  row: HumanStatRow,
+  level: number,
+  experience: number
+): AccountStat => {
+  const gamesPlayed = row.win_count + row.loss_count + row.tie_count
+  const totalXp = totalExperience(level, experience)
+  return {
+    gameMode: row.game_mode,
+    winCount: row.win_count,
+    lossCount: row.loss_count,
+    tieCount: row.tie_count,
+    forfeitCount: row.forfeit_count,
+    abandonCount: row.abandon_count,
+    winRatio: gamesPlayed > 0 ? row.win_count / gamesPlayed : 0,
+    gamesPlayed,
+    experience: totalXp,
+    score: row.score,
+    createdAt: row.created_at,
+    ...(row.player_rank === PlayerRank.UNRANKED
+      ? { rankProgress: Math.min(1, Math.floor((totalXp / 200) * 100) / 100) }
+      : {}),
+    playerRank: row.player_rank,
+    playerRankStage: row.player_rank_stage,
+    playerRankState: row.player_rank_state,
+    winStreak: row.win_streak,
+    lossStreak: row.loss_streak,
+    season: row.season
+  }
+}
+
+const statsFromRows = (
+  rows: HumanStatRow[],
+  level: number,
+  experience: number
+): AccountStats => {
+  const result: AccountStats = {}
+  for (const row of rows) {
+    const stat = accountStat(row, level, experience)
+    switch (row.game_mode) {
+      case GameMode.RANKED_CONSTRUCTED:
+        result.rankedConstructed = stat
+        break
+      case GameMode.RANKED_DISCOVERY:
+        result.rankedDiscovery = stat
+        break
+      case GameMode.CONQUEST_CONSTRUCTED:
+        result.conquestConstructed = stat
+        break
+      case GameMode.CONQUEST_DISCOVERY:
+        result.conquestDiscovery = stat
+        break
+    }
+  }
+  return result
+}
 
 const rarityFor = (
   itemType: ItemType
@@ -273,22 +422,61 @@ export class MatchRepository {
   async humanAccount(
     userId: string,
     principal: string,
-    prisms: string[]
+    prisms: string[],
+    currentSeason: number
   ): Promise<HumanMatchAccount> {
     const now = new Date().toISOString()
-    await this.database
-      .prepare(
-        `INSERT OR IGNORE INTO game_accounts (user_id, created_at)
-         VALUES (?, ?)`
-      )
-      .bind(userId, now)
-      .run()
-    const [profile, gameAccount, cards, quests] = await Promise.all([
+    await this.database.batch([
       this.database
         .prepare(
-          `SELECT u.display_name,
+          `INSERT OR IGNORE INTO game_accounts (user_id, created_at)
+         VALUES (?, ?)`
+        )
+        .bind(userId, now),
+      ...currentStatModes.map(mode =>
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_account_stats
+               (user_id, game_mode, season, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`
+          )
+          .bind(userId, mode, currentSeason, now, now)
+      ),
+      this.database
+        .prepare(
+          `UPDATE player_account_stats
+           SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+               score = 0, player_rank_state = ?, updated_at = ?
+           WHERE user_id = ? AND season = ? AND player_rank = 'UNRANKED'
+             AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
+             AND EXISTS (
+               SELECT 1 FROM player_profiles profile
+               WHERE profile.user_id = player_account_stats.user_id
+                 AND ((MAX(profile.level, 1) - 1) * 200 + profile.xp) >= 200
+             )`
+        )
+        .bind(INITIAL_RANK_STATE_JSON, now, userId, currentSeason)
+    ])
+
+    const [
+      profile,
+      gameAccount,
+      inventory,
+      quests,
+      statRows,
+      equipped,
+      spectateCode
+    ] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT account.name AS account_name,
+                  account.locale,
+                  account.region,
+                  account.tag_art_id,
+                  account.title_id,
+                  account.warm_ups,
                   u.created_at AS user_created_at,
-                  p.updated_at AS profile_updated_at,
+                  account.updated_at AS account_updated_at,
                   p.level,
                   p.xp,
                   p.next_level_xp,
@@ -296,6 +484,7 @@ export class MatchRepository {
            FROM users u
            JOIN player_profiles p ON p.user_id = u.id
            JOIN player_progression g ON g.user_id = u.id
+           JOIN player_account_settings account ON account.user_id = u.id
            WHERE u.id = ?`
         )
         .bind(userId)
@@ -306,13 +495,15 @@ export class MatchRepository {
         .first<{ id: number }>(),
       this.database
         .prepare(
-          `SELECT DISTINCT token_id AS card_id
+          `SELECT item_type, token_id, balance
            FROM player_items
-           WHERE user_id = ? AND balance > 0 AND item_type IN
-             ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
+           WHERE user_id = ? AND balance > 0 AND item_type IN (
+             'SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS',
+             'SW_CRYSTALS', 'SW_HERO_SKINS'
+           )`
         )
         .bind(userId)
-        .all<{ card_id: number }>(),
+        .all<InventoryItemRow>(),
       this.database
         .prepare(
           `SELECT rowid AS row_id, quest_type, epic_type, epic_index,
@@ -323,13 +514,77 @@ export class MatchRepository {
            ORDER BY periodicity ASC, position ASC, rowid ASC`
         )
         .bind(userId)
-        .all<ActiveQuestRow>()
+        .all<ActiveQuestRow>(),
+      this.database
+        .prepare(
+          `SELECT game_mode, season, win_count, loss_count, tie_count,
+                  forfeit_count, abandon_count, score, player_rank,
+                  player_rank_stage, player_rank_state, win_streak,
+                  loss_streak, created_at
+           FROM player_account_stats
+           WHERE user_id = ? AND season = ?`
+        )
+        .bind(userId, currentSeason)
+        .all<HumanStatRow>(),
+      this.database
+        .prepare(
+          `SELECT equipped.item_type, equipped.token_id
+           FROM player_items_equipped equipped
+           JOIN player_items item ON item.id = equipped.item_id
+           WHERE equipped.user_id = ? AND item.balance > 0
+           ORDER BY equipped.item_type ASC, equipped.token_id ASC`
+        )
+        .bind(userId)
+        .all<EquippedItemRow>(),
+      refreshPrivateSpectateCode(this.database, userId, false)
     ])
     if (!profile || !gameAccount)
       throw new Error('player profile is not initialized')
+
+    const cards = new Map<number, OwnedCardRarity>()
+    for (const item of inventory.results) {
+      const rarity = rarityFor(item.item_type)
+      if (!rarity) continue
+      const current = cards.get(item.token_id)
+      if (!current || rarityPriority[rarity] > rarityPriority[current]) {
+        cards.set(item.token_id, rarity)
+      }
+    }
+    const crystals = inventory.results
+      .filter(item => item.item_type === ItemType.SW_CRYSTALS)
+      .map(item => item.token_id)
+      .filter(id => crystalPriority.has(id))
+      .sort(
+        (left, right) =>
+          crystalPriority.get(left)! - crystalPriority.get(right)!
+      )
+    const stickers = equipped.results
+      .filter(item => item.item_type === ItemType.SW_STICKERS)
+      .map(item => item.token_id)
+    const cardBacks = equipped.results
+      .filter(item => item.item_type === ItemType.SW_CARD_BACKS)
+      .map(item => item.token_id)
+    const heroSkin = heroSkinForDeckClass[deckClassForPrisms(prisms)]
+    const ownsHeroSkin = inventory.results.some(
+      item =>
+        item.item_type === ItemType.SW_HERO_SKINS && item.token_id === heroSkin
+    )
+    const deckEquipment: DeckEquipment = {
+      ...(stickers.length > 0 ? { stickers } : {}),
+      ...(cardBacks.length > 0
+        ? {
+            cardBack:
+              cardBacks[
+                crypto.getRandomValues(new Uint32Array(1))[0] % cardBacks.length
+              ]
+          }
+        : {}),
+      ...(ownsHeroSkin ? { heroSkin } : {})
+    }
     return {
       level: profile.level,
-      unlockedCards: new Set(cards.results.map(row => row.card_id)),
+      unlockedCards: cards,
+      spectateCode,
       quests: quests.results.map(quest => ({
         id: quest.row_id,
         position: quest.position,
@@ -354,18 +609,23 @@ export class MatchRepository {
       account: {
         id: gameAccount.id,
         address: principal,
-        name: profile.display_name,
-        locale: 'en',
+        name: profile.account_name,
+        locale: profile.locale,
         createdAt: profile.user_created_at,
-        updatedAt: profile.profile_updated_at,
+        updatedAt: profile.account_updated_at,
         experience: profile.xp,
-        warmUps: 0,
+        warmUps: profile.warm_ups,
         level: profile.level,
         seasonLevel: profile.basic_skypass_level,
         levelUpXP: profile.next_level_xp,
+        stats: statsFromRows(statRows.results, profile.level, profile.xp),
         isBurnerWallet: false,
+        ...(profile.region ? { region: profile.region } : {}),
+        ...(profile.tag_art_id ? { tagArtID: profile.tag_art_id } : {}),
+        ...(profile.title_id !== null ? { titleID: profile.title_id } : {}),
+        ...(crystals[0] !== undefined ? { crystalID: crystals[0] } : {}),
         prisms: prisms as never,
-        deckEquipment: { stickers: [] }
+        deckEquipment
       }
     }
   }

@@ -46,6 +46,7 @@ import {
   type SourceQuestSpec
 } from './quest-library'
 import { identityReferenceFor } from './rpc-principal'
+import { refreshPrivateSpectateCode } from './spectate-code'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
 
 const CARD_FRAMES = [
@@ -749,48 +750,7 @@ export class PlayerRpcRepository {
     userId: string,
     forceReset: boolean
   ): Promise<string> {
-    const current = await this.database
-      .prepare(
-        `SELECT spectate_code, spectate_code_expires_at
-         FROM player_account_settings
-         WHERE user_id = ?`
-      )
-      .bind(userId)
-      .first<{
-        spectate_code: string | null
-        spectate_code_expires_at: string | null
-      }>()
-    if (!current) throw new Error('player account settings are missing')
-
-    const activeMatch = await this.database
-      .prepare(
-        `SELECT 1 FROM multiplayer_matches
-         WHERE status = 'active'
-           AND (player1_user_id = ? OR player2_user_id = ?)
-         LIMIT 1`
-      )
-      .bind(userId, userId)
-      .first()
-    const expiresAt = current.spectate_code_expires_at
-      ? Date.parse(current.spectate_code_expires_at)
-      : Number.NaN
-    const expired = !Number.isFinite(expiresAt) || expiresAt <= Date.now()
-    const shouldReset =
-      forceReset || !current.spectate_code || (!activeMatch && expired)
-
-    if (!shouldReset) return current.spectate_code!
-
-    const code = crypto.randomUUID()
-    const expiry = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
-    await this.database
-      .prepare(
-        `UPDATE player_account_settings
-         SET spectate_code = ?, spectate_code_expires_at = ?, updated_at = ?
-         WHERE user_id = ?`
-      )
-      .bind(code, expiry, new Date().toISOString(), userId)
-      .run()
-    return code
+    return refreshPrivateSpectateCode(this.database, userId, forceReset)
   }
 
   async accountReferenceExists(address: string): Promise<boolean> {
