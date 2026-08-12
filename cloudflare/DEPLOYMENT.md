@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`bddb78e7-5f12-40d1-96e7-78e22142baac`)
+- API/web Worker: `opensky-webapp` (`e5660e23-6306-49c9-996e-3cbdfa1b9b43`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -21,9 +21,10 @@
   `bd1a236` for dormant App Developer Key management, `051e83a` for guarded
   SkyPass reward-definition updates, and `03fd8ca` for the off-chain reward
   policy, plus `44e6797` for the shared next-reward schedule read; matchmaker
-  and match service include `309861e`
+  and match service include `309861e`. The API also includes `08bcd4d` for
+  off-chain referral-sticker delivery
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0057`
+- Applied D1 migrations: `0001` through `0058`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -76,6 +77,11 @@
   five-attempt dead-letter safety
 - Write-once identity referrals, top-five friend points, inviter gifts, and the
   original Invite Friends screens
+- Source referral-sticker threshold accounting, top-five friend attribution,
+  23-hour delayed delivery, 100-unit sticker rewards, point carry-forward, and
+  sanction pauses, with immutable retry-safe off-chain D1 receipts. Production
+  has no current-season sticker definitions, so the scheduled path remains a
+  read-only no-op until Cloud Weasel content is configured
 - Profile reward/rank feed and competitive match history
 - Source match lookup privacy with participant-only replay capabilities
 - Authenticated, match-scoped opponent reports with source rejection rules,
@@ -891,6 +897,22 @@ settlement and delayed delivery against that pool.
   once with all seven guards, and the post-probe D1 read reported
   `changed_db: false`. No reward CSV origin is configured, so the mutation
   remains doubly fail-closed even if a capability were granted accidentally.
+- API/web Worker version `e5660e23-6306-49c9-996e-3cbdfa1b9b43` contains source
+  `08bcd4d`. Migration `0058_referral_sticker_rewards.sql` replaces the source
+  referral contract mint with canonical identity inventory while preserving
+  threshold spending, top-five friend attribution, season carry-forward, the
+  source 23-hour delay, and 100 units per earned sticker. Immutable batch/award
+  rows and D1 transaction batches make duplicate, concurrent, failed, and
+  retried delivery safe; sanctioned accounts pause before preparation or
+  delivery. The strengthened release gate now scans every active reward
+  producer for both canonical inventory writes and an idempotent receipt key.
+  The rollout passed all 236 API tests, Cloudflare TypeScript checking, release
+  gates, and the 472-file browser/game production build. Homepage, Google auth
+  discovery, and `GetStickers` returned `200`. After a live scheduled tick,
+  production still had zero sticker definitions, zero referral batches, zero
+  referral awards, and 31 existing inventory rows; migration `0058` existed
+  once with all four guards, and the read-only verification reported
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
