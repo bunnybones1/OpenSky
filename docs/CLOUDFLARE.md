@@ -456,6 +456,14 @@ and progress are not migrated.
   `CONQUEST_CONFIG_WRITE` capability and creates an immutable audit. The public
   legacy USDC pool and treasure amounts remain at zero until a separate Cloud
   Weasel settlement contract is explicitly approved.
+- App Developer Key management preserves the source create/list/enable/disable
+  and one-year token-generation contracts behind both `ADMIN` and a dormant
+  `APP_DEV_KEY_WRITE` capability. Enabled name/email uniqueness is enforced by
+  D1 under races, state changes and token reveals are immutably audited without
+  copying the secret into audit JSON, and production has no keys or grants.
+  Partner-token API scopes remain disabled pending an explicit contract; the
+  source itself encoded an object claim that its middleware incorrectly read
+  as a string, so Cloud Weasel does not silently turn that bug into authority.
 - The original banner and featured-streamer admin mutations are ported with a
   narrower authorization boundary than the source: callers need both `ADMIN`
   and the separately provisioned `CONTENT_WRITE` permission. Public fields are

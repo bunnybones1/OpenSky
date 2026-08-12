@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     140 |
-| Remaining source RPCs        |      32 |
+| Ported source RPCs           |     145 |
+| Remaining source RPCs        |      27 |
 | Cloudflare-only RPC adapters |       0 |
 
 ## Remaining workstreams
 
 | Workstream             | Remaining | Interpretation                                                                                                                                                                         |
 | ---------------------- | --------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin and operations   |         6 | Conquest V2 previews and Stripe reads now use deployed RBAC; remaining app-key and SkyPass writes require granular authorization and immutable audits.                                |
+| Admin and operations   |         1 | App Developer Keys and Conquest V2 previews now use deployed dormant capabilities and immutable audits; only SkyPass reward-definition writes remain.                                |
 | Commerce and wallet    |         9 | Stripe Checkout and its webhook are ported behind dormant optional configuration. Mobile receipts and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery  |         1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule.                                                                                                            |
 | Internal legacy        |        10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs.                                                              |
@@ -74,6 +74,15 @@ Staff can also inspect SkyPass reward definitions and optional per-season
 premium status. Cloud Weasel stores premium as Google-identity entitlement
 state rather than authentication or wallet state, and a missing entitlement
 truthfully reads false without mutating the account.
+
+App Developer Key management is ported behind `ADMIN` plus a separately
+dormant `APP_DEV_KEY_WRITE` capability. It preserves source-format keys,
+enabled-name/email uniqueness, source pagination, disable/re-enable semantics,
+and source-shaped one-year JWT generation while adding immutable secret-free
+audits and database race guards. The generated partner tokens intentionally do
+not authorize API methods yet: the source encoded the full object in `app` but
+its middleware cast that claim to a string, so silently repairing the bug would
+create new production authority without an approved scope contract.
 
 The event-2 Conquest account-progress read is role-gated and backed by the
 deployed point ledger and source treasure thresholds. The legacy pool config

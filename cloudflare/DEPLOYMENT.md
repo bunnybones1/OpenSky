@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`704c4049-e6fe-44b7-8824-28f7bec9aeef`)
+- API/web Worker: `opensky-webapp` (`aefc18ec-ee27-4b49-8149-c57f95d23632`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -17,10 +17,11 @@
   `c9f358c` for the source payment catalog, `5902915` for dormant Stripe
   checkout, `6dc5e12` for staff payment reads, and `284f1da` for optional
   wallet ownership proofs, and `f19fd20`/`b1597c6` for the fail-closed R2
-  feedback port, and `3113d17` for the gated Conquest V2 economy previews;
-  matchmaker and match service include `309861e`
+  feedback port, `3113d17` for the gated Conquest V2 economy previews, and
+  `bd1a236` for dormant App Developer Key management; matchmaker and match
+  service include `309861e`
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0055`
+- Applied D1 migrations: `0001` through `0056`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -104,6 +105,12 @@
   `CONQUEST_CONFIG_WRITE` capability, uses optimistic concurrency, and appends
   immutable before/after audits; production has no capability grants. These
   previews do not activate the legacy USDC-facing public pool or treasure RPCs
+- Source App Developer Key create/list/enable/disable/token RPCs behind both
+  `ADMIN` and the dormant `APP_DEV_KEY_WRITE` capability. D1 preserves the
+  32-character `SW01` key shape and enabled-name/email uniqueness under races;
+  key state and token reveals enter immutable secret-free audits. Source-shaped
+  one-year JWTs can be generated, but partner API authorization remains
+  intentionally dormant pending an explicit per-method scope contract
 - Original banner and featured-streamer mutations behind both `ADMIN` and an
   independently provisioned `CONTENT_WRITE` permission, with bounded public
   fields, HTTP(S)-only links, atomic before/after audits, and immutable audit
@@ -197,7 +204,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 30 files, 213 tests
+- API Worker: 31 files, 220 tests
 - Match service: 14 Worker tests
 - Game Worker: 25 unit and 59 Worker tests
 - Matchmaker: 26 unit and 18 Worker tests
@@ -846,6 +853,20 @@ settlement and delayed delivery against that pool.
   cache rows; the empty settings singleton remains at version zero, migration
   `0055` exists once with all four transition/immutability guards, and every
   post-probe D1 read reported `changed_db: false`.
+- API/web Worker version `aefc18ec-ee27-4b49-8149-c57f95d23632` contains source
+  `bd1a236`. Migration `0056_app_developer_keys.sql` ports all five source App
+  Developer Key management RPCs while adding a dormant `APP_DEV_KEY_WRITE`
+  capability, source-format `SW01` secrets, partial unique indexes for enabled
+  names/emails, optimistic state transitions, and immutable secret-free
+  create/enable/disable/token-reveal audits. Generated JWTs preserve the
+  source's full AppDevKey claim and one-year expiry, but deliberately remain
+  non-authorizing until a separate partner-method scope is reviewed. The
+  rollout passed all 220 API tests, Cloudflare TypeScript checking, the 145/172
+  RPC guard, production build, and a 1.58-MiB/226-KiB-gzip Wrangler dry run.
+  Live app/version routes returned `200` and all five anonymous management
+  probes returned `401`. Production has zero keys, grants, or audits; migration
+  `0056` exists once with two enabled-uniqueness indexes and all four guards,
+  and every post-probe D1 read reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
