@@ -6,9 +6,9 @@
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`2c9040ad-52f7-472f-9fc6-2e74db06f7e8`)
+- Game Worker: `cloud-weasel-game-server` (`02134a49-7560-4a10-85e3-08b0217ad5f4`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `309861e` for the matchmaker and match service, and `ef953d3`
+  `309861e` for the matchmaker and match service, and `308a948`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -538,6 +538,16 @@ settlement and delayed delivery against that pool.
   game Worker tests plus TypeScript checking. Live game health and authoritative
   mode status passed with Conquest disabled; a read-only production aggregate
   remained one active and nine ended matches and reported `changed_db: false`.
+- Game Worker version `02134a49-7560-4a10-85e3-08b0217ad5f4` contains source
+  `308a948`. Client emotes now enforce the source tagged union with exactly one
+  of hero emote, enabled chat, or sticker; mixed payloads cannot smuggle a
+  second variant through server sanitization. A player sticker is also checked
+  against the immutable equipped-sticker list loaded into the accepted match,
+  matching the original outer server's ownership check before relay or replay
+  archival. The rollout passed all 25 game unit and 54 game Worker tests plus
+  TypeScript checking. Live game health passed; a read-only production
+  aggregate remained one active and nine ended matches and reported
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
