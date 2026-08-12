@@ -1676,6 +1676,7 @@ export class GameMatch implements DurableObject {
     this.sendToSpectators({ type: 'opponent_disconnected' })
     const runtime = await this.ensureRuntime()
     const info = runtime.stateInfo()
+    const timers = await this.timers()
     // Source behavior only advances immediately when the authoritative owner,
     // represented by `store.player === undefined`, owes the reveal.
     if (!info.hasState && info.pendingPlayer === undefined) {
@@ -1684,13 +1685,15 @@ export class GameMatch implements DurableObject {
         this.broadcast({ type: 'gameplay', data: emitted })
         await this.replayGameplay(emitted)
       }
+      await this.afterStateChange(metadata, players, timers, Date.now())
+      return
     }
-    await this.afterStateChange(
-      metadata,
-      players,
-      await this.timers(),
-      Date.now()
-    )
+    // A player-owned pending reveal already has a source commit/reveal timer.
+    // Disconnect adds the independent abandon deadline but must not replace or
+    // extend the reveal deadline. A materialized game likewise keeps its turn
+    // timer unchanged until an authoritative action advances state.
+    await this.state.storage.put(PLAYERS_KEY, players)
+    await this.scheduleAlarm(players, timers, Date.now())
   }
 
   private replayRecordKey(index: number) {

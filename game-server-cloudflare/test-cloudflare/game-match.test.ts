@@ -1270,6 +1270,54 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
   })
 
+  it('preserves a player-owned commit-reveal deadline on disconnect', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const second = await connect(PRINCIPAL_2)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const deadline = Date.now() + 30_000
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers =
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ??
+          {}
+        await state.storage.put('match:timers', {
+          ...timers,
+          commitRevealAtMs: deadline
+        })
+        await state.storage.setAlarm(deadline)
+      }
+    )
+
+    const disconnected = nextMessage(second)
+    first.close(1000, 'disconnect during player reveal')
+    expect(await disconnected).toEqual({ type: 'opponent_disconnected' })
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const [players, timers] = await Promise.all([
+          state.storage.get<Record<string, { abandonAtMs?: number }>>(
+            'match:players'
+          ),
+          state.storage.get<{ commitRevealAtMs?: number }>('match:timers')
+        ])
+        expect(players?.[PRINCIPAL_1].abandonAtMs).toEqual(expect.any(Number))
+        expect(players![PRINCIPAL_1].abandonAtMs).toBeGreaterThan(deadline)
+        expect(timers?.commitRevealAtMs).toBe(deadline)
+        expect(await state.storage.getAlarm()).toBe(deadline)
+      }
+    )
+  })
+
   it('rejects player stickers outside the accepted match equipment', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
@@ -1692,6 +1740,21 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       state: { hasState: true }
     })
 
+    const turnDeadline = Date.now() + 30_000
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers =
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ??
+          {}
+        await state.storage.put('match:timers', {
+          ...timers,
+          turnAtMs: turnDeadline
+        })
+        await state.storage.setAlarm(turnDeadline)
+      }
+    )
+
     const disconnected = nextMessage(second)
     first.close(1000, 'test disconnect')
     expect(await disconnected).toEqual({ type: 'opponent_disconnected' })
@@ -1701,7 +1764,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         const players = await state.storage.get<
           Record<string, { abandonAtMs?: number }>
         >('match:players')
+        const timers = await state.storage.get<{ turnAtMs?: number }>(
+          'match:timers'
+        )
         expect(players?.[PRINCIPAL_1].abandonAtMs).toEqual(expect.any(Number))
+        expect(players![PRINCIPAL_1].abandonAtMs).toBeGreaterThan(turnDeadline)
+        expect(timers?.turnAtMs).toBe(turnDeadline)
+        expect(await state.storage.getAlarm()).toBe(turnDeadline)
         players![PRINCIPAL_1].abandonAtMs = Date.now() - 1
         await state.storage.put('match:players', players)
         await state.storage.setAlarm(Date.now() + 60_000)
