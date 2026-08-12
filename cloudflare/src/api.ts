@@ -565,6 +565,47 @@ export const handleApiRequest = async (
         return json(request, env, { page: result.page, accounts })
       }
 
+      case 'GMListAccountSignals': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ account?: string }>(request)
+        if (!body.account) throw invalidArgument('missing account address')
+        return json(request, env, {
+          signal: await staff.listAccountSignals(body.account)
+        })
+      }
+
+      case 'GMAccountSignalSummaries': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          page?: Page
+          accountStatus?: AccountStatus[]
+          createdBefore?: string
+          createdAfter?: string
+          accountAddress?: string
+        }>(request)
+        const result = await staff.signalSummaries(body)
+        const signals = await Promise.all(
+          result.rows.map(async row => {
+            const accountAddress = identityReferenceFor(row.user_id)
+            const account = await playerRpc.getAccountForAdmin(
+              undefined,
+              accountAddress
+            )
+            if (!account) throw notFound('account not found')
+            return {
+              accountAddress,
+              score: row.score,
+              updatedAt: row.updated_at,
+              account,
+              accountActions: []
+            }
+          })
+        )
+        return json(request, env, { page: result.page, signals })
+      }
+
       case 'GMIsAccountBanned': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)

@@ -38,7 +38,11 @@ const rpcAs = async (
 }
 
 beforeEach(async () => {
-  await env.AUTH_DB.prepare('DELETE FROM users').run()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM player_account_reports'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
+    env.AUTH_DB.prepare('DELETE FROM users')
+  ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users
@@ -60,6 +64,31 @@ const grantAdmin = async () => {
      VALUES (?, 'ADMIN', NULL, 'test bootstrap', ?)`
   )
     .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const seedReport = async () => {
+  const now = '2026-08-13T15:00:00.000Z'
+  await env.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_matches
+       (id, proposal_id, replay_id, mode, version, player1_principal,
+        player2_principal, player1_user_id, player2_user_id,
+        match_payload_json, status, created_at, updated_at)
+     VALUES (901, 'staff-report-match', 'staff-report-replay',
+             'RANKED_CONSTRUCTED', 'test',
+             '0x1111111111111111111111111111111111111111',
+             '0x2222222222222222222222222222222222222222',
+             ?, ?, '{}', 'ended', ?, ?)`
+  )
+    .bind(ADMIN, PLAYER, now, now)
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_account_reports
+       (match_id, reported_user_id, reporter_user_id, comment,
+        created_at, updated_at)
+     VALUES (901, ?, ?, 'Repeated stalling', ?, ?)`
+  )
+    .bind(PLAYER, ADMIN, now, now)
     .run()
 }
 
@@ -239,5 +268,96 @@ describe('fail-closed Google identity staff authorization', () => {
         })
       ).status
     ).toBe(400)
+  })
+
+  it('lists real report signals with identity-safe audit payloads', async () => {
+    await seedReport()
+    expect(
+      (
+        await rpcAs(PLAYER, 'GMListAccountSignals', {
+          account: `identity:${PLAYER}`
+        })
+      ).status
+    ).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMListAccountSignals', {
+      account: `identity:${PLAYER}`
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      signal: [
+        expect.objectContaining({
+          id: expect.any(Number),
+          signalType: 'user report',
+          signalStatus: 'PENDING',
+          createdAt: '2026-08-13T15:00:00.000Z',
+          updatedAt: '2026-08-13T15:00:00.000Z',
+          signalData: {
+            reportedBy: `identity:${ADMIN}`,
+            matchId: 901,
+            comment: 'Repeated stalling'
+          },
+          score: 0
+        })
+      ]
+    })
+    expect((await rpcAs(ADMIN, 'GMListAccountSignals', {})).status).toBe(400)
+  })
+
+  it('summarizes reported accounts without fabricating a risk score', async () => {
+    await seedReport()
+    expect((await rpcAs(PLAYER, 'GMAccountSignalSummaries')).status).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMAccountSignalSummaries', {
+      accountStatus: [],
+      createdBefore: '2026-08-14T00:00:00Z',
+      page: {
+        pageSize: 50,
+        sort: [{ column: 'score', order: 'DESC' }]
+      }
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      page: { pageSize: 50, hasBefore: false, hasAfter: false },
+      signals: [
+        {
+          accountAddress: `identity:${PLAYER}`,
+          score: 0,
+          updatedAt: '2026-08-13T15:00:00.000Z',
+          account: { name: 'Staff Player' },
+          accountActions: []
+        }
+      ]
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings
+       SET account_status = 'FLAGGED' WHERE user_id = ?`
+    )
+      .bind(PLAYER)
+      .run()
+    expect(
+      await (await rpcAs(ADMIN, 'GMAccountSignalSummaries')).json()
+    ).toMatchObject({ signals: [] })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMAccountSignalSummaries', {
+          accountStatus: ['FLAGGED']
+        })
+      ).json()
+    ).toMatchObject({
+      signals: [{ accountAddress: `identity:${PLAYER}`, score: 0 }]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMAccountSignalSummaries', {
+          accountAddress: `identity:${PLAYER}`,
+          accountStatus: ['ACTIVE'],
+          createdBefore: '2000-01-01T00:00:00.000Z'
+        })
+      ).json()
+    ).toMatchObject({
+      signals: [{ accountAddress: `identity:${PLAYER}` }]
+    })
   })
 })

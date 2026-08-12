@@ -1,4 +1,5 @@
 import type {
+  AccountSignal,
   AccountStatus,
   GMStatsResponse,
   Page,
@@ -17,6 +18,23 @@ interface StaffAccountRow {
   conquests_unlocked: number
 }
 
+interface SignalRow {
+  id: number
+  match_id: number
+  reporter_user_id: string
+  signal_type: string
+  signal_status: AccountSignal['signalStatus']
+  comment: string
+  created_at: string
+  updated_at: string
+}
+
+interface SignalSummaryRow {
+  user_id: string
+  updated_at: string
+  score: number
+}
+
 const ACCOUNT_STATUSES = new Set<AccountStatus>([
   'ACTIVE' as AccountStatus,
   'SUSPENDED' as AccountStatus,
@@ -31,6 +49,13 @@ const ACCOUNT_SORT_COLUMNS: Record<string, string> = {
   name: 'settings.name',
   created_at: 'users.created_at',
   createdAt: 'users.created_at'
+}
+const SIGNAL_SORT_COLUMNS: Record<string, string> = {
+  score: 'score',
+  updated_at: 'updated_at',
+  updatedAt: 'updated_at',
+  created_at: 'account_created_at',
+  createdAt: 'account_created_at'
 }
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
@@ -71,6 +96,21 @@ const accountSort = (page?: Page): SortBy[] => {
     }
     if (!['ASC', 'DESC'].includes(item.order)) {
       throw invalidArgument('account sort order is invalid')
+    }
+  }
+  return sort
+}
+
+const signalSort = (page?: Page): SortBy[] => {
+  const sort = page?.sort?.length
+    ? page.sort
+    : [{ column: 'score', order: 'DESC' as SortBy['order'] }]
+  for (const item of sort) {
+    if (!SIGNAL_SORT_COLUMNS[item.column]) {
+      throw invalidArgument(`unsupported signal sort column '${item.column}'`)
+    }
+    if (!['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('signal sort order is invalid')
     }
   }
   return sort
@@ -224,6 +264,115 @@ export class StaffRepository {
       )
       .bind(...bindings, size + 1, offset)
       .all<StaffAccountRow>()
+    const rows = result.results.slice(0, size)
+    const nextOffset = offset + rows.length
+    return {
+      page: {
+        pageSize: size,
+        before: rows.length ? encodeCursor(offset) : undefined,
+        after: rows.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: result.results.length > size,
+        hasAfter: offset > 0,
+        sort
+      },
+      rows
+    }
+  }
+
+  async listAccountSignals(accountReference: string): Promise<AccountSignal[]> {
+    if (!accountReference) throw invalidArgument('missing account address')
+    if (!accountReference.startsWith('identity:')) return []
+    const userId = accountReference.slice('identity:'.length)
+    if (!userId) return []
+    const result = await this.database
+      .prepare(
+        `SELECT id, match_id, reporter_user_id, signal_type, signal_status,
+                comment, created_at, updated_at
+         FROM player_account_reports
+         WHERE reported_user_id = ?
+         ORDER BY signal_status ASC, created_at DESC, id DESC`
+      )
+      .bind(userId)
+      .all<SignalRow>()
+    return result.results.map(row => ({
+      id: row.id,
+      signalType: row.signal_type,
+      signalStatus: row.signal_status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      signalData: {
+        reportedBy: `identity:${row.reporter_user_id}`,
+        matchId: row.match_id,
+        comment: row.comment
+      },
+      // The current source score table does not assign a raw weight to the
+      // "user report" signal. Aggregate fraud probability belongs to a
+      // separate analytics pipeline that Cloud Weasel has not fabricated.
+      score: 0
+    }))
+  }
+
+  async signalSummaries(input: {
+    page?: Page
+    accountStatus?: AccountStatus[]
+    createdBefore?: string
+    createdAfter?: string
+    accountAddress?: string
+  }): Promise<{ page: Page; rows: SignalSummaryRow[] }> {
+    const filters: string[] = []
+    const bindings: unknown[] = []
+    if (input.accountAddress?.startsWith('identity:')) {
+      filters.push('reports.reported_user_id = ?')
+      bindings.push(input.accountAddress.slice('identity:'.length))
+    } else {
+      const statuses = input.accountStatus?.length
+        ? input.accountStatus
+        : (['ACTIVE'] as AccountStatus[])
+      if (statuses.some(status => !ACCOUNT_STATUSES.has(status))) {
+        throw invalidArgument('accountStatus is invalid')
+      }
+      filters.push(
+        `settings.account_status IN (${statuses.map(() => '?').join(',')})`
+      )
+      bindings.push(...statuses)
+      for (const [field, value, operator] of [
+        ['createdBefore', input.createdBefore, '<'],
+        ['createdAfter', input.createdAfter, '>']
+      ] as const) {
+        if (value === undefined) continue
+        if (!Number.isFinite(Date.parse(value))) {
+          throw invalidArgument(`${field} is invalid`)
+        }
+        filters.push(`users.created_at ${operator} ?`)
+        bindings.push(new Date(value).toISOString())
+      }
+    }
+
+    const sort = signalSort(input.page)
+    const size = pageSize(input.page)
+    const offset = cursorOffset(input.page?.before ?? input.page?.after)
+    const order = [
+      ...sort.map(item => `${SIGNAL_SORT_COLUMNS[item.column]} ${item.order}`),
+      'game.id DESC'
+    ].join(', ')
+    const result = await this.database
+      .prepare(
+        `SELECT reports.reported_user_id AS user_id,
+                MAX(reports.updated_at) AS updated_at,
+                users.created_at AS account_created_at,
+                0.0 AS score
+         FROM player_account_reports reports
+         JOIN users ON users.id = reports.reported_user_id
+         JOIN player_account_settings settings
+           ON settings.user_id = reports.reported_user_id
+         JOIN game_accounts game ON game.user_id = reports.reported_user_id
+         WHERE ${filters.join(' AND ')}
+         GROUP BY reports.reported_user_id, users.created_at, game.id
+         ORDER BY ${order}
+         LIMIT ? OFFSET ?`
+      )
+      .bind(...bindings, size + 1, offset)
+      .all<SignalSummaryRow>()
     const rows = result.results.slice(0, size)
     const nextOffset = offset + rows.length
     return {
