@@ -890,6 +890,52 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(wrongRelease.status).toBe(409)
   })
 
+  it('repairs interrupted initialization on an identical create retry', async () => {
+    await initializeMatch()
+    const originalDeadline = await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
+          'match:timers'
+        )
+        expect(timers?.commitRevealAtMs).toEqual(expect.any(Number))
+        await state.storage.deleteAlarm()
+        return timers!.commitRevealAtMs!
+      }
+    )
+
+    const alarmRetry = await createMatch()
+    expect(alarmRetry.status).toBe(200)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
+          'match:timers'
+        )
+        expect(timers?.commitRevealAtMs).toBe(originalDeadline)
+        expect(await state.storage.getAlarm()).toBe(originalDeadline)
+
+        // Represents failure after the immutable match/snapshot batch but
+        // before afterStateChange could persist its first deadline.
+        await state.storage.put('match:timers', {})
+        await state.storage.deleteAlarm()
+      }
+    )
+
+    const stateRetry = await createMatch()
+    expect(stateRetry.status).toBe(200)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
+          'match:timers'
+        )
+        expect(timers?.commitRevealAtMs).toEqual(expect.any(Number))
+        expect(await state.storage.getAlarm()).toBe(timers!.commitRevealAtMs)
+      }
+    )
+  })
+
   it('persists source-shaped replay initialization and authoritative diffs', async () => {
     await initializeMatch()
     const headers = {

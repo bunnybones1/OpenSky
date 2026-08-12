@@ -406,6 +406,7 @@ export class GameMatch implements DurableObject {
           { status: 409 }
         )
       }
+      await this.repairIdempotentCreation(existing)
       return this.creationResponse(existing)
     }
 
@@ -473,6 +474,46 @@ export class GameMatch implements DurableObject {
     })
     await this.afterStateChange(metadata, players, {}, Date.now())
     return this.creationResponse(metadata)
+  }
+
+  private async repairIdempotentCreation(metadata: MatchMetadata) {
+    const [players, timers] = await Promise.all([
+      this.players(),
+      this.timers()
+    ])
+    const now = Date.now()
+
+    // Initial storage is intentionally installed before afterStateChange so a
+    // retry can recover it. If that second step failed, the pre-start runtime
+    // has no commit/reveal deadline. Re-run it only in that impossible healthy
+    // state so an ordinary retry never extends an existing deadline.
+    if (
+      !metadata.started &&
+      !metadata.ended &&
+      timers.commitRevealAtMs === undefined
+    ) {
+      await this.afterStateChange(metadata, players, timers, now)
+      return
+    }
+    if (metadata.ended) return
+
+    // Durable storage may contain the completed state write even when the
+    // subsequent setAlarm call failed. Restore a missing or later alarm from
+    // the persisted deadlines, scheduling overdue work immediately.
+    const nextDeadline = [
+      timers.commitRevealAtMs,
+      timers.turnAtMs,
+      timers.botAtMs,
+      ...Object.values(players).map(player => player.abandonAtMs)
+    ]
+      .filter((value): value is number => value !== undefined)
+      .sort((left, right) => left - right)[0]
+    if (nextDeadline === undefined) return
+    const expectedAlarm = Math.max(now, nextDeadline)
+    const currentAlarm = await this.state.storage.getAlarm()
+    if (currentAlarm === null || currentAlarm > expectedAlarm) {
+      await this.state.storage.setAlarm(expectedAlarm)
+    }
   }
 
   private async status(request: Request) {
