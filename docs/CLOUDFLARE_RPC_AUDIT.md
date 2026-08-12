@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 93 |
-| Remaining source RPCs | 79 |
+| Ported source RPCs | 97 |
+| Remaining source RPCs | 75 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 49 | Requires a new identity/RBAC boundary before exposing source GM tools. |
+| Admin and operations | 45 | Mutating tools require granular authorization and audit records on top of the deployed fail-closed admin role. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -66,4 +66,8 @@ game UI only as a match-local lookup, never as authentication.
    authority.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.
-5. Add an explicit staff identity/RBAC model before porting any GM/admin write.
+5. Provision staff only through an audited out-of-band procedure, then add
+   granular permissions and immutable audit records before porting any GM/admin
+   write. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
+   the original UI's read-only authorization probe are deployed; production has
+   no staff grants.

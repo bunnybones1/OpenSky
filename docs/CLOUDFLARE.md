@@ -245,6 +245,12 @@ and progress are not migrated.
 - The source `RequestMoreInvites` opt-in is now an idempotent Google-identity
   settings write. The already-deprecated source `SignIn` RPC remains a faithful
   error tombstone and does not reintroduce wallet authentication alongside OIDC.
+- Staff authority now uses a D1 `ADMIN` role bound to a Google identity and is
+  denied by default. There is no player-facing grant endpoint and production
+  has no role rows. The source `GMStats` aggregate and the `GMIsAccountBanned`
+  probe used by the original admin route are behind that check; the source's
+  unimplemented `AdminListAccounts`/`AdminSearchAccounts` remain admin-only
+  `501` tombstones.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
@@ -254,8 +260,8 @@ and progress are not migrated.
   of all zeroes until product policy explicitly enables it.
 - WalletConnect linking and wallet-content reads are not implemented yet; the schema and session
   response keep them separate from login.
-- Seasonal invite-sticker redemption, marketplace writes, and administrative
-  APIs still require ports. Conquest settlement is implemented, but production
+- Seasonal invite-sticker redemption, marketplace writes, and most
+  administrative APIs still require ports. Conquest settlement is implemented, but production
   has no active reward-pool rows; matchmaking remains disabled until an
   explicitly approved pool and a pre-enable delivery drill pass.
 - Existing Go/Postgres account data is not automatically migrated into D1.

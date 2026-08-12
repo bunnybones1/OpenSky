@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`acb48593-f01f-455a-93f9-3c7699705eb9`)
+- API/web Worker: `opensky-webapp` (`c79d766d-9d0b-4b09-ae3c-2b451275cdb4`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `7b1c8fa` for web/API and `b612af3` for game, plus the
+- Deployed source includes `27b7c05` for web/API and `b612af3` for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0030`
+- Applied D1 migrations: `0001` through `0031`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -53,6 +53,9 @@
 - Authenticated, match-scoped opponent reports with source rejection rules,
   plain-text sanitization, UTF-8 byte caps, pending moderation state, and
   retry-safe identity audit records
+- Fail-closed Google-identity staff roles, source account-status aggregates,
+  the original admin-UI authorization probe, and admin-gated tombstones for the
+  source-unimplemented account-list methods
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -65,13 +68,14 @@
 WalletConnect remains an optional future integration. Captcha is deployed but
 remains disabled until Cloud Weasel hCaptcha credentials are provisioned.
 Seasonal invite-sticker redemption, marketplace writes, legacy data migration,
-and administrative RPCs remain pending. Conquest queues stay disabled until an
+and most administrative RPCs remain pending. No production staff identity is
+provisioned. Conquest queues stay disabled until an
 explicit production reward pool is approved and the enablement drill validates
 settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 20 files, 108 tests
+- API Worker: 21 files, 112 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -91,6 +95,9 @@ settlement and delayed delivery against that pool.
 - Live invite requests rejected anonymous access, while the retired `SignIn`
   endpoint returned the source-compatible deprecated-method `500`; Worker
   version metadata matched `acb48593-f01f-455a-93f9-3c7699705eb9`
+- Remote D1 after migration `0031`: zero staff grants and one existing `ACTIVE`
+  player; anonymous admin probes returned `401`, version metadata matched the
+  deployment, and the read-only verification reported `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`
