@@ -37,9 +37,12 @@ Every reward producer must:
    encoding belongs only in an optional ownership adapter.
 
 Existing SkyPass claim receipts, Conquest delivery keys, leaderboard award
-receipts, and Stripe webhook receipts are the reference implementations. New
-reward paths must test duplicate, concurrent, rollback, and retry behavior
-before production deployment.
+receipts, referral-sticker award batches, and Stripe webhook receipts are the
+reference implementations. New reward paths must test duplicate, concurrent,
+rollback, and retry behavior before production deployment. The release gate
+scans all five producer modules for both canonical `player_items` writes and an
+idempotent receipt/delivery key, in addition to excluding transaction code from
+the Google-identity route tree.
 
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and

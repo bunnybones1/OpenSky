@@ -6,6 +6,7 @@ import { handleIdentityRequest } from './identity-api'
 import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
+import { runReferralStickerRewards } from './referral-sticker-rewards'
 import { handleReplayRequest } from './replays'
 import { WalletLinksRepository } from './wallet-links'
 
@@ -33,6 +34,7 @@ export default {
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
         runDueLeaderboardRewards(env.AUTH_DB),
+        runReferralStickerRewards(env.AUTH_DB),
         new AccountDeletionRepository(
           env.AUTH_DB,
           env.CLIENT_FEEDBACK

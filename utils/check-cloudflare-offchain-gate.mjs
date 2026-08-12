@@ -23,7 +23,8 @@ export const offchainGateErrors = ({
   webappConfig,
   identityRoutes,
   appSource,
-  policySource
+  policySource,
+  rewardSources = {}
 }) => {
   const errors = []
   if (webappConfig?.AUTH_MODE !== 'google') {
@@ -32,7 +33,11 @@ export const offchainGateErrors = ({
   if (webappConfig?.AUTO_REGISTER_WALLET !== false) {
     errors.push('Cloudflare webapp must not auto-register a wallet')
   }
-  if (!/env\.AUTH_MODE\s*===\s*['"]google['"]\s*\?\s*<IdentityApp\s*\/>/.test(appSource)) {
+  if (
+    !/env\.AUTH_MODE\s*===\s*['"]google['"]\s*\?\s*<IdentityApp\s*\/>/.test(
+      appSource
+    )
+  ) {
     errors.push('App must route Google auth through IdentityApp')
   }
   for (const surface of LEGACY_TRANSACTION_SURFACES) {
@@ -42,7 +47,9 @@ export const offchainGateErrors = ({
   }
   for (const pattern of TRANSACTION_PATTERNS) {
     if (pattern.test(identityRoutes)) {
-      errors.push(`IdentityApp contains legacy transaction code: ${pattern.source}`)
+      errors.push(
+        `IdentityApp contains legacy transaction code: ${pattern.source}`
+      )
     }
   }
   for (const required of [
@@ -54,26 +61,75 @@ export const offchainGateErrors = ({
       errors.push(`off-chain reward policy is missing: ${required}`)
     }
   }
+  for (const [name, source] of Object.entries(rewardSources)) {
+    if (!/INSERT(?: OR IGNORE)? INTO player_items/.test(source)) {
+      errors.push(`${name} does not grant canonical D1 inventory`)
+    }
+    if (!/(receipt|claims?|delivery_token|award_key)/i.test(source)) {
+      errors.push(`${name} does not contain an idempotent receipt key`)
+    }
+    for (const pattern of TRANSACTION_PATTERNS) {
+      if (pattern.test(source)) {
+        errors.push(
+          `${name} contains legacy transaction code: ${pattern.source}`
+        )
+      }
+    }
+  }
   return errors
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
-  const [configSource, identityRoutes, appSource, policySource] =
-    await Promise.all([
-      readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
-      readFile(path.join(root, 'webapp/src/IdentitySession/IdentityApp.tsx'), 'utf8'),
-      readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
-      readFile(path.join(root, 'docs/OFFCHAIN_REWARD_POLICY.md'), 'utf8')
-    ])
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
+  const [
+    configSource,
+    identityRoutes,
+    appSource,
+    policySource,
+    conquestDelivery,
+    leaderboardRewards,
+    playerRpc,
+    referralStickerRewards,
+    stripeCheckout
+  ] = await Promise.all([
+    readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/IdentitySession/IdentityApp.tsx'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
+    readFile(path.join(root, 'docs/OFFCHAIN_REWARD_POLICY.md'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/conquest-delivery.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/player-rpc.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8')
+  ])
   const errors = offchainGateErrors({
     webappConfig: JSON.parse(configSource),
     identityRoutes,
     appSource,
-    policySource
+    policySource,
+    rewardSources: {
+      conquestDelivery,
+      leaderboardRewards,
+      playerRpc,
+      referralStickerRewards,
+      stripeCheckout
+    }
   })
   if (errors.length) {
-    for (const error of errors) process.stderr.write(`Off-chain gate: ${error}\n`)
+    for (const error of errors)
+      process.stderr.write(`Off-chain gate: ${error}\n`)
     process.exitCode = 1
     return
   }
@@ -82,6 +138,9 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

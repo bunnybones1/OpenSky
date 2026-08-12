@@ -96,11 +96,18 @@ export class SocialRepository {
         .all<FriendPointRow>(),
       this.database
         .prepare(
-          `SELECT COALESCE(SUM(balance), 0) AS total
-           FROM player_items
-           WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'`
+          `SELECT
+             COALESCE((
+               SELECT SUM(balance) FROM player_items
+               WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
+             ), 0) +
+             COALESCE((
+               SELECT MAX(required_points)
+               FROM referral_sticker_reward_awards
+               WHERE user_id = ? AND season = ?
+             ), 0) AS total`
         )
-        .bind(userId)
+        .bind(userId, userId, season)
         .first<{ total: number }>()
     ])
 

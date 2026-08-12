@@ -11,7 +11,11 @@ const validInput = () => ({
   policySource:
     'D1 inventory is the canonical authority. ' +
     'No game flow asks a player to mint a reward. ' +
-    'Apply the inventory change and fulfillment receipt in one D1 transaction.'
+    'Apply the inventory change and fulfillment receipt in one D1 transaction.',
+  rewardSources: {
+    example:
+      'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
+  }
 })
 
 test('current Cloudflare identity routing satisfies the off-chain gate', async () => {
@@ -61,6 +65,17 @@ test('rejects removal of an off-chain grant invariant', () => {
   const input = validInput()
   input.policySource = 'D1 inventory is the canonical authority.'
   assert.ok(
-    offchainGateErrors(input).some(error => error.includes('fulfillment receipt'))
+    offchainGateErrors(input).some(error =>
+      error.includes('fulfillment receipt')
+    )
   )
+})
+
+test('rejects a reward producer without D1 inventory and a receipt key', () => {
+  const input = validInput()
+  input.rewardSources = { unsafe: 'wallet.sendTransaction([])' }
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('canonical D1 inventory')))
+  assert.ok(errors.some(error => error.includes('idempotent receipt key')))
+  assert.ok(errors.some(error => error.includes('legacy transaction code')))
 })
