@@ -644,6 +644,23 @@ settlement and delayed delivery against that pool.
   remained one active and nine ended with no creating/failed rows and
   `changed_db: false`. Live API and game protocol-v3 health passed after the
   migration.
+- API/web Worker version `a8eacf61-d2b5-4825-bf2b-3b7ed8b48dbe` and game
+  Worker version `03392572-84e0-47cf-9f55-08dff28fbb41` contain source
+  `dab4ba6`. The source anonymous public-spectator path is restored without
+  weakening player authentication: public match-info returns only active
+  matches, the gateway replaces all browser identity headers with an ephemeral
+  `anonymous-*` identity, and the game Durable Object refuses that identity if
+  its principal collides with a participant. Anonymous viewers cannot enter the
+  matchmaker, recover a participant's private ended-match payload, join as a
+  player, or use account-owned stickers. The rollout passed all 150 API, 31
+  game-unit, and 69 game-Worker tests, both TypeScript checks, every
+  release/RPC/card/Conquest safety gate, and the 1.2 MB/8.9 MB Wrangler dry-run
+  bundles. Live app HTML, API `Ping`/version/mode status, game protocol-v3
+  health, anonymous active-match lookup, and a real anonymous spectator
+  WebSocket reconnect/list handshake passed; direct game-service upgrade was
+  rejected with `401`. A read-only production aggregate remained one active
+  and nine ended matches, zero active Conquest pools/runs/settlements/Gold
+  deliveries, and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

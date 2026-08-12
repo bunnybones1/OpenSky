@@ -179,6 +179,11 @@ and progress are not migrated.
 - The authoritative service preserves the original WASM state engine, WebSocket
   messages, bots, timers, reconnects, spectators, quests, XP, rank transitions,
   rewards, and replay archives.
+- Public live spectate links work without a Google session, matching the source
+  server's anonymous spectator entry. The same-origin gateway mints a fresh
+  `anonymous-*` identity for the WebSocket, while matchmaker entry, player join,
+  account-owned stickers, and participant-only ended-match recovery still
+  require the appropriate authenticated identity.
 - D1 backs identity profiles, decks, inventory, equipment, quests, SkyPass,
   match history, profile feed, competitive stats, item summary reads, and
   write-once social referrals with friend-point accrual. Public account lookup
