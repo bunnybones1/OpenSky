@@ -6,10 +6,10 @@
 - API/web Worker: `opensky-webapp` (`d7fe1517-3ce2-476f-a655-380ffcdd0c3c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`3847ce54-550f-4b7d-8c47-552af1833485`)
+- Game Worker: `cloud-weasel-game-server` (`00abd8fe-a501-4228-a579-edc9798c76a4`)
 - Deployed source includes `56c606d` for the API/web Worker, `72eece1` for the
-  loading-timer milestone, `1e31b4f` for the game Worker, and `309861e` for the
-  matchmaker and match service
+  loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
+  Worker, and `309861e` for the matchmaker and match service
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0047`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -581,6 +581,17 @@ settlement and delayed delivery against that pool.
   unit and 57 game-Worker tests, TypeScript checking, and the 8.9 MB Wrangler
   dry-run bundle. Live game health passed; a read-only production aggregate
   remained one active and nine ended matches and reported `changed_db: false`.
+- Game Worker version `00abd8fe-a501-4228-a579-edc9798c76a4` contains source
+  `1d14982`. Disconnect now preserves any existing player-owned commit/reveal
+  or active-turn deadline exactly while installing the independent, later
+  abandon deadline and keeping the Durable Object alarm on the earliest event.
+  Only the source owner-pending reveal case dispatches immediately and enters
+  normal state-transition timer calculation. This prevents disconnect from
+  shortening or extending a reveal/turn window without an authoritative
+  action. The rollout passed all 25 unit and 58 game-Worker tests, TypeScript
+  checking, and the 8.9 MB Wrangler dry-run bundle. Live game health passed; a
+  read-only production aggregate remained one active and nine ended matches and
+  reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
