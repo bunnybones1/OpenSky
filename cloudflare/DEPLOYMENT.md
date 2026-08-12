@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`85179357-10e9-44c1-b996-601de266a448`)
+- API/web Worker: `opensky-webapp` (`b0223357-9751-423e-9b19-3a4dbac023f8`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -12,12 +12,14 @@
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
   deadline milestone, `f5775cc` for half-open socket handling, `0438095` for
   Conquest settlement retry recovery, `dab4ba6` for anonymous public
-  spectating, `aa53dc7` for leaderboard reward projections, and `309861e` for
-  the matchmaker and match service
+  spectating, `aa53dc7` for leaderboard reward projections, `6cb51bf` for the
+  dormant leaderboard reward worker, and `309861e` for the matchmaker and
+  match service
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0048`
-- Scheduled trigger: every minute for due Conquest Gold delivery and account
-  anonymization
+- Applied D1 migrations: `0001` through `0049`
+- Scheduled trigger: every minute for due Conquest Gold delivery, account
+  anonymization, and explicitly configured leaderboard reward cycles. No
+  leaderboard schedule is configured in production.
 
 ## Verified scope
 
@@ -39,8 +41,10 @@
   card-library scoping, score/class/card filters, highest-player accounts, and
   score-zero rows for newly saved complete decks
 - Source-ranked player leaderboard reward projections, including the exact
-  Silver curve and Conquest-ticket rank boundaries; these are display-only
-  until the weekly distribution worker and schedule are ported
+  Silver curve and Conquest-ticket rank boundaries
+- A retry-safe, immutable weekly leaderboard reward snapshot and delivery
+  worker, deployed dormant until an explicit Cloud Weasel schedule is reviewed;
+  source rank resets and the next-reward countdown remain separate gates
 - Retry-safe ranked-constructed deck aggregation, including source Glicko
   transitions, Apprentice eligibility, match-status counters, current-season
   highest-player wins, a global Durable Object serializer, and D1 receipts
@@ -678,6 +682,22 @@ settlement and delayed delivery against that pool.
   asset build, and the 1.2 MB Wrangler dry-run bundle. Live Worker metadata
   reported the deployed version, app HTML returned `200`, and a public,
   no-store production query returned rank 1 with 10 Silver and two tickets.
+- API/web Worker version `b0223357-9751-423e-9b19-3a4dbac023f8` contains source
+  `6cb51bf`. Migration `0049_leaderboard_reward_worker.sql` adds immutable,
+  versioned schedule and cycle records, top-500 ranked-mode snapshots,
+  deterministic source-compatible Silver draws, identity-inventory ticket and
+  card grants, feed/notification receipts, bounded batches, retry recovery,
+  concurrency serialization, and five-attempt dead-letter handling. The
+  migration intentionally inserts no schedule: after multiple production cron
+  ticks, schedules, cycles, entries, awards, feed events, and linked
+  notifications all remained zero and the verification reported
+  `changed_db: false`; migration `0049` existed exactly once. The rollout passed
+  all 163 API tests, TypeScript checking, the 131/172 RPC guard, all 856-card
+  generation checks, release and Conquest gates, the production asset build,
+  and the 1.2 MB Wrangler dry-run bundle. Live Worker metadata, API `Ping`, app
+  HTML, and rank-one 10-Silver/two-ticket projection passed. Rank reset behavior,
+  `GetNextRewardsTime`, and production schedule activation remain explicit
+  rollout gates.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
