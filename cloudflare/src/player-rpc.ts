@@ -333,6 +333,10 @@ interface RawSkypassRewardRow {
   attributes: string | null
 }
 
+interface SkypassDefinitionRow extends RawSkypassRewardRow {
+  is_infinite: number
+}
+
 interface RankFeedRow {
   row_id: number
   game_mode: string
@@ -2611,7 +2615,7 @@ export class PlayerRpcRepository {
     userId: string,
     season: number
   ): Promise<{ levels: SkypassLevel[]; hasPremium: boolean }> {
-    const [rewardsResult, progression] = await Promise.all([
+    const [rewardsResult, progression, seasonStats] = await Promise.all([
       this.database
         .prepare(
           `SELECT reward.id, reward.level, reward.season, reward.tier,
@@ -2633,7 +2637,14 @@ export class PlayerRpcRepository {
           `SELECT basic_skypass_level FROM player_progression WHERE user_id = ?`
         )
         .bind(userId)
-        .first<ProgressionRow>()
+        .first<ProgressionRow>(),
+      this.database
+        .prepare(
+          `SELECT has_premium FROM player_skypass_season_stats
+           WHERE user_id = ? AND season = ?`
+        )
+        .bind(userId, season)
+        .first<{ has_premium: number }>()
     ])
     const progress = progression?.basic_skypass_level || 0
     const rewards = rewardsResult.results
@@ -2672,7 +2683,7 @@ export class PlayerRpcRepository {
     }
 
     return {
-      hasPremium: false,
+      hasPremium: seasonStats?.has_premium === 1,
       levels: [...grouped.entries()]
         .sort(([left], [right]) => left - right)
         .map(([level, levelRewards]) => ({
@@ -2683,6 +2694,50 @@ export class PlayerRpcRepository {
           )
         }))
     }
+  }
+
+  async listSkypassRewardDefinitions(season: number): Promise<SkypassReward[]> {
+    const rows = await this.database
+      .prepare(
+        `SELECT id, level, season, tier, item_type, amount, is_starter,
+                attributes, is_infinite
+         FROM skypass_rewards
+         WHERE season = ?
+         ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
+      )
+      .bind(season)
+      .all<SkypassDefinitionRow>()
+    return rows.results.map<SkypassReward>(row => ({
+      id: row.id,
+      level: row.level,
+      season: row.season,
+      tier: (row.tier === 2 ? 'PREMIUM' : 'FREE') as SkypassReward['tier'],
+      itemType: ITEM_TYPE_BY_ID[row.item_type] || ('UNKNOWN' as ItemType),
+      amount: row.amount,
+      isStarter: row.is_starter === 1,
+      isInfinite: row.is_infinite === 1,
+      attributes: parseAttributes(row.attributes),
+      claimable: false,
+      claimed: false
+    }))
+  }
+
+  async hasSkypassPremium(
+    accountReference: string,
+    season: number
+  ): Promise<boolean> {
+    if (!(await this.accountReferenceExists(accountReference))) {
+      throw notFound('account does not exist')
+    }
+    const userId = accountReference.slice('identity:'.length)
+    const row = await this.database
+      .prepare(
+        `SELECT has_premium FROM player_skypass_season_stats
+         WHERE user_id = ? AND season = ?`
+      )
+      .bind(userId, season)
+      .first<{ has_premium: number }>()
+    return row?.has_premium === 1
   }
 
   private cardCandidates(

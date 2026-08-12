@@ -8,6 +8,7 @@ import {
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
 import { PlayerRepository } from '../src/player'
+import { seasonFromDate } from '../src/legacy-seasons'
 
 const testEnv = env as unknown as Env
 const ADMIN = 'staff-admin'
@@ -564,5 +565,102 @@ describe('fail-closed Google identity staff authorization', () => {
         ).first<{ count: number }>()
       )?.count
     ).toBe(0)
+  })
+
+  it('lists source-shaped SkyPass definitions in source order for staff', async () => {
+    await env.AUTH_DB.prepare(
+      `INSERT INTO skypass_rewards
+         (level, season, tier, item_type, amount, is_starter, attributes,
+          updated_at, is_infinite)
+       VALUES (2, 999, 1, 500, 0, 1,
+               '{"tokenIDs":[2],"unlockDeckClasses":["AGY"]}', ?, 0),
+              (1, 999, 2, 403, 1, 0, NULL, ?, 0),
+              (2, 999, 1, 300, 1, 0,
+               '{"cardSetsExcluded":["HEXBOUND_INVASION"]}', ?, 1)`
+    )
+      .bind(
+        '2026-08-12T00:00:00.000Z',
+        '2026-08-12T00:00:00.000Z',
+        '2026-08-12T00:00:00.000Z'
+      )
+      .run()
+    expect(
+      (await rpcAs(PLAYER, 'GMListSkypassRewards', { season: 999 })).status
+    ).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMListSkypassRewards', {
+      season: 999
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      rewards: [
+        expect.objectContaining({
+          level: 1,
+          tier: 'PREMIUM',
+          itemType: 'SW_CONQUEST_TICKET',
+          isStarter: false,
+          claimable: false,
+          claimed: false
+        }),
+        expect.objectContaining({
+          level: 2,
+          tier: 'FREE',
+          itemType: 'SW_BASE_CARDS',
+          isStarter: false,
+          isInfinite: true
+        }),
+        expect.objectContaining({
+          level: 2,
+          tier: 'FREE',
+          itemType: 'SW_HERO',
+          isStarter: true,
+          attributes: expect.objectContaining({ tokenIDs: [2] })
+        })
+      ]
+    })
+  })
+
+  it('reads optional premium entitlements without creating or requiring wallets', async () => {
+    const season = seasonFromDate()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_skypass_season_stats
+         (user_id, season, has_premium, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?)`
+    )
+      .bind(PLAYER, season, now, now)
+      .run()
+    expect(
+      (
+        await rpcAs(PLAYER, 'GMHasSkypassPremium', {
+          address: `identity:${PLAYER}`
+        })
+      ).status
+    ).toBe(403)
+    await grantAdmin()
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMHasSkypassPremium', {
+          address: `identity:${PLAYER}`
+        })
+      ).json()
+    ).toEqual({ has: true })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMHasSkypassPremium', {
+          address: `identity:${ADMIN}`
+        })
+      ).json()
+    ).toEqual({ has: false })
+    expect(
+      await (await rpcAs(PLAYER, 'ListSkypassRewards', { season })).json()
+    ).toMatchObject({ res: { hasPremium: true } })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_skypass_season_stats`
+        ).first<{ count: number }>()
+      )?.count
+    ).toBe(1)
   })
 })

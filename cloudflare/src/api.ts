@@ -660,6 +660,26 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'GMListSkypassRewards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ season?: number }>(request)
+        const season = body.season || seasonFromDate()
+        return json(request, env, {
+          rewards: await playerRpc.listSkypassRewardDefinitions(season)
+        })
+      }
+
+      case 'GMHasSkypassPremium': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ address?: string }>(request)
+        if (!body.address) throw invalidArgument('address is required')
+        return json(request, env, {
+          has: await playerRpc.hasSkypassPremium(body.address, seasonFromDate())
+        })
+      }
+
       case 'GMIsAccountBanned': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
