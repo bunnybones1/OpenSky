@@ -52,19 +52,19 @@ test('separates explicit retirement and replacement decisions from real gaps', (
       'MigrateAccount',
       'InternalMatchStart',
       'PrepareOnChainTransaction',
-      'GetNextRewardsTime',
+      'JoinEarlyAccessList',
       'EntirelyNewSourceRPC'
     ]),
     {
       retired: ['MigrateAccount'],
       superseded: ['InternalMatchStart', 'PrepareOnChainTransaction'],
-      actionable: ['EntirelyNewSourceRPC', 'GetNextRewardsTime']
+      actionable: ['EntirelyNewSourceRPC', 'JoinEarlyAccessList']
     }
   )
 })
 
 test('fails closed when a source omission has no reviewed disposition', () => {
-  const implemented = Array.from({ length: 146 }, (_, index) => `Method${index}`)
+  const implemented = Array.from({ length: 147 }, (_, index) => `Method${index}`)
   const errors = checkRpcCoverage({
     source: [...implemented, 'EntirelyNewSourceRPC'],
     implemented: [...implemented, ...[

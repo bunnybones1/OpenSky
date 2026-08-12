@@ -13,23 +13,22 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     146 |
+| Ported source RPCs           |     147 |
 | Cloudflare-superseded RPCs   |      15 |
 | Deliberately retired RPCs    |       2 |
-| Actionable source RPC gaps   |       9 |
+| Actionable source RPC gaps   |       8 |
 | Cloudflare-only RPC adapters |       0 |
 
-Together, 163/172 source contracts (94.8%) are implemented, replaced by a
+Together, 164/172 source contracts (95.3%) are implemented, replaced by a
 reviewed Cloud Weasel contract, or intentionally retired. This is a product-
 intent measure; the audit still prints every raw source omission.
 
 ## Actionable workstreams
 
-| Workstream            | Actionable | Interpretation                                                                                                                                                                         |
-| --------------------- | ---------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mobile-store commerce |          5 | Apple, Google Play, and Samsung product/receipt integrations remain optional product work. Any fulfillment must grant idempotent off-chain inventory; it must never mint.              |
-| Reward schedule       |          1 | `GetNextRewardsTime` needs an explicit Cloud Weasel UTC schedule and the distribution worker contract behind it.                                                                       |
-| Social and launch     |          3 | Discord/Twitch information and the early-access list need Cloud Weasel product choices; they are not inferred from the zero-user migration decision.                                    |
+| Workstream            | Actionable | Interpretation                                                                                                                                                            |
+| --------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mobile-store commerce |          5 | Apple, Google Play, and Samsung product/receipt integrations remain optional product work. Any fulfillment must grant idempotent off-chain inventory; it must never mint. |
+| Social and launch     |          3 | Discord/Twitch information and the early-access list need Cloud Weasel product choices; they are not inferred from the zero-user migration decision.                      |
 
 All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
@@ -63,15 +62,21 @@ random identity-scoped keys, rate limiting, and deletion cleanup. It remains a
 fail-closed `503` after authentication in production until R2 is enabled on the
 Cloudflare account and a retention lifecycle is approved.
 
+`GetNextRewardsTime` now reads the same immutable D1 schedule version used by
+the weekly distribution worker and preserves the source's strictly-after-now
+weekly boundary. It fails explicitly with `503` while production has no active
+schedule, so the preserved UI cannot advertise an invented reward time.
+
 ## Recommended order
 
 1. Approve a versioned production Conquest pool and run the pre-enable
    settlement/delayed-delivery drill; the code path is implemented and deployed.
-2. Define an explicit Cloud Weasel UTC weekday/time and cadence for
-   `GetNextRewardsTime`. The original values were private runtime configuration
-   and are absent from this repository, so inventing them would not be a
-   faithful port. Deck-rank writes, public listing, and authenticated search are
-   now implemented and deployed.
+2. Define an explicit Cloud Weasel UTC weekday/time and add its immutable D1
+   schedule version. `GetNextRewardsTime` and the distribution worker share
+   that authority and are implemented; the original schedule values were
+   private runtime configuration and are absent from this repository, so
+   production remains deliberately unconfigured. Deck-rank writes, public
+   listing, and authenticated search are implemented and deployed.
 3. Define the confirmation and recovery contract for any future hard deletion.
    Identity-native soft deletion is now deployed: the original settings dialog
    uses fresh Google OIDC step-up, access stops immediately, and scheduled

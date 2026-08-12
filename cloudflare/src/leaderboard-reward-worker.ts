@@ -121,26 +121,7 @@ const activeSchedule = async (
   return schedule?.enabled === 1 ? schedule : null
 }
 
-const cycleBySchedule = async (
-  database: D1Database,
-  scheduleVersion: number,
-  scheduledAt: string
-): Promise<CycleRow | null> =>
-  database
-    .prepare(
-      `SELECT id, schedule_version, scheduled_at, season, week, random_seed,
-              status, attempt_count
-       FROM leaderboard_reward_cycles
-       WHERE schedule_version = ? AND scheduled_at = ?`
-    )
-    .bind(scheduleVersion, scheduledAt)
-    .first<CycleRow>()
-
-const nextDueTime = async (
-  database: D1Database,
-  schedule: ScheduleRow,
-  now: Date
-): Promise<Date | null> => {
+const validatedFirstRun = (schedule: ScheduleRow): Date => {
   if (
     schedule.first_run_at === null ||
     schedule.weekday_utc === null ||
@@ -163,6 +144,48 @@ const nextDueTime = async (
   ) {
     throw new Error('leaderboard reward schedule is malformed')
   }
+  return first
+}
+
+/**
+ * Returns the next configured weekly boundary strictly after `now`, matching
+ * the legacy GetNextRewardsTime contract. A missing or explicitly disabled
+ * schedule stays distinguishable from a real date so callers never advertise
+ * an invented reward cadence.
+ */
+export const nextLeaderboardRewardTime = async (
+  database: D1Database,
+  now = new Date()
+): Promise<Date | null> => {
+  const schedule = await activeSchedule(database, now)
+  if (!schedule) return null
+  const first = validatedFirstRun(schedule)
+  if (first.getTime() > now.getTime()) return first
+  const elapsedWeeks = Math.floor((now.getTime() - first.getTime()) / WEEK_MS)
+  return new Date(first.getTime() + (elapsedWeeks + 1) * WEEK_MS)
+}
+
+const cycleBySchedule = async (
+  database: D1Database,
+  scheduleVersion: number,
+  scheduledAt: string
+): Promise<CycleRow | null> =>
+  database
+    .prepare(
+      `SELECT id, schedule_version, scheduled_at, season, week, random_seed,
+              status, attempt_count
+       FROM leaderboard_reward_cycles
+       WHERE schedule_version = ? AND scheduled_at = ?`
+    )
+    .bind(scheduleVersion, scheduledAt)
+    .first<CycleRow>()
+
+const nextDueTime = async (
+  database: D1Database,
+  schedule: ScheduleRow,
+  now: Date
+): Promise<Date | null> => {
+  const first = validatedFirstRun(schedule)
   const latest = await database
     .prepare(
       `SELECT scheduled_at, status FROM leaderboard_reward_cycles

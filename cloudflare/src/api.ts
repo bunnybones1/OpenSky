@@ -66,6 +66,7 @@ import {
   seasonFromDate,
   seasonName
 } from './legacy-seasons'
+import { nextLeaderboardRewardTime } from './leaderboard-reward-worker'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
 import { listPaymentProviderProducts } from './payment-provider-products'
@@ -1075,7 +1076,9 @@ export const handleApiRequest = async (
       case 'GMUpdateSkypassRewards': {
         const principal = await identityPrincipal(request, env)
         await staff.requireSkypassRewardWrite(principal.userId)
-        const body = await requestBody<{ season?: number; url?: string }>(request)
+        const body = await requestBody<{ season?: number; url?: string }>(
+          request
+        )
         const skypassRewardUpdates = new SkypassRewardUpdateRepository(
           env.AUTH_DB,
           services.skypassRewardFetch,
@@ -1992,6 +1995,18 @@ export const handleApiRequest = async (
 
       case 'GetNextSeasonTime': {
         return json(request, env, { res: nextSeasonStart().toISOString() })
+      }
+
+      case 'GetNextRewardsTime': {
+        const next = await nextLeaderboardRewardTime(env.AUTH_DB)
+        if (!next) {
+          throw new RpcError(
+            503,
+            'webrpc.unavailable',
+            'leaderboard reward schedule is not configured'
+          )
+        }
+        return json(request, env, { res: next.toISOString() })
       }
 
       case 'RecordGameClientFeedback': {

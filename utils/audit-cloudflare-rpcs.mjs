@@ -95,7 +95,6 @@ export const SUPERSEDED_SOURCE_RPCS = new Set([
 
 export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([
   'GetDiscordInfo',
-  'GetNextRewardsTime',
   'GetTwitchInfo',
   'IAPVerifyAppleProducts2',
   'IAPVerifyGoogleProducts2',
@@ -121,7 +120,7 @@ export const partitionRpcGaps = methods => ({
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 146) {
+  if (audit.implemented.length < 147) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
   for (const method of CRITICAL_METHODS) {

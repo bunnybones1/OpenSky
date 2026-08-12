@@ -7,6 +7,7 @@ import { ContentRepository } from '../src/content'
 import {
   leaderboardRewardCardIds,
   mostRecentLeaderboardRewardTime,
+  nextLeaderboardRewardTime,
   runDueLeaderboardRewards
 } from '../src/leaderboard-reward-worker'
 import { seasonStart } from '../src/legacy-seasons'
@@ -215,6 +216,31 @@ describe('weekly leaderboard reward worker', () => {
         new Date(FIRST_RUN.getTime() + 3 * WEEK_MS + 12_345)
       )?.toISOString()
     ).toBe(new Date(FIRST_RUN.getTime() + 3 * WEEK_MS).toISOString())
+  })
+
+  it('reports the next configured boundary strictly after now', async () => {
+    expect(await nextLeaderboardRewardTime(env.AUTH_DB, NOW)).toBeNull()
+
+    await enableSchedule()
+    expect(
+      (
+        await nextLeaderboardRewardTime(
+          env.AUTH_DB,
+          new Date(FIRST_RUN.getTime() - 1)
+        )
+      )?.toISOString()
+    ).toBe(FIRST_RUN.toISOString())
+    expect(
+      (await nextLeaderboardRewardTime(env.AUTH_DB, FIRST_RUN))?.toISOString()
+    ).toBe(new Date(FIRST_RUN.getTime() + WEEK_MS).toISOString())
+    expect(
+      (
+        await nextLeaderboardRewardTime(
+          env.AUTH_DB,
+          new Date(FIRST_RUN.getTime() + 3 * WEEK_MS + 12_345)
+        )
+      )?.toISOString()
+    ).toBe(new Date(FIRST_RUN.getTime() + 4 * WEEK_MS).toISOString())
   })
 
   it('uses only source-valid, non-Hexbound reward cards', async () => {
