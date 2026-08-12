@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`599c8f8f-0c32-4d53-876c-5f9f40d13043`)
-- Match service Worker: `cloud-weasel-match-service` (`80e109e1-ba12-4858-8b67-2327a87e195f`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`d0c2f800-7ea9-43b5-8e1f-bc51ca590ed3`)
+- Match service Worker: `cloud-weasel-match-service` (`91d51aae-89de-4269-a4e1-39909b857ed1`)
 - Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
-- Deployed source includes `492cd47` across the API/web, match service, and game
-  Workers, plus `d4b59c2` for the matchmaker
+- Deployed source includes `492cd47` across the API/web and game Workers, plus
+  `cd4832d` for the match service and matchmaker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -321,6 +321,16 @@ settlement and delayed delivery against that pool.
   the corresponding Go validator/matcher suites passed. Live protocol-v3
   health, API `Ping`, and the `/game/cloudflare/` client path passed after
   deployment.
+- Match service version `91d51aae-89de-4269-a4e1-39909b857ed1` and matchmaker
+  version `d0c2f800-7ea9-43b5-8e1f-bc51ca590ed3` contain source `cd4832d`.
+  Discovery/challenge admission now preserves the source random-deck and
+  nonempty-session contract, final dispatch rechecks deck and queued-session
+  integrity, and challenge codes reach the game payload. The rollout passed 31
+  matchmaker unit, 20 matchmaker Worker, and 17 match-service Worker tests,
+  affected-package type checking, the release/Conquest deployment gates, and
+  corresponding Go validator/matcher suites. Live protocol-v3 health, API
+  `Ping`, public mode status, game client HTML, and the game Worker health probe
+  passed; both Conquest queues remain disabled.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
