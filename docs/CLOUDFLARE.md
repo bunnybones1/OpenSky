@@ -227,6 +227,12 @@ and progress are not migrated.
   replay capabilities for their matches, while other signed-in users can only
   inspect ranked/Conquest records with the replay ID redacted. Practice and
   challenge records remain private.
+- Match-scoped opponent reporting now preserves the source participant,
+  opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
+  Google identity owns the report, while the principal-shaped address emitted
+  by the preserved game UI is accepted only as a lookup for that match's actual
+  opponent. Reports enter a pending D1 moderation queue, and one row per
+  reporter/match makes reconnect retries idempotent.
 - Epic quest-chain reads combine claimed assignment history, the active step,
   and zero-ID previews derived from the exact generated source quest specs.
 - The original Invite Friends screens are mounted for Google identities. New

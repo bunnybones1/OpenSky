@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 90 |
-| Remaining source RPCs | 82 |
+| Ported source RPCs | 91 |
+| Remaining source RPCs | 81 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -26,7 +26,7 @@ count or the critical player-facing compatibility set regresses.
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
 | Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
-| Other product | 2 | Account reporting and game-client feedback. |
+| Other product | 1 | Private game-client feedback storage and retention. |
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are
@@ -36,16 +36,13 @@ it cannot drift from the repository.
 
 ## Next product contracts
 
-The two remaining "other product" methods need storage and abuse boundaries,
-not only handler translations:
+The remaining "other product" method needs private storage and abuse
+boundaries, not only a handler translation. `ReportAccount` is now deployed
+with its source participant/opponent checks, plain-text sanitization,
+4,000-byte cap, pending moderation state, and an auditable Google-identity
+record. It accepts the principal-shaped opponent address used by the original
+game UI only as a match-local lookup, never as authentication.
 
-- `ReportAccount` is authenticated and match-scoped. The source rejects a
-  missing report, self-reporting, reports from non-participants, and reports
-  against anyone other than the reporter's opponent in that match. It strips
-  markup from comments, truncates them to 4,000 characters, and creates a
-  pending account signal. The Cloudflare port should preserve all of those
-  checks, use the Google-backed account identity rather than treating a wallet
-  address as authentication, and retain an auditable moderation record.
 - `RecordGameClientFeedback` is authenticated and writes a private JSON dump
   plus an optional base64 JPEG. The Cloudflare equivalent should use a private
   R2 bucket, enforce body/image size and MIME limits before decoding, avoid
@@ -62,7 +59,8 @@ not only handler translations:
    and are absent from this repository, so inventing them would not be a
    faithful port. Deck-rank writes, public listing, and authenticated search are
    now implemented and deployed.
-3. Add identity-native account lifecycle and reporting, with audit trails.
+3. Define the destructive confirmation and recovery contract for
+   identity-native account deletion; match-scoped reporting is now deployed.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.
 5. Add an explicit staff identity/RBAC model before porting any GM/admin write.

@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`3661358a-e27a-443b-aa23-1c3b6b7ac41e`)
+- API/web Worker: `opensky-webapp` (`4df9b855-0df9-4f19-b150-9ad58979474b`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `b612af3` for web/API and game, plus the match-service
-  inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
+- Deployed source includes `2c80321` for web/API and `b612af3` for game, plus the
+  match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0029`
+- Applied D1 migrations: `0001` through `0030`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -48,6 +48,9 @@
   original Invite Friends screens
 - Profile reward/rank feed and competitive match history
 - Source match lookup privacy with participant-only replay capabilities
+- Authenticated, match-scoped opponent reports with source rejection rules,
+  plain-text sanitization, UTF-8 byte caps, pending moderation state, and
+  retry-safe identity audit records
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -66,7 +69,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 18 files, 100 tests
+- API Worker: 19 files, 106 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -80,6 +83,9 @@ settlement and delayed delivery against that pool.
   completion receipts before the first new ranked match; the public list was
   empty, authenticated search rejected anonymous access, and the read-only
   verification reported `changed_db: false`
+- Remote D1 after migration `0030`: zero account-report records before the first
+  player report; anonymous submission returned `401`, the live version matched
+  the deployment, and the read-only verification reported `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`
