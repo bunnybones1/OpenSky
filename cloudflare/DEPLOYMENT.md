@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`21078126-9518-4fe8-8ff0-0e6767189f0d`)
+- API/web Worker: `opensky-webapp` (`58127ee0-0c68-4dd2-9a67-f8dde44f9b0c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -29,9 +29,10 @@
   off-chain ledger, `db134d0` for Samsung purchase verification, and
   `1b141eb` for Google Play verification, and `e713f20` for explicit legacy
   mobile/early-access tombstones, and `0442374` for Apple App Store Server API
-  verification
+  verification, plus `0fc801e`/`0895054` for the off-chain Gold-to-Hero-skin
+  exchange and its preserved original-product interface
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0062`
+- Applied D1 migrations: `0001` through `0063`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -71,6 +72,9 @@
 - Source deck ownership, class-unlock, and partial-deck validation checks
 - Atomic, owner-scoped deck favorite toggling
 - Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads
+- Original Hero-skin carousel, order review, and owned-Gold selection flow,
+  backed in Google-auth mode by a retry-safe, atomic 10-Gold-to-one-Hero-skin
+  D1 exchange instead of a mint or wallet transaction
 - Durable Conquest entry, status, statistics, points, and source treasure thresholds
 - Retry-safe authoritative Conquest win/loss/draw and terminal-state progression
 - Source Conquest treasure points from matches, owned deck cards, and hero skins
@@ -1053,6 +1057,20 @@ settlement and delayed delivery against that pool.
   and Samsung all returned `401`; mobile payments remained zero, inventory
   remained 31 rows, and the read-only D1 check reported zero writes and
   `changed_db: false`.
+- API/web Worker version `58127ee0-0c68-4dd2-9a67-f8dde44f9b0c` contains Hero
+  exchange milestones `0fc801e` and `0895054`. Migration
+  `0063_hero_skin_offchain_exchange.sql` adds immutable, idempotent exchange
+  receipts and database-enforced inventory/price guards. Google-auth players
+  use the original Hero carousel, review dialog, and Gold-card picker, while a
+  same-origin authenticated API atomically debits exactly ten owned Gold cards
+  and credits one identity-owned Hero skin without a wallet, USDC, on-chain
+  transaction, or mint. The Worker suite passed all 268 tests; TypeScript, all
+  reward and transaction gates, and the complete 472-file browser/game build
+  passed. A signed-in production browser check exercised the carousel, review
+  dialog, and picker without submitting an exchange and found no console
+  errors. The anonymous endpoint probe returned `401`; migration `0063` exists
+  once, Hero exchanges remained zero, inventory remained 31 rows, and both
+  read-only D1 checks reported zero writes and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
