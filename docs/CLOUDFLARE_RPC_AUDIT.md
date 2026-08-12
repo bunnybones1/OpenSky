@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 117 |
-| Remaining source RPCs | 55 |
+| Ported source RPCs | 119 |
+| Remaining source RPCs | 53 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 25 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 23 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -107,3 +107,10 @@ Match-review state now follows a separate dormant `MODERATION_WRITE` boundary.
 The source boolean transition is persisted alongside the authoritative match,
 identical retries are no-ops, and only real before/after changes enter the
 immutable audit ledger. Production has no moderation-writer grants.
+
+Game-mode operations are also ported as a coupled contract. The status and
+history RPCs use D1 as the shared authority for the public API, matchmaker
+admission, and final match dispatch. Writes require the dormant
+`GAME_MODE_WRITE` capability and append immutable source-shaped history.
+Conquest has an additional database-enforced active-pool plus recorded-drill
+gate, so a broad administrator cannot accidentally bypass the reward rollout.

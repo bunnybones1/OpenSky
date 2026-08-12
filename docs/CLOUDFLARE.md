@@ -196,8 +196,14 @@ and progress are not migrated.
   preserves exact deck, class, and contained-card filters including score-zero
   rows.
 - Public game-mode status comes from the separately deployed match service over
-  an authenticated Cloudflare service binding, so the UI and queue admission
-  agree that Conquest is still disabled. D1-backed Ping, server Clock, current
+  an authenticated Cloudflare service binding. D1 is now the shared operational
+  authority for that public read, matchmaker profile admission, and final
+  accepted-match dispatch, so a queue switch cannot be ignored by one service.
+  `GMGameModeSet` needs both `ADMIN` and a separately provisioned
+  `GAME_MODE_WRITE` permission; every successful source-compatible invocation
+  enters immutable history. Conquest enablement additionally requires an active
+  reward pool and an out-of-band readiness record for the completed drill, so
+  it remains disabled. D1-backed Ping, server Clock, current
   SkyPass hero-unlock levels, and the authenticated source XP-bonus read are
   also ported. The source Version RPC derives schema fields from the generated
   client and reports Cloudflare's actual Worker Version Metadata ID.

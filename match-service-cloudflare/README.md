@@ -9,11 +9,14 @@ compatible bot participants, and dispatches an idempotent match creation call.
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current
 rank/MMR, card rarities, recent-match state, enabled modes, and active-match
-reconnection data from D1. Ranked queues additionally enforce the source's
+reconnection data from D1. Operational queue switches also come from the same
+D1 state used by the public API and are rechecked before accepted-match
+dispatch. Ranked queues additionally enforce the source's
 200-total-XP requirement on the server; the original UI lock is not treated as
 an authorization boundary. Conquest settlement and delayed delivery are
 ported, but its modes remain deliberately disabled until an approved production
-reward pool passes the end-to-end enablement drill.
+reward pool passes the end-to-end enablement drill and receives a separate
+readiness record.
 
 The endpoint is not public. `cloud-weasel-matchmaker` calls
 `POST /internal/matches` over a Cloudflare service binding. Both Workers must

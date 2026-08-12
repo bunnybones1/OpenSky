@@ -3,14 +3,15 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`d6a00372-2fee-4044-abf0-e5b45862b86d`)
+- API/web Worker: `opensky-webapp` (`c67f5725-04bd-47f3-a3f1-067cfb7e3aa0`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
-- Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
+- Match service Worker: `cloud-weasel-match-service` (`41d03d01-b64d-40b5-96b9-2be1f61afdf6`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `68fe9f0` for web/API and `b612af3` for game, plus the
+- Deployed source includes `ef7fc36` for web/API and match service and `b612af3`
+  for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0036`
+- Applied D1 migrations: `0001` through `0037`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -84,6 +85,10 @@
   provisioned `MODERATION_WRITE` permission, with retry-idempotent state writes
   and immutable transition-only audits; production currently has no grants or
   review rows
+- Source game-mode writes and status history behind both `ADMIN` and a dormant
+  `GAME_MODE_WRITE` permission, with D1 as the shared authority for public
+  status, matchmaker admission, and accepted-match dispatch; Conquest also
+  requires an active pool and a separate recorded enablement drill
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -103,8 +108,8 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 130 tests
-- Match service: 9 Worker tests
+- API Worker: 21 files, 132 tests
+- Match service: 10 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
@@ -168,6 +173,13 @@ settlement and delayed delivery against that pool.
   rows, or review-audit rows, version metadata matched
   `d6a00372-2fee-4044-abf0-e5b45862b86d`, and every D1 read reported
   `changed_db: false`
+- Live `GMGameModeSet` and `GMGameModeStatusHistory` probes returned `401`
+  without a session after edge propagation; migration `0037` was present and
+  the public status stayed unchanged with both Conquest queues disabled.
+  Production retained zero game-mode writer grants, history rows, or Conquest
+  readiness approvals; version metadata on the live routes propagated to
+  `c67f5725-04bd-47f3-a3f1-067cfb7e3aa0` from source `ef7fc36`, and every D1
+  verification read reported `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   `CLOUDFLARE_ACCOUNT_ID=528badc1c29c30196335df252a73c5a6` explicitly even
   though `wrangler.jsonc` pins that account; the first `0035` attempt failed
