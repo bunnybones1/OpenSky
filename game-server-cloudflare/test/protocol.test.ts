@@ -58,6 +58,24 @@ describe('game WebSocket protocol validation', () => {
     }
   })
 
+  it('requires emotes to use exactly one source union variant', () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({ type: 'emote', sticker: 5 })
+      )
+    ).toEqual({ type: 'emote', sticker: 5 })
+    for (const message of [
+      { type: 'emote' },
+      { type: 'emote', emote: 'gg', sticker: 5 },
+      { type: 'emote', chat: 'hello', emote: 'hello' },
+      { type: 'emote', sticker: Number.MAX_SAFE_INTEGER + 1 }
+    ]) {
+      expect(() => parseClientMessage(JSON.stringify(message))).toThrow(
+        'invalid emote'
+      )
+    }
+  })
+
   it('rejects binary, malformed, and unsupported messages', () => {
     expect(() => parseClientMessage(new ArrayBuffer(1))).toThrow(
       'binary messages are not supported'

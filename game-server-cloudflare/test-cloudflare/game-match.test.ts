@@ -1186,6 +1186,25 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
   })
 
+  it('rejects player stickers outside the accepted match equipment', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const second = await connect(PRINCIPAL_2)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const rejected = nextMessage(first)
+    first.send(JSON.stringify({ type: 'emote', sticker: 999 }))
+    expect(await rejected).toMatchObject({
+      type: 'error',
+      message: 'Error: player used unowned sticker'
+    })
+  })
+
   it('restores public and private spectator state without exposing it to public viewers', async () => {
     await insertSpectateIdentities()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])

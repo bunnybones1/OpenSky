@@ -132,12 +132,13 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
       return value as unknown as AcceptedClientMessage
     case 'emote':
       if (
-        !(
-          (typeof value.emote === 'string' &&
-            Emotes.includes(value.emote as never)) ||
-          (typeof value.chat === 'string' && value.chat.length <= 500) ||
-          (Number.isInteger(value.sticker) && (value.sticker as number) >= 0)
-        )
+        [
+          typeof value.emote === 'string' &&
+            Emotes.includes(value.emote as never),
+          typeof value.chat === 'string' && value.chat.length <= 500,
+          Number.isSafeInteger(value.sticker) &&
+            (value.sticker as number) >= 0
+        ].filter(Boolean).length !== 1
       ) {
         throw new GameProtocolError('invalid emote')
       }

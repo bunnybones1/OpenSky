@@ -36,7 +36,7 @@ const account = (id: number, address: string, name: string) =>
     address,
     name,
     prisms: ['str'],
-    deckEquipment: { stickers: [] }
+    deckEquipment: { stickers: [5] }
   }) as unknown as AccountWithPrismsAndCosmeticsInfo
 
 export const createMatchFixture = (

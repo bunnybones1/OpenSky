@@ -1085,6 +1085,17 @@ export class GameMatch implements DurableObject {
     }
     const principal = attachment.principal
     const player = players[principal]
+    if ('sticker' in message) {
+      const participant =
+        this.playerIndex(metadata.match, principal) === 0
+          ? metadata.match.player1
+          : metadata.match.player2
+      if (
+        !participant.account.deckEquipment?.stickers?.includes(message.sticker)
+      ) {
+        throw new GameProtocolError('player used unowned sticker')
+      }
+    }
     const now = Date.now()
     const sinceFirst = now - player.lastEmoteTimestamps[0]
     const sinceLast = now - player.lastEmoteTimestamps[2]
