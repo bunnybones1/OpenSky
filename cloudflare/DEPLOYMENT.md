@@ -3,15 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`5a690489-47ec-4d67-b014-f4fecd949263`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`a6f9470b-2c72-4428-8c5a-d11bd9bea3d2`)
-- Match service Worker: `cloud-weasel-match-service` (`04dd3921-94a6-4016-bd5a-0608d3025545`)
-- Game Worker: `cloud-weasel-game-server` (`3535d130-8e3d-47f4-bbe7-d730eeacb389`)
-- Deployed source includes `9fb4e7c` for the API and `c80d59b` for the webapp,
-  `cae1ea6` for match service and matchmaker,
-  and `fbe7080` for game
+- API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`eddc0240-7eb6-4ceb-8798-6eb484b30779`)
+- Match service Worker: `cloud-weasel-match-service` (`80e109e1-ba12-4858-8b67-2327a87e195f`)
+- Game Worker: `cloud-weasel-game-server` (`51d2a5be-f080-40e4-88cb-a012422be4cf`)
+- Deployed source includes `492cd47` across the API/web, matchmaker, match
+  service, and game Workers
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0044`
+- Applied D1 migrations: `0001` through `0045`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
   anonymization
 
@@ -43,6 +42,9 @@
 - Durable Conquest entry, status, statistics, points, and source treasure thresholds
 - Retry-safe authoritative Conquest win/loss/draw and terminal-state progression
 - Source Conquest treasure points from matches, owned deck cards, and hero skins
+- Faithful per-participant matchmaking modes, including source-compatible mixed
+  Practice-PvP/ranked-constructed matches without awarding or persisting ranked
+  progression for the Practice participant
 - Versioned Conquest card pools, exact zero-through-three-win source bundles,
   independent Silver draws, and immutable retry-safe settlement receipts
 - Immediate identity-inventory Silver grants plus source-compatible 24-hour
@@ -152,10 +154,10 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 22 files, 145 tests
-- Match service: 11 Worker tests
-- Game Worker: 24 unit and 46 Worker tests
-- Matchmaker: 26 unit and 16 Worker tests
+- API Worker: 22 files, 146 tests
+- Match service: 14 Worker tests
+- Game Worker: 24 unit and 48 Worker tests
+- Matchmaker: 26 unit and 17 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
   production build
 - Card-library generator, source-RPC inventory, and production Conquest gates
@@ -301,6 +303,16 @@ settlement and delayed delivery against that pool.
   Their 11 match-service, 26 unit, and 16 Worker tests passed before deployment.
   Live matchmaker protocol-v3 health, public API `Ping`, and the API-to-match-
   service mode-status binding passed; both Conquest queues remained disabled.
+- API/web version `523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`, match service
+  version `80e109e1-ba12-4858-8b67-2327a87e195f`, matchmaker version
+  `eddc0240-7eb6-4ceb-8798-6eb484b30779`, and game version
+  `51d2a5be-f080-40e4-88cb-a012422be4cf` contain source `492cd47`.
+  Migration `0045` existed exactly once, and all 10 existing match rows had
+  both participant modes backfilled with no nulls; the read-only verification
+  reported `changed_db: false`. The live API `Ping`, public mode status, and
+  both protocol-v3 health probes passed, with both Conquest queues still
+  disabled. The rollout passed 146 API, 14 match-service, 24 game-unit, 48
+  game-Worker, 26 matchmaker-unit, and 17 matchmaker-Worker tests.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

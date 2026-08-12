@@ -212,6 +212,13 @@ and progress are not migrated.
   Final dispatch re-reads those preconditions (and ranked eligibility) from D1;
   a stale proposal is terminated with a typed client error instead of being
   retried indefinitely.
+  Each accepted match now preserves both participants' requested game modes
+  instead of collapsing them into one row-level value. This retains the source
+  Practice-PvP/ranked-constructed mixed-pair rule while ensuring reconnects,
+  history, account/deck rating settlement, Conquest progression, and public
+  visibility use the correct participant-specific eligibility. Final dispatch
+  also re-derives both human principals from D1 rather than trusting queued
+  identity snapshots.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active
