@@ -14,7 +14,7 @@ import type {
   Player,
   SkyWeaver,
   Zone
-} from '@skyweaver/state-node-sys'
+} from '@skyweaver/state-metadata'
 
 // Source of truth for synced card data - card mutations should only be done to items in this map
 let cardCache: CardCache

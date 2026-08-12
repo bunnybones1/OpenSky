@@ -1,8 +1,8 @@
 import { decode, encode, VERSION } from '@opensky/deck-string-codec'
 import { MatchLogStateInit, MatchLog } from '@opensky/shared/matchLog'
+import { gameStateReviver } from '@opensky/shared/gameStateSerializer'
 import { GameMode, DeckType } from '@opensky/proto'
 import { initializeCardCache, getCardCache } from './cardCache'
-import * as ethers from 'ethers'
 import {
   CardLibrary,
   PlayerAction,
@@ -15,11 +15,77 @@ import {
   PlayerSecret,
   Secret
 } from '@skyweaver/state-metadata'
-import { WasmMatch } from '@skyweaver/state-node-sys'
 
-interface Action {
+export interface ReplayAction {
   diffs: string[]
   timestamp: Date
+}
+
+export interface AnalyticsMatchRuntime {
+  raw_apply(diff: Uint8Array): void
+  readonly state: unknown
+  secret(player: number): unknown
+  free(): void
+}
+
+export interface AnalyticsMatchRuntimeConstructor {
+  new (
+    player: number | undefined,
+    root: Uint8Array,
+    secret: unknown,
+    p2p: boolean,
+    ready: Function,
+    sign: Function,
+    send: Function,
+    log: Function,
+    random: Function,
+    noVersionCheck?: boolean
+  ): AnalyticsMatchRuntime
+}
+
+export interface ParsedReplay {
+  initLog: MatchLogStateInit
+  actions: ReplayAction[]
+  highestSeenTime: number
+}
+
+export const parseReplayLogs = (matchLogJSONs: Array<string>): ParsedReplay => {
+  const firstRecord = JSON.parse(matchLogJSONs[0], gameStateReviver)
+  if (!Array.isArray(firstRecord) || firstRecord[0]?.type !== 'init') {
+    throw new Error('Replay does not start with an init log')
+  }
+  const initLog = firstRecord[0] as MatchLogStateInit
+  const actions: ReplayAction[] = []
+  let highestSeenTime = 0
+  stop: for (let i = 1; i < matchLogJSONs.length; i++) {
+    const archiveRecords: MatchLog[] = JSON.parse(
+      matchLogJSONs[i],
+      gameStateReviver
+    )
+    if (!Array.isArray(archiveRecords)) {
+      throw new Error(`Replay record ${i} is not an array`)
+    }
+    for (const record of archiveRecords) {
+      if (record.type === 'gameplay' && record.message.type === 'gameplay') {
+        const time = Date.parse(record.timestamp as unknown as string)
+        // Workaround retained from the source analytics service. Development
+        // environments can reuse match IDs, so a replay that jumps backwards
+        // belongs to an older run and all following records must be ignored.
+        if (time < highestSeenTime) {
+          console.warn(
+            'Dev replay bug workaround: Replay jumped into the past, ignoring further frames.'
+          )
+          break stop
+        }
+        highestSeenTime = time
+        actions.push({
+          diffs: record.message.data,
+          timestamp: new Date(record.timestamp)
+        })
+      }
+    }
+  }
+  return { initLog, actions, highestSeenTime }
 }
 
 type PlayerActionWithBaseCard =
@@ -131,35 +197,14 @@ export interface MatchData {
 }
 export class Game {
   lastActionAppliedTime: Date
-  static async loadMatch(matchID: number, matchLogJSONs: Array<string>) {
-    const initLog = JSON.parse(matchLogJSONs[0])[0] as MatchLogStateInit
-    const actions: Action[] = []
-    let highestSeenTime = 0
-    stop: for (let i = 1; i < matchLogJSONs.length; i++) {
-      const archiveRecords: MatchLog[] = JSON.parse(matchLogJSONs[i])
-      for (const record of archiveRecords) {
-        if (record.type === 'gameplay' && record.message.type === 'gameplay') {
-          const time = Date.parse(record.timestamp as unknown as string)
-          // Workaround for dev re-using match IDs
-          // Dev envs might upload to the same S3 path as another old match,
-          // so if our replay suddenly jumps into the past,
-          // stop reading it.
-          if (time < highestSeenTime) {
-            console.warn(
-              'Dev replay bug workaround: Replay jumped into the past, ignoring further frames.'
-            )
-            break stop
-          }
-          highestSeenTime = time
-          actions.push({
-            diffs: record.message.data,
-            timestamp: new Date(record.timestamp)
-          })
-        }
-      }
-    }
+  static async loadMatch(
+    matchID: number,
+    matchLogJSONs: Array<string>,
+    Runtime: AnalyticsMatchRuntimeConstructor
+  ) {
+    const { initLog, actions, highestSeenTime } = parseReplayLogs(matchLogJSONs)
     try {
-      const game = new Game(initLog, actions, matchID)
+      const game = new Game(initLog, actions, matchID, Runtime)
       return game.matchData
     } catch (err) {
       return {
@@ -178,13 +223,18 @@ export class Game {
   private gameStateData: GameStateData[] = []
   matchData: MatchData
 
-  constructor(initLog: MatchLogStateInit, actions: Action[], matchID: number) {
+  constructor(
+    initLog: MatchLogStateInit,
+    actions: ReplayAction[],
+    matchID: number,
+    Runtime: AnalyticsMatchRuntimeConstructor
+  ) {
     this.lastActionAppliedTime = new Date(initLog.timestamp)
     this.moveCount = 0
     initializeCardCache(0)
-    const store = new WasmMatch(
+    const store = new Runtime(
       undefined,
-      ethers.utils.arrayify(initLog.rootProof),
+      hexToBytes(initLog.rootProof),
       initLog.secrets,
       true,
       () => {
@@ -294,7 +344,7 @@ export class Game {
     try {
       for (const action of actions) {
         for (const diff of action.diffs) {
-          store.raw_apply(ethers.utils.arrayify(diff))
+          store.raw_apply(hexToBytes(diff))
           this.lastActionAppliedTime = action.timestamp
         }
 
@@ -628,4 +678,16 @@ function decodeDeckstringOrPanic(deckstring: string): BaseCard[] {
     throw new Error(`Failed to decode deckstring: ${deckstring}\n${s}`)
   }
   return s[2] as BaseCard[]
+}
+
+function hexToBytes(value: string): Uint8Array {
+  const hex = value.startsWith('0x') ? value.slice(2) : value
+  if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(hex)) {
+    throw new Error('Invalid replay hex data')
+  }
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let index = 0; index < bytes.length; index++) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+  }
+  return bytes
 }

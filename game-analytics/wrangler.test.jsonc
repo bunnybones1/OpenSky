@@ -1,0 +1,5 @@
+{
+  "name": "cloud-weasel-game-analytics-test",
+  "main": "src/cloudflareRuntime.ts",
+  "compatibility_date": "2026-07-15"
+}

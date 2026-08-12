@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:offchain && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:offchain && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -24,6 +24,7 @@
     "check:cloudflare:offchain": "node --test ./utils/check-cloudflare-offchain-gate.test.mjs && node ./utils/check-cloudflare-offchain-gate.mjs",
     "check:cloudflare:mint-queues": "node --test ./utils/audit-cloudflare-mint-queues.test.mjs && node ./utils/audit-cloudflare-mint-queues.mjs",
     "check:cloudflare:browser-transactions": "node --test ./utils/audit-cloudflare-browser-transactions.test.mjs && node ./utils/audit-cloudflare-browser-transactions.mjs",
+    "check:cloudflare:analytics": "pnpm --filter @opensky/game-analytics test",
     "check:cloudflare:release": "node --test ./utils/check-cloudflare-release-gate.test.mjs && node ./utils/check-cloudflare-release-gate.mjs",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",

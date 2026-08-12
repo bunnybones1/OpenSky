@@ -1,6 +1,6 @@
 import { Storage } from '@google-cloud/storage'
-import { FlatMatchData, processToCSV } from 'analyticsHelpers'
-import { MatchData } from 'Match'
+import { FlatMatchData, processToCSV } from './analyticsHelpers'
+import { MatchData } from './Match'
 // uncomment for local testing
 // import path from 'path'
 // export const GOOGLE_APPLICATION_CREDENTIALS = path.join(

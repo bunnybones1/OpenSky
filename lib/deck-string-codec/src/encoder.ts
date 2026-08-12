@@ -27,13 +27,21 @@ export function encode(
     }
   }
   const ua = Uint16Array.from(numbers)
-  const buffer = Buffer.from(ua.buffer)
+  const buffer = new Uint8Array(ua.buffer, ua.byteOffset, ua.byteLength)
   if (isBigEndian) {
-    buffer.swap16()
+    swap16(buffer)
   }
   const encodedValues = base58.encode(buffer)
 
   return `${SW_PREFIX}${clazz}${version}${encodedValues}`
+}
+
+function swap16(bytes: Uint8Array): void {
+  for (let index = 0; index < bytes.length; index += 2) {
+    const first = bytes[index]
+    bytes[index] = bytes[index + 1]
+    bytes[index + 1] = first
+  }
 }
 
 function validVersion(version: string): string | null {

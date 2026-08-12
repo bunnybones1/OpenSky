@@ -2,7 +2,9 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { SkyWeaverAPI } from '@opensky/proto'
 import { Game } from 'Match'
-import { saveCSVFiles, processToCSV } from 'analyticsHelpers'
+import { processToCSV } from 'analyticsHelpers'
+import { saveCSVFiles } from 'nodeAnalyticsHelpers'
+import { WasmMatch } from '@skyweaver/state-node-sys'
 const jwtPath = path.join(__dirname, '../secrets/jwt.json')
 let jwt: string
 try {
@@ -42,7 +44,7 @@ async function main() {
     const matchLogs = await Promise.all(
       record.recordURIs.map(r => fetch(r).then(r => r.text()))
     )
-    const gameMatchData = await Game.loadMatch(matchID, matchLogs)
+    const gameMatchData = await Game.loadMatch(matchID, matchLogs, WasmMatch)
     if (gameMatchData.type === 'matchData') {
       let processedCSVs = processToCSV(gameMatchData)
       saveCSVFiles(processedCSVs)
