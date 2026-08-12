@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`31db4f6c-4515-43a0-8799-8556aaed3037`)
+- API/web Worker: `opensky-webapp` (`c2680362-fb9e-4c87-ba41-b9a7d0fa4437`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -966,6 +966,15 @@ settlement and delayed delivery against that pool.
   anonymous `GetPendingCards` returned `401`. The release needed no migration;
   production remained at zero Gold deliveries, zero Silver exchanges, and 31
   inventory rows after read-only verification.
+- API/web Worker version `c2680362-fb9e-4c87-ba41-b9a7d0fa4437` contains
+  hardening milestone `33d572f`. Google Silver exchanges now skip the legacy
+  Sequence payment-product request entirely, and the release gate proves that
+  the identity-native exchange completes and returns before the preserved
+  legacy-wallet branch. Seven off-chain gate tests, touched-file lint, webapp
+  TypeScript checking, and the complete 498-file browser/game build passed.
+  Live `/select-silvers/cards`, `/pending-golds`, and Google provider discovery
+  returned `200`; the exchange endpoint remained authenticated and returned
+  `401` anonymously. No schema or reward-economy change was required.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
