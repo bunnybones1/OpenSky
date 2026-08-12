@@ -8,6 +8,7 @@ import type {
   DeckClass,
   EpicType,
   FeedEventType,
+  GameMode,
   GameModesStatus,
   GMListMatchesRequest,
   Hero,
@@ -640,6 +641,42 @@ export const handleApiRequest = async (
             body.matchId,
             body.reviewed
           )
+        })
+      }
+
+      case 'GMGameModeSet': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireGameModeWrite(principal.userId)
+        const body = await requestBody<{
+          gameMode?: GameMode
+          enable?: boolean
+        }>(request)
+        if (body.gameMode === undefined || body.enable === undefined) {
+          throw invalidArgument('gameMode and enable are required')
+        }
+        return json(request, env, {
+          ok: await staff.setGameModeStatus(
+            principal.userId,
+            body.gameMode,
+            body.enable
+          )
+        })
+      }
+
+      case 'GMGameModeStatusHistory': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          page?: Page
+          gameModes?: GameMode[]
+        }>(request)
+        const result = await staff.gameModeStatusHistory(
+          body.page,
+          body.gameModes
+        )
+        return json(request, env, {
+          page: result.page,
+          statusHistory: result.rows
         })
       }
 

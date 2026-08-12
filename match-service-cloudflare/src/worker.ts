@@ -58,7 +58,7 @@ const DEFAULT_ENABLED_GAME_MODES = new Set<GameMode>([
 ])
 
 const enabledGameModes = (value: string | undefined) => {
-  if (!value) return DEFAULT_ENABLED_GAME_MODES
+  if (!value) return new Set(DEFAULT_ENABLED_GAME_MODES)
   const supported = new Set(Object.values(GameMode))
   return new Set(
     value
@@ -68,8 +68,24 @@ const enabledGameModes = (value: string | undefined) => {
   )
 }
 
-const gameModesStatus = (value: string | undefined) => {
-  const modes = enabledGameModes(value)
+interface GameModeStatusRow {
+  game_mode: GameMode
+  enabled: number
+}
+
+const currentEnabledGameModes = async (env: MatchServiceEnv) => {
+  const modes = enabledGameModes(env.ENABLED_GAME_MODES)
+  const rows = await env.AUTH_DB.prepare(
+    `SELECT game_mode, enabled FROM game_mode_status`
+  ).all<GameModeStatusRow>()
+  for (const row of rows.results) {
+    if (row.enabled === 1) modes.add(row.game_mode)
+    else modes.delete(row.game_mode)
+  }
+  return modes
+}
+
+const gameModesStatus = (modes: Set<GameMode>) => {
   return {
     tutorial: true,
     practicePVP: modes.has(GameMode.PRACTICE_PVP),
@@ -143,9 +159,10 @@ const matchmakingProfile = async (
       GameMode.RANKED_CONSTRUCTED,
       GameMode.RANKED_DISCOVERY
     ].includes(body.mode as GameMode)
+    const modes = await currentEnabledGameModes(env)
     return json({
       gameModeEnabled:
-        enabledGameModes(env.ENABLED_GAME_MODES).has(body.mode as GameMode) &&
+        modes.has(body.mode as GameMode) &&
         (!requiresRankedExperience || profile.rankedEligible),
       profile
     })
@@ -198,7 +215,9 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/internal/game-modes') {
       if (!authorized(request, env)) return json({ error: 'not found' }, 404)
-      return json({ status: gameModesStatus(env.ENABLED_GAME_MODES) })
+      return json({
+        status: gameModesStatus(await currentEnabledGameModes(env))
+      })
     }
     if (
       request.method === 'POST' &&
@@ -251,6 +270,11 @@ export default {
     }
     if (existing?.status === 'ended') {
       return json({ error: 'accepted proposal has already ended' }, 409)
+    }
+
+    const gameMode = dispatch.participants[0].player.mode
+    if (!(await currentEnabledGameModes(env)).has(gameMode)) {
+      return json({ error: 'game mode is disabled' }, 409)
     }
 
     try {

@@ -105,7 +105,17 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_progression'),
     env.AUTH_DB.prepare('DELETE FROM player_profiles'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
-    env.AUTH_DB.prepare('DELETE FROM users')
+    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare(
+      `UPDATE game_mode_status
+       SET enabled = CASE
+         WHEN game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')
+           THEN 0
+         ELSE 1
+       END,
+       updated_by_user_id = 'system:test-reset',
+       updated_at = ?`
+    ).bind(new Date().toISOString())
   ])
   const now = new Date().toISOString()
   await env.AUTH_DB.batch([
@@ -189,6 +199,36 @@ describe('Cloud Weasel accepted-match service', () => {
       'https://match-service.example/internal/game-modes'
     )
     expect(denied.status).toBe(404)
+  })
+
+  it('uses shared D1 queue switches for status, admission, and dispatch', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE game_mode_status SET enabled = 0, updated_at = ?
+       WHERE game_mode = 'PRACTICE_BOT'`
+    )
+      .bind(new Date().toISOString())
+      .run()
+
+    const status = await SELF.fetch(
+      'https://match-service.example/internal/game-modes',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+      }
+    )
+    expect(await status.json()).toMatchObject({
+      status: { practiceBot: false }
+    })
+    expect(
+      await profile(
+        GameMode.PRACTICE_BOT,
+        await deriveGamePrincipal(USER_ID)
+      ).then(response =>
+        response.json()
+      )
+    ).toMatchObject({ gameModeEnabled: false })
+    const dispatched = await create()
+    expect(dispatched.status).toBe(409)
+    expect(await dispatched.json()).toEqual({ error: 'game mode is disabled' })
   })
 
   it('resolves source matchmaking data and an existing match from D1', async () => {

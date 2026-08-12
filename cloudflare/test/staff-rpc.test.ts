@@ -40,6 +40,7 @@ const rpcAs = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM staff_game_mode_permissions'),
     env.AUTH_DB.prepare('DELETE FROM match_reviews'),
     env.AUTH_DB.prepare('DELETE FROM staff_moderation_permissions'),
     env.AUTH_DB.prepare('DELETE FROM player_account_reports'),
@@ -47,7 +48,17 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
     env.AUTH_DB.prepare('DELETE FROM content_featured_streamers'),
     env.AUTH_DB.prepare('DELETE FROM content_banners'),
-    env.AUTH_DB.prepare('DELETE FROM users')
+    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare(
+      `UPDATE game_mode_status
+       SET enabled = CASE
+         WHEN game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')
+           THEN 0
+         ELSE 1
+       END,
+       updated_by_user_id = 'system:test-reset',
+       updated_at = ?`
+    ).bind(new Date().toISOString())
   ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
@@ -86,6 +97,16 @@ const grantContentWrite = async () => {
 const grantModerationWrite = async () => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_moderation_permissions
+       (user_id, granted_by_user_id, reason, created_at)
+     VALUES (?, NULL, 'test bootstrap', ?)`
+  )
+    .bind(ADMIN, new Date().toISOString())
+    .run()
+}
+
+const grantGameModeWrite = async () => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_game_mode_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
@@ -550,6 +571,97 @@ describe('fail-closed Google identity staff authorization', () => {
         `DELETE FROM match_review_audit WHERE match_id = 901`
       ).run()
     ).rejects.toThrow('match review audit rows are immutable')
+  })
+
+  it('ports game-mode writes and source history behind operational authority', async () => {
+    await grantAdmin()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGameModeSet', {
+          gameMode: 'RANKED_CONSTRUCTED',
+          enable: false
+        })
+      ).status
+    ).toBe(403)
+    await grantGameModeWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGameModeSet', {
+          gameMode: 'UNKNOWN',
+          enable: false
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGameModeSet', {
+          gameMode: 'CONQUEST_CONSTRUCTED',
+          enable: true
+        })
+      ).status
+    ).toBe(400)
+
+    for (const enable of [false, false, true]) {
+      expect(
+        await (
+          await rpcAs(ADMIN, 'GMGameModeSet', {
+            gameMode: 'RANKED_CONSTRUCTED',
+            enable
+          })
+        ).json()
+      ).toEqual({ ok: true })
+    }
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMGameModeStatusHistory', {
+          page: { pageSize: 2 },
+          gameModes: ['RANKED_CONSTRUCTED']
+        })
+      ).json()
+    ).toMatchObject({
+      page: { pageSize: 2, hasBefore: true, hasAfter: false },
+      statusHistory: [
+        {
+          id: expect.any(Number),
+          gameMode: 'RANKED_CONSTRUCTED',
+          enabled: false,
+          createdAt: expect.any(String)
+        },
+        {
+          id: expect.any(Number),
+          gameMode: 'RANKED_CONSTRUCTED',
+          enabled: false,
+          createdAt: expect.any(String)
+        }
+      ]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT enabled, updated_by_user_id FROM game_mode_status
+         WHERE game_mode = 'RANKED_CONSTRUCTED'`
+      ).first()
+    ).toMatchObject({ enabled: 1, updated_by_user_id: ADMIN })
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM game_mode_status_history
+         WHERE game_mode = 'RANKED_CONSTRUCTED'`
+      ).run()
+    ).rejects.toThrow('game mode status history rows are immutable')
+  })
+
+  it('keeps game-mode history read-only for broad admins', async () => {
+    expect(
+      (await rpcAs(PLAYER, 'GMGameModeStatusHistory')).status
+    ).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMGameModeStatusHistory', {
+      gameModes: ['PRACTICE_BOT']
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      page: { pageSize: 200, hasBefore: false, hasAfter: false },
+      statusHistory: []
+    })
   })
 
   it('lists pending Gold while counting all recent delivered card quantities', async () => {

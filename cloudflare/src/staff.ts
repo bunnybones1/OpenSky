@@ -1,6 +1,8 @@
 import type {
   AccountSignal,
   AccountStatus,
+  GameMode,
+  GameModeStatusHistory,
   GMStatsResponse,
   GMPendingCardsReponse,
   Page,
@@ -49,6 +51,13 @@ interface ConquestTreasureProgressRow {
   current_points: number
 }
 
+interface GameModeStatusHistoryRow {
+  id: number
+  game_mode: GameMode
+  enabled: number
+  created_at: string
+}
+
 const ACCOUNT_STATUSES = new Set<AccountStatus>([
   'ACTIVE' as AccountStatus,
   'SUSPENDED' as AccountStatus,
@@ -73,6 +82,18 @@ const SIGNAL_SORT_COLUMNS: Record<string, string> = {
 }
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
+const GAME_MODES = new Set<GameMode>([
+  'RANKED_CONSTRUCTED' as GameMode,
+  'CHALLENGE_CONSTRUCTED' as GameMode,
+  'TUTORIAL' as GameMode,
+  'PRACTICE_BOT' as GameMode,
+  'RANKED_DISCOVERY' as GameMode,
+  'CONQUEST_CONSTRUCTED' as GameMode,
+  'CONQUEST_DISCOVERY' as GameMode,
+  'WARM_UP' as GameMode,
+  'CHALLENGE_DISCOVERY' as GameMode,
+  'PRACTICE_PVP' as GameMode
+])
 
 const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
 
@@ -173,6 +194,131 @@ export class StaffRepository {
       .first()
     if (!permission) {
       throw permissionDenied('moderation write access required')
+    }
+  }
+
+  async requireGameModeWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const permission = await this.database
+      .prepare(`SELECT 1 FROM staff_game_mode_permissions WHERE user_id = ?`)
+      .bind(userId)
+      .first()
+    if (!permission) {
+      throw permissionDenied('game mode write access required')
+    }
+  }
+
+  async setGameModeStatus(
+    actorUserId: string,
+    gameMode: GameMode,
+    enable: boolean
+  ): Promise<boolean> {
+    if (!GAME_MODES.has(gameMode)) {
+      throw invalidArgument('invalid game mode')
+    }
+    if (typeof enable !== 'boolean') {
+      throw invalidArgument('enable must be a boolean')
+    }
+    if (
+      enable &&
+      ['CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'].includes(gameMode)
+    ) {
+      const pool = await this.database
+        .prepare(
+          `SELECT 1 FROM conquest_reward_pools pool
+           JOIN conquest_queue_readiness ready
+             ON ready.pool_version = pool.version
+           WHERE pool.status = 'ACTIVE'
+             AND pool.starts_at <= ? AND pool.ends_at > ?`
+        )
+        .bind(new Date().toISOString(), new Date().toISOString())
+        .first()
+      if (!pool) {
+        throw invalidArgument(
+          'verified active Conquest reward pool required'
+        )
+      }
+    }
+    const now = new Date().toISOString()
+    const value = enable ? 1 : 0
+    await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO game_mode_status_history
+             (actor_user_id, game_mode, enabled, created_at)
+           VALUES (?, ?, ?, ?)`
+        )
+        .bind(actorUserId, gameMode, value, now),
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO game_mode_status
+             (game_mode, enabled, updated_by_user_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(gameMode, value, actorUserId, now, now),
+      this.database
+        .prepare(
+          `UPDATE game_mode_status
+           SET enabled = ?, updated_by_user_id = ?, updated_at = ?
+           WHERE game_mode = ? AND enabled <> ?`
+        )
+        .bind(value, actorUserId, now, gameMode, value)
+    ])
+    return true
+  }
+
+  async gameModeStatusHistory(
+    page?: Page,
+    gameModes?: GameMode[]
+  ): Promise<{ page: Page; rows: GameModeStatusHistory[] }> {
+    const modes = gameModes ?? []
+    if (modes.some(mode => !GAME_MODES.has(mode))) {
+      throw invalidArgument('invalid game mode filter')
+    }
+    if (page?.before !== undefined && page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
+    }
+    const size = Math.min(
+      200,
+      page === undefined
+        ? 200
+        : Number.isSafeInteger(page.pageSize) && (page.pageSize ?? 0) > 0
+          ? page.pageSize!
+          : 20
+    )
+    const offset = cursorOffset(page?.before ?? page?.after)
+    const filters = modes.length
+      ? `WHERE game_mode IN (${modes.map(() => '?').join(',')})`
+      : ''
+    const result = await this.database
+      .prepare(
+        `SELECT id, game_mode, enabled, created_at
+         FROM game_mode_status_history
+         ${filters}
+         ORDER BY created_at ASC, id ASC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(...modes, size + 1, offset)
+      .all<GameModeStatusHistoryRow>()
+    const rows = result.results.slice(0, size)
+    const nextOffset = offset + rows.length
+    return {
+      page: {
+        pageSize: size,
+        before: rows.length ? encodeCursor(offset) : undefined,
+        after: rows.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: result.results.length > size,
+        hasAfter: offset > 0,
+        sort: [
+          { column: 'created_at', order: 'ASC' as SortBy['order'] }
+        ]
+      },
+      rows: rows.map(row => ({
+        id: row.id,
+        gameMode: row.game_mode,
+        enabled: row.enabled === 1,
+        createdAt: row.created_at
+      }))
     }
   }
 
