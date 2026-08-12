@@ -83,9 +83,14 @@ export const EXPECTED_RUNNERS = {
     evidence: ['grandweaverStatements', 'GRANDWEAVER_COUNT']
   },
   PushNotificationsRunner: {
-    disposition: 'optional',
-    evidenceFile: 'api/cmd/opensky-worker/main.go',
-    evidence: ['OneSignal', 'NewNullClient']
+    disposition: 'ported',
+    evidenceFile: 'cloudflare/src/push-notifications.ts',
+    evidence: [
+      'runPushNotifications',
+      'include_aliases',
+      'idempotency_key',
+      "status = 'SENT'"
+    ]
   },
   RankPointsHardResetRunner: {
     disposition: 'ported',

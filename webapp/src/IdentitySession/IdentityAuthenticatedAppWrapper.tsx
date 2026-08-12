@@ -15,6 +15,7 @@ import { AuthenticatedPageLoader } from '~/shared/components/AuthenticatedPageLo
 import { Button } from '~/shared/components/Button'
 import { Text } from '~/shared/components/Text'
 import { getUseAccountKey } from '~/shared/constants/react-query-keys'
+import { setExternalUserId } from '~/shared/helpers/one-signal'
 import { history } from '~/shared/redux'
 import { updateAuthenticationState } from '~/shared/state/authentication-state'
 import { FullWidthButtonStyle } from '~/shared/style/FullWidthButtonStyle.css'
@@ -55,6 +56,12 @@ const IdentityAuthenticatedAppWrapper = memo(({ session }: Props) => {
     () => identityReferenceFor(session.user.id),
     [session.user.id]
   )
+
+  useEffect(() => {
+    setExternalUserId(session.user.id).catch((pushError) => {
+      console.error('failed to link Cloud Weasel push identity', pushError)
+    })
+  }, [session.user.id])
 
   const loadPlayer = useCallback(() => {
     setError(undefined)

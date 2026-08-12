@@ -1,3 +1,5 @@
+import { removeExternalUserId } from '~/shared/helpers/one-signal'
+
 export interface IdentityUser {
   id: string
   displayName: string
@@ -220,6 +222,11 @@ class IdentityClient {
       headers: { Accept: 'application/json' }
     })
     if (!response.ok) throw new Error('Unable to sign out. Please try again.')
+    await removeExternalUserId().catch((pushError) => {
+      // Device push is optional and must never strand a cleared app session on
+      // the signed-in screen. A later login replaces the external identity.
+      console.error('failed to unlink Cloud Weasel push identity', pushError)
+    })
   }
 }
 

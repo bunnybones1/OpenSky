@@ -6,6 +6,7 @@ import { handleIdentityRequest } from './identity-api'
 import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
+import { runPushNotifications } from './push-notifications'
 import { runReferralStickerRewards } from './referral-sticker-rewards'
 import { handleReplayRequest } from './replays'
 import { runDueSkypassAutoClaims } from './skypass-auto-claim'
@@ -37,6 +38,7 @@ export default {
         runDueLeaderboardRewards(env.AUTH_DB),
         runReferralStickerRewards(env.AUTH_DB),
         runDueSkypassAutoClaims(env.AUTH_DB),
+        runPushNotifications(env.AUTH_DB, env),
         new AccountDeletionRepository(
           env.AUTH_DB,
           env.CLIENT_FEEDBACK

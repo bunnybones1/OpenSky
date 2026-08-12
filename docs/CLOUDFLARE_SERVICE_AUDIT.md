@@ -36,9 +36,9 @@ product description or Cloudflare runtime.
 
 - Enable R2, create `cloud-weasel-game-analytics`, deploy the analytics consumer,
   verify it, and only then deploy the game-server replay producer.
-- External device push is the sole optional source worker integration not yet
-  ported. In-app notification delivery is already authoritative and must remain
-  independent of any push provider.
+- External device push has a disabled-by-default OneSignal adapter. Activation
+  needs a Cloud Weasel OneSignal app and key; in-app notification delivery stays
+  authoritative and independent of the provider.
 - WalletConnect ownership reads, active Conquest/leaderboard schedules, and
   marketplace behavior require explicit product configuration or decisions;
   they are not missing server processes.

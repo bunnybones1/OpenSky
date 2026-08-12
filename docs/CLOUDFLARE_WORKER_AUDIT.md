@@ -28,7 +28,7 @@ mint. WalletConnect remains an optional ownership integration only.
 | `OnChainPaymentEventRunner` | Retired | On-chain commerce is not a Cloud Weasel reward or payment authority. |
 | `OnChainPaymentListenerRunner` | Retired | On-chain commerce is not a Cloud Weasel reward or payment authority. |
 | `PromoteGrandmastersRunner` | Ported | Promotion is part of the receipt-backed leaderboard reset cycle. |
-| `PushNotificationsRunner` | Optional | In-app notifications work; external device push awaits a provider/product decision. |
+| `PushNotificationsRunner` | Ported | Disabled-by-default OneSignal projection targets Google identity IDs, retries with a stable provider idempotency key, and dead-letters without affecting in-app delivery or rewards. |
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `RankPointsSoftResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; live reward producers deliver off chain. |
@@ -42,6 +42,7 @@ a runner without review, if mapped implementation evidence disappears, or if a
 commented-out runner is accidentally counted as active.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
-reward delivery paths rather than recreating the source mint queues. The only
-optional worker integration left is external device push; in-app notifications
-are already authoritative and do not depend on it.
+reward delivery paths rather than recreating the source mint queues. External
+device push is strictly optional: without complete OneSignal configuration the
+scheduled pass is a read-only no-op. In-app notifications and their off-chain
+rewards remain authoritative and do not depend on it.

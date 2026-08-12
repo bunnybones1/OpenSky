@@ -12,6 +12,7 @@
   "WEBAPP_URL": "/",
   "MATCHMAKER_URL": "/api/matchmaker/",
   "ANALYTICS": false,
+  "ONE_SIGNAL_APP_ID": "",
   "SEQUENCE_API_KEY": "",
   "SEQUENCE_API_HOST": "https://api.sequence.app",
   "SEQUENCE_METADATA_HOST": "https://metadata.sequence.app",

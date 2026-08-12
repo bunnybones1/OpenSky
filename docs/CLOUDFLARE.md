@@ -106,6 +106,21 @@ To intentionally rotate the shared credential on all four Workers, set
 The client ID is public by design, but binding both OAuth values through Wrangler keeps deployment
 configuration together and avoids committing environment-specific identifiers.
 
+## Optional OneSignal configuration
+
+Device push is independent of login and rewards. Create a Cloud Weasel OneSignal
+application, put its public app ID in `webapp/config/webapp.cloudflare.json` and
+the matching Worker variable `ONESIGNAL_APP_ID`, then store the REST API key as
+a Worker secret:
+
+```sh
+pnpm --dir cloudflare exec wrangler secret put ONESIGNAL_REST_API_KEY --config ../wrangler.jsonc
+```
+
+Both Worker values must be present and valid before the scheduled sender does
+anything. Browser subscriptions use the Google identity's opaque user ID as the
+OneSignal external ID; they never use a wallet address.
+
 ## Optional Stripe Checkout configuration
 
 Stripe commerce is independent of Google login and optional WalletConnect links. The
@@ -489,6 +504,12 @@ and progress are not migrated.
   pending a public project ID, origin allowlist, and product mapping. Wallet
   ownership is read-only: Cloud Weasel rewards use canonical off-chain D1
   inventory and never require a mint or reward-transfer transaction.
+- Optional OneSignal device push is ported as a projection of reward inbox
+  notifications. Browser subscriptions are associated with the Google identity
+  ID rather than a wallet address; the scheduled sender uses stable provider
+  idempotency keys, five bounded attempts, and a dead-letter receipt. Missing or
+  partial configuration sends nothing, and provider failure can never roll back
+  a reward or suppress its authoritative in-app notification.
 - Seasonal invite-sticker redemption and marketplace writes still need Cloud
   Weasel product decisions; the source admin RPC surface is ported. Conquest
   settlement is implemented, but production has no active reward-pool rows;

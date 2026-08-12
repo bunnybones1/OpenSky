@@ -545,8 +545,8 @@ const deliverPlayer = async (
       .prepare(
         `INSERT OR IGNORE INTO player_notifications
            (user_id, notification_type, payload, created_at,
-            leaderboard_award_id)
-         SELECT user_id, 'LEADERBOARD_REWARD', ?, ?, id
+            leaderboard_award_id, push_enabled)
+         SELECT user_id, 'LEADERBOARD_REWARD', ?, ?, id, 1
          FROM player_leaderboard_reward_awards
          WHERE award_key = ? AND delivery_key = ?`
       )

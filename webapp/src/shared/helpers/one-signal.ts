@@ -45,5 +45,13 @@ export const showNativePrompt = async (): Promise<void> => {
 }
 
 export const setExternalUserId = async (userId: string): Promise<void> => {
-  return await OneSignal.setExternalUserId(userId)
+  if (!isNativeOpenSkyMobileApp() && env.ONE_SIGNAL_APP_ID !== '' && userId !== '') {
+    return await OneSignal.setExternalUserId(userId)
+  }
+}
+
+export const removeExternalUserId = async (): Promise<void> => {
+  if (!isNativeOpenSkyMobileApp() && env.ONE_SIGNAL_APP_ID !== '') {
+    return await OneSignal.removeExternalUserId()
+  }
 }

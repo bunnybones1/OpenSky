@@ -7,6 +7,8 @@ export interface Env {
   ALLOWED_ORIGINS: string
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
+  ONESIGNAL_APP_ID?: string
+  ONESIGNAL_REST_API_KEY?: string
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
   STRIPE_SKYPASS_PRICE_ID?: string
