@@ -874,4 +874,107 @@ describe('fail-closed Google identity staff authorization', () => {
       ]
     })
   })
+
+  it('creates, updates, and deletes notification templates with immutable audits', async () => {
+    await grantAdmin()
+    const notification = {
+      id: 999,
+      name: 'ONE_TIME_NOTIF',
+      data: { title: 'Cloud Weasel', buttonPath: '/play' },
+      filter: { age: [{ '>': '0h' }] },
+      createdAt: '2000-01-01T00:00:00.000Z',
+      validFrom: '2026-08-12T10:00:00.000Z',
+      expiresAt: '2026-08-12T11:00:00.000Z',
+      updatedAt: '2000-01-01T00:00:00.000Z',
+      updatedBy: 0
+    }
+    expect(
+      (await rpcAs(ADMIN, 'GMCreateOneTimeNotification', { notification }))
+        .status
+    ).toBe(403)
+    await grantContentWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCreateOneTimeNotification', {
+          notification: {
+            ...notification,
+            filter: { arbitrary: [{ '==': true }] }
+          }
+        })
+      ).status
+    ).toBe(400)
+    const created = await rpcAs(ADMIN, 'GMCreateOneTimeNotification', {
+      notification
+    })
+    expect(created.status).toBe(200)
+    const createdTemplate = (
+      (await created.json()) as { res: typeof notification }
+    ).res
+    expect(createdTemplate).toMatchObject({
+      id: expect.any(Number),
+      name: notification.name,
+      data: notification.data,
+      filter: notification.filter,
+      updatedBy: expect.any(Number)
+    })
+    expect(createdTemplate.id).not.toBe(notification.id)
+    expect(createdTemplate.createdAt).not.toBe(notification.createdAt)
+    const updated = {
+      ...createdTemplate,
+      name: 'ONE_TIME_UPDATED',
+      data: { title: 'Updated' },
+      filter: { address: [{ '==': `identity:${PLAYER}` }] }
+    }
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMUpdateOneTimeNotification', {
+          notification: updated
+        })
+      ).json()
+    ).toMatchObject({
+      res: {
+        id: createdTemplate.id,
+        name: 'ONE_TIME_UPDATED',
+        data: { title: 'Updated' },
+        createdAt: createdTemplate.createdAt,
+        updatedBy: expect.any(Number)
+      }
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMDeleteOneTimeNotification', {
+          id: createdTemplate.id
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_notifications`
+        ).first<{ count: number }>()
+      )?.count
+    ).toBe(0)
+    const audits = await env.AUTH_DB.prepare(
+      `SELECT action, actor_user_id, before_json, after_json
+       FROM staff_notification_template_audit
+       WHERE template_id = ? ORDER BY id ASC`
+    )
+      .bind(createdTemplate.id)
+      .all()
+    expect(audits).toMatchObject({
+      results: [
+        { action: 'CREATE', actor_user_id: ADMIN, before_json: null },
+        { action: 'UPDATE', actor_user_id: ADMIN },
+        { action: 'DELETE', actor_user_id: ADMIN, after_json: null }
+      ]
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_notification_template_audit
+         WHERE template_id = ?`
+      )
+        .bind(createdTemplate.id)
+        .run()
+    ).rejects.toThrow('staff notification audit rows are immutable')
+  })
 })

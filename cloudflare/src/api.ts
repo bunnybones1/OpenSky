@@ -12,6 +12,7 @@ import type {
   GMListMatchesRequest,
   Hero,
   ItemType,
+  NotificationOneTime,
   Page,
   SearchDeckRanksRequest
 } from '@opensky/proto'
@@ -721,6 +722,53 @@ export const handleApiRequest = async (
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
           res: await content.listNotificationTemplates()
+        })
+      }
+
+      case 'GMCreateOneTimeNotification': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{
+          notification?: NotificationOneTime
+        }>(request)
+        if (!body.notification) {
+          throw invalidArgument('notification is required')
+        }
+        return json(request, env, {
+          res: await content.createNotificationTemplate(
+            principal.userId,
+            body.notification
+          )
+        })
+      }
+
+      case 'GMUpdateOneTimeNotification': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{
+          notification?: NotificationOneTime
+        }>(request)
+        if (!body.notification) {
+          throw invalidArgument('notification is required')
+        }
+        return json(request, env, {
+          res: await content.updateNotificationTemplate(
+            principal.userId,
+            body.notification
+          )
+        })
+      }
+
+      case 'GMDeleteOneTimeNotification': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireContentWrite(principal.userId)
+        const body = await requestBody<{ id?: number }>(request)
+        if (body.id === undefined) throw invalidArgument('id is required')
+        return json(request, env, {
+          ok: await content.deleteNotificationTemplate(
+            principal.userId,
+            body.id
+          )
         })
       }
 

@@ -49,6 +49,16 @@ interface NotificationTemplateRow {
   updated_by_account_id: number | null
 }
 
+interface NotificationDeliveryTemplateRow {
+  id: number
+  name: string
+  data_json: string | null
+  filter_json: string | null
+  valid_from: string | null
+  expires_at: string | null
+  revision: number
+}
+
 const parsePayload = (payload: string): Record<string, unknown> => {
   try {
     const value = JSON.parse(payload)
@@ -170,6 +180,178 @@ const streamerUsername = (value: unknown) => {
   return username
 }
 
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const jsonField = (value: unknown, field: string, maxBytes: number) => {
+  if (value === undefined || value === null) return null
+  let encoded: string
+  try {
+    encoded = JSON.stringify(value)
+  } catch {
+    throw invalidArgument(`${field} is invalid`)
+  }
+  if (encoded === undefined || utf8Length(encoded) > maxBytes) {
+    throw invalidArgument(`${field} is invalid`)
+  }
+  return encoded
+}
+
+const parseDurationMilliseconds = (value: string): number | null => {
+  const units: Record<string, number> = {
+    ns: 0.000001,
+    us: 0.001,
+    µs: 0.001,
+    μs: 0.001,
+    ms: 1,
+    s: 1000,
+    m: 60_000,
+    h: 3_600_000
+  }
+  if (!value) return null
+  if (value === '0') return 0
+  const sign = value.startsWith('-') ? -1 : 1
+  const duration = /^[+-]/.test(value) ? value.slice(1) : value
+  if (!duration) return null
+  let index = 0
+  let total = 0
+  const pattern = /((?:\d+(?:\.\d*)?|\.\d+))(ns|us|µs|μs|ms|s|m|h)/gy
+  while (index < duration.length) {
+    pattern.lastIndex = index
+    const match = pattern.exec(duration)
+    if (!match) return null
+    total += Number(match[1]) * units[match[2]]
+    index = pattern.lastIndex
+  }
+  return Number.isFinite(total) ? sign * total : null
+}
+
+const FILTER_FIELDS = new Set(['age', 'address', 'created_at'])
+const FILTER_OPERATORS = new Set(['>', '>=', '<', '<=', '=='])
+
+const comparableFilterValue = (field: string, value: unknown) => {
+  if (field === 'age') {
+    if (typeof value !== 'string') return null
+    return parseDurationMilliseconds(value)
+  }
+  if (field === 'created_at') {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return null
+    }
+    const parsed = Date.parse(`${value}T00:00:00.000Z`)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return typeof value === 'string' ? value : null
+}
+
+const validateNotificationFilter = (value: unknown) => {
+  if (value === undefined || value === null) return
+  if (!record(value)) throw invalidArgument('notification filter is invalid')
+  for (const [field, rules] of Object.entries(value)) {
+    if (!FILTER_FIELDS.has(field) || !Array.isArray(rules)) {
+      throw invalidArgument('notification filter is invalid')
+    }
+    for (const rule of rules) {
+      if (!record(rule)) {
+        throw invalidArgument('notification filter is invalid')
+      }
+      for (const [operator, expected] of Object.entries(rule)) {
+        if (
+          !FILTER_OPERATORS.has(operator) ||
+          comparableFilterValue(field, expected) === null
+        ) {
+          throw invalidArgument('notification filter is invalid')
+        }
+      }
+    }
+  }
+}
+
+const compareFilterValue = (
+  actual: number | string,
+  operator: string,
+  expected: number | string
+) => {
+  switch (operator) {
+    case '>':
+      return actual > expected
+    case '>=':
+      return actual >= expected
+    case '<':
+      return actual < expected
+    case '<=':
+      return actual <= expected
+    case '==':
+      return actual === expected
+    default:
+      return false
+  }
+}
+
+const notificationFilterMatches = (
+  value: unknown,
+  account: { reference: string; createdAt: number },
+  now: number
+) => {
+  if (value === undefined || value === null) return true
+  if (!record(value)) return false
+  for (const [field, rules] of Object.entries(value)) {
+    if (!FILTER_FIELDS.has(field) || !Array.isArray(rules)) return false
+    const actual =
+      field === 'age'
+        ? Math.abs(now - account.createdAt)
+        : field === 'created_at'
+          ? account.createdAt
+          : account.reference
+    for (const rule of rules) {
+      if (!record(rule)) return false
+      for (const [operator, rawExpected] of Object.entries(rule)) {
+        const expected = comparableFilterValue(field, rawExpected)
+        if (
+          expected === null ||
+          !compareFilterValue(actual, operator, expected)
+        ) {
+          return false
+        }
+      }
+    }
+  }
+  return true
+}
+
+const normalizedNotificationTemplate = (value: NotificationOneTime) => {
+  if (!value || typeof value.name !== 'string') {
+    throw invalidArgument('notification name is invalid')
+  }
+  const name = value.name.trim()
+  if (!name || utf8Length(name) > 128) {
+    throw invalidArgument('notification name is invalid')
+  }
+  validateNotificationFilter(value.filter)
+  const dataJson = jsonField(value.data, 'notification data', 16 * 1024)
+  const filterJson = jsonField(value.filter, 'notification filter', 8 * 1024)
+  const validFrom = optionalDate(value.validFrom, 'notification validFrom')
+  const expiresAt = optionalDate(value.expiresAt, 'notification expiresAt')
+  if (validFrom !== null && expiresAt !== null && validFrom >= expiresAt) {
+    throw invalidArgument('notification validFrom must be before expiresAt')
+  }
+  return { name, dataJson, filterJson, validFrom, expiresAt }
+}
+
+const notificationTemplateSnapshot = (
+  id: number,
+  value: ReturnType<typeof normalizedNotificationTemplate>
+) => ({
+  id,
+  name: value.name,
+  ...(value.dataJson !== null ? { data: JSON.parse(value.dataJson) } : {}),
+  ...(value.filterJson !== null
+    ? { filter: JSON.parse(value.filterJson) }
+    : {}),
+  ...(value.validFrom !== null ? { validFrom: value.validFrom } : {}),
+  ...(value.expiresAt !== null ? { expiresAt: value.expiresAt } : {})
+})
+
 export class ContentRepository {
   constructor(private readonly database: D1Database) {}
 
@@ -252,6 +434,7 @@ export class ContentRepository {
     userId: string,
     at = new Date()
   ): Promise<Notification[]> {
+    await this.materializeNotificationTemplates(userId, at)
     const now = at.toISOString()
     const rows = await this.database
       .prepare(
@@ -313,6 +496,249 @@ export class ContentRepository {
           : {})
       } as NotificationOneTime
     })
+  }
+
+  private async notificationTemplateById(
+    id: number
+  ): Promise<NotificationOneTime | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT template.id, template.name, template.data_json,
+                template.filter_json, template.valid_from,
+                template.expires_at, template.created_at,
+                template.updated_at, game.id AS updated_by_account_id
+         FROM content_notification_templates template
+         LEFT JOIN game_accounts game
+           ON game.user_id = template.updated_by_user_id
+         WHERE template.id = ?`
+      )
+      .bind(id)
+      .first<NotificationTemplateRow>()
+    if (!row) return null
+    const data = parseJson(row.data_json)
+    const filter = parseJson(row.filter_json)
+    return {
+      id: row.id,
+      name: row.name,
+      ...(data !== undefined ? { data } : {}),
+      ...(filter !== undefined ? { filter } : {}),
+      createdAt: row.created_at,
+      ...(row.valid_from ? { validFrom: row.valid_from } : {}),
+      ...(row.expires_at ? { expiresAt: row.expires_at } : {}),
+      updatedAt: row.updated_at,
+      ...(row.updated_by_account_id !== null
+        ? { updatedBy: row.updated_by_account_id }
+        : {})
+    } as NotificationOneTime
+  }
+
+  private async materializeNotificationTemplates(userId: string, at: Date) {
+    const account = await this.database
+      .prepare('SELECT created_at FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ created_at: string }>()
+    if (!account) return
+    const timestamp = at.toISOString()
+    const templates = await this.database
+      .prepare(
+        `SELECT template.id, template.name, template.data_json,
+                template.filter_json, template.valid_from,
+                template.expires_at, template.revision
+         FROM content_notification_templates template
+         LEFT JOIN player_notifications delivered
+           ON delivered.user_id = ?
+          AND delivered.notification_template_id = template.id
+          AND (delivered.valid_from IS NULL OR delivered.valid_from <= ?)
+          AND (delivered.expires_at IS NULL OR delivered.expires_at >= ?)
+         WHERE delivered.id IS NULL
+           AND (template.valid_from IS NULL OR template.valid_from <= ?)
+           AND (template.expires_at IS NULL OR template.expires_at >= ?)
+         ORDER BY template.valid_from ASC, template.created_at ASC,
+                  template.id ASC`
+      )
+      .bind(userId, timestamp, timestamp, timestamp, timestamp)
+      .all<NotificationDeliveryTemplateRow>()
+    const createdAt = Date.parse(account.created_at)
+    if (!Number.isFinite(createdAt)) return
+    const statements: D1PreparedStatement[] = []
+    for (const template of templates.results) {
+      const filter = parseJson(template.filter_json)
+      if (
+        !notificationFilterMatches(
+          filter,
+          { reference: `identity:${userId}`, createdAt },
+          at.getTime()
+        )
+      ) {
+        continue
+      }
+      const data = parseJson(template.data_json)
+      const payload = {
+        oneTime: {
+          id: template.id,
+          name: template.name,
+          ...(data !== undefined ? { data } : {})
+        }
+      }
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_notifications
+               (user_id, notification_type, payload, created_at, valid_from,
+                expires_at, notification_template_id,
+                notification_template_revision)
+             VALUES (?, 'ONE_TIME', ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            userId,
+            JSON.stringify(payload),
+            timestamp,
+            template.valid_from,
+            template.expires_at,
+            template.id,
+            template.revision
+          )
+      )
+    }
+    if (statements.length) await this.database.batch(statements)
+  }
+
+  async createNotificationTemplate(
+    actorUserId: string,
+    value: NotificationOneTime
+  ): Promise<NotificationOneTime> {
+    const template = normalizedNotificationTemplate(value)
+    const now = new Date().toISOString()
+    const results = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO content_notification_templates
+             (name, data_json, filter_json, valid_from, expires_at,
+              created_at, updated_at, updated_by_user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          template.name,
+          template.dataJson,
+          template.filterJson,
+          template.validFrom,
+          template.expiresAt,
+          now,
+          now,
+          actorUserId
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO staff_notification_template_audit
+             (action, template_id, actor_user_id, before_json, after_json,
+              created_at)
+           SELECT 'CREATE', id, ?, NULL,
+                  json_object(
+                    'id', id, 'name', name, 'data', json(data_json),
+                    'filter', json(filter_json), 'validFrom', valid_from,
+                    'expiresAt', expires_at
+                  ), ?
+           FROM content_notification_templates WHERE id = last_insert_rowid()`
+        )
+        .bind(actorUserId, now)
+    ])
+    const id = Number(results[0].meta.last_row_id)
+    const created = await this.notificationTemplateById(id)
+    if (!created || results[1].meta.changes !== 1) {
+      throw new Error('create notification template')
+    }
+    return created
+  }
+
+  async updateNotificationTemplate(
+    actorUserId: string,
+    value: NotificationOneTime
+  ): Promise<NotificationOneTime> {
+    if (!value || !Number.isSafeInteger(value.id) || value.id <= 0) {
+      throw invalidArgument('notification id is invalid')
+    }
+    const template = normalizedNotificationTemplate(value)
+    const now = new Date().toISOString()
+    const results = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_notification_template_audit
+             (action, template_id, actor_user_id, before_json, after_json,
+              created_at)
+           SELECT 'UPDATE', id, ?,
+                  json_object(
+                    'id', id, 'name', name, 'data', json(data_json),
+                    'filter', json(filter_json), 'validFrom', valid_from,
+                    'expiresAt', expires_at
+                  ), json(?), ?
+           FROM content_notification_templates WHERE id = ?`
+        )
+        .bind(
+          actorUserId,
+          JSON.stringify(notificationTemplateSnapshot(value.id, template)),
+          now,
+          value.id
+        ),
+      this.database
+        .prepare(
+          `UPDATE content_notification_templates
+           SET name = ?, data_json = ?, filter_json = ?, valid_from = ?,
+               expires_at = ?, updated_at = ?, updated_by_user_id = ?,
+               revision = revision + 1
+           WHERE id = ?`
+        )
+        .bind(
+          template.name,
+          template.dataJson,
+          template.filterJson,
+          template.validFrom,
+          template.expiresAt,
+          now,
+          actorUserId,
+          value.id
+        )
+    ])
+    if (results[1].meta.changes !== 1) {
+      throw notFound('notification template not found')
+    }
+    const updated = await this.notificationTemplateById(value.id)
+    if (!updated || results[0].meta.changes !== 1) {
+      throw new Error('update notification template')
+    }
+    return updated
+  }
+
+  async deleteNotificationTemplate(
+    actorUserId: string,
+    id: number
+  ): Promise<boolean> {
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw invalidArgument('notification id is invalid')
+    }
+    const now = new Date().toISOString()
+    const results = await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_notification_template_audit
+             (action, template_id, actor_user_id, before_json, after_json,
+              created_at)
+           SELECT 'DELETE', id, ?,
+                  json_object(
+                    'id', id, 'name', name, 'data', json(data_json),
+                    'filter', json(filter_json), 'validFrom', valid_from,
+                    'expiresAt', expires_at
+                  ), NULL, ?
+           FROM content_notification_templates WHERE id = ?`
+        )
+        .bind(actorUserId, now, id),
+      this.database
+        .prepare('DELETE FROM content_notification_templates WHERE id = ?')
+        .bind(id)
+    ])
+    if (results[1].meta.changes !== 1) {
+      throw notFound('notification template not found')
+    }
+    return results[0].meta.changes === 1
   }
 
   async addBanner(
@@ -446,9 +872,7 @@ export class ContentRepository {
     const createdAt = new Date().toISOString()
     const result = await this.database.batch([
       this.database
-        .prepare(
-          'INSERT INTO content_featured_streamers (username) VALUES (?)'
-        )
+        .prepare('INSERT INTO content_featured_streamers (username) VALUES (?)')
         .bind(username),
       this.database
         .prepare(

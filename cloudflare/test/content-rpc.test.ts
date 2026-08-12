@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
+import { ContentRepository } from '../src/content'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
@@ -34,6 +35,7 @@ const rpc = async (method: string, body: object, signedIn = true) => {
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
     env.AUTH_DB.prepare('DELETE FROM users'),
     env.AUTH_DB.prepare('DELETE FROM content_banners'),
     env.AUTH_DB.prepare('DELETE FROM content_featured_streamers'),
@@ -208,5 +210,138 @@ describe('source content RPC compatibility', () => {
       (await rpc('SetNotificationsAsSeen', { notificationIDs: [] })).status
     ).toBe(400)
     expect((await rpc('ListNotifications', {}, false)).status).toBe(401)
+  })
+
+  it('materializes each eligible one-time template exactly once', async () => {
+    const now = Date.now()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(`UPDATE users SET created_at = ? WHERE id = ?`).bind(
+        new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        userId
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_notification_templates
+           (name, data_json, filter_json, valid_from, expires_at,
+            created_at, updated_at)
+         VALUES ('Eligible', '{"title":"Hello"}',
+                 '{"age":[{">":"1h"}]}', ?, ?, ?, ?),
+                ('Too new', '{"title":"Later"}',
+                 '{"age":[{"<":"1h"}]}', ?, ?, ?, ?)`
+      ).bind(
+        new Date(now - 1_000).toISOString(),
+        new Date(now + 60_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now + 60_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString()
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_notification_templates
+           (name, data_json, filter_json, valid_from, expires_at,
+            created_at, updated_at)
+         VALUES ('Identity match', '{"title":"Identity"}',
+                 ?,
+                 ?, ?, ?, ?)`
+      ).bind(
+        JSON.stringify({
+          address: [{ '==': `identity:${userId}` }],
+          created_at: [
+            {
+              '<=': new Date(now + 24 * 60 * 60 * 1000)
+                .toISOString()
+                .slice(0, 10)
+            }
+          ]
+        }),
+        new Date(now - 1_000).toISOString(),
+        new Date(now + 60_000).toISOString(),
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString()
+      )
+    ])
+    const first = await rpc('ListNotifications', {})
+    expect(await first.json()).toMatchObject({
+      notifications: [
+        {
+          type: 'ONE_TIME',
+          oneTime: { name: 'Eligible', data: { title: 'Hello' } }
+        },
+        {
+          type: 'ONE_TIME',
+          oneTime: { name: 'Identity match', data: { title: 'Identity' } }
+        }
+      ]
+    })
+    const second = await rpc('ListNotifications', {})
+    expect(await second.json()).toMatchObject({
+      notifications: [
+        { oneTime: { name: 'Eligible' } },
+        { oneTime: { name: 'Identity match' } }
+      ]
+    })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_notifications
+           WHERE notification_template_id IS NOT NULL`
+        ).first<{ count: number }>()
+      )?.count
+    ).toBe(2)
+  })
+
+  it('reissues only after a prior template delivery expires and is revised', async () => {
+    const now = Date.now()
+    const initialExpiry = new Date(now + 1_000).toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO content_notification_templates
+         (name, data_json, valid_from, expires_at, created_at, updated_at)
+       VALUES ('Revision', '{"title":"First"}', ?, ?, ?, ?)`
+    )
+      .bind(
+        new Date(now - 1_000).toISOString(),
+        initialExpiry,
+        new Date(now - 1_000).toISOString(),
+        new Date(now - 1_000).toISOString()
+      )
+      .run()
+    expect(await (await rpc('ListNotifications', {})).json()).toMatchObject({
+      notifications: [{ oneTime: { data: { title: 'First' } } }]
+    })
+    await env.AUTH_DB.prepare(
+      `UPDATE content_notification_templates
+       SET data_json = '{"title":"Second"}', expires_at = ?, updated_at = ?,
+           revision = revision + 1
+       WHERE name = 'Revision'`
+    )
+      .bind(
+        new Date(now + 60_000).toISOString(),
+        new Date(now + 500).toISOString()
+      )
+      .run()
+    // The source suppresses a revised definition while its previous delivery
+    // is still valid.
+    expect(await (await rpc('ListNotifications', {})).json()).toMatchObject({
+      notifications: [{ oneTime: { data: { title: 'First' } } }]
+    })
+    // Once the old delivery expires, the still-valid revised template issues
+    // once under its new revision key.
+    const afterExpiry = new Date(now + 2_000)
+    const content = new ContentRepository(env.AUTH_DB)
+    expect(await content.listNotifications(userId, afterExpiry)).toMatchObject([
+      { oneTime: { data: { title: 'Second' } } }
+    ])
+    expect(await content.listNotifications(userId, afterExpiry)).toMatchObject([
+      { oneTime: { data: { title: 'Second' } } }
+    ])
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_notifications
+           WHERE notification_template_id IS NOT NULL`
+        ).first<{ count: number }>()
+      )?.count
+    ).toBe(2)
   })
 })
