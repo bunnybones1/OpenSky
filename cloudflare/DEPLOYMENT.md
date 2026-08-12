@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`962960cf-3db7-4073-a133-c6c65d68f14f`)
+- API/web Worker: `opensky-webapp` (`ef89b704-f0c7-4c1e-9d62-0c05313a3dad`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -27,7 +27,8 @@
   `bc9adc7` for the original Pending Gold delivery screen, and `4fb1e1c` for
   fork-owned Discord/Twitch information, `8346b14` for the mobile-store
   off-chain ledger, `db134d0` for Samsung purchase verification, and
-  `1b141eb` for Google Play verification
+  `1b141eb` for Google Play verification, and `e713f20` for explicit legacy
+  mobile/early-access tombstones
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0062`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
@@ -1023,6 +1024,17 @@ settlement and delayed delivery against that pool.
   complete browser/game build passed. Both live mobile-payment RPCs returned
   `401` anonymously, while mobile payments remained zero and inventory remained
   31 rows with `changed_db: false`.
+- API/web Worker version `ef89b704-f0c7-4c1e-9d62-0c05313a3dad` contains
+  retirement milestone `e713f20`. The two deprecated mobile RPCs now require a
+  signed-in identity before returning an explicit `501` directing current
+  clients to identity-scoped provider verification; they can no longer select
+  reward ownership from a caller-provided wallet address. The obsolete public
+  early-access RPC is an explicit `501` tombstone with no Mailchimp dependency.
+  All 261 Worker tests, TypeScript, the 171-of-172 fulfilled/retired RPC audit,
+  every off-chain/transaction gate, and the complete 498-file browser/game
+  build passed. Live probes returned the expected `501`/`401` boundaries, while
+  mobile payments remained zero, inventory remained 31 rows, and the D1 check
+  reported zero writes and `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
