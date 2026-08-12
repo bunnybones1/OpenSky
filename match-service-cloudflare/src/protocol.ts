@@ -1,5 +1,6 @@
 import { GameMode } from '@opensky/proto'
 import { areMatchModesCompatible } from '@opensky/shared/match-modes'
+import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 
 export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 export const BOT_PLACEHOLDER = '0x0000000000000000000000000000000000000000'
@@ -70,23 +71,29 @@ export const parseAcceptedMatchDispatch = (
       throw new DispatchProtocolError('invalid participant')
     }
     const player = raw.player
+    const playerSessionId = normalizeGoogleUUID(player.playerSessionId)
     if (
       !/^0x[0-9a-f]{40}$/.test(String(player.address ?? '')) ||
       !gameModes.has(player.mode as GameMode) ||
       typeof player.sessionId !== 'string' ||
       player.sessionId.length > 128 ||
-      typeof player.playerSessionId !== 'string' ||
-      player.playerSessionId.length > 128 ||
       typeof player.clientVersionHash !== 'string' ||
       player.clientVersionHash.length > 128
     ) {
       throw new DispatchProtocolError('invalid matchmaker player')
     }
+    if (
+      player.address === BOT_PLACEHOLDER
+        ? player.playerSessionId !== ''
+        : !playerSessionId
+    ) {
+      throw new DispatchProtocolError('invalid player session ID')
+    }
     const normalizedPlayer: AcceptedMatchPlayer = {
       address: player.address as string,
       mode: player.mode as GameMode,
       sessionId: player.sessionId as string,
-      playerSessionId: player.playerSessionId as string,
+      playerSessionId: playerSessionId ?? '',
       clientVersionHash: player.clientVersionHash as string
     }
     if (player.address === BOT_PLACEHOLDER) {
@@ -102,6 +109,9 @@ export const parseAcceptedMatchDispatch = (
         'human participant is missing identity data'
       )
     }
+    const requestPlayerSessionID = normalizeGoogleUUID(
+      raw.request.playerSessionID
+    )
     if (
       raw.identity.principal !== player.address ||
       typeof raw.identity.userId !== 'string' ||
@@ -114,15 +124,18 @@ export const parseAcceptedMatchDispatch = (
       !record(raw.request.privateSeed) ||
       typeof raw.request.sessionID !== 'string' ||
       raw.request.sessionID !== player.sessionId ||
-      typeof raw.request.playerSessionID !== 'string' ||
-      raw.request.playerSessionID !== player.playerSessionId ||
+      !requestPlayerSessionID ||
+      requestPlayerSessionID !== normalizedPlayer.playerSessionId ||
       raw.request.versionHash !== player.clientVersionHash
     ) {
       throw new DispatchProtocolError('participant identity contract mismatch')
     }
     return {
       player: normalizedPlayer,
-      request: raw.request as unknown as AcceptedMatchRequest,
+      request: {
+        ...(raw.request as unknown as AcceptedMatchRequest),
+        playerSessionID: requestPlayerSessionID
+      },
       identity: raw.identity as unknown as AcceptedMatchIdentity
     }
   }) as [AcceptedMatchParticipant, AcceptedMatchParticipant]

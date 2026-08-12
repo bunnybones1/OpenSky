@@ -1,4 +1,5 @@
 import { GameMode } from '@opensky/proto'
+import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 
 export const MATCHMAKER_PATH = '/v1/matchmaker'
 export const MAX_CLIENT_MESSAGE_BYTES = 64 * 1024
@@ -150,14 +151,11 @@ export const parseClientCommand = (
       ) {
         throw new ProtocolError('OUTDATED_CLIENT', 'versionHash is required')
       }
-      if (
-        typeof value.playerSessionID !== 'string' ||
-        value.playerSessionID.length === 0 ||
-        value.playerSessionID.length > 128
-      ) {
+      const playerSessionID = normalizeGoogleUUID(value.playerSessionID)
+      if (!playerSessionID) {
         throw new ProtocolError(
           'INVALID_OPERATION',
-          'playerSessionID is required'
+          'playerSessionID must be a UUID'
         )
       }
       return {
@@ -170,7 +168,7 @@ export const parseClientCommand = (
         sessionID: value.sessionID.toUpperCase(),
         mode: value.mode as GameMode,
         versionHash: value.versionHash.toLowerCase(),
-        playerSessionID: value.playerSessionID,
+        playerSessionID,
         verifyToken: value.verifyToken
       }
     }

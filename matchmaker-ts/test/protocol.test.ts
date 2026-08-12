@@ -14,15 +14,38 @@ const findMatch = {
   sessionID: 'abc',
   mode: GameMode.RANKED_CONSTRUCTED,
   versionHash: 'ABCDEF',
-  playerSessionID: 'session-1'
+  playerSessionID: 'FCEA164C-7449-449C-9718-27B98BD18C64'
 }
 
 describe('matchmaker protocol boundary', () => {
   it('normalizes the source wire command', () => {
     expect(parseClientCommand(JSON.stringify(findMatch))).toMatchObject({
       sessionID: 'ABC',
-      versionHash: 'abcdef'
+      versionHash: 'abcdef',
+      playerSessionID: 'fcea164c-7449-449c-9718-27b98bd18c64'
     })
+  })
+
+  it.each([
+    'fcea164c7449449c971827b98bd18c64',
+    '{fcea164c-7449-449c-9718-27b98bd18c64}',
+    'URN:UUID:fcea164c-7449-449c-9718-27b98bd18c64'
+  ])('normalizes the UUID forms accepted by the Go decoder: %s', playerSessionID => {
+    expect(
+      parseClientCommand(JSON.stringify({ ...findMatch, playerSessionID }))
+    ).toMatchObject({
+      playerSessionID: 'fcea164c-7449-449c-9718-27b98bd18c64'
+    })
+  })
+
+  it.each([
+    'session-1',
+    'fcea164c-7449-449c-9718-27b98bd18c6z',
+    'fcea164c7449-449c-9718-27b98bd18c64'
+  ])('rejects a player session the Go UUID decoder rejects: %s', playerSessionID => {
+    expect(() =>
+      parseClientCommand(JSON.stringify({ ...findMatch, playerSessionID }))
+    ).toThrow('playerSessionID must be a UUID')
   })
 
   it('accepts the original browser heartbeat without inventing a response type', () => {

@@ -12,6 +12,8 @@ const SECOND_USER_ID = '22222222-2222-4222-8222-222222222222'
 let PRINCIPAL = '0x0000000000000000000000000000000000000001'
 let SECOND_PRINCIPAL = '0x0000000000000000000000000000000000000002'
 const PROPOSAL_ID = 'proposal-practice-1'
+const PLAYER_SESSION_ID = 'fcea164c-7449-449c-9718-27b98bd18c64'
+const SECOND_PLAYER_SESSION_ID = 'a51d9958-b28c-4f0a-812f-4e622f387f31'
 const STARTER_CARD_IDS = [
   6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
   151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
@@ -37,7 +39,7 @@ const dispatch = (cards: number[] = STARTER_CARD_IDS) => ({
         address: PRINCIPAL,
         mode: GameMode.PRACTICE_BOT,
         sessionId: '',
-        playerSessionId: 'player-session-1',
+        playerSessionId: PLAYER_SESSION_ID,
         clientVersionHash: 'release-1'
       },
       request: {
@@ -46,7 +48,7 @@ const dispatch = (cards: number[] = STARTER_CARD_IDS) => ({
         sessionID: '',
         mode: GameMode.PRACTICE_BOT,
         versionHash: 'release-1',
-        playerSessionID: 'player-session-1'
+        playerSessionID: PLAYER_SESSION_ID
       },
       identity: {
         principal: PRINCIPAL,
@@ -75,7 +77,7 @@ const mixedDispatch = () => {
       address: SECOND_PRINCIPAL,
       mode: GameMode.RANKED_CONSTRUCTED,
       sessionId: '',
-      playerSessionId: 'player-session-2',
+      playerSessionId: SECOND_PLAYER_SESSION_ID,
       clientVersionHash: 'release-1'
     },
     request: {
@@ -84,7 +86,7 @@ const mixedDispatch = () => {
       sessionID: '',
       mode: GameMode.RANKED_CONSTRUCTED,
       versionHash: 'release-1',
-      playerSessionID: 'player-session-2'
+      playerSessionID: SECOND_PLAYER_SESSION_ID
     },
     identity: {
       principal: SECOND_PRINCIPAL,
@@ -733,6 +735,35 @@ describe('Cloud Weasel accepted-match service', () => {
     const response = await create(accepted)
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'DECK_IS_NOT_RANDOM' })
+  })
+
+  it('normalizes source UUID forms and rejects malformed player sessions', async () => {
+    const accepted = dispatch()
+    accepted.participants[0].player.playerSessionId =
+      'FCEA164C7449449C971827B98BD18C64'
+    accepted.participants[0].request!.playerSessionID =
+      'URN:UUID:fcea164c-7449-449c-9718-27b98bd18c64'
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ match_payload_json: string }>()
+    expect(
+      JSON.parse(row!.match_payload_json).match.player1.playerSessionID
+    ).toBe(PLAYER_SESSION_ID)
+
+    const malformed = dispatch()
+    malformed.proposalId = 'proposal-malformed-player-session'
+    malformed.participants[0].player.playerSessionId = 'player-session-1'
+    malformed.participants[0].request!.playerSessionID = 'player-session-1'
+    const rejected = await create(malformed)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toEqual({
+      error: 'invalid player session ID'
+    })
   })
 
   it('preserves the normalized challenge session as the matchmaking code', async () => {

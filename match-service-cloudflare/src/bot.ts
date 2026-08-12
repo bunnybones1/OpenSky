@@ -77,7 +77,7 @@ export const createBotParticipant = (
     privateSeed,
     gameMode: mode,
     account,
-    playerSessionID: `bot-${crypto.randomUUID()}`,
+    playerSessionID: crypto.randomUUID(),
     botSubkey: bytesToHex(subkey),
     spectateCode: crypto.randomUUID(),
     quests: []
