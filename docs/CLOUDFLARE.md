@@ -256,6 +256,12 @@ and progress are not migrated.
   and rank-derived Conquest eligibility; `GMFindAccount` accepts a username or
   identity reference and includes private settings for staff. Account-action
   and IP histories remain empty until those audited models are ported.
+- Player reports are visible to staff through the original signal detail and
+  summary contracts. The reads preserve reporter identity, match ID, sanitized
+  comment, pending state, status/date filters, and bounded cursors. Scores are
+  intentionally neutral: the source's current raw `user report` signal has no
+  direct weight, while its aggregate probability is maintained by a separate
+  analytics pipeline that has not been ported or imitated.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.

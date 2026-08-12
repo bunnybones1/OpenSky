@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 99 |
-| Remaining source RPCs | 73 |
+| Ported source RPCs | 101 |
+| Remaining source RPCs | 71 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 43 | Moderation/account reads can build on the deployed role; writes require granular authorization and immutable audits. |
+| Admin and operations | 41 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -70,4 +70,6 @@ game UI only as a match-local lookup, never as authentication.
    granular permissions and immutable audit records before porting any GM/admin
    write. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
    the original UI's read-only authorization probe and account discovery are
-   deployed; production has no staff grants.
+   deployed. Report details and summaries are also connected to the D1 audit
+   rows, with neutral scores until the separate fraud model is ported.
+   Production has no staff grants.
