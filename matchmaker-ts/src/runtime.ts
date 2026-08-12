@@ -67,6 +67,7 @@ export interface MatchmakerEnv {
   MATCH_REFUSAL_PENALTY_SECONDS?: string
   MATCH_TICK_MS?: string
   RELAX_MATCHING_INTERVAL_MS?: string
+  MATCH_DISPATCH_MAX_ATTEMPTS?: string
   EXPECTED_RELEASE_VERSION?: string
   ENABLE_RANKED_BOTS?: string
   ALLOW_SAME_IP_MATCH?: string
@@ -128,6 +129,7 @@ interface RuntimeConfig {
   acceptanceTimeoutMs: number
   tickMs: number
   relaxIntervalMs: number
+  dispatchMaxAttempts: number
   expectedReleaseVersion: string
   enableRankedBots: boolean
   allowSameIpMatch: boolean
@@ -195,6 +197,11 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
       env.RELAX_MATCHING_INTERVAL_MS,
       30_000,
       10 * 60_000
+    ),
+    dispatchMaxAttempts: parsePositiveInteger(
+      env.MATCH_DISPATCH_MAX_ATTEMPTS,
+      3,
+      10
     ),
     expectedReleaseVersion,
     enableRankedBots: bool(env.ENABLE_RANKED_BOTS, false),
@@ -1035,12 +1042,47 @@ export class MatchmakerPool implements DurableObject {
       await this.deleteProposal(proposal)
     } catch (error) {
       console.error('match dispatch failed', proposal.id, error)
+      if (proposal.dispatchAttempts >= this.config.dispatchMaxAttempts) {
+        await this.releaseProposalPlayers(proposal)
+        return
+      }
       proposal.status = 'ACCEPTED'
       proposal.nextDispatchAtMs =
         Date.now() +
         Math.min(30_000, 1_000 * 2 ** Math.min(proposal.dispatchAttempts, 5))
       await this.state.storage.put(proposalKey(proposal.id), proposal)
     }
+  }
+
+  // Source oracle: director/matchhandlers/match_handler.go calls ReleasePlayer
+  // for every participant when game creation fails. Cloudflare gets a bounded
+  // retry budget first because the match-service/game calls are idempotent;
+  // exhaustion restores connected humans without refusal/timeout penalties.
+  private async releaseProposalPlayers(proposal: StoredProposal) {
+    const tickets: Record<string, StoredTicket> = {}
+    for (const participant of humanParticipants(proposal)) {
+      if (
+        participant.request &&
+        participant.identity &&
+        this.hasSocket(participant.player.address)
+      ) {
+        tickets[ticketKey(participant.player.address)] = {
+          player: participant.player,
+          request: participant.request,
+          identity: participant.identity
+        }
+      }
+    }
+    await this.deleteProposal(proposal)
+    if (Object.keys(tickets).length > 0) {
+      await this.state.storage.put(tickets)
+    }
+    console.warn(
+      'matchmaker released proposal after dispatch retries',
+      proposal.id,
+      proposal.dispatchAttempts,
+      Object.keys(tickets).length
+    )
   }
 
   private async rescheduleAlarm(now: number) {

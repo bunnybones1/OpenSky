@@ -65,6 +65,11 @@ The preserved Google session replaces the legacy JWT account claim: admission
 overwrites the browser's player bytes with that trusted principal, validates
 subkey/random-seed/prism/card wire shapes before durable queueing, supplies the
 wallet-optional zero signature when needed, and discards client rarity claims.
+Accepted dispatch uses the match service's idempotency contract for three
+bounded attempts. If transient allocation still fails, connected human
+participants are restored to durable tickets without a refusal or timeout
+penalty, preserving the Go director's `ReleasePlayer` outcome without allowing
+an accepted proposal to retry forever.
 
 ## Deployment gates
 

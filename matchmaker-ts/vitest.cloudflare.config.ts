@@ -115,6 +115,18 @@ export default defineConfig({
                 { status: 409 }
               )
             }
+            if (
+              dispatch.participants?.some(
+                participant =>
+                  participant.player?.address ===
+                  '0x7777777777777777777777777777777777777777'
+              )
+            ) {
+              return Response.json(
+                { error: 'transient game allocation failure' },
+                { status: 503 }
+              )
+            }
             return Response.json({
               serverAddress: 'wss://match.example/v1/matches/test'
             })

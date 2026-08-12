@@ -528,6 +528,62 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await status.json()).toMatchObject({ activeProposals: 0 })
   })
 
+  it('releases accepted players after bounded transient dispatch failures', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.RANKED_CONSTRUCTED,
+      'release-1',
+      [PRINCIPAL_7, PRINCIPAL_2]
+    )
+    track(first, second)
+    const firstAcceptance = nextMessage(first)
+    const secondAcceptance = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    await firstAcceptance
+    await secondAcceptance
+    const firstSawSecond = nextMessage(first)
+    const secondSawSecond = nextMessage(second)
+    second.send(JSON.stringify({ type: 'accept_match' }))
+    await firstSawSecond
+    await secondSawSecond
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        expect(proposals.size).toBe(1)
+        for (const [key, proposal] of proposals) {
+          expect(proposal).toMatchObject({ dispatchAttempts: 1 })
+          await state.storage.put(key, {
+            ...proposal,
+            nextDispatchAtMs: Date.now() - 1
+          })
+        }
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const firstRematched = nextMessage(first)
+    const secondRematched = nextMessage(second)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await firstRematched).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.RANKED_CONSTRUCTED
+    })
+    expect(await secondRematched).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.RANKED_CONSTRUCTED
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      queuedPlayers: 0,
+      activeProposals: 1
+    })
+  })
+
   it('persists queue state and socket identity through Durable Object eviction', async () => {
     const [first, second] = track(
       await connect(PRINCIPAL_1, '192.0.2.1'),

@@ -236,6 +236,10 @@ and progress are not migrated.
   principal replaces the browser identity claim, malformed key material/prisms/
   cards receive `INVALID_PRIVATE_SEED`, and client rarity claims are discarded.
   The zero certification signature remains supported for wallet-free play.
+  Accepted proposals retry idempotent game allocation at most three times;
+  exhaustion restores connected humans to durable queue tickets without a
+  penalty, matching the source director's player-release behavior and avoiding
+  permanent dispatch limbo.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active
