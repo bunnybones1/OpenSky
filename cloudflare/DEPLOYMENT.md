@@ -6,9 +6,9 @@
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
+- Game Worker: `cloud-weasel-game-server` (`b6fe6455-7d2c-4a24-b84c-c296c092c006`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `309861e` for the matchmaker and match service, and `7c91592`
+  `309861e` for the matchmaker and match service, and `a3a5358`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -492,6 +492,20 @@ settlement and delayed delivery against that pool.
   practice client HTML passed with Conquest disabled. A read-only production
   aggregate remained one active and nine ended matches with no creating/failed
   rows; D1 remained at 46 migrations and reported `changed_db: false`.
+- Game Worker version `b6fe6455-7d2c-4a24-b84c-c296c092c006` contains source
+  `a3a5358`. Each match now persists the source's separate three-minute
+  asset-loading expiry from its original creation time. If exactly one player
+  finishes loading, commit/reveal is advanced through the source
+  `tryDispatch` sequence and the no-show is abandoned; if neither loads, the
+  match ends without progression, rewards, or an abandon penalty. Loading
+  completion is monotonic, overdue deadlines schedule immediately, and older
+  Durable Objects backfill the deadline without receiving a new grace period.
+  The rollout passed all 24 game unit and 52 game Worker tests, TypeScript
+  checking, and an 8.9 MB Wrangler dry-run bundle. Live game health, API
+  `Ping`, and authoritative mode status passed with Conquest disabled. A
+  read-only production aggregate remained one active and nine ended matches;
+  the pre-existing active row was unchanged and the queries reported
+  `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
