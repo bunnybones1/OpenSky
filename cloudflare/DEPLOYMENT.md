@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`c2680362-fb9e-4c87-ba41-b9a7d0fa4437`)
+- API/web Worker: `opensky-webapp` (`9578a7ac-3011-4b79-a191-476489fe410b`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
@@ -24,9 +24,10 @@
   and match service include `309861e`. The API also includes `08bcd4d` for
   off-chain referral-sticker delivery, `30ca55a` for complete off-chain
   SkyPass delivery, `c88a7a2`/`6fa9d05` for Silver-to-ticket exchange, and
-  `bc9adc7` for the original Pending Gold delivery screen
+  `bc9adc7` for the original Pending Gold delivery screen, and `4fb1e1c` for
+  fork-owned Discord/Twitch information
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0060`
+- Applied D1 migrations: `0001` through `0061`
 - Scheduled trigger: every minute for due Conquest Gold delivery, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
   leaderboard reward cycles. No leaderboard schedule is configured in
@@ -975,6 +976,20 @@ settlement and delayed delivery against that pool.
   Live `/select-silvers/cards`, `/pending-golds`, and Google provider discovery
   returned `200`; the exchange endpoint remained authenticated and returned
   `401` anonymously. No schema or reward-economy change was required.
+- API/web Worker version `9578a7ac-3011-4b79-a191-476489fe410b` contains source
+  `4fb1e1c`. Migration `0061_social_info_cache.sql` ports the source one-minute
+  public-response cache to D1. `GetDiscordInfo` now reads a configurable Cloud
+  Weasel widget URL, while `GetTwitchInfo` uses standard Twitch client
+  credentials directly rather than the source's private Skyweaver token proxy;
+  the original live-channel component consumes that RPC again. Production has
+  none of the fork-owned identifiers or Twitch secret, so both methods return a
+  deliberate `503` and the live-channel section remains hidden. The rollout
+  passed all 244 Worker tests, four focused social tests, both Worker and webapp
+  TypeScript checks, touched-file lint, all release gates, the 149-direct-RPC
+  audit, and the complete 498-file browser/game build. Live `/play` and Google
+  provider discovery returned `200`; both social RPCs returned `503` on the
+  final retry. Migration `0061` exists once, its cache is empty, 31 inventory
+  rows were unchanged, and the read-only D1 check reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
