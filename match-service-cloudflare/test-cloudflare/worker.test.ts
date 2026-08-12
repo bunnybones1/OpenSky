@@ -622,6 +622,100 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(count?.count).toBe(1)
   })
 
+  it('rejects proposal reuse with a different accepted dispatch', async () => {
+    const accepted = dispatch()
+    const first = await create(accepted)
+    expect(first.status).toBe(200)
+
+    const changed = dispatch()
+    changed.participants[0].player.playerSessionId =
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    changed.participants[0].request!.playerSessionID =
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const conflict = await create(changed)
+    expect(conflict.status).toBe(409)
+    expect(await conflict.json()).toEqual({
+      error: 'accepted proposal does not match its existing allocation',
+      reason: 'PLAYER_HAS_EXISTING_MATCH'
+    })
+
+    const row = await env.AUTH_DB.prepare(
+      `SELECT status, dispatch_fingerprint FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ status: string; dispatch_fingerprint: string }>()
+    expect(row).toEqual({
+      status: 'active',
+      dispatch_fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/)
+    })
+
+    const reordered = dispatch()
+    reordered.createdAtMs = accepted.createdAtMs
+    reordered.participants[0].request!.privateSeed = Object.fromEntries(
+      Object.entries(reordered.participants[0].request!.privateSeed).reverse()
+    )
+    const semanticRetry = await create(reordered)
+    expect(semanticRetry.status).toBe(200)
+    expect(await semanticRetry.json()).toEqual(await first.clone().json())
+  })
+
+  it('coalesces concurrent identical proposal allocation races', async () => {
+    const accepted = dispatch()
+    accepted.proposalId = 'proposal-concurrent-identical'
+    const [first, second] = await Promise.all([
+      create(accepted),
+      create(accepted)
+    ])
+    expect([first.status, second.status]).toEqual([200, 200])
+    const bodies = await Promise.all([first.json(), second.json()])
+    expect(bodies[0]).toEqual(bodies[1])
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT replay_id) AS replay_count,
+              COUNT(DISTINCT dispatch_fingerprint) AS fingerprint_count
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{
+        count: number
+        replay_count: number
+        fingerprint_count: number
+      }>()
+    expect(rows).toEqual({
+      count: 1,
+      replay_count: 1,
+      fingerprint_count: 1
+    })
+  })
+
+  it('keeps the winning allocation active during a conflicting proposal race', async () => {
+    const accepted = dispatch()
+    accepted.proposalId = 'proposal-concurrent-conflict'
+    const changed = dispatch()
+    changed.proposalId = accepted.proposalId
+    changed.participants[0].player.playerSessionId =
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    changed.participants[0].request!.playerSessionID =
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+
+    const responses = await Promise.all([create(accepted), create(changed)])
+    expect(responses.map(response => response.status).sort()).toEqual([
+      200, 409
+    ])
+    const conflict = responses.find(response => response.status === 409)!
+    expect(await conflict.json()).toEqual({
+      error: 'accepted proposal does not match its existing allocation',
+      reason: 'PLAYER_HAS_EXISTING_MATCH'
+    })
+    const row = await env.AUTH_DB.prepare(
+      `SELECT status, COUNT(*) OVER () AS count
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{ status: string; count: number }>()
+    expect(row).toEqual({ status: 'active', count: 1 })
+  })
+
   it('reactivates a failed allocation after an idempotent game retry succeeds', async () => {
     const accepted = {
       ...dispatch(),

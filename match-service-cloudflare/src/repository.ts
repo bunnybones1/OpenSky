@@ -99,6 +99,10 @@ export interface MultiplayerMatchRow {
   status: 'creating' | 'active' | 'ended' | 'failed'
   player1_principal: string
   player2_principal: string
+  player1_user_id: string | null
+  player2_user_id: string | null
+  created_at: string
+  dispatch_fingerprint: string | null
 }
 
 export interface NewMultiplayerMatch {
@@ -113,6 +117,7 @@ export interface NewMultiplayerMatch {
   player1UserId?: string
   player2UserId?: string
   createdAt: string
+  dispatchFingerprint: string
 }
 
 export interface MatchmakingProfile {
@@ -140,6 +145,15 @@ export class MatchPreconditionError extends Error {
     message: string
   ) {
     super(message)
+  }
+}
+
+export class MatchAllocationConflictError extends MatchPreconditionError {
+  constructor() {
+    super(
+      'PLAYER_HAS_EXISTING_MATCH',
+      'accepted proposal does not match its existing allocation'
+    )
   }
 }
 
@@ -448,7 +462,9 @@ export class MatchRepository {
       .prepare(
         `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
                 version, match_payload_json,
-                server_address, status, player1_principal, player2_principal
+                server_address, status, player1_principal, player2_principal,
+                player1_user_id, player2_user_id, created_at,
+                dispatch_fingerprint
          FROM multiplayer_matches
          WHERE proposal_id = ?`
       )
@@ -709,8 +725,8 @@ export class MatchRepository {
            (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
             player1_principal, player2_principal, player1_user_id,
             player2_user_id, match_payload_json, server_address, status,
-            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'creating', ?, ?)`
+            created_at, updated_at, dispatch_fingerprint)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'creating', ?, ?, ?)`
       )
       .bind(
         input.proposalId,
@@ -725,12 +741,37 @@ export class MatchRepository {
         input.player2UserId ?? null,
         '',
         input.createdAt,
-        input.createdAt
+        input.createdAt,
+        input.dispatchFingerprint
       )
       .run()
     const row = await this.findByProposal(input.proposalId)
     if (!row) throw new Error('match allocation was not persisted')
+    this.assertAllocationMatches(row, input)
     return row
+  }
+
+  assertAllocationMatches(
+    row: MultiplayerMatchRow,
+    input: NewMultiplayerMatch
+  ) {
+    const fingerprintMatches =
+      row.dispatch_fingerprint === null ||
+      row.dispatch_fingerprint === input.dispatchFingerprint
+    const allocationMatches =
+      row.proposal_id === input.proposalId &&
+      row.mode === input.mode &&
+      (row.player1_mode ?? row.mode) === input.player1Mode &&
+      (row.player2_mode ?? row.mode) === input.player2Mode &&
+      row.version === input.version &&
+      row.player1_principal === input.player1Principal &&
+      row.player2_principal === input.player2Principal &&
+      row.player1_user_id === (input.player1UserId ?? null) &&
+      row.player2_user_id === (input.player2UserId ?? null) &&
+      row.created_at === input.createdAt
+    if (!fingerprintMatches || !allocationMatches) {
+      throw new MatchAllocationConflictError()
+    }
   }
 
   async installPayloadIfMissing(proposalId: string, payloadJson: string) {

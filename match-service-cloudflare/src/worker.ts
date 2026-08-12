@@ -5,12 +5,17 @@ import { legacyMatchMode } from '@opensky/shared/match-modes'
 
 import { buildMatch } from './match-builder'
 import {
+  acceptedMatchFingerprint,
   DispatchProtocolError,
   INTERNAL_AUTH_HEADER,
   MAX_DISPATCH_BYTES,
   parseAcceptedMatchDispatch
 } from './protocol'
-import { MatchPreconditionError, MatchRepository } from './repository'
+import {
+  MatchAllocationConflictError,
+  MatchPreconditionError,
+  MatchRepository
+} from './repository'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
 import { RpcError } from '../../cloudflare/src/errors'
 
@@ -270,6 +275,34 @@ export default {
 
     const repository = new MatchRepository(env.AUTH_DB)
     const existing = await repository.findByProposal(dispatch.proposalId)
+    const gameModes = dispatch.participants.map(
+      participant => participant.player.mode
+    ) as [GameMode, GameMode]
+    const allocation = {
+      proposalId: dispatch.proposalId,
+      replayId: existing?.replay_id ?? crypto.randomUUID(),
+      mode: legacyMatchMode(gameModes),
+      player1Mode: gameModes[0],
+      player2Mode: gameModes[1],
+      version: dispatch.participants[0].player.clientVersionHash,
+      player1Principal: dispatch.participants[0].player.address,
+      player2Principal: dispatch.participants[1].player.address,
+      player1UserId: dispatch.participants[0].identity?.userId,
+      player2UserId: dispatch.participants[1].identity?.userId,
+      createdAt: new Date(dispatch.createdAtMs).toISOString(),
+      dispatchFingerprint: await acceptedMatchFingerprint(dispatch)
+    }
+    if (existing?.status === 'ended') {
+      return json({ error: 'accepted proposal has already ended' }, 409)
+    }
+    try {
+      if (existing) repository.assertAllocationMatches(existing, allocation)
+    } catch (error) {
+      if (error instanceof MatchPreconditionError) {
+        return json({ error: error.message, reason: error.reason }, 409)
+      }
+      throw error
+    }
     if (existing?.status === 'active' && existing.server_address) {
       return json({
         proposalId: existing.proposal_id,
@@ -277,10 +310,6 @@ export default {
         serverAddress: existing.server_address
       })
     }
-    if (existing?.status === 'ended') {
-      return json({ error: 'accepted proposal has already ended' }, 409)
-    }
-
     try {
       const access = new AccountActionsRepository(env.AUTH_DB)
       await Promise.all(
@@ -308,31 +337,15 @@ export default {
       throw error
     }
 
-    const gameModes = dispatch.participants.map(
-      participant => participant.player.mode
-    ) as [GameMode, GameMode]
     const enabledModes = await currentEnabledGameModes(env)
     if (gameModes.some(mode => !enabledModes.has(mode))) {
       return json({ error: 'game mode is disabled' }, 409)
     }
 
     try {
-      const replayId = existing?.replay_id ?? crypto.randomUUID()
       let row =
         existing ??
-        (await repository.allocateIfMissing({
-          proposalId: dispatch.proposalId,
-          replayId,
-          mode: legacyMatchMode(gameModes),
-          player1Mode: gameModes[0],
-          player2Mode: gameModes[1],
-          version: dispatch.participants[0].player.clientVersionHash,
-          player1Principal: dispatch.participants[0].player.address,
-          player2Principal: dispatch.participants[1].player.address,
-          player1UserId: dispatch.participants[0].identity?.userId,
-          player2UserId: dispatch.participants[1].identity?.userId,
-          createdAt: new Date(dispatch.createdAtMs).toISOString()
-        }))
+        (await repository.allocateIfMissing(allocation))
 
       if (!row.match_payload_json) {
         const built = await buildMatch(
@@ -365,7 +378,9 @@ export default {
         serverAddress
       })
     } catch (error) {
-      await repository.fail(dispatch.proposalId)
+      if (!(error instanceof MatchAllocationConflictError)) {
+        await repository.fail(dispatch.proposalId)
+      }
       console.error(
         'accepted match creation failed',
         dispatch.proposalId,

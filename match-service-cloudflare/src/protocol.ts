@@ -48,6 +48,35 @@ const record = (value: unknown): value is Record<string, unknown> =>
 
 const gameModes = new Set(Object.values(GameMode))
 
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`
+  }
+  if (record(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`
+  }
+  const encoded = JSON.stringify(value)
+  if (encoded === undefined) {
+    throw new DispatchProtocolError('dispatch contains unsupported data')
+  }
+  return encoded
+}
+
+export const acceptedMatchFingerprint = async (
+  dispatch: AcceptedMatchDispatch
+) => {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonicalJson(dispatch))
+  )
+  return [...new Uint8Array(digest)]
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export const parseAcceptedMatchDispatch = (
   value: unknown
 ): AcceptedMatchDispatch => {
