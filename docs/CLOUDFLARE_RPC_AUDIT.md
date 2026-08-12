@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 105 |
-| Remaining source RPCs | 67 |
+| Ported source RPCs | 107 |
+| Remaining source RPCs | 65 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 37 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 35 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -78,3 +78,8 @@ Role-gated reads now also cover every configured banner and reusable one-time
 notification template. Player banner visibility remains time-filtered, and
 template definitions are deliberately distinct from per-player notification
 deliveries.
+
+Staff can also inspect SkyPass reward definitions and optional per-season
+premium status. Cloud Weasel stores premium as Google-identity entitlement
+state rather than authentication or wallet state, and a missing entitlement
+truthfully reads false without mutating the account.

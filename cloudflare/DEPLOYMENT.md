@@ -3,14 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`676a7de5-ce02-442e-8c09-dec731570f13`)
+- API/web Worker: `opensky-webapp` (`e5ec4321-d302-4995-9945-86424d526b8c`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `1de1c56` for web/API and `b612af3` for game, plus the
+- Deployed source includes `de3011f` for web/API and `b612af3` for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0032`
+- Applied D1 migrations: `0001` through `0033`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -68,6 +68,9 @@
 - Admin-only community-content reads for every configured banner and reusable
   one-time notification template, while the player banner RPC remains limited
   to active rows and notification delivery remains separate player state
+- Admin-only SkyPass reward-definition and premium-entitlement reads, with
+  premium modeled as optional per-season Google-identity state and the free
+  track available without a wallet or entitlement row
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -87,7 +90,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 121 tests
+- API Worker: 21 files, 123 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -126,6 +129,12 @@ settlement and delayed delivery against that pool.
   a session; migration `0032` was present, production had zero templates and
   zero staff grants, version metadata matched
   `676a7de5-ce02-442e-8c09-dec731570f13`, and all D1 reads reported
+  `changed_db: false`
+- Live SkyPass-definition and premium-entitlement probes both returned `401`
+  without a session; migration `0033` was present, all 127 season-62 reward
+  definitions remained available, production had zero premium entitlements and
+  zero staff grants, version metadata matched
+  `e5ec4321-d302-4995-9945-86424d526b8c`, and all D1 reads reported
   `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;

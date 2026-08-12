@@ -273,6 +273,11 @@ and progress are not migrated.
   while `GetBanners` continues to expose only currently active banners to
   players. One-time notification definitions use a separate template table;
   listing templates never creates or mutates per-player inbox deliveries.
+- Staff SkyPass reads preserve source reward ordering and expose optional
+  per-season premium entitlements. The entitlement belongs to the Google
+  identity, defaults to false without creating a row, and is independent of
+  authentication and any future WalletConnect link; the basic track stays
+  wallet-free.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
