@@ -131,6 +131,7 @@ export type MatchmakerErrorReason =
   | 'DECK_IS_NOT_RANDOM'
   | 'SESSION_IS_EMPTY'
   | 'INVALID_GAME_MODE_FOR_DECK'
+  | 'GAME_MODE_DISABLED'
   | 'CONQUEST_DECK_CLASS_MISMATCH'
   | 'MATCH_CREATION_FAILED'
   | 'MATCH_REFUSAL_PENALTY'
@@ -142,6 +143,7 @@ export type MatchmakerErrorReason =
   | 'INVALID_OPERATION'
   | 'PENDING_MATCH_CREATION'
   | 'RANK_TOO_LOW'
+  | 'SERVER_SHUTDOWN'
 
 export interface MatchmakerErrorMessage extends ErrorMessage {
   reason?: MatchmakerErrorReason

@@ -87,6 +87,29 @@ const collectMessages = (webSocket: WebSocket, count: number) =>
     webSocket.addEventListener('message', listener)
   })
 
+const setGameModeStatus = async (
+  field: string,
+  enabled: boolean
+) => {
+  const response = await runtimeEnv.MATCH_SERVICE?.fetch(
+    new Request('https://match-service.example/__test/game-modes', {
+      method: 'POST',
+      body: JSON.stringify({ field, enabled })
+    })
+  )
+  expect(response?.status).toBe(204)
+}
+
+const setGameModeStatusAvailable = async (available: boolean) => {
+  const response = await runtimeEnv.MATCH_SERVICE?.fetch(
+    new Request('https://match-service.example/__test/game-modes', {
+      method: 'POST',
+      body: JSON.stringify({ available })
+    })
+  )
+  expect(response?.status).toBe(204)
+}
+
 const findCommand = (
   mode = GameMode.RANKED_CONSTRUCTED,
   sessionID = '',
@@ -136,6 +159,11 @@ const pairPlayers = async (
 }
 
 afterEach(async () => {
+  await runtimeEnv.MATCH_SERVICE?.fetch(
+    new Request('https://match-service.example/__test/game-modes', {
+      method: 'DELETE'
+    })
+  )
   for (const socket of [
     ...((globalThis as { testSockets?: WebSocket[] }).testSockets ?? [])
   ]) {
@@ -443,6 +471,111 @@ describe('Cloudflare matchmaker Worker', () => {
       message: 'GAME_MODE_DISABLED',
       level: 'server'
     })
+  })
+
+  it('drains a lone queued player after an operator disables the mode', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(
+      JSON.stringify(
+        findCommand(
+          GameMode.CHALLENGE_CONSTRUCTED,
+          'CLOUD-WEASEL-CHALLENGE'
+        )
+      )
+    )
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          {
+            headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+          }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const disabled = nextMessage(player)
+    await setGameModeStatus('challengeConstructed', false)
+    expect(await disabled).toEqual({
+      type: 'error',
+      reason: 'GAME_MODE_DISABLED',
+      message: 'GAME_MODE_DISABLED',
+      level: 'server'
+    })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+  })
+
+  it('preserves queued state when game-mode status cannot be refreshed', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          {
+            headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+          }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await setGameModeStatusAvailable(false)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => state.storage.setAlarm(Date.now() + 60_000)
+    )
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) =>
+        expect(await state.storage.getAlarm()).toEqual(expect.any(Number))
+    )
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      queuedPlayers: 1,
+      activeProposals: 0
+    })
+  })
+
+  it('drains an accepted proposal when its mode is disabled', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.CHALLENGE_CONSTRUCTED
+    )
+    track(first, second)
+    const firstAccepted = nextMessage(first)
+    const secondSawFirst = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    await firstAccepted
+    await secondSawFirst
+
+    await setGameModeStatus('challengeConstructed', false)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    const firstDrained = collectMessages(first, 2)
+    const secondDrained = collectMessages(second, 2)
+    second.send(JSON.stringify({ type: 'accept_match' }))
+    for (const messages of [await firstDrained, await secondDrained]) {
+      expect(messages).toEqual([
+        { type: 'accept_match', playerID: PRINCIPAL_2 },
+        {
+          type: 'error',
+          reason: 'SERVER_SHUTDOWN',
+          message: 'SERVER_SHUTDOWN',
+          level: 'server'
+        }
+      ])
+    }
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ activeProposals: 0 })
   })
 
   it('hydrates and validates active conquest progress before queueing', async () => {

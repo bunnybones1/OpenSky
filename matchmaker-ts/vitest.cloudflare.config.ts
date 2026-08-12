@@ -1,6 +1,22 @@
 import { cloudflareTest } from '@cloudflare/vitest-pool-workers'
 import { defineConfig } from 'vitest/config'
 
+const defaultGameModeStatus = () => ({
+  tutorial: true,
+  practicePVP: true,
+  practiceBot: true,
+  warmUp: true,
+  rankedConstructed: true,
+  rankedDiscovery: true,
+  conquestConstructed: true,
+  conquestDiscovery: true,
+  challengeConstructed: true,
+  challengeDiscovery: true
+})
+
+let gameModeStatus = defaultGameModeStatus()
+let gameModeStatusAvailable = true
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -9,6 +25,54 @@ export default defineConfig({
         serviceBindings: {
           MATCH_SERVICE: async request => {
             const url = new URL(request.url)
+            if (url.pathname === '/__test/game-modes') {
+              if (request.method === 'DELETE') {
+                gameModeStatus = defaultGameModeStatus()
+                gameModeStatusAvailable = true
+                return new Response(null, { status: 204 })
+              }
+              const body = (await request.json()) as {
+                field?: keyof typeof gameModeStatus
+                enabled?: boolean
+                available?: boolean
+              }
+              if (typeof body.available === 'boolean') {
+                gameModeStatusAvailable = body.available
+                return new Response(null, { status: 204 })
+              }
+              if (
+                request.method !== 'POST' ||
+                !body.field ||
+                !(body.field in gameModeStatus) ||
+                typeof body.enabled !== 'boolean'
+              ) {
+                return new Response('invalid test game-mode update', {
+                  status: 400
+                })
+              }
+              gameModeStatus[body.field] = body.enabled
+              return new Response(null, { status: 204 })
+            }
+            if (url.pathname === '/internal/game-modes') {
+              if (
+                request.method !== 'GET' ||
+                request.headers.get('x-cloud-weasel-internal-auth') !==
+                  'matchmaker-test-secret'
+              ) {
+                return new Response('invalid game-mode request', {
+                  status: 400
+                })
+              }
+              if (!gameModeStatusAvailable) {
+                return Response.json(
+                  { error: 'game-mode status unavailable' },
+                  { status: 503 }
+                )
+              }
+              return Response.json({
+                status: gameModeStatus
+              })
+            }
             if (url.pathname === '/internal/matchmaker/player-profile') {
               if (
                 request.method !== 'POST' ||

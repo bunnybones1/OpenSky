@@ -70,6 +70,11 @@ bounded attempts. If transient allocation still fails, connected human
 participants are restored to durable tickets without a refusal or timeout
 penalty, preserving the Go director's `ReleasePlayer` outcome without allowing
 an accepted proposal to retry forever.
+The match service's D1 game-mode switchboard is refreshed on the source's
+ten-second cache interval even when only one player is waiting. Disabled queues
+are drained with `GAME_MODE_DISABLED`; accepted proposals are canceled with
+`SERVER_SHUTDOWN`. An unavailable or malformed switchboard pauses matching and
+dispatch while retaining durable state for the next alarm retry.
 
 ## Deployment gates
 

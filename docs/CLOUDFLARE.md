@@ -240,6 +240,11 @@ and progress are not migrated.
   exhaustion restores connected humans to durable queue tickets without a
   penalty, matching the source director's player-release behavior and avoiding
   permanent dispatch limbo.
+  The matcher also refreshes D1-backed game-mode status on the source's
+  ten-second cache interval, including for a single waiting player. Switch-off
+  drains waiting tickets with `GAME_MODE_DISABLED` and accepted proposals with
+  `SERVER_SHUTDOWN`; status-service failures pause matching without discarding
+  durable queue/proposal state.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

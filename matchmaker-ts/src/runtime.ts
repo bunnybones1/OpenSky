@@ -68,6 +68,7 @@ export interface MatchmakerEnv {
   MATCH_TICK_MS?: string
   RELAX_MATCHING_INTERVAL_MS?: string
   MATCH_DISPATCH_MAX_ATTEMPTS?: string
+  GAME_MODE_STATUS_CACHE_TTL_MS?: string
   EXPECTED_RELEASE_VERSION?: string
   ENABLE_RANKED_BOTS?: string
   ALLOW_SAME_IP_MATCH?: string
@@ -130,6 +131,7 @@ interface RuntimeConfig {
   tickMs: number
   relaxIntervalMs: number
   dispatchMaxAttempts: number
+  gameModeStatusCacheTtlMs: number
   expectedReleaseVersion: string
   enableRankedBots: boolean
   allowSameIpMatch: boolean
@@ -203,6 +205,11 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
       3,
       10
     ),
+    gameModeStatusCacheTtlMs: parsePositiveInteger(
+      env.GAME_MODE_STATUS_CACHE_TTL_MS,
+      10_000,
+      5 * 60_000
+    ),
     expectedReleaseVersion,
     enableRankedBots: bool(env.ENABLE_RANKED_BOTS, false),
     allowSameIpMatch: bool(env.ALLOW_SAME_IP_MATCH, false),
@@ -239,10 +246,32 @@ const humanParticipants = (proposal: StoredProposal) =>
     participant => !isBot(deserializePlayer(participant.player))
   )
 
+const gameModeStatusFields: Record<
+  Exclude<GameMode, GameMode.UNKNOWN>,
+  string
+> = {
+  [GameMode.TUTORIAL]: 'tutorial',
+  [GameMode.PRACTICE_PVP]: 'practicePVP',
+  [GameMode.PRACTICE_BOT]: 'practiceBot',
+  [GameMode.WARM_UP]: 'warmUp',
+  [GameMode.RANKED_CONSTRUCTED]: 'rankedConstructed',
+  [GameMode.RANKED_DISCOVERY]: 'rankedDiscovery',
+  [GameMode.CONQUEST_CONSTRUCTED]: 'conquestConstructed',
+  [GameMode.CONQUEST_DISCOVERY]: 'conquestDiscovery',
+  [GameMode.CHALLENGE_CONSTRUCTED]: 'challengeConstructed',
+  [GameMode.CHALLENGE_DISCOVERY]: 'challengeDiscovery'
+}
+
+interface GameModeStatusCache {
+  checkedAtMs: number
+  enabledModes: Set<GameMode>
+}
+
 export class MatchmakerPool implements DurableObject {
   private readonly config: RuntimeConfig
   private readonly penalties: PenaltyTracker
   private readonly captcha: CaptchaGuard
+  private gameModeStatusCache?: GameModeStatusCache
 
   constructor(
     private readonly state: DurableObjectState,
@@ -735,6 +764,10 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async attemptMatches(now: number) {
+    const enabledModes = await this.currentEnabledGameModes(now)
+    if (!enabledModes) return
+    await this.drainDisabledMatchmaking(enabledModes)
+
     const storedTickets = await this.state.storage.list<StoredTicket>({
       prefix: TICKET_PREFIX
     })
@@ -960,6 +993,17 @@ export class MatchmakerPool implements DurableObject {
 
   private async dispatchProposal(proposal: StoredProposal) {
     if (!this.env.MATCH_SERVICE) return
+    const enabledModes = await this.currentEnabledGameModes(Date.now())
+    if (!enabledModes) {
+      proposal.status = 'ACCEPTED'
+      proposal.nextDispatchAtMs = Date.now() + this.config.tickMs
+      await this.state.storage.put(proposalKey(proposal.id), proposal)
+      return
+    }
+    if (this.proposalUsesDisabledMode(proposal, enabledModes)) {
+      await this.drainAcceptedProposal(proposal)
+      return
+    }
     proposal.status = 'DISPATCHING'
     proposal.dispatchAttempts += 1
     proposal.nextDispatchAtMs = undefined
@@ -1085,6 +1129,95 @@ export class MatchmakerPool implements DurableObject {
     )
   }
 
+  // Source oracle: gamemodechecker caches the API switchboard for ten seconds.
+  // A failed refresh must preserve queued state and pause matching/dispatch.
+  private async currentEnabledGameModes(
+    now: number
+  ): Promise<Set<GameMode> | undefined> {
+    if (
+      this.gameModeStatusCache &&
+      now - this.gameModeStatusCache.checkedAtMs <
+        this.config.gameModeStatusCacheTtlMs
+    ) {
+      return this.gameModeStatusCache.enabledModes
+    }
+    if (!this.env.MATCH_SERVICE) return undefined
+    try {
+      const response = await this.env.MATCH_SERVICE.fetch(
+        new Request('https://cloud-weasel-match/internal/game-modes', {
+          headers: {
+            [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+          }
+        })
+      )
+      const body: unknown = await response.json()
+      if (!response.ok || !isRecord(body) || !isRecord(body.status)) {
+        throw new Error(`match service returned ${response.status}`)
+      }
+      const enabledModes = new Set<GameMode>()
+      for (const [mode, field] of Object.entries(gameModeStatusFields)) {
+        const value = body.status[field]
+        if (typeof value !== 'boolean') {
+          throw new Error(`match service omitted ${field}`)
+        }
+        if (value) enabledModes.add(mode as GameMode)
+      }
+      this.gameModeStatusCache = { checkedAtMs: now, enabledModes }
+      return enabledModes
+    } catch (error) {
+      console.error('matchmaker game-mode refresh failed', error)
+      this.gameModeStatusCache = undefined
+      return undefined
+    }
+  }
+
+  // Source oracle: custommatchmaker/backend_service.go drains waiting players
+  // with GAME_MODE_DISABLED and accepted proposals with SERVER_SHUTDOWN.
+  private async drainDisabledMatchmaking(enabledModes: Set<GameMode>) {
+    const tickets = await this.state.storage.list<StoredTicket>({
+      prefix: TICKET_PREFIX
+    })
+    const disabledTicketKeys: string[] = []
+    for (const [key, ticket] of tickets) {
+      if (enabledModes.has(ticket.player.mode)) continue
+      this.sendToPrincipal(
+        ticket.player.address,
+        errorMessage('GAME_MODE_DISABLED')
+      )
+      disabledTicketKeys.push(key)
+    }
+    if (disabledTicketKeys.length > 0) {
+      await this.state.storage.delete(disabledTicketKeys)
+    }
+
+    const proposals = await this.state.storage.list<StoredProposal>({
+      prefix: PROPOSAL_PREFIX
+    })
+    for (const proposal of proposals.values()) {
+      if (
+        proposal.status !== 'FOUND' &&
+        this.proposalUsesDisabledMode(proposal, enabledModes)
+      ) {
+        await this.drainAcceptedProposal(proposal)
+      }
+    }
+  }
+
+  private proposalUsesDisabledMode(
+    proposal: StoredProposal,
+    enabledModes: Set<GameMode>
+  ) {
+    return proposal.participants.some(
+      participant => !enabledModes.has(participant.player.mode)
+    )
+  }
+
+  private async drainAcceptedProposal(proposal: StoredProposal) {
+    this.broadcastProposal(proposal, errorMessage('SERVER_SHUTDOWN'))
+    await this.deleteProposal(proposal)
+    console.warn('matchmaker drained disabled accepted proposal', proposal.id)
+  }
+
   private async rescheduleAlarm(now: number) {
     const [tickets, proposals] = await Promise.all([
       this.state.storage.list<StoredTicket>({ prefix: TICKET_PREFIX }),
@@ -1109,6 +1242,16 @@ export class MatchmakerPool implements DurableObject {
       (tickets.size >= 1 && this.config.enableRankedBots)
     ) {
       candidates.push(now + this.config.tickMs)
+    } else if (tickets.size >= 1) {
+      candidates.push(
+        this.gameModeStatusCache
+          ? Math.max(
+              now + 1,
+              this.gameModeStatusCache.checkedAtMs +
+                this.config.gameModeStatusCacheTtlMs
+            )
+          : now + this.config.tickMs
+      )
     }
 
     const next = candidates
