@@ -124,4 +124,120 @@ describe('fail-closed Google identity staff authorization', () => {
     expect((await rpcAs(ADMIN, 'AdminListAccounts')).status).toBe(501)
     expect((await rpcAs(ADMIN, 'AdminSearchAccounts')).status).toBe(501)
   })
+
+  it('finds accounts by source name, address field, and preserved identity route', async () => {
+    expect(
+      (
+        await rpcAs(PLAYER, 'GMFindAccount', {
+          name: 'Staff Player'
+        })
+      ).status
+    ).toBe(403)
+    await grantAdmin()
+    for (const body of [
+      { name: 'Staff Player' },
+      { accountAddress: `identity:${PLAYER}` },
+      { name: `identity:${PLAYER}` }
+    ]) {
+      const response = await rpcAs(ADMIN, 'GMFindAccount', body)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        account: {
+          address: `identity:${PLAYER}`,
+          name: 'Staff Player',
+          settings: { requestMoreInvites: false }
+        }
+      })
+    }
+    expect((await rpcAs(ADMIN, 'GMFindAccount')).status).toBe(400)
+    expect(
+      (await rpcAs(ADMIN, 'GMFindAccount', { name: 'Missing Player' })).status
+    ).toBe(404)
+  })
+
+  it('lists filtered staff account rows with source-shaped cursor metadata', async () => {
+    expect((await rpcAs(PLAYER, 'GMListAccounts')).status).toBe(403)
+    await grantAdmin()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings
+       SET account_status = 'FLAGGED' WHERE user_id = ?`
+    )
+      .bind(PLAYER)
+      .run()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I'
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'`
+    )
+      .bind(PLAYER)
+      .run()
+
+    const filtered = await rpcAs(ADMIN, 'GMListAccounts', {
+      page: {
+        pageSize: 1,
+        sort: [{ column: 'created_at', order: 'DESC' }]
+      },
+      accountStatus: ['FLAGGED'],
+      conquestsUnlocked: true
+    })
+    expect(filtered.status).toBe(200)
+    const body = (await filtered.json()) as {
+      page: { pageSize: number; hasBefore: boolean; hasAfter: boolean }
+      accounts: Array<{
+        account: { address: string }
+        conquestsUnlocked: boolean
+        accountActions: unknown[]
+        ipHistory: unknown[]
+      }>
+    }
+    expect(body.page).toMatchObject({
+      pageSize: 1,
+      hasBefore: false,
+      hasAfter: false
+    })
+    expect(body.accounts).toEqual([
+      expect.objectContaining({
+        account: expect.objectContaining({ address: `identity:${PLAYER}` }),
+        conquestsUnlocked: true,
+        accountActions: [],
+        ipHistory: []
+      })
+    ])
+
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListAccounts', {
+          accountActions: ['BANNED']
+        })
+      ).json()
+    ).toMatchObject({ accounts: [] })
+  })
+
+  it('paginates account rows and rejects unsafe filters and sort columns', async () => {
+    await grantAdmin()
+    const first = (await (
+      await rpcAs(ADMIN, 'GMListAccounts', { page: { pageSize: 1 } })
+    ).json()) as { page: { after: string; hasBefore: boolean } }
+    expect(first.page.hasBefore).toBe(true)
+    const second = await rpcAs(ADMIN, 'GMListAccounts', {
+      page: { pageSize: 1, before: first.page.after }
+    })
+    expect(await second.json()).toMatchObject({
+      page: { hasBefore: false, hasAfter: true }
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListAccounts', {
+          page: { sort: [{ column: 'primary_email', order: 'ASC' }] }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListAccounts', {
+          createdBefore: 'not-a-date'
+        })
+      ).status
+    ).toBe(400)
+  })
 })

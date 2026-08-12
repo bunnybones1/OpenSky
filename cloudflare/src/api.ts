@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountRegistration,
+  AccountStatus,
   CardSearchCriteria,
   DeckClass,
   EpicType,
@@ -514,6 +515,54 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
         return json(request, env, { stats: await staff.stats() })
+      }
+
+      case 'GMFindAccount': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          name?: string
+          accountAddress?: string
+        }>(request)
+        if (!body.name && !body.accountAddress) {
+          throw invalidArgument('both name and accountAddress missing')
+        }
+        const account = await playerRpc.getAccountForAdmin(
+          body.name,
+          body.accountAddress
+        )
+        if (!account) throw notFound('account not found')
+        return json(request, env, { account })
+      }
+
+      case 'GMListAccounts': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          page?: Page
+          accountStatus?: AccountStatus[]
+          accountActions?: AccountStatus[]
+          createdBefore?: string
+          createdAfter?: string
+          conquestsUnlocked?: boolean
+        }>(request)
+        const result = await staff.listAccounts(body)
+        const accounts = await Promise.all(
+          result.rows.map(async row => {
+            const account = await playerRpc.getAccountForAdmin(
+              undefined,
+              identityReferenceFor(row.user_id)
+            )
+            if (!account) throw notFound('account not found')
+            return {
+              account,
+              conquestsUnlocked: row.conquests_unlocked === 1,
+              accountActions: [],
+              ipHistory: []
+            }
+          })
+        )
+        return json(request, env, { page: result.page, accounts })
       }
 
       case 'GMIsAccountBanned': {
