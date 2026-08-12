@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 128 |
-| Remaining source RPCs | 44 |
+| Ported source RPCs | 130 |
+| Remaining source RPCs | 42 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 14 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 12 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -141,3 +141,13 @@ requested current daily, weekly, or seasonal period. Identical retries are
 no-ops in the same D1 transaction boundary. `GMDeleteQuest` preserves the
 source production refusal after role and target validation instead of exposing
 a destructive non-production path from a globally deployed Worker.
+
+Progression overrides have their own dormant `PROGRESSION_WRITE` capability
+and immutable ledger. `GMGiveLevels` preserves the source's uint16 request and
+effective level-1001 experience cap while translating the established Cloud
+Weasel level-one baseline. It updates SkyPass level, rank eligibility, inviter
+season levels, and sticker points. `GMSetRP` preserves the level-15 floor,
+rank/stage thresholds, winning Glicko state, ranked-only score hook, and the
+deterministic top-100 Grandweaver recalculation across both ranked modes. The
+capability is the per-identity replacement for the source's global
+`AllowRankEloChange` switch; production has no grants.

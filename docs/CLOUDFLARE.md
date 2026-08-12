@@ -276,6 +276,13 @@ and progress are not migrated.
   rewards. Both mutations scope assignments to the target Google identity and
   make identical retries no-ops. The source production refusal for quest
   deletion is preserved after admin and target validation.
+- Level and RP overrides require the separate dormant `PROGRESSION_WRITE`
+  capability and append immutable before/after snapshots. The port translates
+  the source level-zero model to Cloud Weasel's existing level-one baseline,
+  preserves its experience cap, SkyPass/referral/sticker effects, level-15 RP
+  floor, rank thresholds, winning Glicko state, and ranked-only score hook, and
+  deterministically recalculates the top 100 eligible Grandweavers in both
+  ranked modes. Production has no progression permission grants.
 - Player reports are visible to staff through the original signal detail and
   summary contracts. The reads preserve reporter identity, match ID, sanitized
   comment, pending state, status/date filters, and bounded cursors. Scores are
