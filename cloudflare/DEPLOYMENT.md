@@ -5,11 +5,11 @@
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`5a690489-47ec-4d67-b014-f4fecd949263`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
-- Match service Worker: `cloud-weasel-match-service` (`177a62e5-e7ad-4142-b029-f9f4d87123d8`)
+- Match service Worker: `cloud-weasel-match-service` (`4ce3627e-69fb-48b2-9169-5f203ede55e9`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
 - Deployed source includes `9fb4e7c` for the API and `c80d59b` for the webapp,
-  `3a964c3` for match service and matchmaker,
-  and `b612af3` for game, plus the match-service inventory fix from `3c57de5`
+  `013a246` for match service, `3a964c3` for matchmaker,
+  and `b612af3` for game
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0043`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
@@ -131,6 +131,10 @@
 - Durable matchmaking, acceptance/refusal cooldowns, active-match reconnects,
   opt-in source-compatible captcha/shadow-ban enforcement, and release-scoped
   game-abandon cooldown bridging
+- Authoritative accepted-match account snapshots from D1: game aliases and
+  locale/settings stay independent of Google profile data; rank state,
+  cosmetics, card rarities, and private spectate codes are resolved by the
+  service instead of trusted from the browser
 - Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
   match rewards, private/public spectators, and capability-protected replays
 
@@ -274,6 +278,13 @@ settlement and delayed delivery against that pool.
   prevents a ban or suspension applied during Google step-up from racing the
   deletion transition. All 498 static assets were recognized,
   and the D1 verification read reported `changed_db: false`
+- Match service version `4ce3627e-69fb-48b2-9169-5f203ede55e9` contains source
+  `013a246`. Its deployment passed the Conquest fail-closed gate; the public
+  API `Ping` and API-to-match-service `GetGameModesStatus` binding both passed,
+  with both Conquest modes still disabled. The authoritative match snapshot
+  now carries the D1 game alias, locale, warm-ups, account cosmetics, current
+  rank state, inventory-derived card rarities, and the persistent spectate code
+  checked by the game Durable Object
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

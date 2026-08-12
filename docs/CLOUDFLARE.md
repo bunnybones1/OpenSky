@@ -201,6 +201,11 @@ and progress are not migrated.
   an authenticated Cloudflare service binding. D1 is now the shared operational
   authority for that public read, matchmaker profile admission, and final
   accepted-match dispatch, so a queue switch cannot be ignored by one service.
+  Accepted-match construction also replaces the old service-only account RPCs
+  with a typed D1 repository: it uses the game alias/settings instead of Google
+  profile fields, derives playable card rarity and hero ability server-side,
+  includes current rank/cosmetic state, and shares the same persistent private
+  spectate-code rotation contract as the public API.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active

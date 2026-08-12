@@ -5,6 +5,10 @@ the authoritative game-server Durable Object. It preserves the source
 `MatchmakerStartMatchMessage` contract, allocates stable match/replay IDs in D1,
 loads the authenticated player's account and unlocked cards, creates source-
 compatible bot participants, and dispatches an idempotent match creation call.
+Human match snapshots come from game-owned D1 state rather than Google identity
+metadata or browser claims: account alias/settings, current ranked stats,
+crystal/title/tag art, equipped cosmetics, inventory card rarity, hero ability,
+quests, and the persistent private spectate code are resolved before dispatch.
 
 It also exposes an internal, authenticated matchmaking-profile endpoint. That
 endpoint verifies the identity-to-game-principal binding and resolves current
