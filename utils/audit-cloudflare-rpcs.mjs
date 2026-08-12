@@ -94,9 +94,6 @@ export const SUPERSEDED_SOURCE_RPCS = new Set([
 ])
 
 export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([
-  'IAPVerifyAppleProducts2',
-  'IAPVerifyGoogleProducts2',
-  'JoinEarlyAccessList',
   'VerifyAppleAppStorePayment'
 ])
 

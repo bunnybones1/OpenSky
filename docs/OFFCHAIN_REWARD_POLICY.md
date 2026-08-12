@@ -79,3 +79,11 @@ not waiting to be copied. `MigrateAccount` and `MigrateFromBurner` are retired.
 `RequestAccountDeletion` is already replaced by the Google OIDC step-up web
 flow. The mechanical audit keeps these source names visible and separately
 reports the small set of genuinely actionable integration gaps.
+
+The deprecated `IAPVerifyGoogleProducts2` and `IAPVerifyAppleProducts2`
+contracts are explicit authenticated tombstones. Their source behavior selected
+the account from a caller-provided wallet address, so it cannot be adapted to a
+Google-owned identity without weakening authorization. Current mobile clients
+must use the modern provider-verification RPCs, which always fulfill the signed-
+in identity. `JoinEarlyAccessList` is also retired: Cloud Weasel is a live fork,
+not a new waitlist, and has no Mailchimp dependency.

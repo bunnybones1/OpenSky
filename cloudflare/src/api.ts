@@ -299,6 +299,24 @@ export const handleApiRequest = async (
         throw internal('deprecated method, use GetAuthToken + RegisterAccount')
       }
 
+      case 'IAPVerifyGoogleProducts2': {
+        await identityPrincipal(request, env)
+        throw unimplemented(
+          'deprecated method, use VerifyGooglePlayPayment with the signed-in identity'
+        )
+      }
+
+      case 'IAPVerifyAppleProducts2': {
+        await identityPrincipal(request, env)
+        throw unimplemented(
+          'deprecated method, use VerifyAppleAppStorePayment with the signed-in identity'
+        )
+      }
+
+      case 'JoinEarlyAccessList': {
+        throw unimplemented('Cloud Weasel early access is retired')
+      }
+
       case 'GetAuthToken': {
         const body = await requestBody<{ ethAuthProofString?: string }>(request)
         if (!body.ethAuthProofString)
