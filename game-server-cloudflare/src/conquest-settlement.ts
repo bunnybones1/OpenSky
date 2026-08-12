@@ -476,7 +476,12 @@ export const settlePendingConquest = async (
   return stored
 }
 
-/** Settles only the terminal runs containing this authoritative match ID. */
+/**
+ * Settles only terminal runs containing this authoritative match ID. A match
+ * completion retry must also recover an already-persisted settlement receipt:
+ * settlement can succeed before a later progression step fails, after which
+ * the run is COMPLETED rather than REWARDS_PENDING.
+ */
 export const settleConquestRewardsForMatch = async (
   database: D1Database,
   proposalId: string,
@@ -505,10 +510,17 @@ export const settleConquestRewardsForMatch = async (
   for (const player of [0, 1] as const) {
     const row = await database
       .prepare(
-        `SELECT id FROM player_conquests
-         WHERE user_id = ? AND mode = ? AND status = 'REWARDS_PENDING'
-           AND json_extract(match_progress, ?) IS NOT NULL
-         ORDER BY id DESC LIMIT 1`
+        `SELECT conquest.id
+         FROM player_conquests conquest
+         LEFT JOIN player_conquest_settlements settlement
+           ON settlement.conquest_id = conquest.id
+         WHERE conquest.user_id = ? AND conquest.mode = ?
+           AND (
+             conquest.status = 'REWARDS_PENDING'
+             OR settlement.conquest_id IS NOT NULL
+           )
+           AND json_extract(conquest.match_progress, ?) IS NOT NULL
+         ORDER BY conquest.id DESC LIMIT 1`
       )
       .bind(userIds[player], conquestMode, `$."${match.id}"`)
       .first<{ id: number }>()

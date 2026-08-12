@@ -266,7 +266,7 @@ describe('source Conquest reward settlement', () => {
     ])
   })
 
-  it('settles only terminal runs that contain the authoritative match', async () => {
+  it('settles only terminal runs and recovers their receipt on match retry', async () => {
     const conquest = await setup(3)
     await setupOpponent()
     await env.AUTH_DB.prepare(
@@ -325,6 +325,27 @@ describe('source Conquest reward settlement', () => {
     ).toEqual({ count: 1 })
     expect(rewards[0].map(reward => reward.card?.card.id)).toEqual([6, 136])
     expect(rewards[1]).toEqual([])
+
+    const retry = await settleConquestRewardsForMatch(
+      env.AUTH_DB,
+      'settlement-match',
+      '2026-08-12T12:01:00.000Z',
+      () => {
+        throw new Error('match retry must not redraw')
+      }
+    )
+    expect(retry).toEqual(rewards)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_conquest_settlements) AS settlements,
+           (SELECT COUNT(*) FROM player_conquest_gold_deliveries) AS deliveries,
+           (SELECT COUNT(*) FROM player_conquest_feed_events) AS events`
+      ).first()
+    ).toEqual({ settlements: 1, deliveries: 1, events: 2 })
+    expect((await inventory()).results).toMatchObject([
+      { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 1 }
+    ])
   })
 
   it('does not require a pool for a nonterminal Conquest match', async () => {
