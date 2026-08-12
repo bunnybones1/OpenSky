@@ -652,9 +652,10 @@ describe('Cloud Weasel accepted-match service', () => {
 
     const reordered = dispatch()
     reordered.createdAtMs = accepted.createdAtMs
+    const reorderedSeed = reordered.participants[0].request!.privateSeed
     reordered.participants[0].request!.privateSeed = Object.fromEntries(
-      Object.entries(reordered.participants[0].request!.privateSeed).reverse()
-    )
+      Object.entries(reorderedSeed).reverse()
+    ) as typeof reorderedSeed
     const semanticRetry = await create(reordered)
     expect(semanticRetry.status).toBe(200)
     expect(await semanticRetry.json()).toEqual(await first.clone().json())
@@ -858,6 +859,31 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(await rejected.json()).toEqual({
       error: 'invalid player session ID'
     })
+  })
+
+  it('rejects release mismatch at the final service boundary', async () => {
+    const accepted = dispatch()
+    accepted.participants[1].player.clientVersionHash = 'release-2'
+    const response = await create(accepted)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: 'participants use different releases'
+    })
+    const count = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ count: number }>()
+    expect(count?.count).toBe(0)
+
+    const empty = dispatch()
+    empty.proposalId = 'proposal-empty-release'
+    empty.participants[0].player.clientVersionHash = ''
+    empty.participants[0].request!.versionHash = ''
+    const rejected = await create(empty)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toEqual({ error: 'invalid matchmaker player' })
   })
 
   it('preserves the normalized challenge session as the matchmaking code', async () => {

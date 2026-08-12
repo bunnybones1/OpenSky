@@ -107,6 +107,7 @@ export const parseAcceptedMatchDispatch = (
       typeof player.sessionId !== 'string' ||
       player.sessionId.length > 128 ||
       typeof player.clientVersionHash !== 'string' ||
+      player.clientVersionHash.length === 0 ||
       player.clientVersionHash.length > 128
     ) {
       throw new DispatchProtocolError('invalid matchmaker player')
@@ -176,6 +177,12 @@ export const parseAcceptedMatchDispatch = (
     ])
   ) {
     throw new DispatchProtocolError('participants use incompatible game modes')
+  }
+  if (
+    participants[0].player.clientVersionHash !==
+    participants[1].player.clientVersionHash
+  ) {
+    throw new DispatchProtocolError('participants use different releases')
   }
   if (
     participants[0].player.address !== BOT_PLACEHOLDER &&
