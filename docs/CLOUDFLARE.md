@@ -227,6 +227,10 @@ and progress are not migrated.
   runs draw the exact source bundle from an active versioned pool, grant Silver
   immediately, persist source-shaped feed receipts, and complete through an
   immutable settlement receipt.
+- Authoritative practice completion now advances the source account warm-up
+  counter from zero through three. A per-proposal D1 receipt makes Durable
+  Object alarm retries idempotent; practice-bot only credits a human win, while
+  practice PvP and Warm Up preserve the source's completed-match behavior.
 - Gold remains source-compatible delayed inventory: a D1 delivery record is
   visible through `GetPendingCards` and card-ownership counters for 24 hours,
   then the API Worker's minute scheduler atomically grants it to the Google
