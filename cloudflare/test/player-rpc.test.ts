@@ -485,12 +485,19 @@ describe('legacy player RPC compatibility', () => {
     expect(first.status).toBe(200)
     const firstBody = await first.json<{
       page: { hasBefore: boolean; after: string }
-      res: Array<{ account: { name: string }; rank: number }>
+      res: Array<{
+        account: { name: string }
+        rank: number
+        rankedSilverReward: number
+        rankedTicketReward: number
+      }>
     }>()
     expect(firstBody.res).toEqual([
       expect.objectContaining({
         account: expect.objectContaining({ name: 'Alpha.Weasel' }),
-        rank: 1
+        rank: 1,
+        rankedSilverReward: 10,
+        rankedTicketReward: 2
       })
     ])
     expect(firstBody.page.hasBefore).toBe(true)
@@ -508,7 +515,9 @@ describe('legacy player RPC compatibility', () => {
         {
           account: { name: 'Beta.Weasel' },
           rank: 2,
-          accountStat: { score: 10 }
+          accountStat: { score: 10 },
+          rankedSilverReward: 9,
+          rankedTicketReward: 2
         }
       ]
     })

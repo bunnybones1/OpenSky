@@ -21,6 +21,7 @@ import {
 
 import { encodeDeckString } from './deck-codec'
 import { invalidArgument, notFound, permissionDenied } from './errors'
+import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
 
@@ -542,6 +543,7 @@ export class CompetitiveRepository {
   ): LeaderboardEntry {
     const rank =
       allRows.findIndex(candidate => candidate.user_id === row.user_id) + 1
+    const rewards = leaderboardRewardsForRank(rank)
     return {
       account: {
         id: 0,
@@ -562,8 +564,8 @@ export class CompetitiveRepository {
       },
       accountStat: statFromRow(row, rank),
       rank,
-      rankedSilverReward: 0,
-      rankedTicketReward: 0
+      rankedSilverReward: rewards.silverCards,
+      rankedTicketReward: rewards.conquestTickets
     }
   }
 
