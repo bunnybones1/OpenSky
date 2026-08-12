@@ -41,6 +41,14 @@ receipts, and Stripe webhook receipts are the reference implementations. New
 reward paths must test duplicate, concurrent, rollback, and retry behavior
 before production deployment.
 
+The Cloudflare release gate also keeps the preserved legacy transaction pages
+out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
+Stripe configuration are ready, its original page may return only after the
+USDC/silver mint controls are removed and Checkout continues to fulfill the
+off-chain receipt contract. The same rule applies to any future paid Conquest
+ticket UI. Hero-skin minting remains a legacy-wallet surface, not a Cloud
+Weasel reward path.
+
 ## Source RPC disposition
 
 The four `PrepareOnChain*`/burner-transfer RPCs are superseded by this policy,
