@@ -39,6 +39,10 @@ import {
   searchLibraryCards
 } from './card-library'
 import { CookiePoliciesRepository } from './cookie-policies'
+import {
+  ClientFeedbackRepository,
+  MAX_FEEDBACK_REQUEST_BYTES
+} from './client-feedback'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { pendingConquestCards } from './conquest-delivery'
@@ -238,6 +242,10 @@ export const handleApiRequest = async (
   const accountActions = new AccountActionsRepository(env.AUTH_DB)
   const accountReports = new AccountReportsRepository(env.AUTH_DB)
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
+  const clientFeedback = new ClientFeedbackRepository(
+    env.AUTH_DB,
+    env.CLIENT_FEEDBACK
+  )
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
@@ -1878,6 +1886,33 @@ export const handleApiRequest = async (
 
       case 'GetNextSeasonTime': {
         return json(request, env, { res: nextSeasonStart().toISOString() })
+      }
+
+      case 'RecordGameClientFeedback': {
+        const principal = await identityPrincipal(request, env)
+        const contentLength = request.headers.get('Content-Length')
+        if (
+          contentLength &&
+          (!/^\d+$/.test(contentLength) ||
+            Number(contentLength) > MAX_FEEDBACK_REQUEST_BYTES)
+        ) {
+          throw invalidArgument('feedback request is too large')
+        }
+        const text = await request.text()
+        if (
+          new TextEncoder().encode(text).byteLength > MAX_FEEDBACK_REQUEST_BYTES
+        ) {
+          throw invalidArgument('feedback request is too large')
+        }
+        let body: { req?: unknown }
+        try {
+          body = JSON.parse(text) as typeof body
+        } catch {
+          throw invalidArgument('request body must be JSON')
+        }
+        return json(request, env, {
+          status: await clientFeedback.record(principal.userId, body.req)
+        })
       }
 
       case 'ListPaymentProviderProducts': {

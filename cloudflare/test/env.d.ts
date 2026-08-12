@@ -4,6 +4,7 @@ declare global {
   namespace Cloudflare {
     interface Env {
       AUTH_DB: D1Database
+      CLIENT_FEEDBACK: R2Bucket
       SESSION_SIGNING_KEY: string
       SEQUENCE_API_HOST: string
       ALLOWED_ORIGINS: string

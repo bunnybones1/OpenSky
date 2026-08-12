@@ -1,5 +1,6 @@
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { providerSubjectHash } from './identities'
+import { ClientFeedbackRepository } from './client-feedback'
 
 const DELETION_DELAY_MS = (30 * 24 - 1) * 60 * 60 * 1_000
 const FINALIZATION_BATCH_SIZE = 50
@@ -42,7 +43,10 @@ const deletionRequest = (row: AccountDeletionRow): AccountDeletionRequest => ({
 })
 
 export class AccountDeletionRepository {
-  constructor(private readonly database: D1Database) {}
+  constructor(
+    private readonly database: D1Database,
+    private readonly feedbackBucket: R2Bucket
+  ) {}
 
   async target(userId: string): Promise<AccountDeletionTarget> {
     const row = await this.database
@@ -140,6 +144,12 @@ export class AccountDeletionRepository {
 
     let completed = 0
     for (const row of due.results) {
+      // R2 has no cross-service transaction with D1. Delete private feedback
+      // first; this is idempotent, so a later D1 failure safely retries.
+      await new ClientFeedbackRepository(
+        this.database,
+        this.feedbackBucket
+      ).deleteForUser(row.user_id)
       const identities = await this.database
         .prepare(
           `SELECT provider, provider_subject FROM auth_identities
@@ -182,6 +192,9 @@ export class AccountDeletionRepository {
         this.database
           .prepare(`DELETE FROM user_storage WHERE owner = ?`)
           .bind(`identity:${row.user_id}`),
+        this.database
+          .prepare(`DELETE FROM client_feedback_rate_limits WHERE user_id = ?`)
+          .bind(row.user_id),
         this.database
           .prepare(
             `UPDATE users

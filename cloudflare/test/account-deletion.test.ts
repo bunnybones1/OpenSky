@@ -12,6 +12,7 @@ import {
 } from '../src/identity-session'
 import { IdentitiesRepository } from '../src/identities'
 import { PlayerRepository } from '../src/player'
+import { feedbackPrefixForUser } from '../src/client-feedback'
 
 const testEnv = env as unknown as Env
 let testSequence = 0
@@ -298,10 +299,10 @@ describe('identity-native account deletion', () => {
       code: 'auth.account_deleted'
     })
 
-    const retry = await new AccountDeletionRepository(env.AUTH_DB).request(
-      userId,
-      new Date('2026-08-13T00:00:00.000Z')
-    )
+    const retry = await new AccountDeletionRepository(
+      env.AUTH_DB,
+      env.CLIENT_FEEDBACK
+    ).request(userId, new Date('2026-08-13T00:00:00.000Z'))
     expect(retry).toMatchObject({
       status: 'PENDING',
       requestedAt: deletion!.requested_at,
@@ -316,10 +317,10 @@ describe('identity-native account deletion', () => {
 
   it('soft-deletes due identities, preserves game state, and prevents recreation', async () => {
     const requestedAt = new Date('2026-07-01T00:00:00.000Z')
-    await new AccountDeletionRepository(env.AUTH_DB).request(
-      userId,
-      requestedAt
-    )
+    await new AccountDeletionRepository(
+      env.AUTH_DB,
+      env.CLIENT_FEEDBACK
+    ).request(userId, requestedAt)
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
         `INSERT INTO wallet_link_challenges
@@ -348,8 +349,21 @@ describe('identity-native account deletion', () => {
         requestedAt.toISOString()
       )
     ])
+    const feedbackKey = `${feedbackPrefixForUser(userId)}2026-07/negative/personal.json`
+    await env.CLIENT_FEEDBACK.put(feedbackKey, '{"private":true}', {
+      httpMetadata: { contentType: 'application/json' }
+    })
+    await env.AUTH_DB.prepare(
+      `INSERT INTO client_feedback_rate_limits
+         (user_id, window_started_at, submission_count) VALUES (?, ?, 1)`
+    )
+      .bind(userId, requestedAt.toISOString())
+      .run()
 
-    const repository = new AccountDeletionRepository(env.AUTH_DB)
+    const repository = new AccountDeletionRepository(
+      env.AUTH_DB,
+      env.CLIENT_FEEDBACK
+    )
     expect(
       await repository.finalizeDue(new Date('2026-07-30T22:59:59.999Z'))
     ).toEqual({ completed: 0 })
@@ -399,6 +413,15 @@ describe('identity-native account deletion', () => {
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM auth_identities WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(await env.CLIENT_FEEDBACK.head(feedbackKey)).toBeNull()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM client_feedback_rate_limits
+         WHERE user_id = ?`
       )
         .bind(userId)
         .first()

@@ -13,6 +13,12 @@
       "migrations_dir": "migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "CLIENT_FEEDBACK",
+      "bucket_name": "cloud-weasel-client-feedback-test"
+    }
+  ],
   "vars": {
     "SEQUENCE_API_HOST": "https://api.sequence.app",
     "ALLOWED_ORIGINS": "https://opensky.example"

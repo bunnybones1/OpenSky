@@ -297,10 +297,10 @@ const beginAccountDeletion = async (
   const accountName =
     typeof body.accountName === 'string' ? body.accountName : ''
   try {
-    await new AccountDeletionRepository(env.AUTH_DB).confirmAccountName(
-      userId,
-      accountName
-    )
+    await new AccountDeletionRepository(
+      env.AUTH_DB,
+      env.CLIENT_FEEDBACK
+    ).confirmAccountName(userId, accountName)
   } catch (error) {
     if (error instanceof RpcError) {
       return json({ code: error.code, message: error.message }, error.status)
@@ -539,7 +539,10 @@ const finishGoogleLogin = async (
       await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(
         userId
       )
-      await new AccountDeletionRepository(env.AUTH_DB).request(userId)
+      await new AccountDeletionRepository(
+        env.AUTH_DB,
+        env.CLIENT_FEEDBACK
+      ).request(userId)
       return accountDeletionRedirect(request, returnTo, 'scheduled')
     }
     const user = await identities.upsertGoogle(profile)

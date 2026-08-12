@@ -33,7 +33,10 @@ export default {
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
         runDueLeaderboardRewards(env.AUTH_DB),
-        new AccountDeletionRepository(env.AUTH_DB).finalizeDue(),
+        new AccountDeletionRepository(
+          env.AUTH_DB,
+          env.CLIENT_FEEDBACK
+        ).finalizeDue(),
         new WalletLinksRepository(env.AUTH_DB).cleanupExpired()
       ]).then(() => undefined)
     )
