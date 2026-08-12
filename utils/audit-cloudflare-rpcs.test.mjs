@@ -64,7 +64,7 @@ test('separates explicit retirement and replacement decisions from real gaps', (
 })
 
 test('fails closed when a source omission has no reviewed disposition', () => {
-  const implemented = Array.from({ length: 147 }, (_, index) => `Method${index}`)
+  const implemented = Array.from({ length: 149 }, (_, index) => `Method${index}`)
   const errors = checkRpcCoverage({
     source: [...implemented, 'EntirelyNewSourceRPC'],
     implemented: [...implemented, ...[

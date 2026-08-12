@@ -28,3 +28,6 @@ export const internal = (message = 'internal server error') =>
 
 export const unimplemented = (message = 'unimplemented') =>
   new RpcError(501, 'webrpc.unimplemented', message)
+
+export const unavailable = (message = 'service unavailable') =>
+  new RpcError(503, 'webrpc.unavailable', message)

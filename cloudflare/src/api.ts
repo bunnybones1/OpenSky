@@ -73,6 +73,7 @@ import { listPaymentProviderProducts } from './payment-provider-products'
 import { ProgressionSupportRepository } from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
+import { SocialInfoRepository, type SocialInfoFetch } from './social-info'
 import { SkypassSupportRepository } from './skypass-support'
 import {
   SkypassRewardUpdateRepository,
@@ -101,6 +102,7 @@ export interface AuthServices {
   stripeFetch?: StripeFetch
   skypassRewardFetch?: SkypassRewardFetch
   skypassRewardAllowedOrigins?: string
+  socialFetch?: SocialInfoFetch
 }
 
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
@@ -267,6 +269,11 @@ export const handleApiRequest = async (
   const userStorage = new UserStorageRepository(env.AUTH_DB)
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
+  const socialInfo = new SocialInfoRepository(
+    env.AUTH_DB,
+    env,
+    services.socialFetch
+  )
   const staff = new StaffRepository(env.AUTH_DB)
   const stripe = new StripeCheckoutRepository(
     env.AUTH_DB,
@@ -1667,6 +1674,14 @@ export const handleApiRequest = async (
         return json(request, env, {
           streamers: await content.listFeaturedStreamers()
         })
+      }
+
+      case 'GetDiscordInfo': {
+        return json(request, env, { data: await socialInfo.discordInfo() })
+      }
+
+      case 'GetTwitchInfo': {
+        return json(request, env, { data: await socialInfo.twitchInfo() })
       }
 
       case 'GetStickers': {

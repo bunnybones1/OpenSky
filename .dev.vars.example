@@ -11,6 +11,14 @@ GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
 # Shared only by the web/API gateway, matchmaker, match service, and game service.
 INTERNAL_AUTH_SECRET=replace-with-a-long-random-value
 
+# Optional Cloud Weasel social integrations. Keep the Twitch client secret in
+# Wrangler secrets in production. The Discord value is the full HTTPS widget
+# JSON endpoint for the Cloud Weasel server; do not reuse the source server ID.
+DISCORD_WIDGET_URL=https://discord.com/api/guilds/replace-with-server-id/widget.json
+TWITCH_CLIENT_ID=replace-with-twitch-client-id
+TWITCH_CLIENT_SECRET=replace-with-twitch-client-secret
+TWITCH_GAME_ID=replace-with-cloud-weasel-game-id
+
 # Optional Stripe Checkout integration. Checkout remains disabled unless both
 # secrets, both redirect URLs, and the selected product's price ID are set.
 # Keep secret values in Wrangler secrets; price IDs and redirect URLs may be

@@ -13,13 +13,13 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     147 |
+| Ported source RPCs           |     149 |
 | Cloudflare-superseded RPCs   |      15 |
 | Deliberately retired RPCs    |       2 |
-| Actionable source RPC gaps   |       8 |
+| Actionable source RPC gaps   |       6 |
 | Cloudflare-only RPC adapters |       0 |
 
-Together, 164/172 source contracts (95.3%) are implemented, replaced by a
+Together, 166/172 source contracts (96.5%) are implemented, replaced by a
 reviewed Cloud Weasel contract, or intentionally retired. This is a product-
 intent measure; the audit still prints every raw source omission.
 
@@ -28,7 +28,7 @@ intent measure; the audit still prints every raw source omission.
 | Workstream            | Actionable | Interpretation                                                                                                                                                            |
 | --------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Mobile-store commerce |          5 | Apple, Google Play, and Samsung product/receipt integrations remain optional product work. Any fulfillment must grant idempotent off-chain inventory; it must never mint. |
-| Social and launch     |          3 | Discord/Twitch information and the early-access list need Cloud Weasel product choices; they are not inferred from the zero-user migration decision.                      |
+| Social and launch     |          1 | The obsolete early-access list still needs an explicit Cloud Weasel product choice. Discord/Twitch reads are ported and fail closed until fork-owned configuration exists. |
 
 All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
@@ -46,8 +46,8 @@ enforced freeze after the first claim in a season.
   web flow.
 - `MigrateAccount` and `MigrateFromBurner` are retired for a zero-user Google-
   identity launch. Future providers get new reviewed account-linking flows.
-- `JoinEarlyAccessList` and the source Discord/Twitch endpoints remain visible
-  product decisions rather than being retired without an explicit choice.
+- `JoinEarlyAccessList` remains a visible product decision rather than being
+  retired without an explicit choice.
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are
@@ -66,6 +66,14 @@ Cloudflare account and a retention lifecycle is approved.
 the weekly distribution worker and preserves the source's strictly-after-now
 weekly boundary. It fails explicitly with `503` while production has no active
 schedule, so the preserved UI cannot advertise an invented reward time.
+
+`GetDiscordInfo` and `GetTwitchInfo` preserve the source response shapes and
+one-minute cache through D1. Discord uses a configurable public widget URL;
+Twitch uses standard app client credentials directly instead of the source's
+private Skyweaver token proxy. Both return a clear `503` until Cloud Weasel's
+own server/app identifiers and Twitch secret are configured. The preserved
+live-channel component now consumes the ported Twitch RPC again and remains
+hidden while that optional integration is unavailable.
 
 ## Recommended order
 

@@ -14,6 +14,10 @@ export interface Env {
   STRIPE_SUCCESS_URL?: string
   STRIPE_CANCEL_URL?: string
   SKYPASS_REWARDS_ALLOWED_ORIGINS?: string
+  DISCORD_WIDGET_URL?: string
+  TWITCH_CLIENT_ID?: string
+  TWITCH_CLIENT_SECRET?: string
+  TWITCH_GAME_ID?: string
   INTERNAL_AUTH_SECRET: string
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
