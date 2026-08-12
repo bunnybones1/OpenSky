@@ -13,8 +13,8 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 91 |
-| Remaining source RPCs | 81 |
+| Ported source RPCs | 93 |
+| Remaining source RPCs | 79 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
@@ -25,7 +25,7 @@ count or the critical player-facing compatibility set regresses.
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
-| Migration and identity | 8 | Burner/account migration and old social-provider endpoints need explicit product decisions. |
+| Migration and identity | 6 | Burner/account migration, deletion, and old social-provider endpoints need explicit product decisions. |
 | Other product | 1 | Private game-client feedback storage and retention. |
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
@@ -61,6 +61,9 @@ game UI only as a match-local lookup, never as authentication.
    now implemented and deployed.
 3. Define the destructive confirmation and recovery contract for
    identity-native account deletion; match-scoped reporting is now deployed.
+   The source invite-request setting is deployed, and its deprecated `SignIn`
+   method remains an explicit compatibility error rather than a second login
+   authority.
 4. Design optional WalletConnect linking and only then adapt commerce/on-chain
    methods at wallet-content boundaries.
 5. Add an explicit staff identity/RBAC model before porting any GM/admin write.

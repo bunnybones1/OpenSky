@@ -242,6 +242,9 @@ and progress are not migrated.
   implying or inventing rewards.
 - Card and presentation assets still load from the configured external assets host.
 - Google authentication and identity sessions are native TypeScript Worker services.
+- The source `RequestMoreInvites` opt-in is now an idempotent Google-identity
+  settings write. The already-deprecated source `SignIn` RPC remains a faithful
+  error tombstone and does not reintroduce wallet authentication alongside OIDC.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
