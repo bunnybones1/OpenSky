@@ -8,7 +8,9 @@ import { BOT_PLACEHOLDER, INTERNAL_AUTH_HEADER } from '../src/protocol'
 import { MatchRepository } from '../src/repository'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
-const PRINCIPAL = '0x1111111111111111111111111111111111111111'
+const SECOND_USER_ID = '22222222-2222-4222-8222-222222222222'
+let PRINCIPAL = '0x0000000000000000000000000000000000000001'
+let SECOND_PRINCIPAL = '0x0000000000000000000000000000000000000002'
 const PROPOSAL_ID = 'proposal-practice-1'
 const STARTER_CARD_IDS = [
   6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
@@ -62,6 +64,34 @@ const dispatch = (cards: number[] = STARTER_CARD_IDS) => ({
   ]
 })
 
+const mixedDispatch = () => {
+  const accepted = dispatch()
+  accepted.participants[0].player.mode = GameMode.PRACTICE_PVP
+  accepted.participants[0].request!.mode = GameMode.PRACTICE_PVP
+  accepted.participants[1] = {
+    player: {
+      address: SECOND_PRINCIPAL,
+      mode: GameMode.RANKED_CONSTRUCTED,
+      playerSessionId: 'player-session-2',
+      clientVersionHash: 'release-1'
+    },
+    request: {
+      type: 'find_match',
+      privateSeed: privateSeed(),
+      sessionID: '',
+      mode: GameMode.RANKED_CONSTRUCTED,
+      versionHash: 'release-1',
+      playerSessionID: 'player-session-2'
+    },
+    identity: {
+      principal: SECOND_PRINCIPAL,
+      userId: SECOND_USER_ID,
+      displayName: 'Ranked Player'
+    }
+  }
+  return { accepted, secondUserId: SECOND_USER_ID }
+}
+
 const create = (body = dispatch(), secret = 'match-service-test-secret') =>
   SELF.fetch('https://match-service.example/internal/matches', {
     method: 'POST',
@@ -93,6 +123,10 @@ const profile = async (
   )
 
 beforeEach(async () => {
+  ;[PRINCIPAL, SECOND_PRINCIPAL] = await Promise.all([
+    deriveGamePrincipal(USER_ID),
+    deriveGamePrincipal(SECOND_USER_ID)
+  ])
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM multiplayer_abandon_penalties_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_abandon_penalties'),
@@ -443,7 +477,7 @@ describe('Cloud Weasel accepted-match service', () => {
       reason: 'CONQUEST_DECK_CLASS_MISMATCH'
     })
 
-    const forged = await profile(GameMode.PRACTICE_BOT, PRINCIPAL)
+    const forged = await profile(GameMode.PRACTICE_BOT, SECOND_PRINCIPAL)
     expect(forged.status).toBe(403)
     expect(await forged.json()).toEqual({
       error: 'identity principal mismatch'
@@ -573,6 +607,100 @@ describe('Cloud Weasel accepted-match service', () => {
       'SELECT COUNT(*) AS count FROM multiplayer_matches'
     ).first<{ count: number }>()
     expect(count?.count).toBe(1)
+  })
+
+  it('preserves the source mixed practice-PVP/ranked participant modes', async () => {
+    const { accepted, secondUserId } = mixedDispatch()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, avatar_url, created_at, updated_at)
+         VALUES (?, 'Ranked Player', 'ranked@example.com', NULL, ?, ?)`
+      ).bind(secondUserId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_profiles
+           (user_id, level, xp, next_level_xp, created_at, updated_at)
+         VALUES (?, 2, 0, 200, ?, ?)`
+      ).bind(secondUserId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, warm_ups, spectate_code,
+            spectate_code_expires_at, created_at, updated_at)
+         VALUES (?, 'Ranked.Player', 'en', 0, 'ranked-spectate', ?, ?, ?)`
+      ).bind(
+        secondUserId,
+        new Date(Date.now() + 60_000).toISOString(),
+        now,
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_progression
+           (user_id, basic_skypass_level, basic_skypass_xp,
+            basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+         VALUES (?, 1, 0, 200, 0, ?, ?)`
+      ).bind(secondUserId, now, now),
+      ...STARTER_CARD_IDS.map(cardId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'test', ?, ?)`
+        ).bind(secondUserId, cardId, now, now)
+      )
+    ])
+
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT mode, player1_mode, player2_mode, match_payload_json
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{
+        mode: GameMode
+        player1_mode: GameMode
+        player2_mode: GameMode
+        match_payload_json: string
+      }>()
+    expect(row).toMatchObject({
+      mode: GameMode.RANKED_CONSTRUCTED,
+      player1_mode: GameMode.PRACTICE_PVP,
+      player2_mode: GameMode.RANKED_CONSTRUCTED
+    })
+    const payload = JSON.parse(row!.match_payload_json)
+    expect(payload.match.player1.gameMode).toBe(GameMode.PRACTICE_PVP)
+    expect(payload.match.player2.gameMode).toBe(GameMode.RANKED_CONSTRUCTED)
+  })
+
+  it('rejects mode combinations not compatible in the source', async () => {
+    const accepted = dispatch()
+    accepted.participants[0].player.mode = GameMode.PRACTICE_PVP
+    accepted.participants[0].request!.mode = GameMode.PRACTICE_PVP
+    accepted.participants[1].player.mode = GameMode.RANKED_DISCOVERY
+    const response = await create(accepted)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: 'participants use incompatible game modes'
+    })
+  })
+
+  it('revalidates both identity bindings before mixed final dispatch', async () => {
+    const { accepted } = mixedDispatch()
+    accepted.participants[1].identity!.userId = USER_ID
+    const response = await create(accepted)
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({
+      error: 'identity principal mismatch'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM multiplayer_matches
+         WHERE proposal_id = ?`
+      )
+        .bind(PROPOSAL_ID)
+        .first('count')
+    ).toBe(0)
   })
 
   it('overrides forged player bytes and rejects cards outside the account collection', async () => {

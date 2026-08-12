@@ -91,6 +91,8 @@ export interface MultiplayerMatchRow {
   proposal_id: string
   replay_id: string
   mode: string
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
   version: string
   match_payload_json: string
   server_address: string | null
@@ -103,6 +105,8 @@ export interface NewMultiplayerMatch {
   proposalId: string
   replayId: string
   mode: string
+  player1Mode: GameMode
+  player2Mode: GameMode
   version: string
   player1Principal: string
   player2Principal: string
@@ -156,6 +160,9 @@ interface MatchmakingHistoryRow {
 
 interface ActiveMatchRow {
   mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
+  player1_principal: string
   server_address: string
 }
 
@@ -365,7 +372,8 @@ export class MatchRepository {
           .first<MatchmakingHistoryRow>(),
         this.database
           .prepare(
-            `SELECT mode, server_address
+            `SELECT mode, player1_mode, player2_mode, player1_principal,
+                    server_address
            FROM multiplayer_matches
            WHERE status = 'active' AND server_address IS NOT NULL
              AND (player1_principal = ? OR player2_principal = ?)
@@ -423,7 +431,10 @@ export class MatchRepository {
       ...(active
         ? {
             activeMatch: {
-              mode: active.mode,
+              mode:
+                active.player1_principal === principal
+                  ? (active.player1_mode ?? active.mode)
+                  : (active.player2_mode ?? active.mode),
               serverAddress: active.server_address
             }
           }
@@ -434,7 +445,8 @@ export class MatchRepository {
   findByProposal(proposalId: string) {
     return this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, version, match_payload_json,
+        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+                version, match_payload_json,
                 server_address, status, player1_principal, player2_principal
          FROM multiplayer_matches
          WHERE proposal_id = ?`
@@ -693,15 +705,18 @@ export class MatchRepository {
     await this.database
       .prepare(
         `INSERT OR IGNORE INTO multiplayer_matches
-           (proposal_id, replay_id, mode, version, player1_principal, player2_principal,
-            player1_user_id, player2_user_id, match_payload_json, server_address,
-            status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'creating', ?, ?)`
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, server_address, status,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'creating', ?, ?)`
       )
       .bind(
         input.proposalId,
         input.replayId,
         input.mode,
+        input.player1Mode,
+        input.player2Mode,
         input.version,
         input.player1Principal,
         input.player2Principal,

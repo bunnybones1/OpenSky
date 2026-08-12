@@ -13,6 +13,11 @@ import type {
   SortBy
 } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
+import {
+  conquestMatchMode,
+  isRankedMatchModes,
+  storedMatchModes
+} from '@opensky/shared/match-modes'
 
 import { encodeDeckString } from './deck-codec'
 import { invalidArgument, notFound, permissionDenied } from './errors'
@@ -30,12 +35,6 @@ const HISTORY_MODES = new Set<GameMode>([
   'CONQUEST_DISCOVERY' as GameMode,
   'CHALLENGE_CONSTRUCTED' as GameMode,
   'CHALLENGE_DISCOVERY' as GameMode
-])
-const PUBLIC_MATCH_MODES = new Set<GameMode>([
-  'RANKED_CONSTRUCTED' as GameMode,
-  'RANKED_DISCOVERY' as GameMode,
-  'CONQUEST_CONSTRUCTED' as GameMode,
-  'CONQUEST_DISCOVERY' as GameMode
 ])
 const ALL_MATCH_MODES = new Set<GameMode>([
   'TUTORIAL' as GameMode,
@@ -106,6 +105,8 @@ interface MatchRow {
   proposal_id: string
   replay_id: string
   mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
   status: 'creating' | 'active' | 'ended' | 'failed'
   player1_user_id: string | null
   player2_user_id: string | null
@@ -342,13 +343,14 @@ const matchFromRow = (row: MatchRow): Match | null => {
             : resultBody.reason === 'forfeited'
               ? 'FORFEITED'
               : 'COMPLETED'
+  const modes = storedMatchModes(row)
   return {
     id: row.id,
     status: status as Match['status'],
     player1,
     player2,
-    player1GameMode: row.mode,
-    player2GameMode: row.mode,
+    player1GameMode: modes[0],
+    player2GameMode: modes[1],
     initPlayer1DeckNumCards: 0,
     initPlayer2DeckNumCards: 0,
     player1DeckClass: player1.deckClass,
@@ -618,7 +620,8 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+                status, player1_user_id,
                 player2_user_id, match_payload_json, winner_player,
                 result_json, created_at, updated_at, ended_at
          FROM multiplayer_matches
@@ -628,7 +631,9 @@ export class CompetitiveRepository {
       )
       .bind(userId, userId)
       .all<MatchRow>()
-    const rows = result.results.filter(row => HISTORY_MODES.has(row.mode))
+    const rows = result.results.filter(row =>
+      storedMatchModes(row).some(mode => HISTORY_MODES.has(mode))
+    )
     const size = pageSize(page)
     const offset = decodeCursor(page?.before)
     const slice = rows.slice(offset, offset + size)
@@ -684,7 +689,8 @@ export class CompetitiveRepository {
     const result = await this.database
       .prepare(
         `SELECT matches.id, matches.proposal_id, matches.replay_id,
-                matches.mode, matches.status, matches.player1_user_id,
+                matches.mode, matches.player1_mode, matches.player2_mode,
+                matches.status, matches.player1_user_id,
                 matches.player2_user_id, matches.match_payload_json,
                 matches.winner_player, matches.result_json,
                 matches.created_at, matches.updated_at, matches.ended_at,
@@ -722,7 +728,10 @@ export class CompetitiveRepository {
       )
       .filter(
         value =>
-          (!req.modes?.length || req.modes.includes(value.row.mode)) &&
+          (!req.modes?.length ||
+            storedMatchModes(value.row).some(mode =>
+              req.modes!.includes(mode)
+            )) &&
           (!req.statuses?.length ||
             req.statuses.includes(value.match.status)) &&
           (minimum === undefined ||
@@ -832,7 +841,8 @@ export class CompetitiveRepository {
     }
     const row = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+                status, player1_user_id,
                 player2_user_id, match_payload_json, winner_player,
                 result_json, created_at, updated_at, ended_at
          FROM multiplayer_matches
@@ -844,7 +854,12 @@ export class CompetitiveRepository {
 
     const participant =
       row.player1_user_id === userId || row.player2_user_id === userId
-    if (!participant && !PUBLIC_MATCH_MODES.has(row.mode)) {
+    const modes = storedMatchModes(row)
+    if (
+      !participant &&
+      !isRankedMatchModes(modes) &&
+      conquestMatchMode(modes) === undefined
+    ) {
       throw notFound('match is private')
     }
     const match = matchFromRow(row)
@@ -855,7 +870,8 @@ export class CompetitiveRepository {
   async matchByReplay(matchId: number, replayId: string) {
     const row = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+                status, player1_user_id,
                 player2_user_id, match_payload_json, winner_player,
                 result_json, created_at, updated_at, ended_at
          FROM multiplayer_matches

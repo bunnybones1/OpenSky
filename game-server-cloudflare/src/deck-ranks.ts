@@ -1,5 +1,10 @@
 import cardLibrary from '../../cloudflare/src/generated/card-library.json'
 import { DeckClass, GameMode, MatchStatus, PlayerRank } from '@opensky/proto'
+import {
+  isRankedConstructedMatchModes,
+  isRankedGameMode,
+  storedMatchModes
+} from '@opensky/shared/match-modes'
 
 import { encodeDeckString } from '../../cloudflare/src/deck-codec'
 import {
@@ -27,6 +32,8 @@ const RANK_ORDER: Record<PlayerRank, number> = {
 
 interface MatchRow {
   mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
   player1_user_id: string | null
   player2_user_id: string | null
   match_payload_json: string
@@ -278,13 +285,15 @@ export const applyDeckRanks = async (
   }
   const match = await database
     .prepare(
-      `SELECT mode, player1_user_id, player2_user_id, match_payload_json
+      `SELECT mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id, match_payload_json
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<MatchRow>()
   if (!match) throw new Error('match ledger row was not found')
-  if (match.mode !== GameMode.RANKED_CONSTRUCTED) {
+  const modes = storedMatchModes(match)
+  if (!isRankedConstructedMatchModes(modes)) {
     return { applied: false, deckStrings: [null, null], processedAt }
   }
   if (!match.player1_user_id || !match.player2_user_id) {
@@ -351,15 +360,16 @@ export const applyDeckRanks = async (
     return row ? mutableRank(row) : deck
   }) as [MutableRank | null, MutableRank | null]
   const playerRanks = await Promise.all(
-    userIds.map(userId =>
-      database
-        .prepare(
-          `SELECT player_rank FROM player_account_stats
-           WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
-             AND season = ?`
-        )
-        .bind(userId, season)
-        .first<PlayerStatsRow>()
+    userIds.map((userId, player) =>
+      isRankedGameMode(modes[player])
+        ? database
+            .prepare(
+              `SELECT player_rank FROM player_account_stats
+               WHERE user_id = ? AND game_mode = ? AND season = ?`
+            )
+            .bind(userId, modes[player], season)
+            .first<PlayerStatsRow>()
+        : Promise.resolve({ player_rank: PlayerRank.UNKNOWN })
     )
   )
   if (!playerRanks[0] || !playerRanks[1]) {
@@ -436,7 +446,12 @@ export const applyDeckRanks = async (
   for (const deck of inserts.values()) {
     statements.push(rankInsert(database, deck, processedAt))
   }
-  if (winner !== undefined && status === MatchStatus.COMPLETED && winnerRank) {
+  if (
+    winner !== undefined &&
+    status === MatchStatus.COMPLETED &&
+    winnerRank &&
+    saveWinner
+  ) {
     statements.push(
       database
         .prepare(

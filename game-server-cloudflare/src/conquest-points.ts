@@ -5,6 +5,10 @@ import {
   RewardType,
   type ConquestV2TreasureProgress
 } from '@opensky/proto'
+import {
+  conquestMatchMode,
+  storedMatchModes
+} from '@opensky/shared/match-modes'
 
 const EVENT_ID = 2
 const POINTS_CAP = 13_750
@@ -30,7 +34,9 @@ const HERO_ID: Record<string, number> = {
 }
 
 interface MatchRow {
-  mode: string
+  mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
   player1_user_id: string | null
   player2_user_id: string | null
   match_payload_json: string
@@ -118,12 +124,14 @@ const receipt = async (
 
 const deckCards = (payload: string): [number[], number[]] => {
   try {
-    const match = (JSON.parse(payload) as {
-      match?: {
-        player1?: { privateSeed?: { cards?: unknown[] } }
-        player2?: { privateSeed?: { cards?: unknown[] } }
+    const match = (
+      JSON.parse(payload) as {
+        match?: {
+          player1?: { privateSeed?: { cards?: unknown[] } }
+          player2?: { privateSeed?: { cards?: unknown[] } }
+        }
       }
-    }).match
+    ).match
     const cards = (value?: unknown[]) =>
       Array.from(
         new Set(
@@ -148,9 +156,9 @@ const eligible = (
   turnCount: number
 ) =>
   status === MatchStatus.COMPLETED ||
-  (((status === MatchStatus.FORFEITED || status === MatchStatus.ABANDONED) &&
+  ((status === MatchStatus.FORFEITED || status === MatchStatus.ABANDONED) &&
     winner === player) ||
-    turnCount >= 8)
+  turnCount >= 8
 
 /** Applies the source 4 + owned-card + hero-skin Conquest point formula once. */
 export const applyConquestPoints = async (
@@ -165,17 +173,15 @@ export const applyConquestPoints = async (
   if (existing) return existing
   const match = await database
     .prepare(
-      `SELECT mode, player1_user_id, player2_user_id, match_payload_json
+      `SELECT mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id, match_payload_json
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<MatchRow>()
   if (!match) throw new Error('match ledger row was not found')
-  if (
-    ![GameMode.CONQUEST_CONSTRUCTED, GameMode.CONQUEST_DISCOVERY].includes(
-      match.mode as GameMode
-    )
-  ) {
+  const conquestMode = conquestMatchMode(storedMatchModes(match))
+  if (!conquestMode) {
     return { applied: false, points: [0, 0], rewards: [[], []], processedAt }
   }
   if (!match.player1_user_id || !match.player2_user_id) {
@@ -196,7 +202,7 @@ export const applyConquestPoints = async (
            WHERE conquest.user_id = ? AND conquest.status = 'IN_PROGRESS'
              AND conquest.mode = ? LIMIT 1`
         )
-        .bind(EVENT_ID, userId, match.mode)
+        .bind(EVENT_ID, userId, conquestMode)
         .first<PlayerRow>()
     )
   )
@@ -234,7 +240,8 @@ export const applyConquestPoints = async (
           byCard.set(item.token_id, 1)
         }
       }
-      let earned = 4 + [...byCard.values()].reduce((sum, value) => sum + value, 0)
+      let earned =
+        4 + [...byCard.values()].reduce((sum, value) => sum + value, 0)
       if (items.results.some(item => item.item_type === 'SW_HERO_SKINS')) {
         earned += Math.ceil(earned * 0.25)
       }

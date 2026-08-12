@@ -10,6 +10,12 @@ import {
   RewardType
 } from '@opensky/proto'
 import {
+  conquestMatchMode,
+  isRankedGameMode,
+  isRankedMatchModes,
+  storedMatchModes
+} from '@opensky/shared/match-modes'
+import {
   hasUnlockedRanked,
   INITIAL_RANK_STATE_JSON
 } from '@opensky/shared/ranked-progression'
@@ -38,7 +44,9 @@ interface MatchPlayersRow {
 }
 
 interface MatchStatsRow extends MatchPlayersRow {
-  mode: string
+  mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
 }
 
 interface ConquestMatchRow extends MatchStatsRow {
@@ -347,17 +355,15 @@ export const applyConquestProgress = async (
 
   const match = await database
     .prepare(
-      `SELECT id, mode, player1_user_id, player2_user_id
+      `SELECT id, mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<ConquestMatchRow>()
   if (!match) throw new Error('match ledger row was not found')
-  if (
-    ![GameMode.CONQUEST_CONSTRUCTED, GameMode.CONQUEST_DISCOVERY].includes(
-      match.mode as GameMode
-    )
-  ) {
+  const conquestMode = conquestMatchMode(storedMatchModes(match))
+  if (!conquestMode) {
     return {
       applied: false,
       results: [ConquestMatchResult.DRAW, ConquestMatchResult.DRAW],
@@ -383,7 +389,7 @@ export const applyConquestProgress = async (
            WHERE user_id = ? AND status = 'IN_PROGRESS' AND mode = ?
            LIMIT 1`
         )
-        .bind(userId, match.mode)
+        .bind(userId, conquestMode)
         .first<ActiveConquestRow>()
     )
   )
@@ -948,13 +954,15 @@ export const applyMatchStats = async (
 ): Promise<MatchStatsReceipt> => {
   const match = await database
     .prepare(
-      `SELECT mode, player1_user_id, player2_user_id
+      `SELECT mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<MatchStatsRow>()
   if (!match) throw new Error('match ledger row was not found')
-  if (!['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].includes(match.mode)) {
+  const modes = storedMatchModes(match)
+  if (!isRankedMatchModes(modes)) {
     return { applied: false, rewards: [[], []], processedAt }
   }
   if (!Number.isSafeInteger(season) || season < 1 || season > 10_000) {
@@ -965,25 +973,28 @@ export const applyMatchStats = async (
   const existing = await statsReceipt(database, proposalId, false)
   if (existing) return existing
 
-  const initializers = userIds
-    .filter((userId): userId is string => userId !== null)
-    .map(userId =>
-      database
-        .prepare(
-          `INSERT OR IGNORE INTO player_account_stats
-             (user_id, game_mode, season, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`
-        )
-        .bind(userId, match.mode, season, processedAt, processedAt)
-    )
+  const initializers = userIds.flatMap((userId, player) =>
+    userId && isRankedGameMode(modes[player])
+      ? [
+          database
+            .prepare(
+              `INSERT OR IGNORE INTO player_account_stats
+                 (user_id, game_mode, season, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)`
+            )
+            .bind(userId, modes[player], season, processedAt, processedAt)
+        ]
+      : []
+  )
   if (initializers.length > 0) await database.batch(initializers)
 
   const accountStats = await Promise.all(
-    userIds.map(userId =>
+    userIds.map((userId, player) =>
       userId
-        ? database
-            .prepare(
-              `SELECT stats.user_id, account.id AS account_id, stats.score,
+        ? isRankedGameMode(modes[player])
+          ? database
+              .prepare(
+                `SELECT stats.user_id, account.id AS account_id, stats.score,
                       stats.player_rank, stats.player_rank_stage,
                       stats.player_rank_state, profile.level, profile.xp,
                       progression.basic_skypass_level
@@ -993,9 +1004,23 @@ export const applyMatchStats = async (
                LEFT JOIN player_progression progression
                  ON progression.user_id = stats.user_id
                WHERE stats.user_id = ? AND stats.game_mode = ? AND stats.season = ?`
-            )
-            .bind(userId, match.mode, season)
-            .first<AccountStatsRow>()
+              )
+              .bind(userId, modes[player], season)
+              .first<AccountStatsRow>()
+          : Promise.resolve({
+              user_id: userId,
+              account_id: null,
+              score: 0,
+              player_rank: PlayerRank.UNKNOWN,
+              player_rank_stage: PlayerRankStage.STAGE_NONE,
+              // FindOrCreateByAccountIDAndMode returns an ephemeral zero-value
+              // AccountStat for Practice. It still participates in the ordered
+              // Glicko calculation, but mayPersistStats prevents saving it.
+              player_rank_state: '[-1,0,0,0]',
+              level: null,
+              xp: null,
+              basic_skypass_level: null
+            } satisfies AccountStatsRow)
         : Promise.resolve(null)
     )
   )
@@ -1012,6 +1037,7 @@ export const applyMatchStats = async (
     const userId = userIds[player]
     const stats = accountStats[player]
     if (!userId || !stats) continue
+    if (!isRankedGameMode(modes[player])) continue
     const won = winner === player ? 1 : 0
     const tied = winner === undefined ? 1 : 0
     const lost = winner !== undefined && winner !== player ? 1 : 0
@@ -1056,7 +1082,7 @@ export const applyMatchStats = async (
              WHERE user_id = ? AND game_mode = ? AND season = ?
                AND player_rank = ? AND player_rank_stage = ?`
           )
-          .bind(userId, match.mode, season, playerRank, playerRankStage)
+          .bind(userId, modes[player], season, playerRank, playerRankStage)
           .first()
         if (!alreadyAwarded) {
           rewards[player].push(
@@ -1064,7 +1090,7 @@ export const applyMatchStats = async (
               {
                 accountID: stats.account_id ?? 0,
                 principal: '',
-                gameMode: match.mode as GameMode,
+                gameMode: modes[player],
                 level: stats.level,
                 experience: stats.xp,
                 seasonLevel: stats.basic_skypass_level,
@@ -1084,7 +1110,7 @@ export const applyMatchStats = async (
               )
               .bind(
                 userId,
-                match.mode,
+                modes[player],
                 season,
                 playerRank,
                 playerRankStage,
@@ -1097,7 +1123,7 @@ export const applyMatchStats = async (
       rewards[player].push({
         accountID: stats.account_id ?? 0,
         type: RewardType.RANK,
-        gameMode: match.mode as GameMode,
+        gameMode: modes[player],
         rank: {
           beforeMatch: rankData(
             stats.player_rank,
@@ -1147,7 +1173,7 @@ export const applyMatchStats = async (
           playerRankState,
           processedAt,
           userId,
-          match.mode,
+          modes[player],
           season,
           proposalId
         )

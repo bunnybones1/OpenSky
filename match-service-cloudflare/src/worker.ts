@@ -1,6 +1,7 @@
 import { GameMode } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
+import { legacyMatchMode } from '@opensky/shared/match-modes'
 
 import { buildMatch } from './match-builder'
 import {
@@ -284,9 +285,21 @@ export default {
       const access = new AccountActionsRepository(env.AUTH_DB)
       await Promise.all(
         dispatch.participants
-          .map(participant => participant.identity?.userId)
-          .filter((userId): userId is string => typeof userId === 'string')
-          .map(userId => access.enforcePlayerAccess(userId))
+          .filter(participant => participant.identity !== undefined)
+          .map(async participant => {
+            const identity = participant.identity!
+            if (
+              (await deriveGamePrincipal(identity.userId)) !==
+              identity.principal
+            ) {
+              throw new RpcError(
+                403,
+                'webrpc.permission_denied',
+                'identity principal mismatch'
+              )
+            }
+            await access.enforcePlayerAccess(identity.userId)
+          })
       )
     } catch (error) {
       if (error instanceof RpcError && error.status === 403) {
@@ -295,8 +308,11 @@ export default {
       throw error
     }
 
-    const gameMode = dispatch.participants[0].player.mode
-    if (!(await currentEnabledGameModes(env)).has(gameMode)) {
+    const gameModes = dispatch.participants.map(
+      participant => participant.player.mode
+    ) as [GameMode, GameMode]
+    const enabledModes = await currentEnabledGameModes(env)
+    if (gameModes.some(mode => !enabledModes.has(mode))) {
       return json({ error: 'game mode is disabled' }, 409)
     }
 
@@ -307,7 +323,9 @@ export default {
         (await repository.allocateIfMissing({
           proposalId: dispatch.proposalId,
           replayId,
-          mode: dispatch.participants[0].player.mode,
+          mode: legacyMatchMode(gameModes),
+          player1Mode: gameModes[0],
+          player2Mode: gameModes[1],
           version: dispatch.participants[0].player.clientVersionHash,
           player1Principal: dispatch.participants[0].player.address,
           player2Principal: dispatch.participants[1].player.address,

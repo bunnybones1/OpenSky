@@ -1,4 +1,5 @@
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
+import { GameMode } from '@opensky/proto'
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -182,6 +183,71 @@ describe('same-origin multiplayer gateway', () => {
       headers
     )
     expect(await afterCompletion.json()).toEqual({ type: 'no_match_found' })
+  })
+
+  it('returns the requesting participant mode for a mixed ranked match', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const opponentId = '33333333-3333-4333-8333-333333333333'
+    const opponent = await deriveGamePrincipal(opponentId)
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Ranked Opponent', 'ranked-opponent@example.com', NULL, ?, ?)`
+    )
+      .bind(opponentId, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+          player1_principal, player2_principal, player1_user_id,
+          player2_user_id, match_payload_json, server_address, status,
+          created_at, updated_at)
+       VALUES ('mixed-gateway', 'mixed-replay', 'RANKED_CONSTRUCTED',
+               'PRACTICE_PVP', 'RANKED_CONSTRUCTED', 'mixed-release',
+               ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
+    )
+      .bind(
+        principal,
+        opponent,
+        USER_ID,
+        opponentId,
+        JSON.stringify({
+          match: {
+            player1: { account: { address: principal } },
+            player2: { account: { address: opponent } }
+          }
+        }),
+        'wss://opensky.example/api/game/matches/mixed-gateway',
+        now,
+        now
+      )
+      .run()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches
+         SET player1_mode = 'PRACTICE_PVP',
+             player2_mode = 'RANKED_DISCOVERY'
+         WHERE proposal_id = 'mixed-gateway'`
+      ).run()
+    ).rejects.toThrow('multiplayer match modes are incompatible')
+
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    expect(
+      await (
+        await gateway(`/api/matchmaker/matchinfo/identity:${USER_ID}`, headers)
+      ).json()
+    ).toMatchObject({ matchInfo: { mode: GameMode.PRACTICE_PVP } })
+    expect(
+      await (
+        await gateway(
+          `/api/matchmaker/matchinfo/identity:${opponentId}`,
+          headers
+        )
+      ).json()
+    ).toMatchObject({ matchInfo: { mode: GameMode.RANKED_CONSTRUCTED } })
   })
 
   it('allows an authenticated spectator to query another player without leaking unknown targets', async () => {

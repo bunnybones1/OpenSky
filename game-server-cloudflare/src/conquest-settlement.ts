@@ -8,6 +8,10 @@ import {
   type Card,
   type Reward
 } from '@opensky/proto'
+import {
+  conquestMatchMode,
+  storedMatchModes
+} from '@opensky/shared/match-modes'
 
 const SILVER_OFFSET = 1 << 16
 const GOLD_OFFSET = 2 << 16
@@ -28,6 +32,8 @@ interface PendingConquestRow {
 interface ConquestMatchRow {
   id: number
   mode: GameMode
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
   player1_user_id: string | null
   player2_user_id: string | null
 }
@@ -251,11 +257,11 @@ const activePool = async (
       .filter(cardId => cardsById.has(cardId))
   if (
     eligible(ItemType.SW_SILVER_CARDS).length !==
-      rows.results.filter(
-        row => row.item_type === ItemType.SW_SILVER_CARDS
-      ).length ||
+      rows.results.filter(row => row.item_type === ItemType.SW_SILVER_CARDS)
+        .length ||
     eligible(ItemType.SW_GOLD_CARDS).length !==
-      rows.results.filter(row => row.item_type === ItemType.SW_GOLD_CARDS).length
+      rows.results.filter(row => row.item_type === ItemType.SW_GOLD_CARDS)
+        .length
   ) {
     throw new Error('active Conquest reward pool contains an invalid card')
   }
@@ -308,14 +314,20 @@ export const settlePendingConquest = async (
   }
   const choose = (candidates: number[]) => {
     const index = draw(candidates.length)
-    if (!Number.isSafeInteger(index) || index < 0 || index >= candidates.length) {
+    if (
+      !Number.isSafeInteger(index) ||
+      index < 0 ||
+      index >= candidates.length
+    ) {
       throw new Error('Conquest reward draw returned an invalid index')
     }
     return candidates[index]
   }
   // The source calls its random-card selector once per Silver. Duplicates are
   // therefore valid and intentional for a two-win bundle.
-  const silverCardIds = Array.from({ length: bundle.silver }, () => choose(silver))
+  const silverCardIds = Array.from({ length: bundle.silver }, () =>
+    choose(silver)
+  )
   const goldCardIds = Array.from({ length: bundle.gold }, () => choose(gold))
   const silverTokenIds = silverCardIds
     .map(cardId => SILVER_OFFSET + cardId)
@@ -361,7 +373,10 @@ export const settlePendingConquest = async (
         settledAt
       )
   ]
-  const grants = new Map<string, { itemType: ItemType; cardId: number; count: number }>()
+  const grants = new Map<
+    string,
+    { itemType: ItemType; cardId: number; count: number }
+  >()
   for (const [itemType, ids] of [
     [ItemType.SW_SILVER_CARDS, silverCardIds]
   ] as const) {
@@ -470,17 +485,15 @@ export const settleConquestRewardsForMatch = async (
 ): Promise<[Reward[], Reward[]]> => {
   const match = await database
     .prepare(
-      `SELECT id, mode, player1_user_id, player2_user_id
+      `SELECT id, mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<ConquestMatchRow>()
   if (!match) throw new Error('match ledger row was not found')
-  if (
-    ![GameMode.CONQUEST_CONSTRUCTED, GameMode.CONQUEST_DISCOVERY].includes(
-      match.mode
-    )
-  ) {
+  const conquestMode = conquestMatchMode(storedMatchModes(match))
+  if (!conquestMode) {
     return [[], []]
   }
   const userIds = [match.player1_user_id, match.player2_user_id] as const
@@ -497,7 +510,7 @@ export const settleConquestRewardsForMatch = async (
            AND json_extract(match_progress, ?) IS NOT NULL
          ORDER BY id DESC LIMIT 1`
       )
-      .bind(userIds[player], match.mode, `$."${match.id}"`)
+      .bind(userIds[player], conquestMode, `$."${match.id}"`)
       .first<{ id: number }>()
     if (!row) continue
     rewards[player] = (

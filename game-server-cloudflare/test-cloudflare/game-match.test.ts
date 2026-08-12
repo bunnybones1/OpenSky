@@ -769,6 +769,58 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toBe(1)
   })
 
+  it('persists only the ranked side of a mixed practice-PVP match', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const processedAt = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches
+         SET player1_mode = 'PRACTICE_PVP',
+             player2_mode = 'RANKED_CONSTRUCTED'
+         WHERE proposal_id = ?`
+      ).bind(proposalId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', 126, 0, 'WANDERER',
+                 'STAGE_I', '[-1,1750,350,0]', ?, ?)`
+      ).bind(USER_ID_2, processedAt, processedAt)
+    ])
+
+    const result = await applyMatchStats(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      0,
+      processedAt
+    )
+    expect(result.rewards[0]).toEqual([])
+    expect(result.rewards[1]).toEqual([
+      expect.objectContaining({
+        type: 'RANK',
+        gameMode: GameMode.RANKED_CONSTRUCTED
+      })
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_account_stats
+         WHERE user_id = ? AND game_mode = 'PRACTICE_PVP'`
+      )
+        .bind(USER_ID_1)
+        .first('count')
+    ).toBe(0)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT win_count, loss_count FROM player_account_stats
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = 126`
+      )
+        .bind(USER_ID_2)
+        .first()
+    ).toEqual({ win_count: 0, loss_count: 1 })
+  })
+
   it('enforces public gateway and request-boundary safeties', async () => {
     const health = await SELF.fetch('https://game.example/health')
     expect(await health.json()).toEqual({

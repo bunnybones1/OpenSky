@@ -86,13 +86,14 @@ const collectMessages = (webSocket: WebSocket, count: number) =>
 const findCommand = (
   mode = GameMode.RANKED_CONSTRUCTED,
   sessionID = '',
-  versionHash = 'release-1'
+  versionHash = 'release-1',
+  prisms: string[] = ['str']
 ) => ({
   type: 'find_match',
   authToken: 'legacy-token-is-not-trusted',
   privateSeed: {
     player: '0xffffffffffffffffffffffffffffffffffffffff',
-    prisms: ['str'],
+    prisms,
     cards: [],
     randomSeed: Array(16).fill(1)
   },
@@ -250,6 +251,24 @@ describe('Cloudflare matchmaker Worker', () => {
         expect(refusalState.size).toBe(0)
       }
     )
+  })
+
+  it('pairs low-rank practice PVP with ranked constructed as in the source', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    const second = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, second)
+    first.send(JSON.stringify(findCommand(GameMode.PRACTICE_PVP)))
+    const firstFound = nextMessage(first)
+    const secondFound = nextMessage(second)
+    second.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))
+    expect(await firstFound).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.PRACTICE_PVP
+    })
+    expect(await secondFound).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.RANKED_CONSTRUCTED
+    })
   })
 
   it('hydrates authoritative rank, score, cards and recent opponents before queueing', async () => {

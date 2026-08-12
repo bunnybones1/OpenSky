@@ -31,6 +31,7 @@ const setup = async (
   proposalId: string,
   options: {
     mode?: GameMode
+    playerModes?: [GameMode, GameMode]
     leftRank?: PlayerRank
     rightRank?: PlayerRank
     payload?: string
@@ -73,16 +74,19 @@ const setup = async (
     ),
     env.AUTH_DB.prepare(
       `INSERT INTO multiplayer_matches
-         (proposal_id, replay_id, mode, version, player1_principal,
+         (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+          player1_principal,
           player2_principal, player1_user_id, player2_user_id,
           match_payload_json, status, created_at, updated_at)
-       VALUES (?, ?, ?, 'test', '0x1111111111111111111111111111111111111111',
+       VALUES (?, ?, ?, ?, ?, 'test', '0x1111111111111111111111111111111111111111',
                '0x2222222222222222222222222222222222222222', ?, ?, ?,
                'active', ?, ?)`
     ).bind(
       proposalId,
       `replay-${proposalId}`,
       options.mode ?? GameMode.RANKED_CONSTRUCTED,
+      options.playerModes?.[0] ?? null,
+      options.playerModes?.[1] ?? null,
       USER_1,
       USER_2,
       options.payload ?? payload(),
@@ -216,6 +220,32 @@ describe('source ranked-constructed deck aggregates', () => {
         row => row.deck_string === encodeDeckString(deck1, DeckClass.STR)
       )
     ).toMatchObject({ score: 0, win_count: 0, highest_player_user_id: USER_1 })
+    expect(
+      result.find(
+        row => row.deck_string === encodeDeckString(deck2, DeckClass.STR)
+      )
+    ).toMatchObject({ loss_count: 1, highest_player_user_id: null })
+  })
+
+  it('uses each participant mode for mixed practice/ranked deck eligibility', async () => {
+    await setup('deck-rank-mixed', {
+      playerModes: [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED]
+    })
+    await applyDeckRanks(
+      env.AUTH_DB,
+      'deck-rank-mixed',
+      126,
+      0,
+      MatchStatus.COMPLETED,
+      NOW
+    )
+    const result = (await ranks()).results
+    expect(result).toHaveLength(2)
+    expect(
+      result.find(
+        row => row.deck_string === encodeDeckString(deck1, DeckClass.STR)
+      )
+    ).toMatchObject({ win_count: 0, highest_player_user_id: USER_1 })
     expect(
       result.find(
         row => row.deck_string === encodeDeckString(deck2, DeckClass.STR)

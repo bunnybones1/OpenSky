@@ -1,5 +1,7 @@
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { CLOUDFLARE_MATCHMAKER_POOL_NAME } from '@opensky/shared/cloudflare-multiplayer'
+import { storedMatchModes } from '@opensky/shared/match-modes'
+import type { GameMode } from '@opensky/proto'
 
 import { readCookies } from './cookies'
 import type { Env } from './env'
@@ -23,6 +25,9 @@ interface MatchInfoRow {
   proposal_id: string
   replay_id: string
   mode: string
+  player1_mode: GameMode | null
+  player2_mode: GameMode | null
+  player1_principal: string
   version: string
   match_payload_json: string
   server_address: string
@@ -74,8 +79,8 @@ const trustedRequest = (
 
 const activeMatchFor = (env: Env, principal: string) =>
   env.AUTH_DB.prepare(
-    `SELECT id, proposal_id, replay_id, mode, version, match_payload_json,
-            server_address
+    `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+            version, match_payload_json, server_address, player1_principal
      FROM multiplayer_matches
      WHERE status = 'active'
        AND server_address IS NOT NULL
@@ -109,13 +114,21 @@ const matchInfo = async (env: Env, principal: string) => {
     // for reconnects. A deployment-wide override can point an older active
     // match at assets built for a different state/protocol version.
     const releaseVersion = row.version || 'cloud-weasel'
+    const modes = storedMatchModes({
+      mode: row.mode as GameMode,
+      player1_mode: row.player1_mode,
+      player2_mode: row.player2_mode
+    })
     return json(
       {
         type: 'in_progress_match_info',
         matchInfo: {
           id: row.id,
           replayID: row.replay_id,
-          mode: row.mode,
+          mode:
+            row.player1_principal.toLowerCase() === principal.toLowerCase()
+              ? modes[0]
+              : modes[1],
           playerIDs,
           version: releaseVersion,
           initialized: true

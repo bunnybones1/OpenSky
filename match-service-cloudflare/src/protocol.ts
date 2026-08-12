@@ -1,4 +1,5 @@
 import { GameMode } from '@opensky/proto'
+import { areMatchModesCompatible } from '@opensky/shared/match-modes'
 
 export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 export const BOT_PLACEHOLDER = '0x0000000000000000000000000000000000000000'
@@ -47,7 +48,10 @@ const gameModes = new Set(Object.values(GameMode))
 export const parseAcceptedMatchDispatch = (
   value: unknown
 ): AcceptedMatchDispatch => {
-  if (!record(value) || !/^[a-zA-Z0-9_-]{1,128}$/.test(String(value.proposalId ?? ''))) {
+  if (
+    !record(value) ||
+    !/^[a-zA-Z0-9_-]{1,128}$/.test(String(value.proposalId ?? ''))
+  ) {
     throw new DispatchProtocolError('invalid proposal ID')
   }
   if (
@@ -59,7 +63,7 @@ export const parseAcceptedMatchDispatch = (
     throw new DispatchProtocolError('invalid accepted proposal')
   }
 
-  const participants = value.participants.map((raw) => {
+  const participants = value.participants.map(raw => {
     if (!record(raw) || !record(raw.player)) {
       throw new DispatchProtocolError('invalid participant')
     }
@@ -82,12 +86,16 @@ export const parseAcceptedMatchDispatch = (
     }
     if (player.address === BOT_PLACEHOLDER) {
       if (raw.request !== undefined || raw.identity !== undefined) {
-        throw new DispatchProtocolError('bot participant contains human identity')
+        throw new DispatchProtocolError(
+          'bot participant contains human identity'
+        )
       }
       return { player: normalizedPlayer }
     }
     if (!record(raw.request) || !record(raw.identity)) {
-      throw new DispatchProtocolError('human participant is missing identity data')
+      throw new DispatchProtocolError(
+        'human participant is missing identity data'
+      )
     }
     if (
       raw.identity.principal !== player.address ||
@@ -112,8 +120,13 @@ export const parseAcceptedMatchDispatch = (
     }
   }) as [AcceptedMatchParticipant, AcceptedMatchParticipant]
 
-  if (participants[0].player.mode !== participants[1].player.mode) {
-    throw new DispatchProtocolError('participants use different game modes')
+  if (
+    !areMatchModesCompatible([
+      participants[0].player.mode,
+      participants[1].player.mode
+    ])
+  ) {
+    throw new DispatchProtocolError('participants use incompatible game modes')
   }
   if (
     participants[0].player.address !== BOT_PLACEHOLDER &&
@@ -121,7 +134,11 @@ export const parseAcceptedMatchDispatch = (
   ) {
     throw new DispatchProtocolError('duplicate participant')
   }
-  if (participants.every((participant) => participant.player.address === BOT_PLACEHOLDER)) {
+  if (
+    participants.every(
+      participant => participant.player.address === BOT_PLACEHOLDER
+    )
+  ) {
     throw new DispatchProtocolError('bot-only matches are not supported')
   }
 

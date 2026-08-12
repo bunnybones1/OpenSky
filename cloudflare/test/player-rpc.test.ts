@@ -594,6 +594,13 @@ describe('legacy player RPC compatibility', () => {
         .run()
     }
 
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET player1_mode = 'PRACTICE_PVP',
+           player2_mode = 'RANKED_CONSTRUCTED'
+       WHERE proposal_id = 'ranked-history'`
+    ).run()
+
     const response = await rpc('ListMatches', {
       page: { pageSize: 5 },
       req: { accountAddress: identityReference }
@@ -614,6 +621,8 @@ describe('legacy player RPC compatibility', () => {
             name: 'History Opponent'
           },
           winningPlayer: 1,
+          player1GameMode: 'PRACTICE_PVP',
+          player2GameMode: 'RANKED_CONSTRUCTED',
           turnNonce: 4,
           replayID: 'ranked-history-replay'
         }
