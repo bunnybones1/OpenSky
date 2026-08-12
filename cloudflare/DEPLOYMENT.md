@@ -930,6 +930,25 @@ settlement and delayed delivery against that pool.
   and 31 inventory rows after the read-only probes. Migration `0059`, its unique
   delivery-key index, column, and two receipt guards each exist once, and the
   final D1 verification reported `changed_db: false`.
+- API/web Worker version `9c7ba2fc-85eb-4f0a-8036-22fc7b7cb730` contains source
+  `c88a7a2` plus D1 parser compatibility commit `6fa9d05`. Migration
+  `0060_silver_ticket_exchange.sql` restores the original Silver-card selection,
+  quantity, warning, and confirmation screens to Google identities while
+  replacing the Sequence transfer with an atomic off-chain exchange at the
+  source price of one Silver card per Conquest ticket. A browser request key and
+  independent delivery key make identical retries idempotent; D1 JSON quantity
+  and live inventory guards serialize competing requests before any debit, and
+  every debit and ticket credit is conditional on the winning immutable receipt.
+  The rollout passed all 240 API tests, the focused six-test player API suite,
+  both Worker and webapp TypeScript checks, touched-file lint, release/off-chain
+  gates, and the 498-file production browser/game build. The first remote D1
+  attempt rejected a trigger `CASE` expression as incomplete and made no schema
+  changes; the equivalent split-trigger form was retested, committed separately,
+  and applied as seven commands. Live homepage, `/select-silvers/cards`, and
+  Google provider discovery returned `200`; the exchange endpoint returned
+  `401` anonymously. Production retains zero exchange receipts and 31 inventory
+  rows, migration `0060` exists once with all four guards, and the final D1 read
+  reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
