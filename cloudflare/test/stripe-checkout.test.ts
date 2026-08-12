@@ -89,7 +89,8 @@ const signedWebhook = async (event: object, at = NOW) => {
 
 const createPending = async (
   productCode = 'skypass_0001',
-  sessionId = 'cs_test_cloud_weasel'
+  sessionId = 'cs_test_cloud_weasel',
+  checkoutAt = NOW
 ) => {
   let checkoutRequest: Request | undefined
   const stripeFetch: StripeFetch = async request => {
@@ -108,7 +109,11 @@ const createPending = async (
     configuredEnv(),
     stripeFetch
   )
-  const checkout = await repository.createCheckout(userId, productCode, NOW)
+  const checkout = await repository.createCheckout(
+    userId,
+    productCode,
+    checkoutAt
+  )
   const payment = await env.AUTH_DB.prepare(
     `SELECT id, product_code, item_type, quantity, checkout_season, status,
             stripe_session_id
@@ -165,6 +170,12 @@ beforeEach(async () => {
       'DROP TRIGGER IF EXISTS reject_stripe_skypass_fulfillment'
     ),
     env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS stripe_checkout_logs_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS stripe_checkout_payment_staff_ids_no_delete'
+    ),
+    env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS stripe_checkout_events_no_delete'
     ),
     env.AUTH_DB.prepare(
@@ -172,11 +183,23 @@ beforeEach(async () => {
     )
   ])
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM stripe_checkout_logs'),
+    env.AUTH_DB.prepare('DELETE FROM stripe_checkout_payment_staff_ids'),
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_events'),
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_payments'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id = ?`).bind(userId)
   ])
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER stripe_checkout_logs_no_delete
+       BEFORE DELETE ON stripe_checkout_logs
+       BEGIN SELECT RAISE(ABORT, 'Stripe checkout logs are immutable'); END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER stripe_checkout_payment_staff_ids_no_delete
+       BEFORE DELETE ON stripe_checkout_payment_staff_ids
+       BEGIN SELECT RAISE(ABORT, 'Stripe staff payment IDs are immutable'); END`
+    ),
     env.AUTH_DB.prepare(
       `CREATE TRIGGER stripe_checkout_events_no_delete
        BEFORE DELETE ON stripe_checkout_events
@@ -199,6 +222,16 @@ beforeEach(async () => {
 })
 
 describe('dormant Stripe Checkout port', () => {
+  const grantAdmin = async () => {
+    await env.AUTH_DB.prepare(
+      `INSERT INTO staff_roles
+         (user_id, role, granted_by_user_id, reason, created_at)
+       VALUES (?, 'ADMIN', NULL, 'Stripe staff read test', ?)`
+    )
+      .bind(userId, NOW.toISOString())
+      .run()
+  }
+
   it('fails closed without complete configuration and creates no payment', async () => {
     const repository = new StripeCheckoutRepository(
       env.AUTH_DB,
@@ -637,5 +670,116 @@ describe('dormant Stripe Checkout port', () => {
         'SELECT COUNT(*) AS count FROM stripe_checkout_events'
       ).first('count')
     ).toBe(2)
+  })
+
+  it('ports source staff payment filters, pagination, and immutable logs', async () => {
+    const first = await createPending('skypass_0001', 'cs_test_staff_first')
+    await first.repository.handleWebhook(
+      await signedWebhook(eventFor(first.payment), NOW),
+      NOW
+    )
+    const second = await createPending(
+      'conquest_tickets_0001',
+      'cs_test_staff_second',
+      new Date(NOW.getTime() + 60_000)
+    )
+
+    const firstPage = await second.repository.listStaffPayments({
+      page: { pageSize: 1 }
+    })
+    expect(firstPage.payments).toHaveLength(1)
+    expect(firstPage.payments[0]).toMatchObject({
+      accountID: expect.any(Number),
+      status: 'PENDING',
+      provider: 'STRIPE',
+      externalTxnID: 'cs_test_staff_second'
+    })
+    expect(firstPage.page.hasBefore).toBe(true)
+    const secondPage = await second.repository.listStaffPayments({
+      page: { pageSize: 1, before: firstPage.page.after }
+    })
+    expect(secondPage.payments[0]).toMatchObject({
+      status: 'SUCCEEDED',
+      externalTxnID: 'cs_test_staff_first'
+    })
+    expect(
+      (
+        await second.repository.listStaffPayments({
+          status: 'SUCCEEDED' as never,
+          provider: 'STRIPE' as never,
+          address: `identity:${userId}`
+        })
+      ).payments
+    ).toHaveLength(1)
+    expect(
+      (
+        await second.repository.listStaffPayments({
+          provider: 'GOOGLE_PLAY' as never
+        })
+      ).payments
+    ).toEqual([])
+
+    const logs = await second.repository.listStaffPaymentLogs(
+      secondPage.payments[0].id
+    )
+    expect(logs.map(log => log.data.type)).toEqual([
+      '*stripe.Event',
+      '*stripe.CheckoutSession',
+      'payments.IntentRequest'
+    ])
+    expect(logs[2].data.data).toEqual({ product_id: 'skypass_0001' })
+    await expect(
+      env.AUTH_DB.prepare(`DELETE FROM stripe_checkout_logs`).run()
+    ).rejects.toThrow('Stripe checkout logs are immutable')
+  })
+
+  it('keeps staff payment reads admin-only through the source RPCs', async () => {
+    const { payment } = await createPending()
+    const token = await createIdentitySession(
+      userId,
+      configuredEnv().SESSION_SIGNING_KEY
+    )
+    const call = (method: string, body: object, signedIn = true) =>
+      handleApiRequest(
+        new Request(`https://opensky.example/api/rpc/SkyWeaverAPI/${method}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(signedIn
+              ? { Cookie: `${IDENTITY_SESSION_COOKIE}=${token}` }
+              : {})
+          },
+          body: JSON.stringify(body)
+        }),
+        configuredEnv()
+      )
+
+    expect((await call('GMListPayments', {}, false)).status).toBe(401)
+    expect((await call('GMListPayments', {})).status).toBe(403)
+    await grantAdmin()
+
+    const paymentsResponse = await call('GMListPayments', {
+      provider: 'STRIPE',
+      address: `identity:${userId}`
+    })
+    expect(paymentsResponse.status).toBe(200)
+    const paymentsBody = (await paymentsResponse.json()) as {
+      payments: Array<{ id: number; externalTxnID: string }>
+    }
+    expect(paymentsBody.payments).toEqual([
+      expect.objectContaining({ externalTxnID: payment.stripe_session_id })
+    ])
+
+    const logsResponse = await call('GMListPaymentLogs', {
+      paymentID: paymentsBody.payments[0].id
+    })
+    expect(logsResponse.status).toBe(200)
+    expect(await logsResponse.json()).toMatchObject({
+      logs: [
+        { data: { type: '*stripe.CheckoutSession' } },
+        { data: { type: 'payments.IntentRequest' } }
+      ]
+    })
+    expect((await call('GMListPaymentLogs', { paymentID: 0 })).status).toBe(400)
   })
 })

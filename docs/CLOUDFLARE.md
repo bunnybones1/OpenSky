@@ -239,6 +239,11 @@ and progress are not migrated.
   retries, delayed methods, and out-of-order success after failure. Production
   has no Stripe configuration, so this surface remains dormant. Mobile receipt
   verification and Sequence/on-chain transaction composition remain disabled.
+  The source staff payment list and per-payment log list are also ported behind
+  the existing deny-by-default `ADMIN` role. A database-assigned numeric ID
+  preserves the legacy staff response while each fulfillment continues to use
+  its opaque UUID authority; intent, Checkout Session, and retrieved Stripe
+  event logs are immutable. No production identity has the staff role.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

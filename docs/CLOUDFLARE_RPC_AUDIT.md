@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface                      | Methods |
 | ---------------------------- | ------: |
 | Source Go RPCs               |     172 |
-| Ported source RPCs           |     134 |
-| Remaining source RPCs        |      38 |
+| Ported source RPCs           |     136 |
+| Remaining source RPCs        |      36 |
 | Cloudflare-only RPC adapters |       0 |
 
 ## Remaining workstreams
 
 | Workstream             | Remaining | Interpretation                                                                                                                                                                         |
 | ---------------------- | --------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin and operations   |        11 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits.                                                                                |
+| Admin and operations   |         9 | Stripe payment and payment-log reads now use deployed RBAC; remaining writes require granular authorization and immutable audits.                                                      |
 | Commerce and wallet    |         9 | Stripe Checkout and its webhook are ported behind dormant optional configuration. Mobile receipts and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery  |         1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule.                                                                                                            |
 | Internal legacy        |        10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs.                                                              |

@@ -1,4 +1,12 @@
-import type { ItemType, PaymentProvider } from '@opensky/proto'
+import type {
+  ItemType,
+  Page,
+  Payment,
+  PaymentLog,
+  PaymentProvider,
+  PaymentStatus,
+  SortBy
+} from '@opensky/proto'
 
 import type { Env } from './env'
 import { internal, invalidArgument, unauthenticated } from './errors'
@@ -60,6 +68,59 @@ interface PaymentRow {
   checkout_season: number
   status: 'INITIATING' | 'PENDING' | 'SUCCEEDED' | 'FAILED'
   stripe_session_id: string | null
+}
+
+interface StaffPaymentRow {
+  staff_id: number
+  account_id: number | null
+  status: PaymentRow['status']
+  stripe_session_id: string | null
+  payment_id: string
+  created_at: string
+}
+
+interface StaffPaymentLogRow {
+  id: number
+  staff_id: number
+  log_type: string
+  data_json: string
+  created_at: string
+}
+
+const PAYMENT_PROVIDERS = new Set<PaymentProvider>([
+  'UNKNOWN' as PaymentProvider,
+  'GOOGLE_PLAY' as PaymentProvider,
+  'APPLE_APP_STORE' as PaymentProvider,
+  'STRIPE' as PaymentProvider,
+  'SEQUENCE' as PaymentProvider,
+  'SAMSUNG_GALAXY_STORE' as PaymentProvider
+])
+const PAYMENT_STATUSES = new Set<PaymentStatus>([
+  'INITIATED' as PaymentStatus,
+  'PENDING' as PaymentStatus,
+  'SUCCEEDED' as PaymentStatus,
+  'FAILED' as PaymentStatus
+])
+const STAFF_PAGE_SIZE = 20
+const MAX_STAFF_PAGE_SIZE = 200
+
+const encodeCursor = (offset: number): string =>
+  btoa(JSON.stringify({ offset }))
+
+const cursorOffset = (value?: string): number => {
+  if (!value) return 0
+  try {
+    const decoded = JSON.parse(atob(value)) as { offset?: unknown }
+    if (
+      Number.isSafeInteger(decoded.offset) &&
+      (decoded.offset as number) >= 0
+    ) {
+      return decoded.offset as number
+    }
+  } catch {
+    // Fall through to the source-compatible invalid page response.
+  }
+  throw invalidArgument('page cursor is invalid')
 }
 
 const configured = (value: string | undefined): value is string =>
@@ -302,20 +363,35 @@ export class StripeCheckoutRepository {
       ) {
         throw new Error('Stripe returned an invalid Checkout Session')
       }
-      await this.database
-        .prepare(
-          `UPDATE stripe_checkout_payments
+      await this.database.batch([
+        this.database
+          .prepare(
+            `UPDATE stripe_checkout_payments
            SET status = 'PENDING', stripe_session_id = ?, checkout_url = ?,
                updated_at = ?
            WHERE id = ? AND status = 'INITIATING'`
-        )
-        .bind(body.id, body.url, new Date().toISOString(), paymentId)
-        .run()
+          )
+          .bind(body.id, body.url, createdAt, paymentId),
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO stripe_checkout_logs
+               (payment_id, receipt_key, log_type, data_json, created_at)
+             SELECT id, ?, '*stripe.CheckoutSession', ?, ?
+             FROM stripe_checkout_payments
+             WHERE id = ? AND status = 'PENDING'`
+          )
+          .bind(
+            `session:${body.id}`,
+            JSON.stringify(body),
+            createdAt,
+            paymentId
+          )
+      ])
       return { url: body.url }
     } catch (error) {
       if (error instanceof StripeRequestError) {
         const message = error.message.slice(0, 1_000)
-        const failedAt = new Date().toISOString()
+        const failedAt = createdAt
         await this.database
           .prepare(
             `UPDATE stripe_checkout_payments
@@ -474,6 +550,24 @@ export class StripeCheckoutRepository {
             payment.id,
             digest,
             receivedAt
+          ),
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO stripe_checkout_logs
+               (payment_id, receipt_key, log_type, data_json, created_at)
+             SELECT ?, ?, '*stripe.Event', ?, ?
+             WHERE EXISTS (
+               SELECT 1 FROM stripe_checkout_events
+               WHERE event_id = ? AND payload_sha256 = ?
+             )`
+          )
+          .bind(
+            payment.id,
+            `event:${event.id}`,
+            JSON.stringify(event),
+            receivedAt,
+            event.id,
+            digest
           )
       ]
       if (payment.item_type === ('SW_SKYPASS' as ItemType)) {
@@ -597,6 +691,24 @@ export class StripeCheckoutRepository {
         .bind(event.id, event.type, session.id, payment.id, digest, receivedAt),
       this.database
         .prepare(
+          `INSERT OR IGNORE INTO stripe_checkout_logs
+             (payment_id, receipt_key, log_type, data_json, created_at)
+           SELECT ?, ?, '*stripe.Event', ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM stripe_checkout_events
+             WHERE event_id = ? AND payload_sha256 = ?
+           )`
+        )
+        .bind(
+          payment.id,
+          `event:${event.id}`,
+          JSON.stringify(event),
+          receivedAt,
+          event.id,
+          digest
+        ),
+      this.database
+        .prepare(
           `UPDATE stripe_checkout_payments
            SET status = 'FAILED', last_error = ?, completed_at = ?,
                updated_at = ?
@@ -608,5 +720,160 @@ export class StripeCheckoutRepository {
         )
         .bind(event.type, receivedAt, receivedAt, payment.id, event.id, digest)
     ])
+  }
+
+  private async staffUserId(address: string): Promise<string | null> {
+    if (address.startsWith('identity:')) {
+      const userId = address.slice('identity:'.length)
+      if (!userId) throw invalidArgument('address is invalid')
+      return (
+        (await this.database
+          .prepare(`SELECT id FROM users WHERE id = ?`)
+          .bind(userId)
+          .first<string>('id')) ?? null
+      )
+    }
+    return (
+      (await this.database
+        .prepare(
+          `SELECT user_id FROM wallet_connections
+           WHERE namespace = 'eip155' AND address = ? COLLATE NOCASE`
+        )
+        .bind(address)
+        .first<string>('user_id')) ?? null
+    )
+  }
+
+  async listStaffPayments(input: {
+    page?: Page
+    status?: PaymentStatus
+    provider?: PaymentProvider
+    address?: string
+  }): Promise<{ page: Page; payments: Payment[] }> {
+    if (input.page?.before !== undefined && input.page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
+    }
+    if (input.status && !PAYMENT_STATUSES.has(input.status)) {
+      throw invalidArgument('payment status is invalid')
+    }
+    if (input.provider && !PAYMENT_PROVIDERS.has(input.provider)) {
+      throw invalidArgument('payment provider is invalid')
+    }
+    const size = Math.min(
+      MAX_STAFF_PAGE_SIZE,
+      Number.isSafeInteger(input.page?.pageSize) &&
+        (input.page?.pageSize ?? 0) > 0
+        ? input.page!.pageSize!
+        : STAFF_PAGE_SIZE
+    )
+    const offset = cursorOffset(input.page?.before ?? input.page?.after)
+    const bindings: unknown[] = []
+    const filters: string[] = []
+    if (input.address !== undefined) {
+      if (typeof input.address !== 'string' || input.address.length > 256) {
+        throw invalidArgument('address is invalid')
+      }
+      const userId = await this.staffUserId(input.address)
+      if (!userId) {
+        return {
+          page: {
+            pageSize: size,
+            hasBefore: false,
+            hasAfter: offset > 0,
+            sort: [
+              {
+                column: 'created_at',
+                order: 'DESC' as SortBy['order']
+              }
+            ]
+          },
+          payments: []
+        }
+      }
+      filters.push('payment.user_id = ?')
+      bindings.push(userId)
+    }
+    if (input.status) {
+      filters.push('payment.status = ?')
+      bindings.push(
+        input.status === ('INITIATED' as PaymentStatus)
+          ? 'INITIATING'
+          : input.status
+      )
+    }
+    // This ledger intentionally contains only the ported Stripe provider.
+    if (input.provider && input.provider !== ('STRIPE' as PaymentProvider)) {
+      filters.push('0 = 1')
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
+    const result = await this.database
+      .prepare(
+        `SELECT staff.id AS staff_id, game.id AS account_id,
+                payment.status, payment.stripe_session_id,
+                payment.id AS payment_id, payment.created_at
+         FROM stripe_checkout_payments payment
+         JOIN stripe_checkout_payment_staff_ids staff
+           ON staff.payment_id = payment.id
+         LEFT JOIN game_accounts game ON game.user_id = payment.user_id
+         ${where}
+         ORDER BY payment.created_at DESC, payment.id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(...bindings, size + 1, offset)
+      .all<StaffPaymentRow>()
+    const rows = result.results.slice(0, size)
+    const nextOffset = offset + rows.length
+    return {
+      page: {
+        pageSize: size,
+        before: rows.length ? encodeCursor(offset) : undefined,
+        after: rows.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: result.results.length > size,
+        hasAfter: offset > 0,
+        sort: [
+          {
+            column: 'created_at',
+            order: 'DESC' as SortBy['order']
+          }
+        ]
+      },
+      payments: rows.map(row => ({
+        id: row.staff_id,
+        accountID: row.account_id ?? 0,
+        status: (row.status === 'INITIATING'
+          ? 'INITIATED'
+          : row.status) as PaymentStatus,
+        provider: 'STRIPE' as PaymentProvider,
+        externalTxnID: row.stripe_session_id ?? row.payment_id,
+        createdAt: row.created_at
+      }))
+    }
+  }
+
+  async listStaffPaymentLogs(paymentId: number): Promise<PaymentLog[]> {
+    if (!Number.isSafeInteger(paymentId) || paymentId <= 0) {
+      throw invalidArgument('paymentID cannot be zero')
+    }
+    const result = await this.database
+      .prepare(
+        `SELECT log.id, staff.id AS staff_id, log.log_type, log.data_json,
+                log.created_at
+         FROM stripe_checkout_logs log
+         JOIN stripe_checkout_payment_staff_ids staff
+           ON staff.payment_id = log.payment_id
+         WHERE staff.id = ?
+         ORDER BY log.created_at DESC, log.id DESC`
+      )
+      .bind(paymentId)
+      .all<StaffPaymentLogRow>()
+    return result.results.map(row => ({
+      id: row.id,
+      paymentID: row.staff_id,
+      data: {
+        type: row.log_type,
+        data: JSON.parse(row.data_json) as unknown
+      },
+      createdAt: row.created_at
+    }))
   }
 }

@@ -17,6 +17,7 @@ import type {
   NotificationOneTime,
   Page,
   PaymentProvider,
+  PaymentStatus,
   QuestPeriodicity,
   SearchDeckRanksRequest
 } from '@opensky/proto'
@@ -1906,6 +1907,27 @@ export const handleApiRequest = async (
       case 'StripeEventWebhook': {
         await stripe.handleWebhook(request)
         return json(request, env, {})
+      }
+
+      case 'GMListPayments': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          page?: Page
+          status?: PaymentStatus
+          provider?: PaymentProvider
+          address?: string
+        }>(request)
+        return json(request, env, await stripe.listStaffPayments(body))
+      }
+
+      case 'GMListPaymentLogs': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ paymentID?: number }>(request)
+        return json(request, env, {
+          logs: await stripe.listStaffPaymentLogs(body.paymentID ?? 0)
+        })
       }
 
       case 'ListSkypassRewards': {
