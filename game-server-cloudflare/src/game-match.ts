@@ -79,6 +79,7 @@ interface MatchMetadata {
   ended: boolean
   endedAtMs?: number
   result?: MatchResult
+  expiredBeforeLoad?: boolean
   completionRecorded?: boolean
 }
 
@@ -102,6 +103,7 @@ interface PlayerRuntimeState {
 type PlayerStateMap = Record<string, PlayerRuntimeState>
 
 interface MatchTimers {
+  loadExpiryAtMs?: number
   commitRevealAtMs?: number
   turnAtMs?: number
   lastTurnCount?: number
@@ -349,11 +351,15 @@ export class GameMatch implements DurableObject {
       if (!metadata) return
       if (metadata.ended) {
         if (!metadata.completionRecorded) {
-          await this.recordCompletionWithRetry(
-            metadata,
-            Date.now(),
-            await this.questProgress()
-          )
+          if (metadata.expiredBeforeLoad) {
+            await this.recordUnloadedExpiryWithRetry(metadata, Date.now())
+          } else {
+            await this.recordCompletionWithRetry(
+              metadata,
+              Date.now(),
+              await this.questProgress()
+            )
+          }
         }
         return
       }
@@ -363,13 +369,45 @@ export class GameMatch implements DurableObject {
       ])
       const now = Date.now()
       const runtime = await this.ensureRuntime()
+      if (
+        !metadata.started &&
+        timers.loadExpiryAtMs === undefined &&
+        !Object.values(players).every(player => player.finishedLoadingAssets)
+      ) {
+        // Backfill Durable Objects created before the dedicated load-expiry
+        // timer was introduced. The original creation time keeps rollout from
+        // granting an extra grace period.
+        timers.loadExpiryAtMs =
+          metadata.createdAtMs + this.settings.abandonTimeoutMs
+      }
 
       const expiredPlayer = Object.entries(players).find(
         ([, player]) =>
           player.abandonAtMs !== undefined && player.abandonAtMs <= now
       )
       let emitted: string[] = []
-      if (expiredPlayer) {
+      if (
+        timers.loadExpiryAtMs !== undefined &&
+        timers.loadExpiryAtMs <= now
+      ) {
+        timers.loadExpiryAtMs = undefined
+        const loadedPlayers = Object.entries(players).filter(
+          ([, player]) => player.finishedLoadingAssets
+        )
+        if (loadedPlayers.length === 0) {
+          await this.expireUnloadedMatch(metadata, players, timers, now)
+          return
+        }
+        if (loadedPlayers.length === 1) {
+          const absentPrincipal = Object.keys(players).find(
+            principal => principal !== loadedPlayers[0][0]
+          )!
+          emitted = this.dispatchAbandonFromAnyState(
+            runtime,
+            this.playerIndex(metadata.match, absentPrincipal)
+          )
+        }
+      } else if (expiredPlayer) {
         const index = this.playerIndex(metadata.match, expiredPlayer[0])
         emitted = runtime.dispatchAbandon(index)
         expiredPlayer[1].abandonAtMs = undefined
@@ -493,6 +531,17 @@ export class GameMatch implements DurableObject {
     ])
     const now = Date.now()
 
+    if (
+      !metadata.started &&
+      !metadata.ended &&
+      timers.loadExpiryAtMs === undefined &&
+      !Object.values(players).every(player => player.finishedLoadingAssets)
+    ) {
+      timers.loadExpiryAtMs =
+        metadata.createdAtMs + this.settings.abandonTimeoutMs
+      await this.state.storage.put(TIMERS_KEY, timers)
+    }
+
     // Initial storage is intentionally installed before afterStateChange so a
     // retry can recover it. If that second step failed, the pre-start runtime
     // has no commit/reveal deadline. Re-run it only in that impossible healthy
@@ -512,6 +561,7 @@ export class GameMatch implements DurableObject {
     // the persisted deadlines, scheduling overdue work immediately.
     const nextDeadline = [
       timers.commitRevealAtMs,
+      timers.loadExpiryAtMs,
       timers.turnAtMs,
       timers.botAtMs,
       ...Object.values(players).map(player => player.abandonAtMs)
@@ -865,8 +915,11 @@ export class GameMatch implements DurableObject {
     const metadata = await this.metadataRequired()
     const players = await this.players()
     const player = players[principal]
-    player.loadingProgress = progress
-    player.finishedLoadingAssets = progress >= 1
+    // The source records completion as a one-way transition. A stale or
+    // reordered progress message cannot make an already-loaded player a
+    // no-show again.
+    player.loadingProgress = Math.max(player.loadingProgress, progress)
+    player.finishedLoadingAssets ||= player.loadingProgress >= 1
     const opponentPrincipal = this.opponentAddress(metadata.match, principal)
     const matchAbandonTime =
       metadata.createdAtMs + this.settings.abandonTimeoutMs
@@ -897,6 +950,14 @@ export class GameMatch implements DurableObject {
       this.sendToPrincipal(principal, loadingComplete)
       this.sendToSpectators(loadingComplete)
       await this.flushPendingGameplay(metadata, players)
+      await this.afterStateChange(
+        metadata,
+        players,
+        await this.timers(),
+        Date.now(),
+        true
+      )
+      return
     }
     await this.afterStateChange(
       metadata,
@@ -1038,7 +1099,8 @@ export class GameMatch implements DurableObject {
     if (metadata.ended) return
     const players = await this.players()
     const runtime = await this.ensureRuntime()
-    const emitted = runtime.dispatchAbandon(
+    const emitted = this.dispatchAbandonFromAnyState(
+      runtime,
       this.playerIndex(metadata.match, principal)
     )
     if (emitted.length > 0) {
@@ -1062,6 +1124,15 @@ export class GameMatch implements DurableObject {
   ) {
     const runtime = await this.ensureRuntime()
     const info = runtime.stateInfo()
+    const allPlayersLoaded = Object.values(players).every(
+      player => player.finishedLoadingAssets
+    )
+    if (allPlayersLoaded) {
+      timers.loadExpiryAtMs = undefined
+    } else if (!metadata.started) {
+      timers.loadExpiryAtMs ??=
+        metadata.createdAtMs + this.settings.abandonTimeoutMs
+    }
     if (info.statusType === 'GameOver') {
       metadata.ended = true
       metadata.endedAtMs ??= now
@@ -1077,6 +1148,7 @@ export class GameMatch implements DurableObject {
               : MatchStatus.COMPLETED
       }
       timers.commitRevealAtMs = undefined
+      timers.loadExpiryAtMs = undefined
       timers.turnAtMs = undefined
       timers.botAtMs = undefined
       this.broadcast({ type: 'match_ended' })
@@ -1310,21 +1382,79 @@ export class GameMatch implements DurableObject {
     }
   }
 
+  private async expireUnloadedMatch(
+    metadata: MatchMetadata,
+    players: PlayerStateMap,
+    timers: MatchTimers,
+    now: number
+  ) {
+    metadata.ended = true
+    metadata.endedAtMs ??= now
+    metadata.expiredBeforeLoad = true
+    timers.loadExpiryAtMs = undefined
+    timers.commitRevealAtMs = undefined
+    timers.turnAtMs = undefined
+    timers.botAtMs = undefined
+    this.broadcast({ type: 'match_ended' })
+    await this.state.storage.put({
+      [METADATA_KEY]: metadata,
+      [PLAYERS_KEY]: players,
+      [TIMERS_KEY]: timers
+    })
+    await this.recordUnloadedExpiryWithRetry(metadata, now)
+  }
+
+  private async recordUnloadedExpiryWithRetry(
+    metadata: MatchMetadata,
+    now: number
+  ) {
+    try {
+      const endedAt = new Date(metadata.endedAtMs ?? now).toISOString()
+      const result = await this.env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches
+         SET status = 'ended', winner_player = NULL, result_json = ?,
+             ended_at = ?, updated_at = ?
+         WHERE proposal_id = ? AND status IN ('active', 'ended')`
+      )
+        .bind(
+          JSON.stringify({ reason: 'players_did_not_load' }),
+          endedAt,
+          endedAt,
+          metadata.proposalId
+        )
+        .run()
+      if ((result.meta.changes ?? 0) < 1) {
+        throw new Error('active match ledger row was not found')
+      }
+      metadata.completionRecorded = true
+      await this.state.storage.put(METADATA_KEY, metadata)
+      await this.state.storage.deleteAlarm()
+    } catch (error) {
+      console.error(
+        'unloaded match expiry recording failed',
+        metadata.proposalId,
+        error
+      )
+      await this.state.storage.setAlarm(now + 10_000)
+    }
+  }
+
   private async scheduleAlarm(
     players: PlayerStateMap,
     timers: MatchTimers,
     now: number
   ) {
     const candidates = [
+      timers.loadExpiryAtMs,
       timers.commitRevealAtMs,
       timers.turnAtMs,
       timers.botAtMs,
       ...Object.values(players).map(player => player.abandonAtMs)
     ]
-      .filter((value): value is number => value !== undefined && value > now)
+      .filter((value): value is number => value !== undefined)
       .sort((left, right) => left - right)
     if (candidates[0] !== undefined)
-      await this.state.storage.setAlarm(candidates[0])
+      await this.state.storage.setAlarm(Math.max(now, candidates[0]))
     else await this.state.storage.deleteAlarm()
   }
 
@@ -1366,6 +1496,25 @@ export class GameMatch implements DurableObject {
       data: applied.opponentDiffs
     })
     await this.replayGameplay(applied.opponentDiffs)
+  }
+
+  private dispatchAbandonFromAnyState(
+    runtime: AuthoritativeMatchRuntime,
+    player: Player
+  ) {
+    const emitted: string[] = []
+    // Source Match.tryDispatch first drives the commit/reveal store into a
+    // ready match state. Abandon is not a valid action against a pending store.
+    for (let attempt = 0; !runtime.stateInfo().hasState; attempt += 1) {
+      if (attempt >= 6) {
+        throw new Error(
+          'commit-reveal state did not become ready before abandon'
+        )
+      }
+      emitted.push(...runtime.dispatchTimeout())
+    }
+    emitted.push(...runtime.dispatchAbandon(player))
+    return emitted
   }
 
   private botParticipant(match: MatchmakerStartMatchMessage) {

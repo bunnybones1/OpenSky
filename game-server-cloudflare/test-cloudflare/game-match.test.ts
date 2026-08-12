@@ -7,6 +7,7 @@ import {
 } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GameMode, MatchStatus } from '@opensky/proto'
+import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 
 import { GameMatch, GameServerEnv } from '../src/game-match'
 import { recordAbandonPenalty } from '../src/abandon-penalties'
@@ -919,15 +920,17 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
   it('repairs interrupted initialization on an identical create retry', async () => {
     await initializeMatch()
-    const originalDeadline = await runInDurableObject(
+    const originalDeadlines = await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
-          'match:timers'
-        )
+        const timers = await state.storage.get<{
+          loadExpiryAtMs?: number
+          commitRevealAtMs?: number
+        }>('match:timers')
+        expect(timers?.loadExpiryAtMs).toEqual(expect.any(Number))
         expect(timers?.commitRevealAtMs).toEqual(expect.any(Number))
         await state.storage.deleteAlarm()
-        return timers!.commitRevealAtMs!
+        return timers!
       }
     )
 
@@ -936,11 +939,14 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
-          'match:timers'
+        const timers = await state.storage.get<{
+          loadExpiryAtMs?: number
+          commitRevealAtMs?: number
+        }>('match:timers')
+        expect(timers).toEqual(originalDeadlines)
+        expect(await state.storage.getAlarm()).toBe(
+          originalDeadlines.loadExpiryAtMs
         )
-        expect(timers?.commitRevealAtMs).toBe(originalDeadline)
-        expect(await state.storage.getAlarm()).toBe(originalDeadline)
 
         // Represents failure after the immutable match/snapshot batch but
         // before afterStateChange could persist its first deadline.
@@ -954,13 +960,142 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
-          'match:timers'
-        )
+        const timers = await state.storage.get<{
+          loadExpiryAtMs?: number
+          commitRevealAtMs?: number
+        }>('match:timers')
+        expect(timers?.loadExpiryAtMs).toEqual(expect.any(Number))
         expect(timers?.commitRevealAtMs).toEqual(expect.any(Number))
-        expect(await state.storage.getAlarm()).toBe(timers!.commitRevealAtMs)
+        expect(await state.storage.getAlarm()).toBe(timers!.loadExpiryAtMs)
       }
     )
+  })
+
+  it('ends an unjoined match without rewards when neither player loads', async () => {
+    await insertActiveLedgerRow()
+    await initializeMatch()
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<Record<string, unknown>>(
+          'match:timers'
+        )
+        await state.storage.put('match:timers', {
+          ...timers,
+          loadExpiryAtMs: Date.now() - 1
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
+
+    const status = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      ended: true,
+      started: false,
+      timers: {}
+    })
+    const row = await env.AUTH_DB.prepare(
+      `SELECT status, winner_player, result_json
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{
+        status: string
+        winner_player: number | null
+        result_json: string
+      }>()
+    expect(row).toMatchObject({ status: 'ended', winner_player: null })
+    expect(JSON.parse(row!.result_json)).toEqual({
+      reason: 'players_did_not_load'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM multiplayer_match_progression
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(0)
+  })
+
+  it('abandons the no-show when exactly one player finishes loading', async () => {
+    await insertQuestPlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+    const first = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const joined = collectMessages(first, 2)
+    join(first, 0x31)
+    await joined
+
+    // Finished-loading is a source one-way transition even if a stale lower
+    // progress update arrives later.
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 0.25 })
+    )
+    await expect
+      .poll(async () => {
+        const response = await stub().fetch('https://match/internal/status', {
+          headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+        })
+        const body = await response.json<{
+          players: Record<
+            string,
+            { loadingProgress: number; finishedLoadingAssets: boolean }
+          >
+        }>()
+        return body.players[PRINCIPAL_1]
+      })
+      .toEqual({
+        connected: true,
+        joined: true,
+        loadingProgress: 1,
+        finishedLoadingAssets: true,
+        opponentMuted: false,
+        lastEmoteTimestamps: [0, 0, 0]
+      })
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<Record<string, unknown>>(
+          'match:timers'
+        )
+        await state.storage.put('match:timers', {
+          ...timers,
+          loadExpiryAtMs: Date.now() - 1
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
+    const status = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      ended: true,
+      state: {
+        statusType: 'GameOver',
+        winner: 0
+      }
+    })
+    const row = await env.AUTH_DB.prepare(
+      `SELECT status, winner_player, result_json
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{
+        status: string
+        winner_player: number
+        result_json: string
+      }>()
+    expect(row).toMatchObject({ status: 'ended', winner_player: 0 })
+    expect(JSON.parse(row!.result_json)).toMatchObject({
+      winner: 0,
+      status: MatchStatus.ABANDONED
+    })
   })
 
   it('persists source-shaped replay initialization and authoritative diffs', async () => {
