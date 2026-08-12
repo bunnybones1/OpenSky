@@ -4,11 +4,11 @@
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`b5b68d91-7eb3-4aa6-a6c6-c72cb48442b9`)
-- Match service Worker: `cloud-weasel-match-service` (`51087d54-7b34-4696-91dc-cd33d77f6f71`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
+- Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `f734491` for the matchmaker, `2a51215` for the match service, and `7c91592`
+  `309861e` for the matchmaker and match service, and `7c91592`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -477,6 +477,21 @@ settlement and delayed delivery against that pool.
   game health, API `Ping`, and authoritative mode status passed with Conquest
   disabled; a read-only production aggregate remained one active and nine
   ended matches with no creating/failed rows and reported `changed_db: false`.
+- Matchmaker version `063eeb90-21e3-48e5-b877-57fea7ad57ef` and match service
+  version `d4245da4-c8f2-4c1c-bea9-3496ea5de292` contain source `309861e`.
+  Practice Bot, Warm Up, and optional ranked replacement bots now copy the
+  human player's client release and original queue timestamp exactly like the
+  Go `player/bot.Factory.CreateUnregistered` contract. The final match-service
+  boundary permits bot placeholders for Practice Bot and Warm Up, requires the
+  bot and human modes to match, rejects challenge/Conquest bots, and keeps
+  ranked/PvP bots behind the explicit `ENABLE_RANKED_BOTS=false` production
+  switch shared with the matcher. The rollout passed 47 matcher unit, 31
+  matcher Worker, and 26 match-service Worker tests, both TypeScript checks,
+  release parity, the Conquest production gate, and the Go director handler
+  suite. Live matcher/game health, API `Ping`, authoritative mode status, and
+  practice client HTML passed with Conquest disabled. A read-only production
+  aggregate remained one active and nine ended matches with no creating/failed
+  rows; D1 remained at 46 migrations and reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
