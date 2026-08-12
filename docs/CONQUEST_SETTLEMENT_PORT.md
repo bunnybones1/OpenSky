@@ -32,6 +32,9 @@ run only after that task settles.
   decoder matching the source JSONB scan into
   `map[uint64]ConquestMatchResult`. Source nil-map/key/enum normalization is
   preserved; malformed shapes and value types fail closed.
+- D1 insert/update triggers reject syntactically invalid progress JSON before
+  it can be stored, matching the source PostgreSQL JSONB write boundary. The
+  shared decoder remains the typed-map boundary for valid JSON.
 - A loss or third win ends the run exactly once; zero-win losses become
   `COMPLETED`, while earned bundles become `REWARDS_PENDING`.
 - Event-2 treasure points and their retry receipt are independent of card

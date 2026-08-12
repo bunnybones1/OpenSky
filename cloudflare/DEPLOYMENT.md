@@ -14,7 +14,7 @@
   Conquest settlement retry recovery, and `309861e` for the matchmaker and
   match service
 - Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0047`
+- Applied D1 migrations: `0001` through `0048`
 - Scheduled trigger: every minute for due Conquest Gold delivery and account
   anonymization
 
@@ -632,6 +632,18 @@ settlement and delayed delivery against that pool.
   production scan found zero Conquest runs or malformed progress rows and
   retained one active and nine ended matches, no creating/failed rows, no
   active Conquest pool/reward rows, and `changed_db: false`.
+- Migration `0048_conquest_progress_json_guard.sql` contains source `ef15cfb`
+  and restores PostgreSQL JSONB's first write boundary for D1's TEXT-backed
+  Conquest progress: syntactically invalid JSON is rejected on insert/update,
+  while the deployed shared decoder continues to enforce the source typed-map
+  shape. The full gate passed with 31 unit, 67 game-Worker, and 149 API tests,
+  both affected TypeScript checks, all compatibility/safety gates, and both
+  Wrangler bundles. Production applied exactly one `0048` row and exposes both
+  guard triggers. A read-only scan found zero Conquest runs, invalid/non-object
+  progress, active pools, settlements, or Gold deliveries; the match aggregate
+  remained one active and nine ended with no creating/failed rows and
+  `changed_db: false`. Live API and game protocol-v3 health passed after the
+  migration.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
