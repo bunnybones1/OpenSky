@@ -51,6 +51,13 @@ production producer and must stay producerless unless reviewed. A newly added
 queue, a revived producerless task, or missing Cloudflare evidence fails the
 production build.
 
+The browser transaction audit separately freezes every direct transaction
+callsite in the preserved webapp. Product surfaces excluded from `IdentityApp`,
+legacy-wallet infrastructure, and the guarded Silver exchange each have an
+explicit disposition and reviewed callsite count. A new callsite, a newly
+reachable legacy product surface, or a Silver flow that can fall through to the
+wallet branch fails the production build.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
