@@ -5,10 +5,10 @@
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
 - API/web Worker: `opensky-webapp` (`523cbe54-0e1b-40fc-b2e2-f3f37a2322e5`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`b5b68d91-7eb3-4aa6-a6c6-c72cb48442b9`)
-- Match service Worker: `cloud-weasel-match-service` (`1e0c236f-292a-40c3-9600-9f28522d2888`)
+- Match service Worker: `cloud-weasel-match-service` (`ed5d2d3c-6618-4e71-88bc-7930c3a647c7`)
 - Game Worker: `cloud-weasel-game-server` (`9e2bdf2b-489e-45cc-9ef1-2e9df16bd801`)
 - Deployed source includes `492cd47` across the API/web Worker,
-  `f734491` for the matchmaker, `bd34e6e` for the match service, and `7c91592`
+  `f734491` for the matchmaker, `1a86cfb` for the match service, and `7c91592`
   for the game Worker
 - Deployed: 2026-08-12 PDT
 - Applied D1 migrations: `0001` through `0046`
@@ -452,6 +452,17 @@ settlement and delayed delivery against that pool.
   protocol-v3 health, API `Ping`, and authoritative mode status passed with
   Conquest disabled; a read-only production aggregate remained one active and
   nine ended matches with no creating/failed rows and reported
+  `changed_db: false`.
+- Match service version `ed5d2d3c-6618-4e71-88bc-7930c3a647c7` contains source
+  `1a86cfb`. Final accepted dispatch now independently preserves the source
+  version matcher: both participants must supply the same nonempty normalized
+  client release before any D1 allocation or account/game work. This prevents a
+  bypassed matcher from silently choosing player one's release for a mixed-
+  client match. The rollout passed all 24 match-service Worker tests,
+  TypeScript checking, the Go match-validator suite, and the Conquest gate.
+  Live matcher/game health, API `Ping`, and authoritative mode status passed
+  with Conquest disabled; a read-only production aggregate remained one active
+  and nine ended matches with no creating/failed rows and reported
   `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
