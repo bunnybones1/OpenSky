@@ -3,15 +3,14 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`c67f5725-04bd-47f3-a3f1-067cfb7e3aa0`)
-- Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
-- Match service Worker: `cloud-weasel-match-service` (`41d03d01-b64d-40b5-96b9-2be1f61afdf6`)
+- API/web Worker: `opensky-webapp` (`300f56ff-6019-49d8-bcc7-2c254c3bae86`)
+- Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
+- Match service Worker: `cloud-weasel-match-service` (`177a62e5-e7ad-4142-b029-f9f4d87123d8`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `ef7fc36` for web/API and match service and `b612af3`
-  for game, plus the
-  match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
+- Deployed source includes `3a964c3` for web/API, match service, and matchmaker,
+  and `b612af3` for game, plus the match-service inventory fix from `3c57de5`
 - Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0037`
+- Applied D1 migrations: `0001` through `0038`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -59,7 +58,8 @@
   source-unimplemented account-list methods
 - Admin-only source account discovery by username or identity reference, plus
   cursor-paginated account lists with status, creation-window, and Conquest
-  eligibility filters; absent action/IP models return truthful empty histories
+  eligibility filters; IP history remains truthfully empty until that source
+  audit stream has a Cloudflare equivalent
 - Admin-only report-signal detail and account summaries for the preserved
   moderation screens, with source payload fields, status/date filters, bounded
   cursors, and neutral scores until the separate fraud analytics model is ported
@@ -89,6 +89,12 @@
   `GAME_MODE_WRITE` permission, with D1 as the shared authority for public
   status, matchmaker admission, and accepted-match dispatch; Conquest also
   requires an active pool and a separate recorded enablement drill
+- Source moderator ban, suspension, flag, and vet actions behind both `ADMIN`
+  and a dormant `ACCOUNT_ACTION_WRITE` permission, with immutable action,
+  deactivation, and signal histories. Bans and suspensions are enforced at API,
+  player, multiplayer-gateway, matchmaking-profile, and final-dispatch
+  boundaries; bans suppress competitive ranking, all sanctions suspend delayed
+  Conquest Gold, and only vetting restores disabled delivery
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -108,8 +114,8 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 132 tests
-- Match service: 10 Worker tests
+- API Worker: 21 files, 134 tests
+- Match service: 11 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
 - API, match service, and game Worker type-checks; original webapp/game
@@ -180,10 +186,21 @@ settlement and delayed delivery against that pool.
   readiness approvals; version metadata on the live routes propagated to
   `c67f5725-04bd-47f3-a3f1-067cfb7e3aa0` from source `ef7fc36`, and every D1
   verification read reported `changed_db: false`
+- Live `GMListAccountActions` and `GMCreateAccountAction` probes returned `401`
+  without a session; migration `0038` was present and the app, Google auth
+  configuration, API ping, game-mode status, and matchmaker protocol-v3 health
+  all passed. Production retained zero account-action writer grants, action,
+  deactivation, signal, or disabled-delivery rows; its one existing account
+  remained leaderboard-eligible. API, match-service, and matchmaker versions
+  propagated to `300f56ff-6019-49d8-bcc7-2c254c3bae86`,
+  `177a62e5-e7ad-4142-b029-f9f4d87123d8`, and
+  `c493d4d0-3e69-4cbf-93be-de0dc235a4a7`, and every D1 verification read
+  reported `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
-  `CLOUDFLARE_ACCOUNT_ID=528badc1c29c30196335df252a73c5a6` explicitly even
-  though `wrangler.jsonc` pins that account; the first `0035` attempt failed
-  before execution and the explicit-account retry applied it once.
+  the repository config so its pinned account/database IDs select production.
+  An explicit environment override produced Cloudflare `7403` before execution
+  during the `0038` rollout; removing it resolved the same database and applied
+  the migration once.
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`

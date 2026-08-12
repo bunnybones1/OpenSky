@@ -260,8 +260,10 @@ and progress are not migrated.
 - The original admin account table and direct lookup now have role-gated reads:
   `GMListAccounts` supports bounded cursors, source status and creation filters,
   and rank-derived Conquest eligibility; `GMFindAccount` accepts a username or
-  identity reference and includes private settings for staff. Account-action
-  and IP histories remain empty until those audited models are ported.
+  identity reference and includes private settings for staff. Account actions
+  now expose immutable ban/suspension/flag/vet history and require the separate
+  `ACCOUNT_ACTION_WRITE` permission to create; IP history remains empty until
+  that source audit stream has a Cloudflare equivalent.
 - Player reports are visible to staff through the original signal detail and
   summary contracts. The reads preserve reporter identity, match ID, sanitized
   comment, pending state, status/date filters, and bounded cursors. Scores are
