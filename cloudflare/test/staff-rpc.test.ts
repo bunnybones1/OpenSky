@@ -663,4 +663,77 @@ describe('fail-closed Google identity staff authorization', () => {
       )?.count
     ).toBe(1)
   })
+
+  it('paginates event-2 Conquest treasure progress using source thresholds', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_conquest_points
+           (user_id, event_id, current_points, total_points, updated_at)
+         VALUES (?, 2, 500, 700, ?)`
+      ).bind(ADMIN, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_conquest_points
+           (user_id, event_id, current_points, total_points, updated_at)
+         VALUES (?, 2, 900, 1000, ?)`
+      ).bind(PLAYER, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_conquest_points
+           (user_id, event_id, current_points, total_points, updated_at)
+         VALUES (?, 3, 99999, 99999, ?)`
+      ).bind(PLAYER, now)
+    ])
+    expect(
+      (await rpcAs(PLAYER, 'GMListConquestV2AccountTreasureProgress')).status
+    ).toBe(403)
+    await grantAdmin()
+    const first = await rpcAs(
+      ADMIN,
+      'GMListConquestV2AccountTreasureProgress',
+      { page: { pageSize: 1 } }
+    )
+    expect(first.status).toBe(200)
+    const firstBody = (await first.json()) as {
+      page: { after: string }
+      data: unknown[]
+    }
+    expect(firstBody).toMatchObject({
+      page: { pageSize: 1, hasBefore: true, hasAfter: false },
+      data: [
+        {
+          accountName: 'Staff Player',
+          progress: {
+            treasureLevel: 2,
+            treasurePoints: 150,
+            treasurePointsRequired: 600
+          }
+        }
+      ]
+    })
+    const second = await rpcAs(
+      ADMIN,
+      'GMListConquestV2AccountTreasureProgress',
+      { page: { pageSize: 1, after: firstBody.page.after } }
+    )
+    expect(await second.json()).toMatchObject({
+      page: { hasBefore: false, hasAfter: true },
+      data: [
+        {
+          accountName: 'Staff Admin',
+          progress: {
+            treasureLevel: 1,
+            treasurePoints: 250,
+            treasurePointsRequired: 250
+          }
+        }
+      ]
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListConquestV2AccountTreasureProgress', {
+          page: { sort: [{ column: 'account_name', order: 'ASC' }] }
+        })
+      ).status
+    ).toBe(400)
+  })
 })

@@ -43,6 +43,12 @@ interface PendingGoldRow {
   cards_won_last_week: number
 }
 
+interface ConquestTreasureProgressRow {
+  account_id: number
+  account_name: string
+  current_points: number
+}
+
 const ACCOUNT_STATUSES = new Set<AccountStatus>([
   'ACTIVE' as AccountStatus,
   'SUSPENDED' as AccountStatus,
@@ -472,6 +478,54 @@ export class StaffRepository {
         cardsWonLastDay: row.cards_won_last_day,
         cardsWonLastWeek: row.cards_won_last_week
       }))
+    }
+  }
+
+  async conquestTreasureProgress(page?: Page): Promise<{
+    page: Page
+    rows: ConquestTreasureProgressRow[]
+  }> {
+    const sort = page?.sort?.length
+      ? page.sort
+      : [{ column: 'current_points', order: 'DESC' as SortBy['order'] }]
+    if (
+      sort.length !== 1 ||
+      !['current_points', 'currentPoints'].includes(sort[0].column)
+    ) {
+      throw invalidArgument('unsupported Conquest progress sort')
+    }
+    if (!['ASC', 'DESC'].includes(sort[0].order)) {
+      throw invalidArgument('Conquest progress sort order is invalid')
+    }
+    const size = Math.min(200, pageSize(page))
+    const offset = cursorOffset(page?.before ?? page?.after)
+    const direction = sort[0].order
+    const result = await this.database
+      .prepare(
+        `SELECT game.id AS account_id, settings.name AS account_name,
+                points.current_points
+         FROM player_conquest_points points
+         JOIN player_account_settings settings
+           ON settings.user_id = points.user_id
+         JOIN game_accounts game ON game.user_id = points.user_id
+         WHERE points.event_id = 2
+         ORDER BY points.current_points ${direction}, game.id ${direction}
+         LIMIT ? OFFSET ?`
+      )
+      .bind(size + 1, offset)
+      .all<ConquestTreasureProgressRow>()
+    const rows = result.results.slice(0, size)
+    const nextOffset = offset + rows.length
+    return {
+      page: {
+        pageSize: size,
+        before: rows.length ? encodeCursor(offset) : undefined,
+        after: rows.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: result.results.length > size,
+        hasAfter: offset > 0,
+        sort
+      },
+      rows
     }
   }
 }

@@ -680,6 +680,21 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'GMListConquestV2AccountTreasureProgress': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ page?: Page }>(request)
+        const result = await staff.conquestTreasureProgress(body.page)
+        return json(request, env, {
+          page: result.page,
+          data: result.rows.map(row => ({
+            accountID: row.account_id,
+            accountName: row.account_name,
+            progress: conquestTreasureProgress(row.current_points)
+          }))
+        })
+      }
+
       case 'GMIsAccountBanned': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
