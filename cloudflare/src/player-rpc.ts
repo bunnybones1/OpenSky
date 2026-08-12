@@ -28,6 +28,7 @@ import {
   validateDeckClass
 } from './deck-codec'
 import { CompetitiveRepository } from './competitive'
+import { completeDeckRankInsert } from './deck-ranks'
 import {
   alreadyExists,
   invalidArgument,
@@ -102,7 +103,10 @@ const ITEM_TYPE_BY_TOKEN_CODE: Record<number, ItemType> = {
 }
 
 const ITEM_TYPE_ID = Object.fromEntries(
-  Object.entries(ITEM_TYPE_BY_ID).map(([id, itemType]) => [itemType, Number(id)])
+  Object.entries(ITEM_TYPE_BY_ID).map(([id, itemType]) => [
+    itemType,
+    Number(id)
+  ])
 ) as Record<string, number>
 const KNOWN_ITEM_TYPES = new Set(Object.values(ITEM_TYPE_BY_ID))
 
@@ -199,6 +203,7 @@ const CARD_NAMES: Record<number, string> = {
 }
 
 interface AccountRow {
+  game_account_id: number | null
   display_name: string
   account_name: string | null
   locale: string | null
@@ -638,7 +643,7 @@ export class PlayerRpcRepository {
     const stats = await competitive.currentStats(userId)
     const row = await this.database
       .prepare(
-        `SELECT u.display_name,
+        `SELECT u.display_name, game.id AS game_account_id,
                 account.name AS account_name,
                 account.locale,
                 account.region,
@@ -661,6 +666,7 @@ export class PlayerRpcRepository {
          JOIN player_profiles p ON p.user_id = u.id
          JOIN player_progression g ON g.user_id = u.id
          LEFT JOIN player_account_settings account ON account.user_id = u.id
+         LEFT JOIN game_accounts game ON game.user_id = u.id
          LEFT JOIN player_invites invite ON invite.invitee_user_id = u.id
          WHERE u.id = ?`
       )
@@ -669,7 +675,7 @@ export class PlayerRpcRepository {
     if (!row) return null
 
     return {
-      id: 0,
+      id: row.game_account_id ?? 0,
       address: identityReferenceFor(userId),
       name: row.account_name || row.display_name,
       locale: row.locale || 'en',
@@ -1025,7 +1031,10 @@ export class PlayerRpcRepository {
         throw invalidArgument('account address is invalid')
       }
       userId = request.accountAddress.slice('identity:'.length)
-      if (!userId || !(await this.accountReferenceExists(request.accountAddress))) {
+      if (
+        !userId ||
+        !(await this.accountReferenceExists(request.accountAddress))
+      ) {
         throw invalidArgument('account address is invalid')
       }
     }
@@ -1047,10 +1056,7 @@ export class PlayerRpcRepository {
     const decoded = stored
       ? { cardIds: stored.cardIds, deckClass: stored.class }
       : decodeDeckString(request.deckString!)
-    const normalized = forceValidDeckClass(
-      decoded.cardIds,
-      decoded.deckClass
-    )
+    const normalized = forceValidDeckClass(decoded.cardIds, decoded.deckClass)
     if (normalized.cardIds.length > 30) {
       throw new Error('deck validation failed: wrong number of cards')
     }
@@ -1087,8 +1093,7 @@ export class PlayerRpcRepository {
 
     return {
       containsInvalid: normalized.containsInvalid,
-      accountOwnsAllCards:
-        normalized.cardIds.length === owned.results.length,
+      accountOwnsAllCards: normalized.cardIds.length === owned.results.length,
       unlockedClass
     }
   }
@@ -1131,7 +1136,7 @@ export class PlayerRpcRepository {
     const deckString = encodeDeckString(request.cardIds, deckClass)
     const uuid = crypto.randomUUID()
     const now = new Date().toISOString()
-    await this.database
+    const insert = this.database
       .prepare(
         `INSERT INTO player_decks
            (id, user_id, name, prism, deck_string, card_count, is_starter,
@@ -1152,7 +1157,14 @@ export class PlayerRpcRepository {
         JSON.stringify(request.cardIds),
         request.art || ''
       )
-      .run()
+    const rankInsert = completeDeckRankInsert(this.database, {
+      deckString,
+      deckClass,
+      cardIds: request.cardIds,
+      userId,
+      now
+    })
+    await this.database.batch(rankInsert ? [insert, rankInsert] : [insert])
     const deck = await this.findDeck(userId, { uuid })
     if (!deck) throw new Error('created deck was not found')
     return deck
@@ -1177,7 +1189,7 @@ export class PlayerRpcRepository {
     const decoded = decodeDeckString(update.deckString)
     validateDeckClass(decoded.cardIds, decoded.deckClass)
     const now = new Date().toISOString()
-    await this.database
+    const updateStatement = this.database
       .prepare(
         `UPDATE player_decks
          SET name = ?, deck_class = ?, prism = ?, deck_string = ?, card_ids = ?,
@@ -1196,7 +1208,16 @@ export class PlayerRpcRepository {
         userId,
         existing.uuid
       )
-      .run()
+    const rankInsert = completeDeckRankInsert(this.database, {
+      deckString: update.deckString,
+      deckClass: decoded.deckClass,
+      cardIds: decoded.cardIds,
+      userId,
+      now
+    })
+    await this.database.batch(
+      rankInsert ? [updateStatement, rankInsert] : [updateStatement]
+    )
     const deck = await this.findDeck(userId, { uuid: existing.uuid })
     if (!deck) throw new Error('updated deck was not found')
     return deck
@@ -1457,10 +1478,9 @@ export class PlayerRpcRepository {
       throw invalidArgument('tokenIDs are invalid')
     }
     const supplies = await Promise.all(
-      [...new Set(itemIds)].map(async itemId => [
-        itemId,
-        await this.itemSupply(itemId)
-      ] as const)
+      [...new Set(itemIds)].map(
+        async itemId => [itemId, await this.itemSupply(itemId)] as const
+      )
     )
     return Object.fromEntries(
       supplies.filter(([, supply]) => Object.keys(supply).length > 0)
@@ -1470,7 +1490,8 @@ export class PlayerRpcRepository {
   async itemSuppliesByType(
     itemTypes: ItemType[]
   ): Promise<Record<number, ItemSupply[]>> {
-    if (itemTypes.length === 0) throw invalidArgument('itemTypes cannot be empty')
+    if (itemTypes.length === 0)
+      throw invalidArgument('itemTypes cannot be empty')
     if (!itemTypes.every(itemType => KNOWN_ITEM_TYPES.has(itemType))) {
       throw invalidArgument('itemTypes contains an invalid item type')
     }
@@ -1776,7 +1797,9 @@ export class PlayerRpcRepository {
     for (const pending of pendingRows) {
       for (const card of pending.cards) {
         const cardClass = CARD_CLASS_BY_ID.get(card.id)
-        if (!CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])) {
+        if (
+          !CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])
+        ) {
           continue
         }
         const activeClass = cardClass as (typeof CARD_CLASSES)[number]
@@ -2120,9 +2143,7 @@ export class PlayerRpcRepository {
     }
     const specs = SOURCE_QUEST_SPECS.filter(
       spec => spec.epicType === epicType
-    ).sort(
-      (left, right) => (left.epicIndex ?? 0) - (right.epicIndex ?? 0)
-    )
+    ).sort((left, right) => (left.epicIndex ?? 0) - (right.epicIndex ?? 0))
     if (!specs.length) return []
 
     const assignments = await this.database

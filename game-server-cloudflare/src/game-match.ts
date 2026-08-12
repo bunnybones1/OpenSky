@@ -16,6 +16,7 @@ import {
 } from './abandon-penalties'
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
+import type { DeckRankReceipt } from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
@@ -51,6 +52,7 @@ const MAX_REPLAY_RECORD_BYTES = 1024 * 1024
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
+  DECK_RANK_COORDINATOR: DurableObjectNamespace
   AUTH_DB: D1Database
   INTERNAL_AUTH_SECRET: string
   MATCH_OWNER_PRIVATE_KEY: string
@@ -1133,6 +1135,30 @@ export class GameMatch implements DurableObject {
         metadata.result?.winner,
         endedAt
       )
+      const deckRanksResponse = await this.env.DECK_RANK_COORDINATOR.getByName(
+        'current-library'
+      ).fetch(
+        new Request('https://deck-rank-coordinator/internal/apply', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+          },
+          body: JSON.stringify({
+            proposalId: metadata.proposalId,
+            season: metadata.match.matchSettings.season,
+            winner: metadata.result?.winner,
+            status: metadata.result?.status ?? MatchStatus.COMPLETED,
+            processedAt: endedAt
+          })
+        })
+      )
+      if (!deckRanksResponse.ok) {
+        throw new Error(
+          `deck-rank coordinator returned ${deckRanksResponse.status}`
+        )
+      }
+      await deckRanksResponse.json<DeckRankReceipt>()
       const experience = await applyMatchExperience(
         this.env.AUTH_DB,
         metadata.proposalId,

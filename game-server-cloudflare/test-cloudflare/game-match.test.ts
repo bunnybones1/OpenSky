@@ -296,6 +296,9 @@ const join = (socket: WebSocket, subkeyByte: number) => {
 beforeEach(async () => {
   proposalId = `proposal-test-${crypto.randomUUID()}`
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_experience'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),

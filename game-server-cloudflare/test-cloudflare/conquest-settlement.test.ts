@@ -122,8 +122,13 @@ const inventory = () =>
     }>()
 
 beforeEach(async () => {
-  await env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_conquest_inventory').run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_conquest_inventory'
+  ).run()
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_gold_deliveries'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_feed_events'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_settlements'),

@@ -192,6 +192,12 @@ export class PlayerRepository {
     const statements: D1PreparedStatement[] = [
       this.database
         .prepare(
+          `INSERT OR IGNORE INTO game_accounts (user_id, created_at)
+           VALUES (?, ?)`
+        )
+        .bind(userId, now),
+      this.database
+        .prepare(
           `INSERT OR IGNORE INTO player_profiles
              (user_id, level, xp, next_level_xp, created_at, updated_at)
            VALUES (?, 1, 0, 200, ?, ?)`

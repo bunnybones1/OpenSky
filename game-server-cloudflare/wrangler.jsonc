@@ -9,6 +9,10 @@
       {
         "name": "GAME_MATCHES",
         "class_name": "GameMatch"
+      },
+      {
+        "name": "DECK_RANK_COORDINATOR",
+        "class_name": "DeckRankCoordinator"
       }
     ]
   },
@@ -24,6 +28,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GameMatch"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["DeckRankCoordinator"]
     }
   ],
   "vars": {

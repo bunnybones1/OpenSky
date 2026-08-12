@@ -8,7 +8,8 @@ import type {
   GameModesStatus,
   Hero,
   ItemType,
-  Page
+  Page,
+  SearchDeckRanksRequest
 } from '@opensky/proto'
 import {
   WebRPCSchemaHash,
@@ -29,6 +30,7 @@ import { CookiePoliciesRepository } from './cookie-policies'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { pendingConquestCards } from './conquest-delivery'
+import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
 import { invalidArgument, notFound, RpcError, unimplemented } from './errors'
@@ -164,7 +166,9 @@ const authoritativeGameModesStatus = async (
   if (
     typeof body.status !== 'object' ||
     body.status === null ||
-    !keys.every(key => typeof (body.status as Record<string, unknown>)[key] === 'boolean')
+    !keys.every(
+      key => typeof (body.status as Record<string, unknown>)[key] === 'boolean'
+    )
   ) {
     throw new Error('match service returned invalid mode status')
   }
@@ -209,6 +213,7 @@ export const handleApiRequest = async (
   const cookiePolicies = new CookiePoliciesRepository(env.AUTH_DB)
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
+  const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
   const userStorage = new UserStorageRepository(env.AUTH_DB)
@@ -999,6 +1004,32 @@ export const handleApiRequest = async (
           page: { pageSize: 200 },
           res: await playerRpc.listDecks(principal.userId)
         })
+      }
+
+      case 'ListDeckRanks': {
+        const body = await requestBody<{
+          page?: Page
+          req?: { class?: DeckClass }
+        }>(request)
+        return json(
+          request,
+          env,
+          await deckRanks.list(body.page, body.req?.class, userId =>
+            playerRpc.getAccountByReference(identityReferenceFor(userId))
+          )
+        )
+      }
+
+      case 'SearchDeckRanks': {
+        await identityPrincipal(request, env)
+        const body = await requestBody<{
+          page?: Page
+          req?: SearchDeckRanksRequest
+        }>(request)
+        if (!body.req || typeof body.req !== 'object') {
+          throw invalidArgument('req is required')
+        }
+        return json(request, env, await deckRanks.search(body.page, body.req))
       }
 
       case 'SearchDecks': {

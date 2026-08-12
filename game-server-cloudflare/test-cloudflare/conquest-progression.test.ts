@@ -16,10 +16,10 @@ const USER_2 = 'conquest-progress-user-2'
 
 const setup = async (
   proposalId: string,
-  progress: [Record<number, ConquestMatchResult>, Record<number, ConquestMatchResult>] = [
-    {},
-    {}
-  ],
+  progress: [
+    Record<number, ConquestMatchResult>,
+    Record<number, ConquestMatchResult>
+  ] = [{}, {}],
   mode = GameMode.CONQUEST_CONSTRUCTED
 ) => {
   const now = '2026-08-11T12:00:00.000Z'
@@ -54,13 +54,25 @@ const setup = async (
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
           match_progress, created_at)
        VALUES (?, ?, 'IN_PROGRESS', 1, ?, 'ADA', 'STR', ?, ?)`
-    ).bind(`entry-${proposalId}-1`, USER_1, mode, JSON.stringify(progress[0]), now),
+    ).bind(
+      `entry-${proposalId}-1`,
+      USER_1,
+      mode,
+      JSON.stringify(progress[0]),
+      now
+    ),
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
           match_progress, created_at)
        VALUES (?, ?, 'IN_PROGRESS', 1, ?, 'ADA', 'STR', ?, ?)`
-    ).bind(`entry-${proposalId}-2`, USER_2, mode, JSON.stringify(progress[1]), now)
+    ).bind(
+      `entry-${proposalId}-2`,
+      USER_2,
+      mode,
+      JSON.stringify(progress[1]),
+      now
+    )
   ])
   return env.AUTH_DB.prepare(
     'SELECT id FROM multiplayer_matches WHERE proposal_id = ?'
@@ -82,6 +94,9 @@ const conquests = () =>
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
+    env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_points'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_progress'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_points'),
@@ -299,7 +314,9 @@ describe('source Conquest authoritative match progression', () => {
         '2026-08-11T12:04:30.000Z'
       )
     ).rejects.toThrow('there is no conquest in progress')
-    expect(JSON.parse((await conquests()).results[0].match_progress)).toEqual({})
+    expect(JSON.parse((await conquests()).results[0].match_progress)).toEqual(
+      {}
+    )
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count

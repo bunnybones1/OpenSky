@@ -1,4 +1,5 @@
 import { GameMatch, GameServerEnv } from './game-match'
+import { DeckRankCoordinator } from './deck-ranks'
 import {
   CreateMatchRequest,
   INTERNAL_AUTH_HEADER,
@@ -29,7 +30,7 @@ const allowedOrigin = (request: Request, env: GameServerEnv) => {
     new Set(
       (env.ALLOWED_ORIGINS ?? '')
         .split(',')
-        .map((value) => value.trim())
+        .map(value => value.trim())
         .filter(Boolean)
     ).has(origin)
   )
@@ -54,7 +55,9 @@ export default {
       let body: CreateMatchRequest
       try {
         const text = await request.text()
-        if (new TextEncoder().encode(text).byteLength > MAX_CREATE_REQUEST_BYTES) {
+        if (
+          new TextEncoder().encode(text).byteLength > MAX_CREATE_REQUEST_BYTES
+        ) {
           return json({ error: 'request too large' }, 413)
         }
         body = JSON.parse(text) as CreateMatchRequest
@@ -78,24 +81,38 @@ export default {
         )
       } catch (error) {
         console.error('match creation failed', error)
-        return json({ error: error instanceof Error ? error.message : 'match creation failed' }, 400)
+        return json(
+          {
+            error:
+              error instanceof Error ? error.message : 'match creation failed'
+          },
+          400
+        )
       }
     }
-    if (request.method === 'GET' && url.pathname.startsWith(MATCH_PATH_PREFIX)) {
+    if (
+      request.method === 'GET' &&
+      url.pathname.startsWith(MATCH_PATH_PREFIX)
+    ) {
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
         return json({ error: 'websocket upgrade required' }, 426)
       }
-      if (!allowedOrigin(request, env)) return json({ error: 'origin not allowed' }, 403)
+      if (!allowedOrigin(request, env))
+        return json({ error: 'origin not allowed' }, 403)
       if (
         !isInternal(request, env) ||
-        !/^0x[0-9a-f]{40}$/.test(request.headers.get(TRUSTED_PRINCIPAL_HEADER) ?? '') ||
+        !/^0x[0-9a-f]{40}$/.test(
+          request.headers.get(TRUSTED_PRINCIPAL_HEADER) ?? ''
+        ) ||
         !(request.headers.get(TRUSTED_USER_ID_HEADER) ?? '').length
       ) {
         return json({ error: 'authenticated gateway required' }, 401)
       }
       let proposalId: string
       try {
-        proposalId = decodeURIComponent(url.pathname.slice(MATCH_PATH_PREFIX.length))
+        proposalId = decodeURIComponent(
+          url.pathname.slice(MATCH_PATH_PREFIX.length)
+        )
       } catch {
         return json({ error: 'invalid match ID' }, 400)
       }
@@ -108,4 +125,4 @@ export default {
   }
 } satisfies ExportedHandler<GameServerEnv>
 
-export { GameMatch }
+export { DeckRankCoordinator, GameMatch }
