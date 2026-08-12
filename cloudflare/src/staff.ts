@@ -2,6 +2,7 @@ import type {
   AccountSignal,
   AccountStatus,
   GMStatsResponse,
+  GMPendingCardsReponse,
   Page,
   SortBy
 } from '@opensky/proto'
@@ -33,6 +34,13 @@ interface SignalSummaryRow {
   user_id: string
   updated_at: string
   score: number
+}
+
+interface PendingGoldRow {
+  user_id: string
+  deliver_at: string
+  cards_won_last_day: number
+  cards_won_last_week: number
 }
 
 const ACCOUNT_STATUSES = new Set<AccountStatus>([
@@ -385,6 +393,85 @@ export class StaffRepository {
         sort
       },
       rows
+    }
+  }
+
+  async pendingGold(page?: Page): Promise<{
+    page: Page
+    rows: Array<
+      Pick<
+        GMPendingCardsReponse,
+        'mintAt' | 'cardsWonLastDay' | 'cardsWonLastWeek'
+      > & {
+        userId: string
+      }
+    >
+  }> {
+    const sort = page?.sort?.length
+      ? page.sort
+      : [{ column: 'mint_at', order: 'ASC' as SortBy['order'] }]
+    for (const item of sort) {
+      if (
+        !['mint_at', 'mintAt', 'run_at', 'deliver_at'].includes(item.column)
+      ) {
+        throw invalidArgument(
+          `unsupported pending-card sort column '${item.column}'`
+        )
+      }
+      if (!['ASC', 'DESC'].includes(item.order)) {
+        throw invalidArgument('pending-card sort order is invalid')
+      }
+    }
+    const size = Math.min(
+      500,
+      Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+        ? page!.pageSize!
+        : 500
+    )
+    const offset = cursorOffset(page?.before ?? page?.after)
+    const direction = sort[0].order
+    const now = Date.now()
+    const day = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+    const week = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const result = await this.database
+      .prepare(
+        `SELECT pending.user_id, pending.deliver_at,
+                COALESCE((
+                  SELECT SUM(json_array_length(day.card_ids_json))
+                  FROM player_conquest_gold_deliveries day
+                  WHERE day.user_id = pending.user_id AND day.created_at >= ?
+                ), 0) AS cards_won_last_day,
+                COALESCE((
+                  SELECT SUM(json_array_length(week.card_ids_json))
+                  FROM player_conquest_gold_deliveries week
+                  WHERE week.user_id = pending.user_id AND week.created_at >= ?
+                ), 0) AS cards_won_last_week
+         FROM player_conquest_gold_deliveries pending
+         WHERE pending.status = 'PENDING'
+         ORDER BY pending.deliver_at ${direction}, pending.conquest_id ${direction}
+         LIMIT ? OFFSET ?`
+      )
+      .bind(day, week, size + 1, offset)
+      .all<PendingGoldRow>()
+    const rows = result.results.slice(0, size)
+    const nextOffset = offset + rows.length
+    return {
+      page: {
+        pageSize: size,
+        before: rows.length
+          ? encodeCursor(Math.max(0, offset - size))
+          : undefined,
+        after: rows.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: result.results.length > size,
+        hasAfter: offset > 0,
+        sort
+      },
+      rows: rows.map(row => ({
+        userId: row.user_id,
+        mintAt: row.deliver_at,
+        cardsWonLastDay: row.cards_won_last_day,
+        cardsWonLastWeek: row.cards_won_last_week
+      }))
     }
   }
 }

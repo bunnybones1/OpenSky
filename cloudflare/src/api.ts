@@ -7,6 +7,7 @@ import type {
   EpicType,
   FeedEventType,
   GameModesStatus,
+  GMListMatchesRequest,
   Hero,
   ItemType,
   Page,
@@ -604,6 +605,43 @@ export const handleApiRequest = async (
           })
         )
         return json(request, env, { page: result.page, signals })
+      }
+
+      case 'GMListMatches': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{
+          page?: Page
+          req?: GMListMatchesRequest
+        }>(request)
+        return json(
+          request,
+          env,
+          await competitive.listAdminMatches(body.page, body.req)
+        )
+      }
+
+      case 'GMListPendingCards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ page?: Page }>(request)
+        const result = await staff.pendingGold(body.page)
+        const response = await Promise.all(
+          result.rows.map(async row => {
+            const account = await playerRpc.getAccountForAdmin(
+              undefined,
+              identityReferenceFor(row.userId)
+            )
+            if (!account) throw notFound('account not found')
+            return {
+              account,
+              mintAt: row.mintAt,
+              cardsWonLastDay: row.cardsWonLastDay,
+              cardsWonLastWeek: row.cardsWonLastWeek
+            }
+          })
+        )
+        return json(request, env, { page: result.page, response })
       }
 
       case 'GMIsAccountBanned': {

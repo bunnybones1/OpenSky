@@ -69,18 +69,22 @@ const grantAdmin = async () => {
 
 const seedReport = async () => {
   const now = '2026-08-13T15:00:00.000Z'
+  const endedAt = '2026-08-13T15:15:00.000Z'
   await env.AUTH_DB.prepare(
     `INSERT INTO multiplayer_matches
        (id, proposal_id, replay_id, mode, version, player1_principal,
         player2_principal, player1_user_id, player2_user_id,
-        match_payload_json, status, created_at, updated_at)
+        match_payload_json, status, winner_player, result_json,
+        created_at, updated_at, ended_at)
      VALUES (901, 'staff-report-match', 'staff-report-replay',
              'RANKED_CONSTRUCTED', 'test',
              '0x1111111111111111111111111111111111111111',
              '0x2222222222222222222222222222222222222222',
-             ?, ?, '{}', 'ended', ?, ?)`
+             ?, ?, '{}', 'ended', 0,
+             '{"status":"COMPLETED","turnCount":8,"moveCount":12}',
+             ?, ?, ?)`
   )
-    .bind(ADMIN, PLAYER, now, now)
+    .bind(ADMIN, PLAYER, now, endedAt, endedAt)
     .run()
   await env.AUTH_DB.prepare(
     `INSERT INTO player_account_reports
@@ -90,6 +94,41 @@ const seedReport = async () => {
   )
     .bind(PLAYER, ADMIN, now, now)
     .run()
+}
+
+const seedGoldDeliveries = async () => {
+  const createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const deliverAt = new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString()
+  const deliveredAt = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_conquests
+       (id, entry_key, user_id, status, nonce, mode, hero, deck_class,
+        match_progress, created_at, ended_at)
+     VALUES (951, 'staff-gold-pending', ?, 'COMPLETED', 1,
+             'CONQUEST_CONSTRUCTED', 'ADA', 'STR', '{}', ?, ?),
+            (952, 'staff-gold-delivered', ?, 'COMPLETED', 2,
+             'CONQUEST_CONSTRUCTED', 'ADA', 'STR', '{}', ?, ?)`
+  )
+    .bind(PLAYER, createdAt, createdAt, PLAYER, createdAt, createdAt)
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_conquest_gold_deliveries
+       (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+        status, attempt_count, created_at)
+     VALUES (951, ?, '[11,12]', '[1011,1012]', ?, 'PENDING', 0, ?)`
+  )
+    .bind(PLAYER, deliverAt, createdAt)
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_conquest_gold_deliveries
+       (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+        status, delivery_key, attempt_count, created_at, delivered_at)
+     VALUES (952, ?, '[13]', '[1013]', ?, 'DELIVERED',
+             'staff-delivery-receipt', 1, ?, ?)`
+  )
+    .bind(PLAYER, deliveredAt, createdAt, deliveredAt)
+    .run()
+  return deliverAt
 }
 
 describe('fail-closed Google identity staff authorization', () => {
@@ -359,5 +398,91 @@ describe('fail-closed Google identity staff authorization', () => {
     ).toMatchObject({
       signals: [{ accountAddress: `identity:${PLAYER}` }]
     })
+  })
+
+  it('inspects authoritative matches with staff-only replay access and source filters', async () => {
+    await seedReport()
+    expect((await rpcAs(PLAYER, 'GMListMatches', { req: {} })).status).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMListMatches', {
+      page: {
+        pageSize: 10,
+        sort: [{ column: 'ended_at', order: 'DESC' }]
+      },
+      req: {
+        accountAddress: `identity:${PLAYER}`,
+        modes: ['RANKED_CONSTRUCTED'],
+        statuses: ['COMPLETED'],
+        min_duration: '10m',
+        max_duration: '20m',
+        reviewed: false
+      }
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      page: { pageSize: 10, hasBefore: false, hasAfter: false },
+      res: [
+        {
+          reviewed: false,
+          duration: 900,
+          match: {
+            id: 901,
+            status: 'COMPLETED',
+            replayID: 'staff-report-replay',
+            player1: { address: `identity:${ADMIN}` },
+            player2: { address: `identity:${PLAYER}` },
+            turnNonce: 8
+          }
+        }
+      ]
+    })
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListMatches', {
+          req: { reviewed: true }
+        })
+      ).json()
+    ).toMatchObject({ res: [] })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListMatches', {
+          req: { min_duration: 'ten minutes' }
+        })
+      ).status
+    ).toBe(400)
+  })
+
+  it('lists pending Gold while counting all recent delivered card quantities', async () => {
+    const deliverAt = await seedGoldDeliveries()
+    expect((await rpcAs(PLAYER, 'GMListPendingCards')).status).toBe(403)
+    await grantAdmin()
+    const response = await rpcAs(ADMIN, 'GMListPendingCards', {
+      page: {
+        pageSize: 50,
+        sort: [{ column: 'mint_at', order: 'DESC' }]
+      }
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      page: { pageSize: 50, hasBefore: false, hasAfter: false },
+      response: [
+        {
+          account: {
+            address: `identity:${PLAYER}`,
+            name: 'Staff Player'
+          },
+          mintAt: deliverAt,
+          cardsWonLastDay: 3,
+          cardsWonLastWeek: 3
+        }
+      ]
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListPendingCards', {
+          page: { sort: [{ column: 'primary_email', order: 'ASC' }] }
+        })
+      ).status
+    ).toBe(400)
   })
 })

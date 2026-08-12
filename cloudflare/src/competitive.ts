@@ -2,12 +2,15 @@ import type {
   AccountStat,
   DeckClass,
   GameMode,
+  GMListMatchesRequest,
+  GMMatch,
   LeaderboardEntry,
   Match,
   MatchPlayer,
   Page,
   PlayerRank,
-  PlayerRankStage
+  PlayerRankStage,
+  SortBy
 } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
@@ -33,6 +36,21 @@ const PUBLIC_MATCH_MODES = new Set<GameMode>([
   'RANKED_DISCOVERY' as GameMode,
   'CONQUEST_CONSTRUCTED' as GameMode,
   'CONQUEST_DISCOVERY' as GameMode
+])
+const ALL_MATCH_MODES = new Set<GameMode>([
+  'TUTORIAL' as GameMode,
+  'PRACTICE_BOT' as GameMode,
+  'PRACTICE_PVP' as GameMode,
+  'WARM_UP' as GameMode,
+  ...HISTORY_MODES
+])
+const MATCH_STATUSES = new Set<Match['status']>([
+  'UNKNOWN' as Match['status'],
+  'COMPLETED' as Match['status'],
+  'ABANDONED' as Match['status'],
+  'FORFEITED' as Match['status'],
+  'IN_PROGRESS' as Match['status'],
+  'CRASHED' as Match['status']
 ])
 const RANK_ORDER: Record<string, number> = {
   UNKNOWN: 0,
@@ -149,6 +167,18 @@ const decodeCursor = (cursor?: string): number => {
   } catch {
     throw invalidArgument('page cursor is invalid')
   }
+}
+
+const durationSeconds = (value: string, field: string): number => {
+  if (!value || !/^(?:\d+(?:\.\d+)?(?:h|m|s))+$/.test(value)) {
+    throw invalidArgument(`${field} invalid value`)
+  }
+  let seconds = 0
+  for (const match of value.matchAll(/(\d+(?:\.\d+)?)(h|m|s)/g)) {
+    const amount = Number(match[1])
+    seconds += amount * (match[2] === 'h' ? 3600 : match[2] === 'm' ? 60 : 1)
+  }
+  return seconds
 }
 
 const totalExperience = (level: number, xp: number): number =>
@@ -612,6 +642,145 @@ export class CompetitiveRepository {
         ...(offset > 0 ? { hasAfter: true } : { hasAfter: false })
       } satisfies Page,
       res: matches
+    }
+  }
+
+  async listAdminMatches(
+    page: Page | undefined,
+    request: GMListMatchesRequest | undefined
+  ): Promise<{ page: Page; res: GMMatch[] }> {
+    const req = request ?? ({} as GMListMatchesRequest)
+    let requestedUserId: string | undefined
+    if (req.accountAddress !== undefined) {
+      if (!req.accountAddress.startsWith('identity:')) {
+        throw invalidArgument('cannot find account')
+      }
+      requestedUserId = req.accountAddress.slice('identity:'.length)
+      const exists = await this.database
+        .prepare('SELECT 1 FROM users WHERE id = ?')
+        .bind(requestedUserId)
+        .first()
+      if (!requestedUserId || !exists)
+        throw invalidArgument('cannot find account')
+    }
+    if (req.modes?.some(mode => !ALL_MATCH_MODES.has(mode))) {
+      throw invalidArgument('match modes are invalid')
+    }
+    if (req.statuses?.some(status => !MATCH_STATUSES.has(status))) {
+      throw invalidArgument('match statuses are invalid')
+    }
+    const minimum = req.min_duration
+      ? durationSeconds(req.min_duration, 'min_duration')
+      : undefined
+    const maximum = req.max_duration
+      ? durationSeconds(req.max_duration, 'max_duration')
+      : undefined
+    if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+      throw invalidArgument('match duration range is invalid')
+    }
+    if (req.reviewed === true) {
+      return {
+        page: { pageSize: pageSize(page), hasBefore: false, hasAfter: false },
+        res: []
+      }
+    }
+
+    const result = await this.database
+      .prepare(
+        `SELECT id, proposal_id, replay_id, mode, status, player1_user_id,
+                player2_user_id, match_payload_json, winner_player,
+                result_json, created_at, updated_at, ended_at
+         FROM multiplayer_matches`
+      )
+      .all<MatchRow>()
+    const mapped = result.results
+      .filter(
+        row =>
+          !requestedUserId ||
+          row.player1_user_id === requestedUserId ||
+          row.player2_user_id === requestedUserId
+      )
+      .map(row => {
+        const match = matchFromRow(row)
+        if (!match) return null
+        const duration = row.ended_at
+          ? Math.max(
+              0,
+              (Date.parse(row.ended_at) - Date.parse(row.created_at)) / 1000
+            )
+          : undefined
+        return { row, match, duration }
+      })
+      .filter(
+        (
+          value
+        ): value is {
+          row: MatchRow
+          match: Match
+          duration: number | undefined
+        } => value !== null
+      )
+      .filter(
+        value =>
+          (!req.modes?.length || req.modes.includes(value.row.mode)) &&
+          (!req.statuses?.length ||
+            req.statuses.includes(value.match.status)) &&
+          (minimum === undefined ||
+            (value.duration !== undefined && value.duration >= minimum)) &&
+          (maximum === undefined ||
+            (value.duration !== undefined && value.duration <= maximum))
+      )
+
+    const sort = page?.sort?.length
+      ? page.sort
+      : [{ column: 'started_at', order: 'DESC' as SortBy['order'] }]
+    for (const item of sort) {
+      if (
+        !['started_at', 'startedAt', 'ended_at', 'endedAt'].includes(
+          item.column
+        )
+      ) {
+        throw invalidArgument(`unsupported match sort column '${item.column}'`)
+      }
+      if (!['ASC', 'DESC'].includes(item.order)) {
+        throw invalidArgument('match sort order is invalid')
+      }
+    }
+    mapped.sort((left, right) => {
+      for (const item of sort) {
+        const ended = item.column === 'ended_at' || item.column === 'endedAt'
+        const leftValue = ended
+          ? (left.row.ended_at ?? '')
+          : left.row.created_at
+        const rightValue = ended
+          ? (right.row.ended_at ?? '')
+          : right.row.created_at
+        const compared = leftValue.localeCompare(rightValue)
+        if (compared) return item.order === 'DESC' ? -compared : compared
+      }
+      return right.row.id - left.row.id
+    })
+
+    const size = pageSize(page)
+    const offset = decodeCursor(page?.before ?? page?.after)
+    const slice = mapped.slice(offset, offset + size)
+    const nextOffset = offset + slice.length
+    return {
+      page: {
+        pageSize: size,
+        before: slice.length
+          ? encodeCursor(Math.max(0, offset - size))
+          : undefined,
+        after: slice.length ? encodeCursor(nextOffset) : undefined,
+        hasBefore: nextOffset < mapped.length,
+        hasAfter: offset > 0,
+        sort
+      },
+      res: slice.map(value => ({
+        match: value.match,
+        reviewed: false,
+        ...(value.duration !== undefined ? { duration: value.duration } : {})
+      }))
     }
   }
 
