@@ -45,7 +45,8 @@ export const ConfirmConvertSilverCardsDialog = memo(() => {
 
   const { data: IAPData } = usePaymentProviderProducts(
     PaymentProvider.SEQUENCE,
-    ItemType.SW_CONQUEST_TICKET
+    ItemType.SW_CONQUEST_TICKET,
+    env.AUTH_MODE !== 'google'
   )
   const sequenceProductCode = IAPData?.sequenceProductCode
 

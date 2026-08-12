@@ -13,6 +13,10 @@ const validInput = () => ({
     'No game flow asks a player to mint a reward. ' +
     'Apply the inventory change and fulfillment receipt in one D1 transaction.',
   pendingGoldSources: "env.AUTH_MODE === 'google'; Delivery in progress",
+  silverExchangeUi:
+    "env.AUTH_MODE !== 'google'; if (env.AUTH_MODE === 'google') { " +
+    'identityClient.exchangeSilverCardsForTickets(); return } ' +
+    'AuthenticationClient.wallet',
   rewardSources: {
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
@@ -87,4 +91,14 @@ test('rejects player-facing mint language from Google Pending Gold UI', () => {
   assert.ok(
     offchainGateErrors(input).some(error => error.includes('Pending Gold'))
   )
+})
+
+test('rejects a Google Silver exchange that can fall through to a wallet', () => {
+  const input = validInput()
+  input.silverExchangeUi =
+    "if (env.AUTH_MODE === 'google') { " +
+    'identityClient.exchangeSilverCardsForTickets() } AuthenticationClient.wallet'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('legacy wallet path')))
+  assert.ok(errors.some(error => error.includes('legacy payment catalog')))
 })

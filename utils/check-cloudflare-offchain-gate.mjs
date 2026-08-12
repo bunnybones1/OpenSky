@@ -24,6 +24,7 @@ export const offchainGateErrors = ({
   appSource,
   policySource,
   pendingGoldSources = '',
+  silverExchangeUi = '',
   rewardSources = {}
 }) => {
   const errors = []
@@ -68,6 +69,26 @@ export const offchainGateErrors = ({
   ) {
     errors.push('Google Pending Gold UI contains player-facing mint language')
   }
+  if (silverExchangeUi) {
+    const googleGuard = silverExchangeUi.indexOf("env.AUTH_MODE === 'google'")
+    const offchainExchange = silverExchangeUi.indexOf(
+      'identityClient.exchangeSilverCardsForTickets',
+      googleGuard
+    )
+    const googleReturn = silverExchangeUi.indexOf('return', offchainExchange)
+    const legacyWallet = silverExchangeUi.indexOf('AuthenticationClient.wallet')
+    if (
+      googleGuard < 0 ||
+      offchainExchange < googleGuard ||
+      googleReturn < offchainExchange ||
+      legacyWallet < googleReturn
+    ) {
+      errors.push('Google Silver exchange can reach the legacy wallet path')
+    }
+    if (!silverExchangeUi.includes("env.AUTH_MODE !== 'google'")) {
+      errors.push('Google Silver exchange still loads the legacy payment catalog')
+    }
+  }
   for (const [name, source] of Object.entries(rewardSources)) {
     if (!/INSERT(?: OR IGNORE)? INTO player_items/.test(source)) {
       errors.push(`${name} does not grant canonical D1 inventory`)
@@ -103,7 +124,8 @@ const main = async () => {
     silverTicketExchange,
     stripeCheckout,
     pendingGoldPage,
-    pendingGoldCard
+    pendingGoldCard,
+    silverExchangeUi
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -131,6 +153,13 @@ const main = async () => {
     readFile(
       path.join(root, 'webapp/src/PendingGoldsPage/components/PendingGoldCard.tsx'),
       'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversControlsRow/components/ConfirmConvertSilverCardsDialog.tsx'
+      ),
+      'utf8'
     )
   ])
   const errors = offchainGateErrors({
@@ -139,6 +168,7 @@ const main = async () => {
     appSource,
     policySource,
     pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}`,
+    silverExchangeUi,
     rewardSources: {
       conquestDelivery,
       leaderboardRewards,
