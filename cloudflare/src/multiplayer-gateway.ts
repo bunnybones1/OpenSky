@@ -33,6 +33,15 @@ interface MatchInfoRow {
   server_address: string
 }
 
+interface RecentMatchRow {
+  proposal_id: string
+  status: string
+  result_json: string | null
+  ended_at: string | null
+}
+
+const RECENT_MATCH_EXPIRY_MS = 24 * 60 * 60 * 1_000
+
 const json = (body: unknown, status: number) =>
   Response.json(body, {
     status,
@@ -91,9 +100,102 @@ const activeMatchFor = (env: Env, principal: string) =>
     .bind(principal, principal)
     .first<MatchInfoRow>()
 
-const matchInfo = async (env: Env, principal: string) => {
+const recentMatchFor = (env: Env, principal: string) =>
+  env.AUTH_DB.prepare(
+    `SELECT proposal_id, status, result_json, ended_at
+     FROM multiplayer_matches
+     WHERE player1_principal = ? OR player2_principal = ?
+     ORDER BY id DESC
+     LIMIT 1`
+  )
+    .bind(principal, principal)
+    .first<RecentMatchRow>()
+
+const validRecentMatchInfo = (
+  value: unknown,
+  principal: string
+): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const info = value as Record<string, unknown>
+  return (
+    info.type === 'recent_match_info' &&
+    typeof info.playerID === 'string' &&
+    info.playerID.toLowerCase() === principal.toLowerCase() &&
+    Number.isSafeInteger(info.matchID) &&
+    typeof info.replayID === 'string' &&
+    typeof info.gameMode === 'string' &&
+    Array.isArray(info.accounts) &&
+    info.accounts.length === 2 &&
+    typeof info.store === 'string' &&
+    /^0x(?:[0-9a-f]{2})+$/i.test(info.store) &&
+    Array.isArray(info.rewards)
+  )
+}
+
+const recentMatchInfo = async (env: Env, principal: string) => {
+  const row = await recentMatchFor(env, principal)
+  if (
+    !row ||
+    row.status !== 'ended' ||
+    !row.ended_at ||
+    Date.parse(row.ended_at) < Date.now() - RECENT_MATCH_EXPIRY_MS
+  ) {
+    return json({ type: 'no_match_found' }, 200)
+  }
+  try {
+    const result = row.result_json
+      ? (JSON.parse(row.result_json) as { reason?: unknown })
+      : undefined
+    if (result?.reason === 'players_did_not_load') {
+      return json({ type: 'no_match_found' }, 200)
+    }
+  } catch {
+    return json({ type: 'no_match_found' }, 200)
+  }
+  try {
+    const response = await env.GAME_MATCHES.getByName(
+      `match:${row.proposal_id}`
+    ).fetch(
+      new Request('https://game-match/internal/recent-match-info', {
+        headers: {
+          [INTERNAL_AUTH_HEADER]: env.INTERNAL_AUTH_SECRET,
+          [TRUSTED_PRINCIPAL_HEADER]: principal
+        }
+      })
+    )
+    if (response.status === 404)
+      return json({ type: 'no_match_found' }, 200)
+    if (!response.ok) {
+      throw new Error(`game server returned ${response.status}`)
+    }
+    const info: unknown = await response.json()
+    if (!validRecentMatchInfo(info, principal)) {
+      throw new Error('game server returned invalid recent match info')
+    }
+    return json(info, 200)
+  } catch (error) {
+    console.error('recent match recovery failed', row.proposal_id, error)
+    return json(
+      { type: 'error', level: 'server', message: 'Recent match is unavailable.' },
+      500
+    )
+  }
+}
+
+const matchInfo = async (
+  env: Env,
+  principal: string,
+  requesterPrincipal: string
+) => {
   const row = await activeMatchFor(env, principal)
-  if (!row) return json({ type: 'no_match_found' }, 200)
+  if (!row) {
+    // Recent payloads contain the player's private final store and rewards.
+    // Active-match lookup remains available to authenticated spectators, but
+    // ended-match recovery is only returned to that participant.
+    return principal === requesterPrincipal
+      ? recentMatchInfo(env, principal)
+      : json({ type: 'no_match_found' }, 200)
+  }
 
   try {
     const payload = JSON.parse(row.match_payload_json) as {
@@ -208,7 +310,7 @@ export const handleMultiplayerGateway = async (
       url.pathname.slice(MATCH_INFO_PREFIX.length)
     )
     return principal
-      ? matchInfo(env, principal)
+      ? matchInfo(env, principal, authenticated.principal)
       : json({ type: 'no_match_found' }, 200)
   }
   if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {

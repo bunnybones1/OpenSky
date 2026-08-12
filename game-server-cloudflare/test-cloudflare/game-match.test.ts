@@ -1011,6 +1011,17 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(JSON.parse(row!.result_json)).toEqual({
       reason: 'players_did_not_load'
     })
+    const recent = await stub().fetch(
+      'https://match/internal/recent-match-info',
+      {
+        headers: {
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: PRINCIPAL_1
+        }
+      }
+    )
+    expect(recent.status).toBe(404)
+    await recent.text()
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM multiplayer_match_progression
@@ -1576,6 +1587,38 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       type: 'rewards',
       data: JSON.parse(ledger!.result_json).rewards[1]
     })
+
+    const recentInfoResponse = await stub().fetch(
+      'https://match/internal/recent-match-info',
+      {
+        headers: {
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: PRINCIPAL_2
+        }
+      }
+    )
+    expect(recentInfoResponse.status).toBe(200)
+    expect(await recentInfoResponse.json()).toEqual({
+      type: 'recent_match_info',
+      playerID: PRINCIPAL_2,
+      gameMode: GameMode.RANKED_CONSTRUCTED,
+      matchID: 42,
+      replayID: 'replay-test-42',
+      accounts: [fixture().match.player1.account, fixture().match.player2.account],
+      store: recentReconnect.store,
+      rewards: JSON.parse(ledger!.result_json).rewards[1]
+    })
+    const privateInfo = await stub().fetch(
+      'https://match/internal/recent-match-info',
+      {
+        headers: {
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: SPECTATOR_PRINCIPAL
+        }
+      }
+    )
+    expect(privateInfo.status).toBe(404)
+    await privateInfo.text()
 
     const abandonPenalty = await env.AUTH_DB.prepare(
       `SELECT abandon_count, cooldown_expires_at

@@ -3,6 +3,7 @@ import {
   EmoteMessage,
   GameServerMessage,
   JoinServerMessage,
+  type RecentMatchInfo,
   SpectateServerMessage
 } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
@@ -281,6 +282,8 @@ export class GameMatch implements DurableObject {
       if (url.pathname === '/internal/create')
         return await this.createMatch(request)
       if (url.pathname === '/internal/status') return await this.status(request)
+      if (url.pathname === '/internal/recent-match-info')
+        return await this.recentMatchInfo(request)
       if (url.pathname === '/internal/replay-index')
         return await this.replayIndex(request)
       if (url.pathname.startsWith('/internal/replay/'))
@@ -604,6 +607,58 @@ export class GameMatch implements DurableObject {
       state: stateInfo,
       questProgress: runtime.questProgress(),
       sockets: this.state.getWebSockets().length
+    })
+  }
+
+  private async recentMatchInfo(request: Request) {
+    if (!this.isInternal(request))
+      return new Response('Not found', { status: 404 })
+    const principal = normalizedAddress(
+      request.headers.get(TRUSTED_PRINCIPAL_HEADER) ?? ''
+    )
+    if (!/^0x[0-9a-f]{40}$/.test(principal)) {
+      return new Response('Invalid player', { status: 400 })
+    }
+    const metadata = await this.metadata()
+    if (!metadata?.ended || metadata.expiredBeforeLoad) {
+      return new Response('Recent match not found', { status: 404 })
+    }
+    let index: Player
+    try {
+      index = this.playerIndex(metadata.match, principal)
+    } catch {
+      return new Response('Recent match not found', { status: 404 })
+    }
+    const runtime = await this.ensureRuntime()
+    const participant =
+      index === 0 ? metadata.match.player1 : metadata.match.player2
+    const info: RecentMatchInfo = {
+      type: 'recent_match_info',
+      playerID: principal,
+      gameMode: participant.gameMode,
+      matchID: metadata.match.matchID,
+      replayID: metadata.match.replayID,
+      accounts: [
+        metadata.match.player1.account,
+        metadata.match.player2.account
+      ],
+      store: bytesToHex(runtime.serialize((index + 1) as 1 | 2)),
+      rewards: await this.completedRewards(metadata.proposalId, index)
+    }
+    if (
+      metadata.match.player1.gameMode === GameMode.CONQUEST_CONSTRUCTED ||
+      metadata.match.player1.gameMode === GameMode.CONQUEST_DISCOVERY
+    ) {
+      info.conquestInfo = [
+        metadata.match.player1.conquestInfo!,
+        metadata.match.player2.conquestInfo!
+      ]
+    }
+    return Response.json(info, {
+      headers: {
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff'
+      }
     })
   }
 

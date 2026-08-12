@@ -17,6 +17,9 @@ const namespace = (
 ) =>
   ({ getByName: () => service(handler) }) as unknown as DurableObjectNamespace
 
+let recentMatchResponse = (_request: Request) =>
+  new Response('Recent match not found', { status: 404 })
+
 const testEnv = {
   ...(env as unknown as Env),
   MATCHMAKER_POOLS: namespace(request =>
@@ -31,15 +34,18 @@ const testEnv = {
       cookie: request.headers.get('cookie')
     })
   ),
-  GAME_MATCHES: namespace(request =>
-    Response.json({
+  GAME_MATCHES: namespace(request => {
+    if (new URL(request.url).pathname === '/internal/recent-match-info') {
+      return recentMatchResponse(request)
+    }
+    return Response.json({
       target: new URL(request.url).pathname,
       principal: request.headers.get('x-cloud-weasel-principal'),
       userId: request.headers.get('x-cloud-weasel-user-id'),
       internal: request.headers.get('x-cloud-weasel-internal-auth'),
       cookie: request.headers.get('cookie')
     })
-  )
+  })
 } satisfies Env
 
 const gateway = (path: string, headers: HeadersInit) =>
@@ -49,6 +55,8 @@ const gateway = (path: string, headers: HeadersInit) =>
   )
 
 beforeEach(async () => {
+  recentMatchResponse = () =>
+    new Response('Recent match not found', { status: 404 })
   await env.AUTH_DB.prepare('DELETE FROM multiplayer_matches').run()
   await env.AUTH_DB.prepare('DELETE FROM auth_identities').run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
@@ -248,6 +256,150 @@ describe('same-origin multiplayer gateway', () => {
         )
       ).json()
     ).toMatchObject({ matchInfo: { mode: GameMode.RANKED_CONSTRUCTED } })
+  })
+
+  it('returns a participant recent match for 24 hours without leaking it to spectators', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const opponentId = '33333333-3333-4333-8333-333333333333'
+    const opponent = await deriveGamePrincipal(opponentId)
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, avatar_url, created_at, updated_at)
+       VALUES (?, 'Recent Opponent', 'recent-opponent@example.com', NULL, ?, ?)`
+    )
+      .bind(opponentId, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, result_json,
+          created_at, updated_at, ended_at)
+       VALUES ('recent-proposal', 'recent-replay', 'PRACTICE_PVP',
+               'recent-release', ?, ?, ?, ?, '{}', ?, 'ended', '{}', ?, ?, ?)`
+    )
+      .bind(
+        principal,
+        opponent,
+        USER_ID,
+        opponentId,
+        'wss://opensky.example/api/game/matches/recent-proposal',
+        now,
+        now,
+        now
+      )
+      .run()
+
+    const expected = {
+      type: 'recent_match_info',
+      playerID: principal,
+      gameMode: GameMode.PRACTICE_PVP,
+      matchID: 91,
+      replayID: 'recent-replay',
+      accounts: [{ address: principal }, { address: opponent }],
+      store: '0x0102',
+      rewards: [{ type: 'XP', amount: 42 }]
+    }
+    let recoveryRequests = 0
+    recentMatchResponse = request => {
+      recoveryRequests += 1
+      expect(request.headers.get('x-cloud-weasel-principal')).toBe(principal)
+      expect(request.headers.get('x-cloud-weasel-internal-auth')).toBe(
+        'multiplayer-gateway-test-secret'
+      )
+      return Response.json(expected)
+    }
+
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    const response = await gateway(
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
+      headers
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(expected)
+    expect(recoveryRequests).toBe(1)
+
+    const spectator = await gateway(
+      `/api/matchmaker/matchinfo/identity:${opponentId}`,
+      headers
+    )
+    expect(await spectator.json()).toEqual({ type: 'no_match_found' })
+    expect(recoveryRequests).toBe(1)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET ended_at = ?, updated_at = ?
+       WHERE proposal_id = 'recent-proposal'`
+    )
+      .bind(
+        new Date(Date.now() - 24 * 60 * 60 * 1_000 - 1).toISOString(),
+        now
+      )
+      .run()
+    const expired = await gateway(
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
+      headers
+    )
+    expect(await expired.json()).toEqual({ type: 'no_match_found' })
+    expect(recoveryRequests).toBe(1)
+  })
+
+  it('suppresses no-load results and stale results after a newer match attempt', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const opponent = '0x3333333333333333333333333333333333333333'
+    const now = new Date().toISOString()
+    const insert = (
+      proposal: string,
+      status: 'ended' | 'failed',
+      result: string | null,
+      endedAt: string | null
+    ) =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, server_address, status, result_json,
+            created_at, updated_at, ended_at)
+         VALUES (?, ?, 'PRACTICE_PVP', 'recent-release', ?, ?, ?, NULL,
+                 '{}', NULL, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          proposal,
+          `replay-${proposal}`,
+          principal,
+          opponent,
+          USER_ID,
+          status,
+          result,
+          now,
+          now,
+          endedAt
+        )
+        .run()
+
+    await insert(
+      'no-load-proposal',
+      'ended',
+      JSON.stringify({ reason: 'players_did_not_load' }),
+      now
+    )
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    const path = `/api/matchmaker/matchinfo/identity:${USER_ID}`
+    expect(await (await gateway(path, headers)).json()).toEqual({
+      type: 'no_match_found'
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET result_json = '{}'
+       WHERE proposal_id = 'no-load-proposal'`
+    ).run()
+    await insert('newer-failed-proposal', 'failed', null, null)
+    expect(await (await gateway(path, headers)).json()).toEqual({
+      type: 'no_match_found'
+    })
   })
 
   it('allows an authenticated spectator to query another player without leaking unknown targets', async () => {
