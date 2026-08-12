@@ -67,6 +67,7 @@ import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { SkypassSupportRepository } from './skypass-support'
 import { StaffRepository } from './staff'
+import { StripeCheckoutRepository, type StripeFetch } from './stripe-checkout'
 import type { VerifiedProof } from './proof'
 import { verifySequenceProof } from './proof'
 import {
@@ -85,6 +86,7 @@ export interface AuthServices {
     requestOrigin: string | null,
     sequenceApiHost: string
   ): Promise<VerifiedProof>
+  stripeFetch?: StripeFetch
 }
 
 const defaultServices: AuthServices = { verifyProof: verifySequenceProof }
@@ -247,6 +249,11 @@ export const handleApiRequest = async (
   const botMatches = new BotMatchRepository(env.AUTH_DB)
   const social = new SocialRepository(env.AUTH_DB)
   const staff = new StaffRepository(env.AUTH_DB)
+  const stripe = new StripeCheckoutRepository(
+    env.AUTH_DB,
+    env,
+    services.stripeFetch
+  )
 
   try {
     switch (method) {
@@ -1882,6 +1889,23 @@ export const handleApiRequest = async (
         return json(request, env, {
           products: listPaymentProviderProducts(body.provider, body.itemType)
         })
+      }
+
+      case 'CreateStripePaymentIntent': {
+        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{ productID?: string }>(request)
+        if (!body.productID) throw invalidArgument('productID is required')
+        return json(request, env, {
+          checkout: await stripe.createCheckout(
+            principal.userId,
+            body.productID
+          )
+        })
+      }
+
+      case 'StripeEventWebhook': {
+        await stripe.handleWebhook(request)
+        return json(request, env, {})
       }
 
       case 'ListSkypassRewards': {

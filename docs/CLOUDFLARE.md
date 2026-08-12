@@ -106,6 +106,31 @@ To intentionally rotate the shared credential on all four Workers, set
 The client ID is public by design, but binding both OAuth values through Wrangler keeps deployment
 configuration together and avoids committing environment-specific identifiers.
 
+## Optional Stripe Checkout configuration
+
+Stripe commerce is independent of Google login and optional WalletConnect links. The
+Worker keeps checkout disabled unless the Stripe API key, endpoint signing secret,
+redirect URLs, and requested product's Price ID are configured. Put the two secrets
+in Wrangler rather than a committed file:
+
+```sh
+pnpm --dir cloudflare exec wrangler secret put STRIPE_SECRET_KEY --config ../wrangler.jsonc
+pnpm --dir cloudflare exec wrangler secret put STRIPE_WEBHOOK_SECRET --config ../wrangler.jsonc
+```
+
+Configure `STRIPE_SKYPASS_PRICE_ID`, `STRIPE_CONQUEST_TICKET_PRICE_ID`,
+`STRIPE_SUCCESS_URL`, and `STRIPE_CANCEL_URL` as Worker variables for the target
+environment. Register the following Stripe webhook endpoint and subscribe to
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, and `checkout.session.expired`:
+
+```text
+https://opensky-webapp.dysinski-tomasz.workers.dev/api/rpc/SkyWeaverAPI/StripeEventWebhook
+```
+
+No Stripe values are configured by migrations or deployment. Until an operator
+adds them explicitly, checkout fails closed and cannot create or fulfill a payment.
+
 ## Local Cloudflare preview
 
 Apply the D1 migrations before the first local run:
@@ -205,9 +230,15 @@ and progress are not migrated.
   make retries and concurrent cron ticks idempotent.
 - Authenticated identities can load the original payment-provider product
   catalog, including the Stripe SkyPass product code used by the preserved UI.
-  This is discovery only: checkout creation, provider webhooks, fulfillment,
-  mobile receipt verification, and Sequence/on-chain transaction composition
-  remain disabled until their secrets and idempotency boundaries are ported.
+  Source-compatible Stripe Checkout creation and webhook fulfillment are ported
+  behind optional configuration. The webhook verifies Stripe's raw-body
+  signature, retrieves the event from Stripe, validates local identity/product
+  metadata, and grants SkyPass or Conquest-ticket inventory in the same D1 batch
+  as an immutable event receipt. Creation reuses its Stripe idempotency key after
+  an indeterminate response; fulfillment tolerates duplicates, concurrency,
+  retries, delayed methods, and out-of-order success after failure. Production
+  has no Stripe configuration, so this surface remains dormant. Mobile receipt
+  verification and Sequence/on-chain transaction composition remain disabled.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

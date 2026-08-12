@@ -10,23 +10,23 @@ The audit discovers exported Go `*Server` methods from `api/rpc`, compares them
 with the TypeScript cases in `cloudflare/src/api.ts`, and fails if the ported
 count or the critical player-facing compatibility set regresses.
 
-| Surface | Methods |
-| --- | ---: |
-| Source Go RPCs | 172 |
-| Ported source RPCs | 131 |
-| Remaining source RPCs | 41 |
-| Cloudflare-only RPC adapters | 0 |
+| Surface                      | Methods |
+| ---------------------------- | ------: |
+| Source Go RPCs               |     172 |
+| Ported source RPCs           |     134 |
+| Remaining source RPCs        |      38 |
+| Cloudflare-only RPC adapters |       0 |
 
 ## Remaining workstreams
 
-| Workstream | Remaining | Interpretation |
-| --- | ---: | --- |
-| Admin and operations | 11 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
-| Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
-| Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
-| Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
-| Migration and identity | 6 | Burner/account migration, deletion, and old social-provider endpoints need explicit product decisions. |
-| Other product | 1 | Private game-client feedback storage and retention. |
+| Workstream             | Remaining | Interpretation                                                                                                                                                                         |
+| ---------------------- | --------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin and operations   |        11 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits.                                                                                |
+| Commerce and wallet    |         9 | Stripe Checkout and its webhook are ported behind dormant optional configuration. Mobile receipts and on-chain methods should follow optional WalletConnect, not be copied into login. |
+| Content and discovery  |         1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule.                                                                                                            |
+| Internal legacy        |        10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs.                                                              |
+| Migration and identity |         6 | Burner/account migration, deletion, and old social-provider endpoints need explicit product decisions.                                                                                 |
+| Other product          |         1 | Private game-client feedback storage and retention.                                                                                                                                    |
 
 The raw percentage deliberately does not claim that every missing legacy RPC is
 a product gap. `InternalMatchStart` and `InternalMatchEnd`, for example, are

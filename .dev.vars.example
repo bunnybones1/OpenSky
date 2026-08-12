@@ -10,3 +10,14 @@ GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
 
 # Shared only by the web/API gateway, matchmaker, match service, and game service.
 INTERNAL_AUTH_SECRET=replace-with-a-long-random-value
+
+# Optional Stripe Checkout integration. Checkout remains disabled unless both
+# secrets, both redirect URLs, and the selected product's price ID are set.
+# Keep secret values in Wrangler secrets; price IDs and redirect URLs may be
+# configured as environment variables.
+STRIPE_SECRET_KEY=replace-with-stripe-secret-key
+STRIPE_WEBHOOK_SECRET=replace-with-stripe-webhook-signing-secret
+STRIPE_SKYPASS_PRICE_ID=replace-with-stripe-skypass-price-id
+STRIPE_CONQUEST_TICKET_PRICE_ID=replace-with-stripe-ticket-price-id
+STRIPE_SUCCESS_URL=http://localhost:8787/skypass
+STRIPE_CANCEL_URL=http://localhost:8787/skypass/purchase
