@@ -281,12 +281,16 @@ const collectMessages = (socket: WebSocket, count: number) =>
 const nextMessage = async (socket: WebSocket) =>
   (await collectMessages(socket, 1))[0]
 
-const join = (socket: WebSocket, subkeyByte: number) => {
+const join = (
+  socket: WebSocket,
+  subkeyByte: number,
+  loadingProgress = 1
+) => {
   socket.send(
     JSON.stringify({
       type: 'join_server',
       authToken: 'legacy-token-is-ignored',
-      loadingProgress: 1,
+      loadingProgress,
       subkeyCertification: {
         player: Array(20).fill(0xff),
         subkey: Array(20).fill(subkeyByte),
@@ -1405,6 +1409,113 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(JSON.parse(row!.result_json)).toEqual({
       reason: 'players_did_not_load'
     })
+  })
+
+  it('does not extend durable timers when a loaded player repeats progress', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const second = await connect(PRINCIPAL_2)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const deadline = Date.now() + 30_000
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers =
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ??
+          {}
+        await state.storage.put('match:timers', {
+          ...timers,
+          commitRevealAtMs: deadline
+        })
+        await state.storage.setAlarm(deadline)
+      }
+    )
+
+    const relayed = collectMessages(first, 2)
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
+    )
+    expect(await relayed).toEqual([
+      expect.objectContaining({
+        type: 'opponent_loading_progress',
+        progress: 1
+      }),
+      {
+        type: 'opponent_loading_progress',
+        progress: 1,
+        matchAbandonTime: -1
+      }
+    ])
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers = await state.storage.get<{ commitRevealAtMs?: number }>(
+          'match:timers'
+        )
+        expect(timers?.commitRevealAtMs).toBe(deadline)
+        expect(await state.storage.getAlarm()).toBe(deadline)
+      }
+    )
+  })
+
+  it('keeps fractional loading progress out of authoritative timers', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const joined = collectMessages(first, 2)
+    join(first, 0x31, 0.25)
+    await joined
+
+    const deadline = Date.now() + 30_000
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const timers =
+          (await state.storage.get<Record<string, unknown>>('match:timers')) ??
+          {}
+        await state.storage.put('match:timers', {
+          ...timers,
+          commitRevealAtMs: deadline
+        })
+        await state.storage.setAlarm(deadline)
+      }
+    )
+
+    const relayed = nextMessage(first)
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 0.5 })
+    )
+    expect(await relayed).toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 0
+    })
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const [players, timers] = await Promise.all([
+          state.storage.get<
+            Record<
+              string,
+              { loadingProgress: number; finishedLoadingAssets: boolean }
+            >
+          >('match:players'),
+          state.storage.get<{ commitRevealAtMs?: number }>('match:timers')
+        ])
+        expect(players?.[PRINCIPAL_1]).toMatchObject({
+          loadingProgress: 0.5,
+          finishedLoadingAssets: false
+        })
+        expect(timers?.commitRevealAtMs).toBe(deadline)
+        expect(await state.storage.getAlarm()).toBe(deadline)
+      }
+    )
   })
 
   it('still rejects gameplay before join_server', async () => {

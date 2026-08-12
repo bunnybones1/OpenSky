@@ -849,11 +849,6 @@ export class GameMatch implements DurableObject {
     const player = players[attachment.principal]
     player.connected = true
     player.joined = true
-    player.loadingProgress = Math.max(
-      player.loadingProgress,
-      message.loadingProgress
-    )
-    player.finishedLoadingAssets = player.loadingProgress >= 1
     player.abandonAtMs = undefined
     await this.state.storage.put({
       [PLAYERS_KEY]: players,
@@ -878,7 +873,7 @@ export class GameMatch implements DurableObject {
     if (this.spectatorSockets(attachment.principal).length > 0) {
       this.updateSpectators(attachment.principal)
     }
-    await this.updateLoading(attachment.principal, player.loadingProgress)
+    await this.updateLoading(attachment.principal, message.loadingProgress)
   }
 
   private async spectate(
@@ -986,6 +981,9 @@ export class GameMatch implements DurableObject {
     // The source records completion as a one-way transition. A stale or
     // reordered progress message cannot make an already-loaded player a
     // no-show again.
+    const newlyFinishedLoading =
+      !player.finishedLoadingAssets &&
+      Math.max(player.loadingProgress, progress) >= 1
     player.loadingProgress = Math.max(player.loadingProgress, progress)
     player.finishedLoadingAssets ||= player.loadingProgress >= 1
     const opponentPrincipal = this.opponentAddress(metadata.match, principal)
@@ -1007,9 +1005,10 @@ export class GameMatch implements DurableObject {
     this.sendToPrincipal(principal, loadingForPlayer)
     this.sendToSpectators(loadingForPlayer)
     await this.state.storage.put(PLAYERS_KEY, players)
-    if (
-      Object.values(players).every(current => current.finishedLoadingAssets)
-    ) {
+    const allPlayersLoaded = Object.values(players).every(
+      current => current.finishedLoadingAssets
+    )
+    if (allPlayersLoaded) {
       const loadingComplete = {
         type: 'opponent_loading_progress',
         progress: 1,
@@ -1017,6 +1016,12 @@ export class GameMatch implements DurableObject {
       } as const
       this.sendToPrincipal(principal, loadingComplete)
       this.sendToSpectators(loadingComplete)
+    }
+    // Source MatchHandler only invokes match-state/timer work inside the
+    // one-way false -> true transition. Repeated or fractional UI progress is
+    // relayed above but must never refresh an authoritative deadline.
+    if (!newlyFinishedLoading) return
+    if (allPlayersLoaded) {
       await this.flushPendingGameplay(metadata, players)
       await this.afterStateChange(
         metadata,
@@ -1027,6 +1032,10 @@ export class GameMatch implements DurableObject {
       )
       return
     }
+    // With no materialized game state, the first loaded player does not alter
+    // the original commit/reveal grace deadline. A legacy/partially advanced
+    // match that already has state retains the source timer-repair behavior.
+    if (!(await this.ensureRuntime()).stateInfo().hasState) return
     await this.afterStateChange(
       metadata,
       players,
