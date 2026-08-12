@@ -198,8 +198,11 @@ and progress are not migrated.
   display-only in production. The source-compatible reward snapshot and
   delivery worker is deployed behind an immutable schedule table, but that
   table deliberately has no configured schedule. Cloud Weasel therefore issues
-  no weekly rewards yet and does not advertise a next-reward countdown. Source
-  weekly/monthly rank resets remain a separate rollout gate.
+  no weekly rewards yet and does not advertise a next-reward countdown. Once an
+  explicit schedule is enabled, completed reward delivery atomically triggers
+  the source weekly snapshots/floors/RD inflation or the week-four next-season
+  carry, score averaging, and Grandweaver recalculation. Immutable reset receipts
+  make retries and concurrent cron ticks idempotent.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
