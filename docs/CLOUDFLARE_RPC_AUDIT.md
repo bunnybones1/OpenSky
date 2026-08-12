@@ -1,6 +1,6 @@
 # Cloudflare RPC port audit
 
-Audited 2026-08-11 with:
+Audited 2026-08-12 with:
 
 ```sh
 pnpm check:cloudflare:rpcs
@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 121 |
-| Remaining source RPCs | 51 |
+| Ported source RPCs | 125 |
+| Remaining source RPCs | 47 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 21 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 17 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -123,3 +123,12 @@ legacy ordinal semantics of the mistyped account-action filter, while replacing
 mutable `is_active` history with immutable deactivation records. Enforcement is
 rechecked at API/session, multiplayer admission, matchmaking profile, and final
 dispatch boundaries so an already queued player cannot race a sanction.
+
+Four player-support mutations now use another separately dormant capability.
+Forced rename, all-base-card unlock, warm-up correction, and starter-deck
+repair require both `ADMIN` and `PLAYER_SUPPORT_WRITE`, validate the source
+request boundaries, execute their data change and before/after audit atomically,
+and protect every audit row from update or deletion. The card operation walks
+the generated 856-card source library and treats an owned Silver or Gold copy as
+ownership of that logical card instead of minting a redundant base copy.
+Production has no player-support grants.

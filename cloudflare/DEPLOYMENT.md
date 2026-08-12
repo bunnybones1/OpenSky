@@ -3,14 +3,15 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`300f56ff-6019-49d8-bcc7-2c254c3bae86`)
+- API/web Worker: `opensky-webapp` (`3ea599d6-bff3-4341-be27-c3025dc3b6ec`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`c493d4d0-3e69-4cbf-93be-de0dc235a4a7`)
 - Match service Worker: `cloud-weasel-match-service` (`177a62e5-e7ad-4142-b029-f9f4d87123d8`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `3a964c3` for web/API, match service, and matchmaker,
+- Deployed source includes `dc5ab33` for web/API, `3a964c3` for match service
+  and matchmaker,
   and `b612af3` for game, plus the match-service inventory fix from `3c57de5`
-- Deployed: 2026-08-11 PDT
-- Applied D1 migrations: `0001` through `0038`
+- Deployed: 2026-08-12 PDT
+- Applied D1 migrations: `0001` through `0039`
 - Scheduled trigger: every minute for due Conquest Gold delivery
 
 ## Verified scope
@@ -95,6 +96,11 @@
   player, multiplayer-gateway, matchmaking-profile, and final-dispatch
   boundaries; bans suppress competitive ranking, all sanctions suspend delayed
   Conquest Gold, and only vetting restores disabled delivery
+- Source forced rename, all-base-card unlock, warm-up correction, and starter-
+  deck repair behind both `ADMIN` and a dormant `PLAYER_SUPPORT_WRITE`
+  permission. Every successful change is atomic and immutably audited;
+  collection repair recognizes Silver and Gold ownership of the same logical
+  card, and the production capability currently has no grants
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -114,7 +120,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 134 tests
+- API Worker: 21 files, 136 tests
 - Match service: 11 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -196,6 +202,17 @@ settlement and delayed delivery against that pool.
   `177a62e5-e7ad-4142-b029-f9f4d87123d8`, and
   `c493d4d0-3e69-4cbf-93be-de0dc235a4a7`, and every D1 verification read
   reported `changed_db: false`
+- Live `GMRenameAccount`, `GMUnlockAllBaseCards`,
+  `GMSetWarmupGamesCompleted`, and `GMResetStarterDecks` probes all returned
+  `401` without a session; migration `0039` was present, Google login remained
+  configured, and API `Ping` passed. Production retained zero player-support
+  grants or audit rows, and its one existing account remained at zero warm-ups.
+  The corrected 498-file static deployment served the canonical practice-game
+  index and its 4.5 MB hashed bundle with HTML and JavaScript content types
+  respectively, after an incomplete 157-file upload had briefly exposed the
+  webapp SPA fallback at the game route. API version
+  `3ea599d6-bff3-4341-be27-c3025dc3b6ec` contains source `dc5ab33`, and every
+  D1 verification read reported `changed_db: false`
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution

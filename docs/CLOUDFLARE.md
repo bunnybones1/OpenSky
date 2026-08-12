@@ -264,6 +264,12 @@ and progress are not migrated.
   now expose immutable ban/suspension/flag/vet history and require the separate
   `ACCOUNT_ACTION_WRITE` permission to create; IP history remains empty until
   that source audit stream has a Cloudflare equivalent.
+- Forced rename, all-base-card unlock, warm-up correction, and starter-deck
+  repair preserve the source admin contracts behind `ADMIN` plus the narrower
+  `PLAYER_SUPPORT_WRITE` capability. Each write and immutable before/after
+  audit is atomic. The card repair uses the generated source library and does
+  not mint a base duplicate when the identity already owns that logical card
+  in Silver or Gold. Production has no player-support permission grants.
 - Player reports are visible to staff through the original signal detail and
   summary contracts. The reads preserve reporter identity, match ID, sanitized
   comment, pending state, status/date filters, and bounded cursors. Scores are
