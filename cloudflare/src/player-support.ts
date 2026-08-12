@@ -1,5 +1,13 @@
+import type { QuestPeriodicity } from '@opensky/proto'
+
 import { allLibraryCards } from './card-library'
-import { alreadyExists, invalidArgument, notFound } from './errors'
+import {
+  alreadyExists,
+  internal,
+  invalidArgument,
+  notFound
+} from './errors'
+import { questPeriodAt } from './quest-library'
 import { STARTER_DECKS } from './starter-decks'
 
 type SupportOperation =
@@ -18,6 +26,12 @@ interface TargetRow {
 interface StarterDeckRow {
   prism: string
   deck_type: string
+}
+
+interface QuestRow {
+  id: number
+  quest_key: string
+  status: string
 }
 
 const supportAudit = (
@@ -428,5 +442,141 @@ export class PlayerSupportRepository {
       )
     ])
     return true
+  }
+
+  async completeQuest(
+    actorUserId: string,
+    accountAddress: string | undefined,
+    id: unknown
+  ): Promise<boolean> {
+    if (!Number.isSafeInteger(id) || (id as number) <= 0) {
+      throw invalidArgument('id must be a positive integer')
+    }
+    const target = await this.target(
+      undefined,
+      accountAddress ?? `identity:${actorUserId}`
+    )
+    const quest = await this.database
+      .prepare(
+        `SELECT rowid AS id, quest_key, status
+         FROM player_quests WHERE user_id = ? AND rowid = ?`
+      )
+      .bind(target.user_id, id)
+      .first<QuestRow>()
+    // The source wraps a missing assignment lookup as an internal GM error.
+    if (!quest) throw internal('find quest assignment')
+    if (quest.status === 'complete') return true
+
+    const now = new Date().toISOString()
+    await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_quest_support_audit
+             (operation, target_user_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'COMPLETE_QUEST', ?, ?,
+                  json_object('id', rowid, 'questKey', quest_key,
+                              'status', status),
+                  json_object('id', rowid, 'questKey', quest_key,
+                              'status', 'complete'), ?
+           FROM player_quests
+           WHERE user_id = ? AND rowid = ? AND status <> 'complete'`
+        )
+        .bind(
+          target.user_id,
+          actorUserId,
+          now,
+          target.user_id,
+          quest.id
+        ),
+      this.database
+        .prepare(
+          `UPDATE player_quests SET status = 'complete', updated_at = ?
+           WHERE user_id = ? AND rowid = ? AND status <> 'complete'`
+        )
+        .bind(now, target.user_id, quest.id)
+    ])
+    return true
+  }
+
+  async resetQuestRerolls(
+    actorUserId: string,
+    accountAddress: string | undefined,
+    periodicity: QuestPeriodicity | undefined
+  ): Promise<boolean> {
+    if (!periodicity || periodicity === 'UNKNOWN') {
+      throw internal('correct periodicity is missing')
+    }
+    if (!['DAILY', 'WEEKLY', 'SEASONAL'].includes(periodicity)) {
+      throw internal('correct periodicity is missing')
+    }
+    const target = await this.target(
+      undefined,
+      accountAddress ?? `identity:${actorUserId}`
+    )
+    const period = questPeriodAt(periodicity)
+    const now = new Date().toISOString()
+    await this.database.batch([
+      this.database
+        .prepare(
+          `INSERT INTO staff_quest_support_audit
+             (operation, target_user_id, actor_user_id, before_json,
+              after_json, created_at)
+           SELECT 'RESET_QUEST_REROLLS', ?, ?,
+                  json_object(
+                    'periodicity', ?, 'period', ?, 'assignments',
+                    json(json_group_array(json_object(
+                      'id', id, 'questKey', quest_key, 'rerolls', rerolls
+                    )))
+                  ),
+                  json_object(
+                    'periodicity', ?, 'period', ?, 'assignments',
+                    json(json_group_array(json_object(
+                      'id', id, 'questKey', quest_key, 'rerolls', 0
+                    )))
+                  ), ?
+           FROM (
+             SELECT rowid AS id, quest_key, rerolls
+             FROM player_quests
+             WHERE user_id = ? AND periodicity = ? AND period = ?
+               AND rerolls <> 0
+             ORDER BY rowid ASC
+           ) changed
+           HAVING COUNT(*) > 0`
+        )
+        .bind(
+          target.user_id,
+          actorUserId,
+          periodicity,
+          period,
+          periodicity,
+          period,
+          now,
+          target.user_id,
+          periodicity,
+          period
+        ),
+      this.database
+        .prepare(
+          `UPDATE player_quests SET rerolls = 0, updated_at = ?
+           WHERE user_id = ? AND periodicity = ? AND period = ?
+             AND rerolls <> 0`
+        )
+        .bind(now, target.user_id, periodicity, period)
+    ])
+    return true
+  }
+
+  async rejectProductionQuestDelete(
+    actorUserId: string,
+    accountAddress: string | undefined
+  ): Promise<never> {
+    // Source production validates the target first, then always refuses this
+    // destructive operation. Cloud Weasel is production-only by design.
+    await this.target(
+      undefined,
+      accountAddress ?? `identity:${actorUserId}`
+    )
+    throw internal('cannot delete quest in production')
   }
 }

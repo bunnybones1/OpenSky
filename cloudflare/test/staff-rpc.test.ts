@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers'
-import { ActionType } from '@opensky/proto'
+import { ActionType, QuestPeriodicity } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
@@ -12,6 +12,7 @@ import {
 } from '../src/identity-session'
 import { PlayerRepository, STARTER_CARDS } from '../src/player'
 import { seasonFromDate } from '../src/legacy-seasons'
+import { questPeriodAt } from '../src/quest-library'
 
 const testEnv = env as unknown as Env
 const ADMIN = 'staff-admin'
@@ -522,6 +523,215 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(repairPlayer)
         .run()
     ).rejects.toThrow('staff player support audit rows are immutable')
+  })
+
+  it('gates, scopes, and immutably audits quest support repairs', async () => {
+    await grantAdmin()
+    const playerQuest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND status = 'active' ORDER BY rowid ASC LIMIT 1`
+    )
+      .bind(PLAYER)
+      .first<{ id: number }>()
+    const adminQuest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? ORDER BY rowid ASC LIMIT 1`
+    )
+      .bind(ADMIN)
+      .first<{ id: number }>()
+    expect(playerQuest).not.toBeNull()
+    expect(adminQuest).not.toBeNull()
+
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCompleteQuest', {
+          accountAddress: `identity:${PLAYER}`,
+          id: playerQuest!.id
+        })
+      ).status
+    ).toBe(403)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMResetQuestReRolls', {
+          accountAddress: `identity:${PLAYER}`,
+          periodicity: 'DAILY'
+        })
+      ).status
+    ).toBe(403)
+    expect(
+      (
+        await rpcAs(PLAYER, 'GMDeleteQuest', {
+          accountAddress: `identity:${PLAYER}`,
+          id: playerQuest!.id
+        })
+      ).status
+    ).toBe(403)
+    await grantPlayerSupportWrite()
+
+    // A quest ID never authorizes crossing the explicitly selected account.
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCompleteQuest', {
+          accountAddress: `identity:${PLAYER}`,
+          id: adminQuest!.id
+        })
+      ).status
+    ).toBe(500)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCompleteQuest', {
+          accountAddress: `identity:${PLAYER}`,
+          id: 0
+        })
+      ).status
+    ).toBe(400)
+
+    const completed = await rpcAs(ADMIN, 'GMCompleteQuest', {
+      accountAddress: `identity:${PLAYER}`,
+      id: playerQuest!.id
+    })
+    expect(completed.status).toBe(200)
+    expect(await completed.json()).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, progress, target FROM player_quests WHERE rowid = ?`
+      )
+        .bind(playerQuest!.id)
+        .first()
+    ).toMatchObject({ status: 'complete' })
+
+    // The source only changes status; it does not synthesize progress/rewards.
+    const completedAuditCount = async () =>
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM staff_quest_support_audit
+           WHERE operation = 'COMPLETE_QUEST' AND target_user_id = ?`
+        )
+          .bind(PLAYER)
+          .first<{ count: number }>()
+      )!.count
+    expect(await completedAuditCount()).toBe(1)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMCompleteQuest', {
+          accountAddress: `identity:${PLAYER}`,
+          id: playerQuest!.id
+        })
+      ).status
+    ).toBe(200)
+    expect(await completedAuditCount()).toBe(1)
+
+    const assignments = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? ORDER BY rowid ASC LIMIT 3`
+    )
+      .bind(PLAYER)
+      .all<{ id: number }>()
+    expect(assignments.results).toHaveLength(3)
+    const dailyPeriod = questPeriodAt(QuestPeriodicity.DAILY)
+    const weeklyPeriod = questPeriodAt(QuestPeriodicity.WEEKLY)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests
+         SET periodicity = 'DAILY', period = ?, rerolls = 2 WHERE rowid = ?`
+      ).bind(dailyPeriod, assignments.results[0].id),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests
+         SET periodicity = 'WEEKLY', period = ?, rerolls = 3 WHERE rowid = ?`
+      ).bind(weeklyPeriod, assignments.results[1].id),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests
+         SET periodicity = 'DAILY', period = ?, rerolls = 4 WHERE rowid = ?`
+      ).bind(dailyPeriod - 1, assignments.results[2].id)
+    ])
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMResetQuestReRolls', {
+          accountAddress: `identity:${PLAYER}`,
+          periodicity: 'UNKNOWN'
+        })
+      ).status
+    ).toBe(500)
+    const reset = await rpcAs(ADMIN, 'GMResetQuestReRolls', {
+      accountAddress: `identity:${PLAYER}`,
+      periodicity: 'DAILY'
+    })
+    expect(reset.status).toBe(200)
+    expect(await reset.json()).toEqual({ ok: true })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMResetQuestReRolls', {
+          accountAddress: `identity:${PLAYER}`,
+          periodicity: 'DAILY'
+        })
+      ).status
+    ).toBe(200)
+    const rerolls = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id, rerolls FROM player_quests
+       WHERE rowid IN (?, ?, ?) ORDER BY rowid ASC`
+    )
+      .bind(...assignments.results.map(row => row.id))
+      .all<{ id: number; rerolls: number }>()
+    expect(rerolls.results.map(row => row.rerolls)).toEqual([0, 3, 4])
+
+    const auditRows = await env.AUTH_DB.prepare(
+      `SELECT id, operation, actor_user_id, target_user_id, before_json,
+              after_json
+       FROM staff_quest_support_audit WHERE target_user_id = ? ORDER BY id ASC`
+    )
+      .bind(PLAYER)
+      .all<{
+        id: number
+        operation: string
+        actor_user_id: string
+        target_user_id: string
+        before_json: string
+        after_json: string
+      }>()
+    expect(auditRows.results.map(row => row.operation)).toEqual([
+      'COMPLETE_QUEST',
+      'RESET_QUEST_REROLLS'
+    ])
+    expect(auditRows.results[1]).toMatchObject({
+      actor_user_id: ADMIN,
+      target_user_id: PLAYER
+    })
+    expect(JSON.parse(auditRows.results[1].before_json)).toMatchObject({
+      periodicity: 'DAILY',
+      period: dailyPeriod,
+      assignments: [{ id: assignments.results[0].id, rerolls: 2 }]
+    })
+    expect(JSON.parse(auditRows.results[1].after_json)).toMatchObject({
+      assignments: [{ id: assignments.results[0].id, rerolls: 0 }]
+    })
+    expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_quest_support_audit SET actor_user_id = ? WHERE id = ?`
+      )
+        .bind(PLAYER, auditRows.results[0].id)
+        .run()
+    ).rejects.toThrow(/immutable/i)
+    expect(
+      env.AUTH_DB.prepare(`DELETE FROM staff_quest_support_audit WHERE id = ?`)
+        .bind(auditRows.results[0].id)
+        .run()
+    ).rejects.toThrow(/immutable/i)
+
+    // Cloud Weasel deploys only the source production behavior: validate the
+    // account, then refuse destructive quest deletion without touching D1.
+    const refusedDelete = await rpcAs(ADMIN, 'GMDeleteQuest', {
+      accountAddress: `identity:${PLAYER}`,
+      id: playerQuest!.id
+    })
+    expect(refusedDelete.status).toBe(500)
+    expect(await refusedDelete.json()).toMatchObject({
+      msg: 'cannot delete quest in production'
+    })
+    expect(
+      await env.AUTH_DB.prepare(`SELECT 1 AS present FROM player_quests WHERE rowid = ?`)
+        .bind(playerQuest!.id)
+        .first()
+    ).toEqual({ present: 1 })
   })
 
   it('lists filtered staff account rows with source-shaped cursor metadata', async () => {

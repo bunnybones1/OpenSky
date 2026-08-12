@@ -16,6 +16,7 @@ import type {
   ItemType,
   NotificationOneTime,
   Page,
+  QuestPeriodicity,
   SearchDeckRanksRequest
 } from '@opensky/proto'
 import {
@@ -601,6 +602,48 @@ export const handleApiRequest = async (
             body.address
           )
         })
+      }
+
+      case 'GMCompleteQuest': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          id?: number
+        }>(request)
+        return json(request, env, {
+          ok: await playerSupport.completeQuest(
+            principal.userId,
+            body.accountAddress,
+            body.id
+          )
+        })
+      }
+
+      case 'GMResetQuestReRolls': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          periodicity?: QuestPeriodicity
+        }>(request)
+        return json(request, env, {
+          ok: await playerSupport.resetQuestRerolls(
+            principal.userId,
+            body.accountAddress,
+            body.periodicity
+          )
+        })
+      }
+
+      case 'GMDeleteQuest': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ accountAddress?: string }>(request)
+        await playerSupport.rejectProductionQuestDelete(
+          principal.userId,
+          body.accountAddress
+        )
       }
 
       case 'GMListAccounts': {
