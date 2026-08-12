@@ -282,6 +282,12 @@ and progress are not migrated.
   ledger and uses the same treasure thresholds as the player RPC. It preserves
   source descending-point pagination and joins the Google identity's numeric
   game account/name without exposing a wallet dependency.
+- The original banner and featured-streamer admin mutations are ported with a
+  narrower authorization boundary than the source: callers need both `ADMIN`
+  and the separately provisioned `CONTENT_WRITE` permission. Public fields are
+  size/shape validated, banner links accept only HTTP(S), and every mutation
+  writes an immutable before/after audit snapshot atomically. No production
+  identity currently has this permission.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.

@@ -13,15 +13,15 @@ count or the critical player-facing compatibility set regresses.
 | Surface | Methods |
 | --- | ---: |
 | Source Go RPCs | 172 |
-| Ported source RPCs | 108 |
-| Remaining source RPCs | 64 |
+| Ported source RPCs | 113 |
+| Remaining source RPCs | 59 |
 | Cloudflare-only RPC adapters | 0 |
 
 ## Remaining workstreams
 
 | Workstream | Remaining | Interpretation |
 | --- | ---: | --- |
-| Admin and operations | 34 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
+| Admin and operations | 29 | Remaining reads can build on deployed RBAC; writes require granular authorization and immutable audits. |
 | Commerce and wallet | 12 | Payment and on-chain methods should follow optional WalletConnect, not be copied into login. |
 | Content and discovery | 1 | The leaderboard reward-schedule read needs a Cloud Weasel product schedule. |
 | Internal legacy | 10 | Several match/archive methods are already replaced by typed service bindings and Durable Objects rather than public RPCs. |
@@ -89,3 +89,9 @@ deployed point ledger and source treasure thresholds. The legacy pool config
 and summary are still absent because their USDC-style economics do not map
 faithfully to Cloud Weasel's versioned card pools without an explicit product
 contract.
+
+Banner and featured-streamer mutations now demonstrate the required write
+pattern: `ADMIN` plus a distinct `CONTENT_WRITE` capability, strict public-field
+validation, atomic before/after snapshots, and D1 triggers that reject audit
+updates or deletes. Production has no content-writer grants; the capability is
+deployed but dormant until an explicit out-of-band approval.
