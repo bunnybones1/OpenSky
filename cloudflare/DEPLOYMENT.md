@@ -736,6 +736,23 @@ settlement and delayed delivery against that pool.
   returned `401` without a session as required. A read-only D1 regression check
   kept the leaderboard schedule, cycle, and reset counts at zero with migration
   `0050` present once and `changed_db: false`.
+- API/web Worker version `c3762cbe-b048-47d2-a54a-34ea4d73fa8d` contains source
+  `5902915`. Migration `0051_stripe_checkout.sql` adds guarded payment attempts
+  and immutable webhook-event receipts without inserting configuration or
+  payment data. Authenticated Google identities can create source-shaped Stripe
+  Checkout Sessions only when the optional secrets, redirect URLs, and selected
+  Price ID are provisioned. Stripe idempotency keys survive indeterminate
+  responses; raw-body signatures, an authenticated Stripe event lookup, local
+  identity/product metadata, payment status, and amount shape are all checked
+  before SkyPass or Conquest-ticket inventory is granted atomically with its
+  receipt. Duplicate/concurrent delivery, fulfillment rollback and retry,
+  delayed payment methods, and out-of-order paid-after-failure events are
+  covered. The rollout passed all 185 API tests, Cloudflare TypeScript checking,
+  the 134/172 RPC guard, card/release/Conquest gates, and the production asset
+  build. Live app HTML and API `Ping` passed; anonymous checkout returned `401`
+  and the unsigned webhook failed closed because Stripe is unconfigured.
+  Production retained zero Stripe payments/events with all four update/delete
+  guards present and a read-only post-probe check reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
