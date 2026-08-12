@@ -175,9 +175,9 @@ export class MatchRepository {
           : Promise.resolve(null),
         this.database
           .prepare(
-            `SELECT card_id, item_type
-           FROM player_card_unlocks
-           WHERE user_id = ? AND item_type IN
+            `SELECT token_id AS card_id, item_type
+           FROM player_items
+           WHERE user_id = ? AND balance > 0 AND item_type IN
              ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
           )
           .bind(userId)
@@ -305,7 +305,12 @@ export class MatchRepository {
         .bind(userId)
         .first<{ id: number }>(),
       this.database
-        .prepare('SELECT card_id FROM player_card_unlocks WHERE user_id = ?')
+        .prepare(
+          `SELECT DISTINCT token_id AS card_id
+           FROM player_items
+           WHERE user_id = ? AND balance > 0 AND item_type IN
+             ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
+        )
         .bind(userId)
         .all<{ card_id: number }>(),
       this.database

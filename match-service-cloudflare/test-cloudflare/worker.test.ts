@@ -98,6 +98,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
     env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
     env.AUTH_DB.prepare('DELETE FROM game_accounts'),
+    env.AUTH_DB.prepare('DELETE FROM player_items'),
     env.AUTH_DB.prepare('DELETE FROM player_card_unlocks'),
     env.AUTH_DB.prepare('DELETE FROM player_quests'),
     env.AUTH_DB.prepare('DELETE FROM player_decks'),
@@ -148,6 +149,14 @@ beforeEach(async () => {
             item_type, is_new)
          VALUES (?, ?, ?, 'strength', 'starter-deck', ?, 'SW_BASE_CARDS', 0)`
       ).bind(USER_ID, cardId, `Card ${cardId}`, now)
+    ),
+    ...STARTER_CARD_IDS.map(cardId =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, 'starter-deck', ?, ?)`
+      ).bind(USER_ID, cardId, now, now)
     )
   ])
 })
@@ -244,6 +253,42 @@ describe('Cloud Weasel accepted-match service', () => {
     )
     expect(body.profile.abandonPenaltyMs).toBeGreaterThan(0)
     expect(body.profile.abandonPenaltyMs).toBeLessThanOrEqual(10_000)
+  })
+
+  it('uses the identity inventory as the authoritative playable-card source', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_items SET balance = 0, updated_at = ?
+         WHERE user_id = ? AND item_type = 'SW_BASE_CARDS' AND token_id = 6`
+      ).bind(now, USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_GOLD_CARDS', 6, 1, 1, 'conquest:test', ?, ?)`
+      ).bind(USER_ID, now, now)
+    ])
+
+    const response = await profile(GameMode.PRACTICE_PVP, principal)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      profile: { cards: expect.arrayContaining([[6, 'gold']]) }
+    })
+
+    // The legacy table cannot represent more than one frame for a card. A
+    // zero-balance identity inventory row must not remain playable merely
+    // because that compatibility row still exists.
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 0, updated_at = ?
+       WHERE user_id = ? AND token_id = 6`
+    )
+      .bind(now, USER_ID)
+      .run()
+    const denied = await create(dispatch([6]))
+    expect(denied.status).toBe(400)
+    expect(await denied.json()).toEqual({ error: 'card 6 is not unlocked' })
   })
 
   it('disables unfinished conquest queues and rejects forged identity bindings', async () => {
