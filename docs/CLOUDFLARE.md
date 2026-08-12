@@ -278,6 +278,10 @@ and progress are not migrated.
   identity, defaults to false without creating a row, and is independent of
   authentication and any future WalletConnect link; the basic track stays
   wallet-free.
+- The staff Conquest progress table reads only event-2 points from the same D1
+  ledger and uses the same treasure thresholds as the player RPC. It preserves
+  source descending-point pagination and joins the Google identity's numeric
+  game account/name without exposing a wallet dependency.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.

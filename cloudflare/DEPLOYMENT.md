@@ -3,11 +3,11 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`e5ec4321-d302-4995-9945-86424d526b8c`)
+- API/web Worker: `opensky-webapp` (`9f9c4e18-677f-45a5-9ad4-41dfa7c738de`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`2c6bae51-4c9a-41ab-b178-bd087afc5908`)
 - Match service Worker: `cloud-weasel-match-service` (`8db250fe-2068-45b1-97b5-66636bae80bb`)
 - Game Worker: `cloud-weasel-game-server` (`45b699f8-f25b-4888-ba3b-2450adfc68d4`)
-- Deployed source includes `de3011f` for web/API and `b612af3` for game, plus the
+- Deployed source includes `6cf7e89` for web/API and `b612af3` for game, plus the
   match-service inventory fix from `3c57de5`; matchmaker remains at `c9e2201`
 - Deployed: 2026-08-11 PDT
 - Applied D1 migrations: `0001` through `0033`
@@ -71,6 +71,8 @@
 - Admin-only SkyPass reward-definition and premium-entitlement reads, with
   premium modeled as optional per-season Google-identity state and the free
   track available without a wallet or entitlement row
+- Admin-only event-2 Conquest treasure-progress listing with bounded cursors,
+  source point ordering and thresholds, and identity account names
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities
@@ -90,7 +92,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 21 files, 123 tests
+- API Worker: 21 files, 124 tests
 - Match service: 9 Worker tests
 - Game Worker: 24 unit and 44 Worker tests
 - Matchmaker: 26 unit and 12 Worker tests
@@ -136,6 +138,10 @@ settlement and delayed delivery against that pool.
   zero staff grants, version metadata matched
   `e5ec4321-d302-4995-9945-86424d526b8c`, and all D1 reads reported
   `changed_db: false`
+- The live Conquest treasure-progress probe returned `401` without a session;
+  production had zero event-2 progress rows and zero staff grants, version
+  metadata matched `9f9c4e18-677f-45a5-9ad4-41dfa7c738de`, and both D1 reads
+  reported `changed_db: false`
 - Remote D1 after migrations `0027`/`0028` and a scheduled tick: zero active
   reward pools, settlements, delayed Gold deliveries, or Conquest feed events;
   the read-only verification reported `changed_db: false`
