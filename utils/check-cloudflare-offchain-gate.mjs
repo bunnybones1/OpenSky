@@ -217,6 +217,7 @@ const main = async () => {
     referralStickerRewards,
     silverTicketExchange,
     heroSkinExchange,
+    operatorCardGrant,
     stripeCheckout,
     mobileStoreFulfillment,
     skypassAutoClaim,
@@ -260,6 +261,7 @@ const main = async () => {
       path.join(root, 'cloudflare/src/hero-skin-exchange.ts'),
       'utf8'
     ),
+    readFile(path.join(root, 'cloudflare/src/player-support.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare/src/mobile-store-fulfillment.ts'),
@@ -392,6 +394,7 @@ const main = async () => {
       referralStickerRewards,
       silverTicketExchange,
       heroSkinExchange,
+      operatorCardGrant,
       stripeCheckout,
       mobileStoreFulfillment,
       skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`

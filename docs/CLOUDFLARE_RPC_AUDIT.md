@@ -17,7 +17,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs   |      15 |
 | Deliberately retired RPCs    |       2 |
 | Actionable source RPC gaps   |       0 |
-| Cloudflare-only RPC adapters |       0 |
+| Cloudflare-only RPC adapters |       1 |
 
 Together, 172/172 source contracts (100%) are implemented, replaced by a
 reviewed Cloud Weasel contract, or intentionally retired. This is a product-
@@ -36,6 +36,11 @@ All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
 bounded fetches, atomic optimistic replacement, immutable audits, and a D1-
 enforced freeze after the first claim in a season.
+
+`GMGrantBaseCards` is the single Cloudflare-only adapter. It replaces the
+source `grant-cards` command's direct contract mint with a capability-gated,
+idempotent identity-inventory grant. It preserves all/prism selection and
+records an immutable receipt; it never prepares or sends a chain transaction.
 
 ## Reviewed non-ports
 

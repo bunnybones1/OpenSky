@@ -25,7 +25,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   off-chain inventory contract as Stripe. Store verification never mints.
 - Source-only operator grants follow the same rule. The legacy `grant-cards`
   command's contract mint is replaced by the capability-gated player-support
-  grant into `player_items`; it never becomes a Cloudflare contract call.
+  `GMGrantBaseCards` adapter and immutable request receipt in `player_items`; it
+  never becomes a Cloudflare contract call. The source's all/prism selection is
+  preserved, while its wallet address is replaced by an identity reference.
 
 ## Required grant invariants
 

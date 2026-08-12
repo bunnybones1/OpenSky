@@ -9,7 +9,7 @@ export const EXPECTED_CHAIN_EFFECT_FILES = {
   'api/cmd/grant-cards/_main.go': {
     count: 2,
     disposition: 'offchain-operator-grant',
-    evidence: ['player_items', 'gm-unlock-all-base-cards']
+    evidence: ['player_operator_card_grants', 'operator-card-grant']
   },
   'api/lib/accounts/asset_transferer.go': {
     count: 2,

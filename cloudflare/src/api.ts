@@ -696,6 +696,21 @@ export const handleApiRequest = async (
         })
       }
 
+      case 'GMGrantBaseCards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          prism?: unknown
+          requestKey?: unknown
+        }>(request)
+        return json(
+          request,
+          env,
+          await playerSupport.grantBaseCards(principal.userId, body)
+        )
+      }
+
       case 'GMSetWarmupGamesCompleted': {
         const principal = await identityPrincipal(request, env)
         await staff.requirePlayerSupportWrite(principal.userId)

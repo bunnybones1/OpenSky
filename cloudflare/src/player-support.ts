@@ -1,12 +1,7 @@
 import type { QuestPeriodicity } from '@opensky/proto'
 
 import { allLibraryCards } from './card-library'
-import {
-  alreadyExists,
-  internal,
-  invalidArgument,
-  notFound
-} from './errors'
+import { alreadyExists, internal, invalidArgument, notFound } from './errors'
 import { questPeriodAt } from './quest-library'
 import { STARTER_DECKS } from './starter-decks'
 
@@ -32,6 +27,30 @@ interface QuestRow {
   id: number
   quest_key: string
   status: string
+}
+
+type OperatorGrantPrism =
+  | 'all'
+  | 'strength'
+  | 'heart'
+  | 'agility'
+  | 'intellect'
+  | 'wisdom'
+
+interface OperatorGrantReceiptRow {
+  user_id: string
+  prism: OperatorGrantPrism
+  card_ids_json: string
+  granted_card_count: number
+}
+
+const OPERATOR_GRANT_CLASSES: Record<OperatorGrantPrism, string | undefined> = {
+  all: undefined,
+  strength: 'STR',
+  heart: 'HRT',
+  agility: 'AGY',
+  intellect: 'INT',
+  wisdom: 'WIS'
 }
 
 const supportAudit = (
@@ -88,6 +107,39 @@ const deckSnapshot = (rows: StarterDeckRow[]) =>
   [...rows]
     .sort((left, right) => left.prism.localeCompare(right.prism))
     .map(row => ({ prism: row.prism, deckType: row.deck_type }))
+
+const operatorGrantPrism = (value: unknown): OperatorGrantPrism => {
+  if (value === undefined || value === null || value === '') return 'all'
+  if (typeof value !== 'string') throw invalidArgument('prism is invalid')
+  const aliases: Record<string, OperatorGrantPrism> = {
+    all: 'all',
+    str: 'strength',
+    strength: 'strength',
+    hrt: 'heart',
+    heart: 'heart',
+    agy: 'agility',
+    agility: 'agility',
+    int: 'intellect',
+    intelect: 'intellect',
+    intellect: 'intellect',
+    wis: 'wisdom',
+    wisdom: 'wisdom'
+  }
+  const normalized = aliases[value.trim().toLowerCase()]
+  if (!normalized) throw invalidArgument('prism is invalid')
+  return normalized
+}
+
+const operatorGrantRequestKey = (value: unknown): string => {
+  if (typeof value !== 'string') {
+    throw invalidArgument('requestKey is required')
+  }
+  const key = value.trim()
+  if (!/^[A-Za-z0-9:_-]{8,128}$/.test(key)) {
+    throw invalidArgument('requestKey is invalid')
+  }
+  return key
+}
 
 export class PlayerSupportRepository {
   constructor(private readonly database: D1Database) {}
@@ -278,6 +330,163 @@ export class PlayerSupportRepository {
       )
     ])
     return true
+  }
+
+  async grantBaseCards(
+    actorUserId: string,
+    input: {
+      accountAddress?: string
+      prism?: unknown
+      requestKey?: unknown
+    }
+  ): Promise<{
+    ok: true
+    prism: OperatorGrantPrism
+    grantedCardCount: number
+    cardIds: number[]
+  }> {
+    const [target, prism, requestKey] = await Promise.all([
+      this.target(undefined, input.accountAddress),
+      Promise.resolve(operatorGrantPrism(input.prism)),
+      Promise.resolve(operatorGrantRequestKey(input.requestKey))
+    ])
+    const previous = await this.database
+      .prepare(
+        `SELECT user_id, prism, card_ids_json, granted_card_count
+         FROM player_operator_card_grants
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+      .bind(actorUserId, requestKey)
+      .first<OperatorGrantReceiptRow>()
+    if (previous) {
+      if (previous.user_id !== target.user_id || previous.prism !== prism) {
+        throw alreadyExists(
+          'requestKey was already used for another card grant'
+        )
+      }
+      return {
+        ok: true,
+        prism,
+        grantedCardCount: previous.granted_card_count,
+        cardIds: JSON.parse(previous.card_ids_json) as number[]
+      }
+    }
+
+    const cardClass = OPERATOR_GRANT_CLASSES[prism]
+    const cards = allLibraryCards().filter(
+      card => cardClass === undefined || card.class === cardClass
+    )
+    const cardIds = cards.map(card => card.id)
+    const cardJson = JSON.stringify(
+      cards.map(card => ({
+        id: card.id,
+        name: card.name,
+        prism: card.class.toLowerCase()
+      }))
+    )
+    const deliveryKey = crypto.randomUUID()
+    const now = new Date().toISOString()
+    try {
+      await this.database.batch([
+        this.database
+          .prepare(
+            `INSERT INTO player_operator_card_grants
+               (request_key, delivery_key, user_id, actor_user_id, prism,
+                card_ids_json, granted_card_count, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            requestKey,
+            deliveryKey,
+            target.user_id,
+            actorUserId,
+            prism,
+            JSON.stringify(cardIds),
+            cardIds.length,
+            now
+          ),
+        this.database
+          .prepare(
+            `INSERT INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             SELECT ?, 'SW_BASE_CARDS', json_extract(card.value, '$.id'),
+                    1, 1, ?, ?, ?
+             FROM json_each(?) card
+             WHERE EXISTS (
+               SELECT 1 FROM player_operator_card_grants
+               WHERE actor_user_id = ? AND request_key = ?
+                 AND delivery_key = ?
+             )
+             ON CONFLICT(user_id, item_type, token_id)
+             DO UPDATE SET
+               balance = player_items.balance + 1,
+               is_new = 1, unlock_source = excluded.unlock_source,
+               updated_at = excluded.updated_at`
+          )
+          .bind(
+            target.user_id,
+            `operator-card-grant:${deliveryKey}`,
+            now,
+            now,
+            cardJson,
+            actorUserId,
+            requestKey,
+            deliveryKey
+          ),
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_card_unlocks
+               (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
+                item_type, is_new)
+             SELECT ?, json_extract(card.value, '$.id'),
+                    json_extract(card.value, '$.name'),
+                    json_extract(card.value, '$.prism'), ?, ?,
+                    'SW_BASE_CARDS', 1
+             FROM json_each(?) card
+             WHERE EXISTS (
+               SELECT 1 FROM player_operator_card_grants
+               WHERE actor_user_id = ? AND request_key = ?
+                 AND delivery_key = ?
+             )`
+          )
+          .bind(
+            target.user_id,
+            `operator-card-grant:${deliveryKey}`,
+            now,
+            cardJson,
+            actorUserId,
+            requestKey,
+            deliveryKey
+          )
+      ])
+    } catch (error) {
+      if (!String(error).toLowerCase().includes('unique')) throw error
+      const concurrent = await this.database
+        .prepare(
+          `SELECT user_id, prism, card_ids_json, granted_card_count
+           FROM player_operator_card_grants
+           WHERE actor_user_id = ? AND request_key = ?`
+        )
+        .bind(actorUserId, requestKey)
+        .first<OperatorGrantReceiptRow>()
+      if (
+        !concurrent ||
+        concurrent.user_id !== target.user_id ||
+        concurrent.prism !== prism
+      ) {
+        throw alreadyExists(
+          'requestKey was already used for another card grant'
+        )
+      }
+      return {
+        ok: true,
+        prism,
+        grantedCardCount: concurrent.granted_card_count,
+        cardIds: JSON.parse(concurrent.card_ids_json) as number[]
+      }
+    }
+    return { ok: true, prism, grantedCardCount: cardIds.length, cardIds }
   }
 
   async resetStarterDecks(
@@ -482,13 +691,7 @@ export class PlayerSupportRepository {
            FROM player_quests
            WHERE user_id = ? AND rowid = ? AND status <> 'complete'`
         )
-        .bind(
-          target.user_id,
-          actorUserId,
-          now,
-          target.user_id,
-          quest.id
-        ),
+        .bind(target.user_id, actorUserId, now, target.user_id, quest.id),
       this.database
         .prepare(
           `UPDATE player_quests SET status = 'complete', updated_at = ?
@@ -573,10 +776,7 @@ export class PlayerSupportRepository {
   ): Promise<never> {
     // Source production validates the target first, then always refuses this
     // destructive operation. Cloud Weasel is production-only by design.
-    await this.target(
-      undefined,
-      accountAddress ?? `identity:${actorUserId}`
-    )
+    await this.target(undefined, accountAddress ?? `identity:${actorUserId}`)
     throw internal('cannot delete quest in production')
   }
 }

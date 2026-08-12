@@ -548,6 +548,169 @@ describe('fail-closed Google identity staff authorization', () => {
     ).rejects.toThrow('staff player support audit rows are immutable')
   })
 
+  it('replaces the grant-cards contract mint with an idempotent off-chain grant', async () => {
+    const grantPlayer = 'operator-card-grant-player'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Grant Player', 'grant-player@example.com', ?, ?)`
+    )
+      .bind(grantPlayer, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(grantPlayer)
+    await grantAdmin()
+
+    const request = {
+      accountAddress: `identity:${grantPlayer}`,
+      prism: 'str',
+      requestKey: 'operator-grant-strength-1'
+    }
+    expect((await rpcAs(ADMIN, 'GMGrantBaseCards', request)).status).toBe(403)
+    await grantPlayerSupportWrite()
+
+    const strengthCards = allLibraryCards().filter(card => card.class === 'STR')
+    const strengthCardIdsJson = JSON.stringify(
+      strengthCards.map(card => card.id)
+    )
+    const beforeGrant = await env.AUTH_DB.prepare(
+      `SELECT token_id, balance FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, strengthCardIdsJson)
+      .all<{ token_id: number; balance: number }>()
+    const beforeBalance = new Map(
+      beforeGrant.results.map(item => [item.token_id, item.balance])
+    )
+
+    const first = await rpcAs(ADMIN, 'GMGrantBaseCards', request)
+    expect(first.status).toBe(200)
+    const result = await first.json<{
+      ok: boolean
+      prism: string
+      grantedCardCount: number
+      cardIds: number[]
+    }>()
+    expect(result).toEqual({
+      ok: true,
+      prism: 'strength',
+      grantedCardCount: strengthCards.length,
+      cardIds: strengthCards.map(card => card.id)
+    })
+
+    const inventory = await env.AUTH_DB.prepare(
+      `SELECT token_id, balance, unlock_source FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))
+       ORDER BY token_id`
+    )
+      .bind(grantPlayer, strengthCardIdsJson)
+      .all<{ token_id: number; balance: number; unlock_source: string }>()
+    expect(inventory.results).toHaveLength(strengthCards.length)
+    expect(
+      inventory.results.every(
+        item => item.balance === (beforeBalance.get(item.token_id) ?? 0) + 1
+      )
+    ).toBe(true)
+    expect(
+      inventory.results.every(item =>
+        item.unlock_source.startsWith('operator-card-grant:')
+      )
+    ).toBe(true)
+
+    const retry = await rpcAs(ADMIN, 'GMGrantBaseCards', request)
+    expect(await retry.json()).toEqual(result)
+    const afterRetry = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count, SUM(balance) AS balance
+       FROM player_items WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, strengthCardIdsJson)
+      .first<{ count: number; balance: number }>()
+    expect(afterRetry).toEqual({
+      count: strengthCards.length,
+      balance:
+        strengthCards.length +
+        [...beforeBalance.values()].reduce(
+          (total, balance) => total + balance,
+          0
+        )
+    })
+
+    const collision = await rpcAs(ADMIN, 'GMGrantBaseCards', {
+      ...request,
+      prism: 'wisdom'
+    })
+    expect(collision.status).toBe(409)
+    const invalidPrism = await rpcAs(ADMIN, 'GMGrantBaseCards', {
+      ...request,
+      requestKey: 'operator-grant-invalid-1',
+      prism: 'unknown'
+    })
+    expect(invalidPrism.status).toBe(400)
+
+    const wisdomCards = allLibraryCards().filter(card => card.class === 'WIS')
+    const wisdomIdsJson = JSON.stringify(wisdomCards.map(card => card.id))
+    const wisdomBefore = await env.AUTH_DB.prepare(
+      `SELECT COALESCE(SUM(balance), 0) AS balance FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, wisdomIdsJson)
+      .first<{ balance: number }>()
+    const concurrentRequest = {
+      accountAddress: `identity:${grantPlayer}`,
+      prism: 'wis',
+      requestKey: 'operator-grant-wisdom-concurrent'
+    }
+    const concurrent = await Promise.all([
+      rpcAs(ADMIN, 'GMGrantBaseCards', concurrentRequest),
+      rpcAs(ADMIN, 'GMGrantBaseCards', concurrentRequest)
+    ])
+    expect(concurrent.map(response => response.status)).toEqual([200, 200])
+    const wisdomAfter = await env.AUTH_DB.prepare(
+      `SELECT COALESCE(SUM(balance), 0) AS balance FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, wisdomIdsJson)
+      .first<{ balance: number }>()
+    expect(wisdomAfter!.balance - wisdomBefore!.balance).toBe(
+      wisdomCards.length
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_operator_card_grants
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+        .bind(ADMIN, concurrentRequest.requestKey)
+        .first()
+    ).toEqual({ count: 1 })
+
+    const receipt = await env.AUTH_DB.prepare(
+      `SELECT user_id, actor_user_id, prism, granted_card_count
+       FROM player_operator_card_grants
+       WHERE actor_user_id = ? AND request_key = ?`
+    )
+      .bind(ADMIN, request.requestKey)
+      .first()
+    expect(receipt).toEqual({
+      user_id: grantPlayer,
+      actor_user_id: ADMIN,
+      prism: 'strength',
+      granted_card_count: strengthCards.length
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_operator_card_grants SET prism = 'all'
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+        .bind(ADMIN, request.requestKey)
+        .run()
+    ).rejects.toThrow('Operator card grant receipts are immutable')
+  })
+
   it('gates, scopes, and immutably audits quest support repairs', async () => {
     await grantAdmin()
     const playerQuest = await env.AUTH_DB.prepare(
@@ -625,14 +788,12 @@ describe('fail-closed Google identity staff authorization', () => {
 
     // The source only changes status; it does not synthesize progress/rewards.
     const completedAuditCount = async () =>
-      (
-        await env.AUTH_DB.prepare(
-          `SELECT COUNT(*) AS count FROM staff_quest_support_audit
+      (await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_quest_support_audit
            WHERE operation = 'COMPLETE_QUEST' AND target_user_id = ?`
-        )
-          .bind(PLAYER)
-          .first<{ count: number }>()
-      )!.count
+      )
+        .bind(PLAYER)
+        .first<{ count: number }>())!.count
     expect(await completedAuditCount()).toBe(1)
     expect(
       (
@@ -751,7 +912,9 @@ describe('fail-closed Google identity staff authorization', () => {
       msg: 'cannot delete quest in production'
     })
     expect(
-      await env.AUTH_DB.prepare(`SELECT 1 AS present FROM player_quests WHERE rowid = ?`)
+      await env.AUTH_DB.prepare(
+        `SELECT 1 AS present FROM player_quests WHERE rowid = ?`
+      )
         .bind(playerQuest!.id)
         .first()
     ).toEqual({ present: 1 })
