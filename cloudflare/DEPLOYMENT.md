@@ -753,6 +753,20 @@ settlement and delayed delivery against that pool.
   and the unsigned webhook failed closed because Stripe is unconfigured.
   Production retained zero Stripe payments/events with all four update/delete
   guards present and a read-only post-probe check reported `changed_db: false`.
+- API/web Worker version `8f3fcdf3-db34-44bb-b41f-5595e22c72f9` contains source
+  `6dc5e12`. Migration `0052_stripe_staff_reads.sql` ports the source
+  `GMListPayments` and `GMListPaymentLogs` read contracts behind the existing
+  deny-by-default `ADMIN` role. D1 assigns each opaque Stripe payment UUID a
+  stable immutable numeric compatibility ID and records source-shaped intent,
+  Checkout Session, and retrieved-event logs without making that ID a
+  fulfillment authority. Status/provider/identity filters, descending creation
+  order, bounded cursor pages, and per-payment reverse-chronological logs are
+  preserved. The rollout passed all 187 API tests, Cloudflare TypeScript
+  checking, the 136/172 RPC guard, all card/release/Conquest gates, and the
+  production asset build. Live app HTML and API `Ping` passed; both staff RPCs
+  returned `401` anonymously. Production retained zero payments, events,
+  numeric staff IDs, or logs with all five creation/immutability guards present
+  and the verification reported `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
