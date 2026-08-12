@@ -2027,6 +2027,162 @@ describe('legacy player RPC compatibility', () => {
     expect(heroCount?.count).toBe(2)
   })
 
+  it('delivers every remaining source SkyPass reward into off-chain inventory', async () => {
+    const season = seasonFromDate()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_stickers (token_id, required_points, season)
+         VALUES (987, 0, ?)`
+      ).bind(season),
+      ...[
+        [101, 403, 3, null],
+        [102, 405, 0, JSON.stringify({ tokenIDs: [987] })],
+        [103, 303, 7, null],
+        [104, 401, 0, JSON.stringify({ tokenIDs: [1, 2] })],
+        [105, 407, 0, JSON.stringify({ tokenIDs: [11] })],
+        [106, 302, 0, JSON.stringify({ tokenIDs: [12] })]
+      ].map(([level, itemType, amount, attributes]) =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO skypass_rewards
+             (level, season, tier, item_type, amount, is_starter, attributes,
+              updated_at, is_infinite)
+           VALUES (?, ?, 1, ?, ?, 0, ?, ?, 0)`
+        ).bind(level, season, itemType, amount, attributes, now)
+      ),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression SET basic_skypass_level = 106
+         WHERE user_id = ?`
+      ).bind(userId)
+    ])
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT id FROM skypass_rewards
+       WHERE season = ? AND level BETWEEN 101 AND 106 ORDER BY level`
+    )
+      .bind(season)
+      .all<{ id: number }>()
+
+    const claimed = await rpc('ClaimSkypassRewards', {
+      ids: rows.results.map(row => row.id)
+    })
+    expect(claimed.status).toBe(200)
+    expect(
+      (await claimed.json<{ rewards: Array<{ type: string }> }>()).rewards.map(
+        reward => reward.type
+      )
+    ).toEqual([
+      'CONQUEST_TICKET',
+      'STICKER',
+      'STICKER_POINTS',
+      'CARD',
+      'CARD',
+      'CARD_BACK',
+      'TITLE'
+    ])
+
+    const inventory = await env.AUTH_DB.prepare(
+      `SELECT item_type, token_id, balance FROM player_items
+       WHERE user_id = ? AND unlock_source LIKE 'skypass:%'
+       ORDER BY item_type, token_id`
+    )
+      .bind(userId)
+      .all<{ item_type: string; token_id: number; balance: number }>()
+    expect(inventory.results).toEqual([
+      { item_type: 'SW_CARD_BACKS', token_id: 11, balance: 1 },
+      { item_type: 'SW_CONQUEST_TICKET', token_id: 2, balance: 3 },
+      { item_type: 'SW_SILVER_CARDS', token_id: 1, balance: 1 },
+      { item_type: 'SW_SILVER_CARDS', token_id: 2, balance: 1 },
+      { item_type: 'SW_STICKERS', token_id: 987, balance: 1 },
+      { item_type: 'SW_STICKER_POINTS', token_id: 0, balance: 7 },
+      { item_type: 'SW_TITLES', token_id: 12, balance: 1 }
+    ])
+
+    const claimedAgain = await rpc('ClaimSkypassRewards', {
+      ids: rows.results.map(row => row.id)
+    })
+    expect(claimedAgain.status).toBe(200)
+    const afterRetry = await env.AUTH_DB.prepare(
+      `SELECT SUM(balance) AS balance FROM player_items
+       WHERE user_id = ? AND unlock_source LIKE 'skypass:%'`
+    )
+      .bind(userId)
+      .first<{ balance: number }>()
+    expect(afterRetry?.balance).toBe(15)
+
+    const feed = await rpc('GetFeed', {
+      page: { pageSize: 20 },
+      req: { accountAddress: identityReference }
+    })
+    const feedEvents = (
+      await feed.json<{
+        res: Array<{ type: string; tokenIds?: number[]; stickerPoints?: number }>
+      }>()
+    ).res
+    expect(feedEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'REWARD',
+          tokenIds: expect.arrayContaining([16_646_145])
+        }),
+        expect.objectContaining({ type: 'REWARD', stickerPoints: 7 }),
+        expect.objectContaining({
+          type: 'REWARD',
+          tokenIds: expect.arrayContaining([(5 << 16) + 987])
+        }),
+        expect.objectContaining({
+          type: 'REWARD',
+          tokenIds: expect.arrayContaining([(6 << 16) + 11])
+        }),
+        expect.objectContaining({
+          type: 'REWARD',
+          tokenIds: expect.arrayContaining([(8 << 16) + 12])
+        })
+      ])
+    )
+  })
+
+  it('credits a concurrent SkyPass claim only once', async () => {
+    const season = seasonFromDate()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO skypass_rewards
+         (level, season, tier, item_type, amount, is_starter, attributes,
+          updated_at, is_infinite)
+       VALUES (120, ?, 1, 303, 9, 0, NULL, ?, 0)`
+    )
+      .bind(season, new Date().toISOString())
+      .run()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_progression SET basic_skypass_level = 120 WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+    const reward = await env.AUTH_DB.prepare(
+      `SELECT id FROM skypass_rewards WHERE season = ? AND level = 120`
+    )
+      .bind(season)
+      .first<{ id: number }>()
+
+    const responses = await Promise.all([
+      rpc('ClaimSkypassRewards', { ids: [reward!.id] }),
+      rpc('ClaimSkypassRewards', { ids: [reward!.id] })
+    ])
+    expect(responses.map(response => response.status)).toEqual([200, 200])
+    const item = await env.AUTH_DB.prepare(
+      `SELECT balance FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+    )
+      .bind(userId)
+      .first<{ balance: number }>()
+    expect(item?.balance).toBe(9)
+    const receipt = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
+       FROM player_skypass_claims WHERE user_id = ? AND reward_id = ?`
+    )
+      .bind(userId, reward!.id)
+      .first<{ count: number; keys: number }>()
+    expect(receipt).toEqual({ count: 1, keys: 1 })
+  })
+
   it('rejects SkyPass rewards that are unearned or replaced in the listing', async () => {
     const unearned = await env.AUTH_DB.prepare(
       `SELECT id FROM skypass_rewards

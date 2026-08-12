@@ -179,11 +179,6 @@ const EQUIPPABLE_ITEM_TYPES = new Set<ItemType>([
   'SW_CARD_BACKS' as ItemType
 ])
 
-const HEXBOUND_CARD_IDS = [
-  30, 98, 125, 140, 1047, 1100, 1101, 1125, 3004, 3101, 3125, 3135, 4004, 4027,
-  4101, 4124
-]
-
 const CARD_NAMES: Record<number, string> = {
   30: 'Treefolk Goliath',
   98: 'Mortal Blow',
@@ -352,6 +347,9 @@ interface SkypassFeedRow {
   row_id: number
   rewards: string
   claimed_at: string
+  item_type: number
+  amount: number
+  attributes: string | null
 }
 
 interface ConquestFeedRow {
@@ -410,7 +408,11 @@ const parseJsonArray = (value: string): unknown[] => {
   }
 }
 
-const rewardTokenIds = (value: string) => {
+const rewardTokenIds = (
+  value: string,
+  itemType?: number,
+  attributes?: string | null
+) => {
   const rewards = parseJsonArray(value)
   const tokenIds: number[] = []
   let unlockedStarterDeck = false
@@ -429,6 +431,18 @@ const rewardTokenIds = (value: string) => {
           ? 0x02
           : 0xff
     tokenIds.push((typeCode << 16) + (Number(card.id) & 0x00ffff))
+  }
+  const definitionTokenIds = parseAttributes(attributes || null).tokenIDs
+    .map(Number)
+    .filter(Number.isSafeInteger)
+  const itemTypeCode =
+    itemType === 405 ? 5 : itemType === 407 ? 6 : itemType === 302 ? 8 : null
+  if (itemTypeCode !== null) {
+    tokenIds.push(
+      ...definitionTokenIds.map(tokenId => (itemTypeCode << 16) + tokenId)
+    )
+  } else if (itemType === 403) {
+    tokenIds.push(16_646_145)
   }
   return { tokenIds, unlockedStarterDeck }
 }
@@ -496,6 +510,15 @@ const rewardCard = (cardId: number, itemType: ItemType) => ({
     }
   }
 })
+
+const stableRewardIndex = (value: string, length: number): number => {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) % length
+}
 
 export class PlayerRpcRepository {
   constructor(private readonly database: D1Database) {}
@@ -581,9 +604,11 @@ export class PlayerRpcRepository {
           .all<RankFeedRow>(),
         this.database
           .prepare(
-            `SELECT rowid AS row_id, rewards, claimed_at
-           FROM player_skypass_claims
-           WHERE user_id = ?`
+            `SELECT claim.rowid AS row_id, claim.rewards, claim.claimed_at,
+                    reward.item_type, reward.amount, reward.attributes
+             FROM player_skypass_claims claim
+             JOIN skypass_rewards reward ON reward.id = claim.reward_id
+             WHERE claim.user_id = ?`
           )
           .bind(userId)
           .all<SkypassFeedRow>(),
@@ -622,13 +647,26 @@ export class PlayerRpcRepository {
         }) as unknown as FeedEvent
     )
     for (const row of skypassRows.results) {
-      const { tokenIds, unlockedStarterDeck } = rewardTokenIds(row.rewards)
+      const { tokenIds, unlockedStarterDeck } = rewardTokenIds(
+        row.rewards,
+        row.item_type,
+        row.attributes
+      )
       if (tokenIds.length > 0) {
         events.push({
           id: row.row_id * 2 + 1,
           type: 'REWARD',
           createdAt: row.claimed_at,
           tokenIds,
+          cards: [],
+          heroes: []
+        } as unknown as FeedEvent)
+      } else if (row.item_type === 303) {
+        events.push({
+          id: row.row_id * 2 + 1,
+          type: 'REWARD',
+          createdAt: row.claimed_at,
+          stickerPoints: row.amount,
           cards: [],
           heroes: []
         } as unknown as FeedEvent)
@@ -2732,21 +2770,67 @@ export class PlayerRpcRepository {
   }
 
   private cardCandidates(
-    attributes: ReturnType<typeof parseAttributes>
+    attributes: ReturnType<typeof parseAttributes>,
+    season: number
   ): number[] {
     const cardSets = new Set(attributes.cardSets)
     const excludedSets = new Set(attributes.cardSetsExcluded)
-    if (cardSets.has('HEXBOUND_INVASION')) return HEXBOUND_CARD_IDS
+    return allLibraryCards()
+      .filter(card => card.validFromSeason <= season)
+      .filter(card => !cardSets.size || cardSets.has(card.set))
+      .filter(card => !excludedSets.has(card.set))
+      .map(card => card.id)
+      .sort((left, right) => left - right)
+  }
 
-    const broadPool = Array.from({ length: 164 }, (_, index) => index + 1)
-    return excludedSets.has('HEXBOUND_INVASION')
-      ? broadPool.filter(cardId => !HEXBOUND_CARD_IDS.includes(cardId))
-      : [...broadPool, ...HEXBOUND_CARD_IDS]
+  private gainSkypassItem(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    itemType: ItemType,
+    tokenId: number,
+    amount: number,
+    now: string,
+    statements: D1PreparedStatement[],
+    stackable = true
+  ): void {
+    const conflict = stackable
+      ? `ON CONFLICT(user_id, item_type, token_id)
+         DO UPDATE SET balance = balance + excluded.balance,
+                       is_new = 1, updated_at = excluded.updated_at`
+      : `ON CONFLICT(user_id, item_type, token_id) DO NOTHING`
+    statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           SELECT ?, ?, ?, ?, 1, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM player_skypass_claims
+             WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+           )
+           ${conflict}`
+        )
+        .bind(
+          userId,
+          itemType,
+          tokenId,
+          amount,
+          `skypass:${reward.id}`,
+          now,
+          now,
+          userId,
+          reward.id,
+          deliveryKey
+        )
+    )
   }
 
   private async applyBaseCardSkypassReward(
     userId: string,
     reward: RawSkypassRewardRow,
+    deliveryKey: string,
     statements: D1PreparedStatement[]
   ): Promise<Array<Record<string, unknown>>> {
     const ownedResult = await this.database
@@ -2759,13 +2843,21 @@ export class PlayerRpcRepository {
       .map(Number)
       .filter(Number.isSafeInteger)
     const amount = requestedTokenIds.length || reward.amount
-    const candidates = this.cardCandidates(attributes)
+    const candidates = this.cardCandidates(attributes, reward.season)
+    const explicitCandidates = new Set(
+      this.cardCandidates(
+        { ...attributes, cardSets: [] },
+        reward.season
+      )
+    )
     const granted: number[] = []
 
     for (let index = 0; index < amount; index++) {
       const requested = requestedTokenIds[index]
       const cardId =
-        requested !== undefined && !owned.has(requested)
+        requested !== undefined &&
+        explicitCandidates.has(requested) &&
+        !owned.has(requested)
           ? requested
           : candidates.find(candidate => !owned.has(candidate))
       if (cardId === undefined) continue
@@ -2778,7 +2870,11 @@ export class PlayerRpcRepository {
             `INSERT OR IGNORE INTO player_card_unlocks
                (user_id, card_id, card_name, prism, unlock_source, unlocked_at,
                 item_type, is_new)
-             VALUES (?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 1)`
+             SELECT ?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 1
+             WHERE EXISTS (
+               SELECT 1 FROM player_skypass_claims
+               WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+             )`
           )
           .bind(
             userId,
@@ -2786,7 +2882,10 @@ export class PlayerRpcRepository {
             CARD_NAMES[cardId] || `Card ${cardId}`,
             cardClassForId(cardId),
             `skypass:${reward.id}`,
-            new Date().toISOString()
+            new Date().toISOString(),
+            userId,
+            reward.id,
+            deliveryKey
           )
       )
       const now = new Date().toISOString()
@@ -2796,9 +2895,22 @@ export class PlayerRpcRepository {
             `INSERT OR IGNORE INTO player_items
                (user_id, item_type, token_id, balance, is_new, unlock_source,
                 created_at, updated_at)
-             VALUES (?, 'SW_BASE_CARDS', ?, 1, 1, ?, ?, ?)`
+             SELECT ?, 'SW_BASE_CARDS', ?, 1, 1, ?, ?, ?
+             WHERE EXISTS (
+               SELECT 1 FROM player_skypass_claims
+               WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+             )`
           )
-          .bind(userId, cardId, `skypass:${reward.id}`, now, now)
+          .bind(
+            userId,
+            cardId,
+            `skypass:${reward.id}`,
+            now,
+            now,
+            userId,
+            reward.id,
+            deliveryKey
+          )
       )
     }
 
@@ -2810,6 +2922,7 @@ export class PlayerRpcRepository {
   private async applyHeroSkypassReward(
     userId: string,
     reward: RawSkypassRewardRow,
+    deliveryKey: string,
     statements: D1PreparedStatement[]
   ): Promise<Array<Record<string, unknown>>> {
     const attributes = parseAttributes(reward.attributes)
@@ -2830,9 +2943,22 @@ export class PlayerRpcRepository {
             `INSERT OR IGNORE INTO player_items
                (user_id, item_type, token_id, balance, is_new, unlock_source,
                 created_at, updated_at)
-             VALUES (?, 'SW_HERO', ?, 1, 1, ?, ?, ?)`
+             SELECT ?, 'SW_HERO', ?, 1, 1, ?, ?, ?
+             WHERE EXISTS (
+               SELECT 1 FROM player_skypass_claims
+               WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+             )`
           )
-          .bind(userId, heroId, `skypass:${reward.id}`, now, now)
+          .bind(
+            userId,
+            heroId,
+            `skypass:${reward.id}`,
+            now,
+            now,
+            userId,
+            reward.id,
+            deliveryKey
+          )
       )
 
       const starterDeck = STARTER_DECK_BY_HERO_ID.get(heroId)
@@ -2843,9 +2969,20 @@ export class PlayerRpcRepository {
               `UPDATE player_decks
                SET deck_type = 'UNLOCKED_STARTER', is_new = 1, updated_at = ?
                WHERE user_id = ? AND deck_class = ?
-                 AND deck_type = 'LOCKED_STARTER'`
+                 AND deck_type = 'LOCKED_STARTER'
+                 AND EXISTS (
+                   SELECT 1 FROM player_skypass_claims
+                   WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+                 )`
             )
-            .bind(now, userId, starterDeck.deckClass)
+            .bind(
+              now,
+              userId,
+              starterDeck.deckClass,
+              userId,
+              reward.id,
+              deliveryKey
+            )
         )
 
         for (const cardId of starterDeck.cardIds) {
@@ -2855,7 +2992,11 @@ export class PlayerRpcRepository {
                 `INSERT OR IGNORE INTO player_card_unlocks
                    (user_id, card_id, card_name, prism, unlock_source,
                     unlocked_at, item_type, is_new)
-                 VALUES (?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 0)`
+                 SELECT ?, ?, ?, ?, ?, ?, 'SW_BASE_CARDS', 0
+                 WHERE EXISTS (
+                   SELECT 1 FROM player_skypass_claims
+                   WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+                 )`
               )
               .bind(
                 userId,
@@ -2863,7 +3004,10 @@ export class PlayerRpcRepository {
                 CARD_NAMES[cardId] || `Card ${cardId}`,
                 starterDeck.key,
                 `starter-deck:${starterDeck.deckClass}`,
-                now
+                now,
+                userId,
+                reward.id,
+                deliveryKey
               )
           )
           statements.push(
@@ -2872,14 +3016,21 @@ export class PlayerRpcRepository {
                 `INSERT OR IGNORE INTO player_items
                    (user_id, item_type, token_id, balance, is_new, unlock_source,
                     created_at, updated_at)
-                 VALUES (?, 'SW_BASE_CARDS', ?, 1, 0, ?, ?, ?)`
+                 SELECT ?, 'SW_BASE_CARDS', ?, 1, 0, ?, ?, ?
+                 WHERE EXISTS (
+                   SELECT 1 FROM player_skypass_claims
+                   WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+                 )`
               )
               .bind(
                 userId,
                 cardId,
                 `starter-deck:${starterDeck.deckClass}`,
                 now,
-                now
+                now,
+                userId,
+                reward.id,
+                deliveryKey
               )
           )
         }
@@ -2902,6 +3053,207 @@ export class PlayerRpcRepository {
     }
 
     return [...deckRewards, ...heroRewards]
+  }
+
+  private applyConquestTicketSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Array<Record<string, unknown>> {
+    this.gainSkypassItem(
+      userId,
+      reward,
+      deliveryKey,
+      'SW_CONQUEST_TICKET' as ItemType,
+      2,
+      Math.max(1, reward.amount),
+      now,
+      statements
+    )
+    return [{ accountID: 0, type: 'CONQUEST_TICKET' }]
+  }
+
+  private async applyStickerSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Promise<Array<Record<string, unknown>>> {
+    const requested = [
+      ...new Set(
+        parseAttributes(reward.attributes).tokenIDs
+          .map(Number)
+          .filter(Number.isSafeInteger)
+      )
+    ]
+    if (!requested.length) throw new Error('no tokens provided')
+    const placeholders = requested.map(() => '?').join(',')
+    const result = await this.database
+      .prepare(
+        `SELECT DISTINCT token_id FROM content_stickers
+         WHERE token_id IN (${placeholders})`
+      )
+      .bind(...requested)
+      .all<{ token_id: number }>()
+    const available = new Set(result.results.map(row => row.token_id))
+    const stickerIds = requested.filter(tokenId => available.has(tokenId))
+    if (!stickerIds.length) throw new Error('no stickers provided')
+    for (const tokenId of stickerIds) {
+      this.gainSkypassItem(
+        userId,
+        reward,
+        deliveryKey,
+        'SW_STICKERS' as ItemType,
+        tokenId,
+        1,
+        now,
+        statements
+      )
+    }
+    return [{ accountID: 0, type: 'STICKER' }]
+  }
+
+  private applyStickerPointsSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Array<Record<string, unknown>> {
+    if (reward.amount === 0) throw new Error('no amount provided')
+    this.gainSkypassItem(
+      userId,
+      reward,
+      deliveryKey,
+      'SW_STICKER_POINTS' as ItemType,
+      0,
+      reward.amount,
+      now,
+      statements
+    )
+    return [
+      { accountID: 0, type: 'STICKER_POINTS', stickerPoints: reward.amount }
+    ]
+  }
+
+  private applySilverCardSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Array<Record<string, unknown>> {
+    const attributes = parseAttributes(reward.attributes)
+    const requested = attributes.tokenIDs
+      .map(Number)
+      .filter(Number.isSafeInteger)
+    const libraryIds = new Set(allLibraryCards().map(card => card.id))
+    const amount = requested.length || reward.amount
+    const candidates = this.cardCandidates(attributes, reward.season)
+    const cardIds: number[] = []
+    for (let index = 0; index < amount; index++) {
+      const requestedId = requested[index]
+      const cardId =
+        requestedId !== undefined
+          ? libraryIds.has(requestedId)
+            ? requestedId
+            : undefined
+          : candidates.length
+            ? candidates[
+                stableRewardIndex(
+                  `${userId}:${reward.id}:${index}`,
+                  candidates.length
+                )
+              ]
+            : undefined
+      if (cardId === undefined) continue
+      cardIds.push(cardId)
+      this.gainSkypassItem(
+        userId,
+        reward,
+        deliveryKey,
+        'SW_SILVER_CARDS' as ItemType,
+        cardId,
+        1,
+        now,
+        statements
+      )
+    }
+    if (!cardIds.length) throw new Error('no cards provided')
+    return cardIds.map(cardId =>
+      rewardCard(cardId, 'SW_SILVER_CARDS' as ItemType)
+    )
+  }
+
+  private applyCardBackSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Array<Record<string, unknown>> {
+    const cardBackIds = parseAttributes(reward.attributes).tokenIDs
+      .map(Number)
+      .filter(Number.isSafeInteger)
+    if (!cardBackIds.length) throw new Error('no card backs provided')
+    for (const tokenId of cardBackIds) {
+      this.gainSkypassItem(
+        userId,
+        reward,
+        deliveryKey,
+        'SW_CARD_BACKS' as ItemType,
+        tokenId,
+        1,
+        now,
+        statements
+      )
+    }
+    return [{ accountID: 0, type: 'CARD_BACK' }]
+  }
+
+  private async applyTitleSkypassReward(
+    userId: string,
+    reward: RawSkypassRewardRow,
+    deliveryKey: string,
+    statements: D1PreparedStatement[],
+    now: string
+  ): Promise<Array<Record<string, unknown>>> {
+    const titleIds = [
+      ...new Set(
+        parseAttributes(reward.attributes).tokenIDs
+          .map(Number)
+          .filter(Number.isSafeInteger)
+      )
+    ]
+    if (!titleIds.length) throw new Error('no tokens provided')
+    const placeholders = titleIds.map(() => '?').join(',')
+    const existing = await this.database
+      .prepare(
+        `SELECT token_id FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_TITLES'
+           AND token_id IN (${placeholders})`
+      )
+      .bind(userId, ...titleIds)
+      .all<{ token_id: number }>()
+    const owned = new Set(existing.results.map(row => row.token_id))
+    const granted = titleIds.filter(tokenId => !owned.has(tokenId))
+    for (const tokenId of granted) {
+      this.gainSkypassItem(
+        userId,
+        reward,
+        deliveryKey,
+        'SW_TITLES' as ItemType,
+        tokenId,
+        1,
+        now,
+        statements,
+        false
+      )
+    }
+    return granted.length ? [{ accountID: 0, type: 'TITLE' }] : []
   }
 
   async claimSkypassRewards(
@@ -2960,11 +3312,71 @@ export class PlayerRpcRepository {
       }
 
       const itemType = ITEM_TYPE_BY_ID[rawReward.item_type]
+      const deliveryKey = crypto.randomUUID()
+      const rewardStatements: D1PreparedStatement[] = []
       const applied =
         itemType === ('SW_BASE_CARDS' as ItemType)
-          ? await this.applyBaseCardSkypassReward(userId, rawReward, statements)
+          ? await this.applyBaseCardSkypassReward(
+              userId,
+              rawReward,
+              deliveryKey,
+              rewardStatements
+            )
           : itemType === ('SW_HERO' as ItemType)
-            ? await this.applyHeroSkypassReward(userId, rawReward, statements)
+            ? await this.applyHeroSkypassReward(
+                userId,
+                rawReward,
+                deliveryKey,
+                rewardStatements
+              )
+            : itemType === ('SW_CONQUEST_TICKET' as ItemType)
+              ? this.applyConquestTicketSkypassReward(
+                  userId,
+                  rawReward,
+                  deliveryKey,
+                  rewardStatements,
+                  now
+                )
+              : itemType === ('SW_STICKERS' as ItemType)
+                ? await this.applyStickerSkypassReward(
+                    userId,
+                    rawReward,
+                    deliveryKey,
+                    rewardStatements,
+                    now
+                  )
+                : itemType === ('SW_STICKER_POINTS' as ItemType)
+                  ? this.applyStickerPointsSkypassReward(
+                      userId,
+                      rawReward,
+                      deliveryKey,
+                      rewardStatements,
+                      now
+                    )
+                  : itemType === ('SW_SILVER_CARDS' as ItemType)
+                    ? this.applySilverCardSkypassReward(
+                        userId,
+                        rawReward,
+                        deliveryKey,
+                        rewardStatements,
+                        now
+                      )
+                    : itemType === ('SW_CARD_BACKS' as ItemType)
+                      ? this.applyCardBackSkypassReward(
+                          userId,
+                          rawReward,
+                          deliveryKey,
+                          rewardStatements,
+                          now
+                        )
+                      : itemType === ('SW_TITLES' as ItemType)
+                        ? await this.applyTitleSkypassReward(
+                            userId,
+                            rawReward,
+                            deliveryKey,
+                            rewardStatements,
+                            now
+                          )
             : (() => {
                 throw new Error(
                   `unsupported item type ${itemType || 'UNKNOWN'}`
@@ -2974,12 +3386,13 @@ export class PlayerRpcRepository {
       statements.push(
         this.database
           .prepare(
-            `INSERT INTO player_skypass_claims
-               (user_id, reward_id, rewards, claimed_at)
-             VALUES (?, ?, ?, ?)`
+            `INSERT OR IGNORE INTO player_skypass_claims
+               (user_id, reward_id, rewards, claimed_at, delivery_key)
+             VALUES (?, ?, ?, ?, ?)`
           )
-          .bind(userId, id, JSON.stringify(applied), now)
+          .bind(userId, id, JSON.stringify(applied), now, deliveryKey)
       )
+      statements.push(...rewardStatements)
     }
 
     if (statements.length) await this.database.batch(statements)
