@@ -41,32 +41,37 @@ const normalizeCards = (
   mode: GameMode
 ) => {
   const values = value === undefined ? [] : value
-  if (!Array.isArray(values)) {
+  if (
+    !Array.isArray(values) ||
+    values.length > 5_000 ||
+    values.some(card => typeof card !== 'string' || !/^\+?\d+$/.test(card))
+  ) {
     throw new DispatchProtocolError('invalid private seed cards')
   }
   if (discoveryModes.has(mode) && values.length !== 0) {
     throw new DispatchProtocolError('DECK_IS_NOT_RANDOM')
   }
-  if (values.length > 30) {
+  // The Go player factory hydrates the account, then calls
+  // RemoveUnownedCardsFromDeck before DeckValidator. Preserve that ordering:
+  // unknown and unowned claims disappear instead of entering the game seed.
+  const cards = values
+    .map(card => Number(card))
+    .filter(
+      numeric =>
+        Number.isSafeInteger(numeric) &&
+        CardLibrary.has(String(numeric) as BaseCard) &&
+        unlocked.has(numeric)
+    )
+    .map(numeric => String(numeric) as BaseCard)
+  if (cards.length > 30) {
     throw new DispatchProtocolError('invalid deck: more than 30 cards')
   }
-  const cards = values.map(card => String(card) as BaseCard)
   if (new Set(cards).size !== cards.length) {
     throw new DispatchProtocolError('invalid deck: duplicate cards')
   }
   const cardPrisms = new Set<string>()
   for (const card of cards) {
-    const numeric = Number(card)
-    const metadata = CardLibrary.get(card)
-    if (
-      !/^\d+$/.test(card) ||
-      !metadata ||
-      !Number.isSafeInteger(numeric) ||
-      !unlocked.has(numeric)
-    ) {
-      throw new DispatchProtocolError(`card ${card} is not unlocked`)
-    }
-    cardPrisms.add(metadata.prism)
+    cardPrisms.add(CardLibrary.get(card)!.prism)
   }
   if (cardPrisms.size > 2) {
     throw new DispatchProtocolError('invalid deck: more than two prisms')
@@ -100,7 +105,6 @@ const humanParticipant = async (
   const signature = validByteArray(seed.signature, 65)
     ? seed.signature
     : Array(65).fill(0)
-  const cardSet = new Set(cards)
   const heroAbility =
     DECKCLASS_ABILITIES[prismsToDeckClass(prisms as PrivateSeed['prisms'])]
   const privateSeed: PrivateSeed = {
@@ -116,7 +120,6 @@ const humanParticipant = async (
     // the JSON service hop into the game Durable Object.
     cardRarities: Object.fromEntries(
       [...profile.unlockedCards]
-        .filter(([card]) => cardSet.has(String(card) as BaseCard))
         .map(([card, rarity]) => [String(card), rarity])
     ) as never
   }

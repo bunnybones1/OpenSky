@@ -422,9 +422,17 @@ describe('Cloud Weasel accepted-match service', () => {
     )
       .bind(now, USER_ID)
       .run()
-    const denied = await create(dispatch([6]))
-    expect(denied.status).toBe(400)
-    expect(await denied.json()).toEqual({ error: 'card 6 is not unlocked' })
+    const accepted = await create(dispatch([6]))
+    expect(accepted.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ match_payload_json: string }>()
+    expect(
+      JSON.parse(row!.match_payload_json).match.player1.privateSeed.cards
+    ).toEqual([])
   })
 
   it('disables unfinished conquest queues and rejects forged identity bindings', async () => {
@@ -687,6 +695,15 @@ describe('Cloud Weasel accepted-match service', () => {
       error: 'invalid deck: duplicate cards'
     })
 
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_BASE_CARDS', 30, 1, 0, 'test', ?, ?)`
+    )
+      .bind(USER_ID, now, now)
+      .run()
     const oversized = dispatch([...STARTER_CARD_IDS, 30])
     oversized.proposalId = 'proposal-oversized-deck'
     const response = await create(oversized)
@@ -790,12 +807,20 @@ describe('Cloud Weasel accepted-match service', () => {
     ).toBe(0)
   })
 
-  it('overrides forged player bytes and rejects cards outside the account collection', async () => {
-    const response = await create(dispatch([30]))
-    expect(response.status).toBe(400)
-    expect(await response.json()).toMatchObject({
-      error: 'card 30 is not unlocked'
-    })
+  it('overrides forged player bytes and removes cards outside the account collection', async () => {
+    const accepted = dispatch([6, 30])
+    accepted.participants[0].request!.privateSeed.cards = ['+6', '030']
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(PROPOSAL_ID)
+      .first<{ match_payload_json: string }>()
+    const player = JSON.parse(row!.match_payload_json).match.player1
+    expect(player.privateSeed.player).toEqual(hexToBytes(PRINCIPAL))
+    expect(player.privateSeed.cards).toEqual(['6'])
   })
 
   it('supersedes an older active match without allowing it to reactivate', async () => {

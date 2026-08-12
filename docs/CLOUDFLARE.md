@@ -228,9 +228,10 @@ and progress are not migrated.
   Matchmaker admission now preserves the source discovery/challenge seed
   contract and exact `DECK_IS_NOT_RANDOM` / `SESSION_IS_EMPTY` errors before a
   queue ticket is written. Final dispatch repeats the discovery and constructed
-  deck checks against authoritative inventory, validates the accepted request's
-  session against its queued player, and carries the challenge code into the
-  game payload's `matchmakingCode`.
+  deck checks against authoritative inventory, removes unknown/unowned claims
+  in the source player-factory order, validates the accepted request's session
+  against its queued player, and carries the challenge code into the game
+  payload's `matchmakingCode`.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires an active
