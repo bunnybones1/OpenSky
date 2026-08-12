@@ -44,7 +44,10 @@ const parseValue = (sql, start) => {
     const end = sql.slice(cursor).search(/[,)]/)
     if (end < 0) throw new Error(`unterminated value at byte ${cursor}`)
     const raw = sql.slice(cursor, cursor + end).trim()
-    return { value: raw.toLowerCase() === 'null' ? null : raw, cursor: cursor + end }
+    return {
+      value: raw.toLowerCase() === 'null' ? null : raw,
+      cursor: cursor + end
+    }
   }
 
   cursor += 1
@@ -80,8 +83,7 @@ export const parseCardRows = sql => {
       cursor += 1
       continue
     }
-    if (sql[cursor] !== '(')
-      throw new Error(`expected row at byte ${cursor}`)
+    if (sql[cursor] !== '(') throw new Error(`expected row at byte ${cursor}`)
     cursor += 1
 
     const row = []
@@ -132,6 +134,7 @@ const cardFromRow = row => {
     keywords: keywords(row[12]),
     status: 'PLAY',
     set: requiredEnum(cardSets, row[16], 'set', id),
+    validFromSeason: Number(row[17]),
     imageURL: {
       small: `https://assets.skyweaver.net/latest/full-cards/en/2x/${id}.webp`,
       medium: `https://assets.skyweaver.net/latest/full-cards/en/4x/${id}.webp`,
@@ -172,7 +175,9 @@ export const generatedCardLibrary = async () => {
   const cards = cardsFromRows(rows)
   const searchTokens = searchTokensFromRows(rows)
   if (cards.length < 500)
-    throw new Error(`refusing to generate an incomplete library of ${cards.length} cards`)
+    throw new Error(
+      `refusing to generate an incomplete library of ${cards.length} cards`
+    )
   return `${JSON.stringify(
     {
       source: relative(root, sourcePath),
@@ -203,10 +208,15 @@ const main = async () => {
   await mkdir(dirname(outputPath), { recursive: true })
   await writeFile(outputPath, generated)
   const payload = JSON.parse(generated)
-  console.log(`Generated ${payload.cards.length} cards at ${relative(root, outputPath)}`)
+  console.log(
+    `Generated ${payload.cards.length} cards at ${relative(root, outputPath)}`
+  )
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   main().catch(error => {
     console.error(error instanceof Error ? error.message : error)
     process.exitCode = 1

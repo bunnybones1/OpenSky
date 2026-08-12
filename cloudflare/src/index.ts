@@ -3,6 +3,7 @@ import { AccountDeletionRepository } from './account-deletion'
 import { deliverDueConquestGold } from './conquest-delivery'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
+import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
 import { handleReplayRequest } from './replays'
@@ -30,6 +31,7 @@ export default {
     ctx.waitUntil(
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
+        runDueLeaderboardRewards(env.AUTH_DB),
         new AccountDeletionRepository(env.AUTH_DB).finalizeDue()
       ]).then(() => undefined)
     )

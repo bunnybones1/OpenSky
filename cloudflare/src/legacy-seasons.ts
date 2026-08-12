@@ -11,6 +11,15 @@ export const seasonStart = (season: number): Date => {
   return new Date(FIRST_SEASON_START_MS + (season - 1) * SEASON_MS)
 }
 
+export const seasonWeekFromDate = (
+  date = new Date()
+): { season: number; week: number } => {
+  const season = seasonFromDate(date)
+  const week =
+    Math.floor((date.getTime() - seasonStart(season).getTime()) / WEEK_MS) + 1
+  return { season, week }
+}
+
 export const currentSeasonStart = (date = new Date()): Date =>
   new Date(seasonStart(seasonFromDate(date)).getTime() + 1000)
 

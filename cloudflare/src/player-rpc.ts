@@ -361,6 +361,14 @@ interface ConquestFeedRow {
   created_at: string
 }
 
+interface LeaderboardFeedRow {
+  id: number
+  game_mode: FeedEvent['gameMode']
+  leaderboard_rank: number
+  token_ids_json: string
+  created_at: string
+}
+
 const FEED_PAGE_SIZE = 50
 const MAX_FEED_PAGE_SIZE = 100
 
@@ -560,33 +568,42 @@ export class PlayerRpcRepository {
       .first()
     if (!account) throw notFound('account was not found')
 
-    const [rankRows, skypassRows, conquestRows] = await Promise.all([
-      this.database
-        .prepare(
-          `SELECT rowid AS row_id, game_mode, season, player_rank,
+    const [rankRows, skypassRows, conquestRows, leaderboardRows] =
+      await Promise.all([
+        this.database
+          .prepare(
+            `SELECT rowid AS row_id, game_mode, season, player_rank,
                   player_rank_stage, awarded_at
            FROM player_rank_up_rewards
            WHERE user_id = ?`
-        )
-        .bind(userId)
-        .all<RankFeedRow>(),
-      this.database
-        .prepare(
-          `SELECT rowid AS row_id, rewards, claimed_at
+          )
+          .bind(userId)
+          .all<RankFeedRow>(),
+        this.database
+          .prepare(
+            `SELECT rowid AS row_id, rewards, claimed_at
            FROM player_skypass_claims
            WHERE user_id = ?`
-        )
-        .bind(userId)
-        .all<SkypassFeedRow>(),
-      this.database
-        .prepare(
-          `SELECT id AS row_id, event_type, token_ids_json, created_at
+          )
+          .bind(userId)
+          .all<SkypassFeedRow>(),
+        this.database
+          .prepare(
+            `SELECT id AS row_id, event_type, token_ids_json, created_at
            FROM player_conquest_feed_events
            WHERE user_id = ?`
-        )
-        .bind(userId)
-        .all<ConquestFeedRow>()
-    ])
+          )
+          .bind(userId)
+          .all<ConquestFeedRow>(),
+        this.database
+          .prepare(
+            `SELECT id, game_mode, leaderboard_rank, token_ids_json, created_at
+           FROM player_leaderboard_reward_feed_events
+           WHERE user_id = ?`
+          )
+          .bind(userId)
+          .all<LeaderboardFeedRow>()
+      ])
 
     // The generated client type marks `match` as required, but the source Go
     // pointer is absent for every non-MATCH event returned by this endpoint.
@@ -632,6 +649,18 @@ export class PlayerRpcRepository {
         id: 4_503_599_627_370_496 + row.row_id,
         type: row.event_type,
         createdAt: row.created_at,
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
+        cards: [],
+        heroes: []
+      } as unknown as FeedEvent)
+    }
+    for (const row of leaderboardRows.results) {
+      events.push({
+        id: 3_377_699_720_527_872 + row.id,
+        type: 'LEADERBOARD_REWARD',
+        createdAt: row.created_at,
+        gameMode: row.game_mode,
+        leaderboardRank: row.leaderboard_rank,
         tokenIds: parseJsonArray(row.token_ids_json).map(Number),
         cards: [],
         heroes: []

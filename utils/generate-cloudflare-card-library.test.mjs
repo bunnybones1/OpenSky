@@ -20,8 +20,24 @@ test('parses SQL apostrophes, commas, newlines, and nulls without changing sourc
 
 test('maps only source PLAY cards in active source classes', () => {
   const active = [
-    '1', 'One', '', '', 'one', '0', '1', '0', '2', '3', '4', null,
-    '{GUARD}', '0', '$', '[]', '1', '0'
+    '1',
+    'One',
+    '',
+    '',
+    'one',
+    '0',
+    '1',
+    '0',
+    '2',
+    '3',
+    '4',
+    null,
+    '{GUARD}',
+    '0',
+    '$',
+    '[]',
+    '1',
+    '0'
   ]
   const blocked = [...active]
   blocked[0] = '2'
@@ -31,15 +47,22 @@ test('maps only source PLAY cards in active source classes', () => {
   token[5] = '5'
 
   const cards = cardsFromRows([active, blocked, token])
-  assert.deepEqual(cards.map(card => card.id), [1])
+  assert.deepEqual(
+    cards.map(card => card.id),
+    [1]
+  )
   assert.equal(cards[0].class, 'STR')
   assert.equal(cards[0].element, 'FIRE')
   assert.equal(cards[0].type, 'UNIT')
+  assert.equal(cards[0].validFromSeason, 0)
   assert.deepEqual(cards[0].keywords, ['GUARD'])
   assert.equal(cards[0].silverCardTokenId, 65_537)
   assert.equal(cards[0].goldCardTokenId, 131_073)
 
   const tokens = searchTokensFromRows([active, blocked, token])
-  assert.deepEqual(tokens.map(card => card.id), [3])
+  assert.deepEqual(
+    tokens.map(card => card.id),
+    [3]
+  )
   assert.equal(tokens[0].class, 'TOK')
 })
