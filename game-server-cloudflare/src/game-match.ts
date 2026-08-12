@@ -1660,7 +1660,15 @@ export class GameMatch implements DurableObject {
     if (
       this.state
         .getWebSockets(attachment.principal)
-        .some(other => other.readyState === WebSocket.OPEN)
+        .some(other => {
+          if (other.readyState !== WebSocket.OPEN) return false
+          const otherAttachment =
+            other.deserializeAttachment() as SocketAttachment | null
+          return (
+            otherAttachment?.joined === true &&
+            (otherAttachment.role ?? 'player') === 'player'
+          )
+        })
     ) {
       return
     }

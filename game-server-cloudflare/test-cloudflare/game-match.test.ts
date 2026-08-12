@@ -1270,6 +1270,41 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
   })
 
+  it('does not let an unjoined replacement suppress player abandonment', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const second = await connect(PRINCIPAL_2)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const pendingReplacement = await connect(PRINCIPAL_1)
+    const disconnected = nextMessage(second)
+    first.close(1000, 'real player disconnected')
+    expect(await disconnected).toEqual({ type: 'opponent_disconnected' })
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    const status = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    const body = await status.json<{
+      players: Record<
+        string,
+        { connected: boolean; joined: boolean; abandonAtMs?: number }
+      >
+    }>()
+    expect(body.players[PRINCIPAL_1]).toMatchObject({
+      connected: false,
+      joined: true,
+      abandonAtMs: expect.any(Number)
+    })
+
+    pendingReplacement.close(1000, 'test complete')
+  })
+
   it('preserves a player-owned commit-reveal deadline on disconnect', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
