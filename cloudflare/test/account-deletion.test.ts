@@ -197,6 +197,53 @@ describe('identity-native account deletion', () => {
     ).toEqual({ count: 0 })
   })
 
+  it('does not let an account sanction race the Google confirmation', async () => {
+    const start = await begin()
+    const authorizationUrl = new URL(
+      (await start.json<{ authorizationUrl: string }>()).authorizationUrl
+    )
+    const now = new Date('2026-08-12T00:00:00.000Z').toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings
+         SET account_status = 'BANNED' WHERE user_id = ?`
+      ).bind(userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_actions
+           (action_key, account_user_id, account_address, action_type,
+            created_by_user_id, created_by_account_id, expires_at, created_at,
+            updated_at)
+         VALUES (?, ?, ?, 'MOD_BAN', 'moderator', 1, ?, ?, ?)`
+      ).bind(
+        `deletion-race-${testSequence}`,
+        userId,
+        `identity:${userId}`,
+        '2026-08-13T00:00:00.000Z',
+        now,
+        now
+      )
+    ])
+    const callback = await request(
+      `/api/auth/google/callback?state=${encodeURIComponent(
+        authorizationUrl.searchParams.get('state')!
+      )}&code=fresh-google-code`,
+      undefined,
+      `${await sessionCookie()}; ${cookieJar(start)}`
+    )
+    expect(callback.status).toBe(302)
+    expect(callback.headers.get('Location')).toBe(
+      'https://opensky.example/account/settings?deletion_error=failed'
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM account_deletion_requests
+         WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ count: 0 })
+  })
+
   it('schedules once, clears the session, and blocks every stale-session boundary', async () => {
     const start = await begin()
     const authorizationUrl = new URL(

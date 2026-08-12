@@ -165,6 +165,14 @@ const beginAccountDeletion = async (
       401
     )
   }
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
+  } catch (error) {
+    if (error instanceof RpcError) {
+      return json({ code: error.code, message: error.message }, error.status)
+    }
+    throw error
+  }
   let body: { accountName?: unknown; returnTo?: unknown }
   try {
     body = (await request.json()) as typeof body
@@ -416,6 +424,9 @@ const finishGoogleLogin = async (
       if (!userId || !linkedSubject || linkedSubject !== profile.subject) {
         return accountDeletionRedirect(request, returnTo, 'failed')
       }
+      await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(
+        userId
+      )
       await new AccountDeletionRepository(env.AUTH_DB).request(userId)
       return accountDeletionRedirect(request, returnTo, 'scheduled')
     }
