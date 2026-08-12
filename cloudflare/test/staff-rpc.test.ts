@@ -727,14 +727,14 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(JSON.parse(auditRows.results[1].after_json)).toMatchObject({
       assignments: [{ id: assignments.results[0].id, rerolls: 0 }]
     })
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `UPDATE staff_quest_support_audit SET actor_user_id = ? WHERE id = ?`
       )
         .bind(PLAYER, auditRows.results[0].id)
         .run()
     ).rejects.toThrow(/immutable/i)
-    expect(
+    await expect(
       env.AUTH_DB.prepare(`DELETE FROM staff_quest_support_audit WHERE id = ?`)
         .bind(auditRows.results[0].id)
         .run()
@@ -897,14 +897,14 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(PLAYER)
         .first()
     ).toEqual({ count: 1 })
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `UPDATE staff_progression_audit SET actor_user_id = ? WHERE target_user_id = ?`
       )
         .bind(PLAYER, PLAYER)
         .run()
     ).rejects.toThrow(/immutable/i)
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `DELETE FROM staff_progression_audit WHERE target_user_id = ?`
       )
@@ -2062,7 +2062,7 @@ describe('fail-closed Google identity staff authorization', () => {
       hasPremium: true,
       balance: 1
     })
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `INSERT INTO staff_skypass_entitlement_audit
            (operation, target_user_id, actor_user_id, season, before_json,
@@ -2079,14 +2079,14 @@ describe('fail-closed Google identity staff authorization', () => {
         )
         .run()
     ).rejects.toThrow(/state changed/i)
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `UPDATE staff_skypass_entitlement_audit SET actor_user_id = ? WHERE id = ?`
       )
         .bind(PLAYER, audits.results[0].id)
         .run()
     ).rejects.toThrow(/immutable/i)
-    expect(
+    await expect(
       env.AUTH_DB.prepare(
         `DELETE FROM staff_skypass_entitlement_audit WHERE id = ?`
       )

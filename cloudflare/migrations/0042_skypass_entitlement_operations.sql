@@ -41,41 +41,56 @@ CREATE INDEX staff_skypass_entitlement_audit_actor_idx
 
 -- Enforce the source production giveaway limit in D1, not only in Worker code,
 -- so concurrent operators cannot race the cap.
-CREATE TRIGGER staff_skypass_entitlement_audit_giveaway_limit
+CREATE TRIGGER staff_skypass_entitlement_audit_giveaway_limit_missing
 BEFORE INSERT ON staff_skypass_entitlement_audit
 WHEN json_extract(NEW.before_json, '$.hasPremium') = 0
  AND json_extract(NEW.after_json, '$.hasPremium') = 1
+ AND NOT EXISTS (
+   SELECT 1 FROM skypass_giveaway_limits WHERE season = NEW.season
+ )
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
-    SELECT 1 FROM skypass_giveaway_limits WHERE season = NEW.season
-  ) THEN RAISE(ABORT, 'skypass giveaway limit is not configured') END;
-
-  SELECT CASE WHEN (
-    SELECT COUNT(*) FROM staff_skypass_entitlement_audit audit
-    WHERE audit.season = NEW.season
-      AND json_extract(audit.before_json, '$.hasPremium') = 0
-      AND json_extract(audit.after_json, '$.hasPremium') = 1
-  ) >= (
-    SELECT giveaway_limit FROM skypass_giveaway_limits
-    WHERE season = NEW.season
-  ) THEN RAISE(ABORT, 'skypass giveaway limit reached') END;
+  SELECT RAISE(ABORT, 'skypass giveaway limit is not configured');
 END;
 
-CREATE TRIGGER staff_skypass_entitlement_audit_state_guard
+CREATE TRIGGER staff_skypass_entitlement_audit_giveaway_limit_reached
 BEFORE INSERT ON staff_skypass_entitlement_audit
+WHEN json_extract(NEW.before_json, '$.hasPremium') = 0
+ AND json_extract(NEW.after_json, '$.hasPremium') = 1
+ AND EXISTS (
+   SELECT 1 FROM skypass_giveaway_limits WHERE season = NEW.season
+ )
+ AND (
+   SELECT COUNT(*) FROM staff_skypass_entitlement_audit audit
+   WHERE audit.season = NEW.season
+     AND json_extract(audit.before_json, '$.hasPremium') = 0
+     AND json_extract(audit.after_json, '$.hasPremium') = 1
+ ) >= (
+   SELECT giveaway_limit FROM skypass_giveaway_limits
+   WHERE season = NEW.season
+ )
 BEGIN
-  SELECT CASE WHEN COALESCE((
-    SELECT has_premium FROM player_skypass_season_stats
-    WHERE user_id = NEW.target_user_id AND season = NEW.season
-  ), 0) != json_extract(NEW.before_json, '$.hasPremium')
-  THEN RAISE(ABORT, 'skypass entitlement state changed') END;
+  SELECT RAISE(ABORT, 'skypass giveaway limit reached');
+END;
 
-  SELECT CASE WHEN COALESCE((
-    SELECT balance FROM player_items
-    WHERE user_id = NEW.target_user_id AND item_type = 'SW_SKYPASS'
-      AND token_id = NEW.season
-  ), 0) != json_extract(NEW.before_json, '$.balance')
-  THEN RAISE(ABORT, 'skypass entitlement balance changed') END;
+CREATE TRIGGER staff_skypass_entitlement_audit_stats_state_guard
+BEFORE INSERT ON staff_skypass_entitlement_audit
+WHEN COALESCE((
+  SELECT has_premium FROM player_skypass_season_stats
+  WHERE user_id = NEW.target_user_id AND season = NEW.season
+), 0) != json_extract(NEW.before_json, '$.hasPremium')
+BEGIN
+  SELECT RAISE(ABORT, 'skypass entitlement state changed');
+END;
+
+CREATE TRIGGER staff_skypass_entitlement_audit_balance_state_guard
+BEFORE INSERT ON staff_skypass_entitlement_audit
+WHEN COALESCE((
+  SELECT balance FROM player_items
+  WHERE user_id = NEW.target_user_id AND item_type = 'SW_SKYPASS'
+    AND token_id = NEW.season
+), 0) != json_extract(NEW.before_json, '$.balance')
+BEGIN
+  SELECT RAISE(ABORT, 'skypass entitlement state changed');
 END;
 
 CREATE TRIGGER staff_skypass_entitlement_audit_no_update
