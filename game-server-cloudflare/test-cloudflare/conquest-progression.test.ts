@@ -328,7 +328,6 @@ describe('source Conquest authoritative match progression', () => {
   })
 
   it.each([
-    ['invalid JSON', '{'],
     ['an array', '[]'],
     ['a nonnumeric match ID', '{"not-a-match":"WIN"}'],
     ['an out-of-range match ID', '{"18446744073709551616":"WIN"}'],
@@ -364,6 +363,21 @@ describe('source Conquest authoritative match progression', () => {
       ).toEqual({ count: 0 })
     }
   )
+
+  it('rejects invalid JSON at the D1 source boundary', async () => {
+    const proposalId = 'conquest-progress-invalid-json'
+    await setup(proposalId)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquests SET match_progress = '[' WHERE user_id = ?`
+      )
+        .bind(USER_2)
+        .run()
+    ).rejects.toThrow('Conquest match progress must be valid JSON')
+    expect(JSON.parse((await conquests()).results[1].match_progress)).toEqual(
+      {}
+    )
+  })
 
   it('matches source uint64-key and unknown-enum normalization', async () => {
     const proposalId = 'conquest-progress-source-normalization'

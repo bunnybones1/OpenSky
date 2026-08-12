@@ -295,6 +295,18 @@ describe('source conquest RPC foundation', () => {
 
   it('matches source typed-map decoding and fails malformed rows closed', async () => {
     const now = new Date().toISOString()
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_conquests
+           (entry_key, user_id, status, nonce, mode, hero, deck_class,
+            match_progress, created_at)
+         VALUES ('invalid-json', ?, 'IN_PROGRESS', 1,
+                 'CONQUEST_CONSTRUCTED', 'ADA', 'STR', '[', ?)`
+      )
+        .bind(userId, now)
+        .run()
+    ).rejects.toThrow('Conquest match progress must be valid JSON')
+
     await env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
@@ -316,10 +328,17 @@ describe('source conquest RPC foundation', () => {
     })
 
     await env.AUTH_DB.prepare(
-      `UPDATE player_conquests SET match_progress = '['
+      `UPDATE player_conquests SET match_progress = '[]'
        WHERE entry_key = 'typed-map'`
     ).run()
     expect((await rpc('ConquestStatus', {})).status).toBe(500)
     expect((await rpc('ConquestStats', {})).status).toBe(500)
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquests SET match_progress = '['
+         WHERE entry_key = 'typed-map'`
+      ).run()
+    ).rejects.toThrow('Conquest match progress must be valid JSON')
   })
 })

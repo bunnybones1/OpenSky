@@ -451,7 +451,7 @@ describe('source Conquest reward settlement', () => {
   it('fails closed for malformed persisted match progress', async () => {
     const conquest = await setup(1)
     await env.AUTH_DB.prepare(
-      `UPDATE player_conquests SET match_progress = '[' WHERE id = ?`
+      `UPDATE player_conquests SET match_progress = '[]' WHERE id = ?`
     )
       .bind(conquest!.id)
       .run()
