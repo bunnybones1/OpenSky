@@ -202,6 +202,12 @@ importers:
 
   cloudflare:
     dependencies:
+      '@ethersproject/address':
+        specifier: ^5.8.0
+        version: 5.8.0
+      '@ethersproject/wallet':
+        specifier: ^5.8.0
+        version: 5.8.0
       '@opensky/proto':
         specifier: workspace:*
         version: link:../lib/proto

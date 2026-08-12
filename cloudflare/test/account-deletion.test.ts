@@ -29,7 +29,9 @@ const exchangeCode = vi.fn<GoogleAuthServices['exchangeCode']>(
 const services: GoogleAuthServices = { exchangeCode }
 
 const setCookies = (response: Response): string[] => {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] }
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[]
+  }
   return headers.getSetCookie?.() || [response.headers.get('Set-Cookie') || '']
 }
 
@@ -40,10 +42,7 @@ const cookieJar = (response: Response): string =>
     .join('; ')
 
 const sessionCookie = async () => {
-  const token = await createIdentitySession(
-    userId,
-    testEnv.SESSION_SIGNING_KEY
-  )
+  const token = await createIdentitySession(userId, testEnv.SESSION_SIGNING_KEY)
   return `${IDENTITY_SESSION_COOKIE}=${token}`
 }
 
@@ -317,8 +316,24 @@ describe('identity-native account deletion', () => {
 
   it('soft-deletes due identities, preserves game state, and prevents recreation', async () => {
     const requestedAt = new Date('2026-07-01T00:00:00.000Z')
-    await new AccountDeletionRepository(env.AUTH_DB).request(userId, requestedAt)
+    await new AccountDeletionRepository(env.AUTH_DB).request(
+      userId,
+      requestedAt
+    )
     await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO wallet_link_challenges
+           (id, user_id, namespace, address, chain_id, nonce, origin, message,
+            status, created_at, expires_at)
+         VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ?, 'eip155',
+                 '0x0000000000000000000000000000000000000abc', 137,
+                 '1234567890abcdef', 'https://opensky.example',
+                 'pending wallet proof', 'PENDING', ?, ?)`
+      ).bind(
+        userId,
+        requestedAt.toISOString(),
+        new Date(requestedAt.getTime() + 10 * 60 * 1_000).toISOString()
+      ),
       env.AUTH_DB.prepare(
         `INSERT INTO wallet_connections
            (user_id, namespace, address, source, verified_at, last_seen_at)
@@ -391,6 +406,13 @@ describe('identity-native account deletion', () => {
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM wallet_connections WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM wallet_link_challenges WHERE user_id = ?`
       )
         .bind(userId)
         .first()

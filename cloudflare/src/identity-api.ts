@@ -20,6 +20,7 @@ import { IdentitiesRepository } from './identities'
 import { AccountActionsRepository } from './account-actions'
 import { AccountDeletionRepository } from './account-deletion'
 import { RpcError } from './errors'
+import { WalletLinkError, WalletLinksRepository } from './wallet-links'
 
 const OAUTH_STATE_COOKIE = 'opensky_google_state'
 const OAUTH_VERIFIER_COOKIE = 'opensky_google_verifier'
@@ -134,6 +135,117 @@ const requestUserId = async (
 const sameOrigin = (request: Request): boolean => {
   const origin = request.headers.get('Origin')
   return origin === new URL(request.url).origin
+}
+
+const walletErrorResponse = (error: unknown): Response | undefined => {
+  if (error instanceof WalletLinkError) {
+    return json({ code: error.code, message: error.message }, error.status)
+  }
+  if (error instanceof RpcError) {
+    return json({ code: error.code, message: error.message }, error.status)
+  }
+  return undefined
+}
+
+const walletRequestBody = async (
+  request: Request
+): Promise<Record<string, unknown>> => {
+  const contentLength = Number(request.headers.get('Content-Length') || '0')
+  if (contentLength > 4096) {
+    throw new WalletLinkError(
+      413,
+      'wallet.request_too_large',
+      'Wallet link request is too large.'
+    )
+  }
+  let text: string
+  try {
+    text = await request.text()
+  } catch {
+    throw new WalletLinkError(
+      400,
+      'wallet.invalid_request',
+      'A JSON body is required.'
+    )
+  }
+  if (text.length > 4096) {
+    throw new WalletLinkError(
+      413,
+      'wallet.request_too_large',
+      'Wallet link request is too large.'
+    )
+  }
+  try {
+    const body = JSON.parse(text) as unknown
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      throw new Error()
+    return body as Record<string, unknown>
+  } catch {
+    throw new WalletLinkError(
+      400,
+      'wallet.invalid_request',
+      'A JSON body is required.'
+    )
+  }
+}
+
+const walletLinkRequest = async (
+  request: Request,
+  env: Env,
+  action: 'challenge' | 'verify' | 'unlink'
+): Promise<Response> => {
+  if (!sameOrigin(request)) {
+    return json(
+      {
+        code: 'wallet.forbidden',
+        message: 'Cross-origin wallet requests are not allowed.'
+      },
+      403
+    )
+  }
+  const userId = await requestUserId(request, env)
+  if (!userId) {
+    return json(
+      { code: 'wallet.unauthenticated', message: 'Sign in is required.' },
+      401
+    )
+  }
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
+    const body = await walletRequestBody(request)
+    const wallets = new WalletLinksRepository(env.AUTH_DB)
+    if (action === 'challenge') {
+      return json({
+        challenge: await wallets.createChallenge(
+          userId,
+          new URL(request.url).origin,
+          { address: body.address, chainId: body.chainId }
+        )
+      })
+    }
+    if (action === 'verify') {
+      return json({
+        wallets: await wallets.verifyChallenge(
+          userId,
+          new URL(request.url).origin,
+          {
+            challengeId: body.challengeId,
+            signature: body.signature,
+            label: body.label
+          }
+        )
+      })
+    }
+    return json(await wallets.unlink(userId, body.address))
+  } catch (error) {
+    const response = walletErrorResponse(error)
+    if (response) return response
+    console.error('Wallet link request failed', error)
+    return json(
+      { code: 'wallet.internal', message: 'Unable to update wallet links.' },
+      500
+    )
+  }
 }
 
 const beginAccountDeletion = async (
@@ -486,6 +598,18 @@ export const handleIdentityRequest = async (
     request.method === 'POST'
   ) {
     return beginAccountDeletion(request, env)
+  }
+  if (
+    url.pathname === '/api/auth/wallet/challenge' &&
+    request.method === 'POST'
+  ) {
+    return walletLinkRequest(request, env, 'challenge')
+  }
+  if (url.pathname === '/api/auth/wallet/verify' && request.method === 'POST') {
+    return walletLinkRequest(request, env, 'verify')
+  }
+  if (url.pathname === '/api/auth/wallet' && request.method === 'DELETE') {
+    return walletLinkRequest(request, env, 'unlink')
   }
   if (url.pathname === '/api/auth/google/start' && request.method === 'GET') {
     return beginGoogleLogin(request, env)

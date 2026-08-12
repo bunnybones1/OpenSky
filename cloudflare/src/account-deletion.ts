@@ -34,9 +34,7 @@ export interface AccountDeletionRun {
   completed: number
 }
 
-const deletionRequest = (
-  row: AccountDeletionRow
-): AccountDeletionRequest => ({
+const deletionRequest = (row: AccountDeletionRow): AccountDeletionRequest => ({
   status: row.status,
   requestedAt: row.requested_at,
   executeAt: row.execute_at,
@@ -112,7 +110,10 @@ export class AccountDeletionRepository {
     return { status: 'PENDING', requestedAt, executeAt }
   }
 
-  async confirmAccountName(userId: string, expectedName: string): Promise<void> {
+  async confirmAccountName(
+    userId: string,
+    expectedName: string
+  ): Promise<void> {
     const target = await this.target(userId)
     if (!expectedName || expectedName !== target.name) {
       throw invalidArgument('account name does not match')
@@ -169,6 +170,9 @@ export class AccountDeletionRepository {
         )
       }
       statements.push(
+        this.database
+          .prepare(`DELETE FROM wallet_link_challenges WHERE user_id = ?`)
+          .bind(row.user_id),
         this.database
           .prepare(`DELETE FROM wallet_connections WHERE user_id = ?`)
           .bind(row.user_id),

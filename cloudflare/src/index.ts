@@ -7,6 +7,7 @@ import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
 import { handleReplayRequest } from './replays'
+import { WalletLinksRepository } from './wallet-links'
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -32,7 +33,8 @@ export default {
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
         runDueLeaderboardRewards(env.AUTH_DB),
-        new AccountDeletionRepository(env.AUTH_DB).finalizeDue()
+        new AccountDeletionRepository(env.AUTH_DB).finalizeDue(),
+        new WalletLinksRepository(env.AUTH_DB).cleanupExpired()
       ]).then(() => undefined)
     )
   }
