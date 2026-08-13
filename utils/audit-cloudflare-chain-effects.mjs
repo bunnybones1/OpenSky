@@ -55,6 +55,11 @@ const EFFECT_PATTERNS = [
   /\.Encode\s*\(\s*"batchMint"/g
 ]
 
+const MINT_EFFECT_PATTERNS = [
+  /\.(?:Mint|BatchMint)\s*\(/g,
+  /\.Encode\s*\(\s*"batchMint"/g
+]
+
 const sourceFiles = async directory => {
   const entries = await readdir(directory, { withFileTypes: true })
   const nested = await Promise.all(
@@ -79,6 +84,12 @@ export const chainEffectCount = source =>
     0
   )
 
+export const mintEffectCount = source =>
+  MINT_EFFECT_PATTERNS.reduce(
+    (count, pattern) => count + [...source.matchAll(pattern)].length,
+    0
+  )
+
 export const chainEffectAuditErrors = ({ sources, evidenceSources }) => {
   const errors = []
   const actual = Object.entries(sources)
@@ -94,6 +105,14 @@ export const chainEffectAuditErrors = ({ sources, evidenceSources }) => {
     if (count !== review.count) {
       errors.push(
         `${file} has ${count} chain-effect callsites; reviewed count is ${review.count}`
+      )
+    }
+    if (
+      mintEffectCount(sources[file]) > 0 &&
+      !review.disposition.startsWith('offchain')
+    ) {
+      errors.push(
+        `${file} executes a source mint and must have an offchain disposition`
       )
     }
   }
