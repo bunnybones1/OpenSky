@@ -77,7 +77,7 @@ export const EXPECTED_GO_ENTRYPOINTS = {
   'api/cmd/opensky-gm-cli/main.go': 'operator-tooling',
   'api/cmd/opensky-worker/main.go': 'ported',
   'api/cmd/util-goose/main.go': 'superseded',
-  'api/cmd/util-jwt/main.go': 'retired',
+  'api/cmd/util-jwt/main.go': 'superseded',
   'api/cmd/util-stress-api/main.go': 'test-tooling',
   'matchmaker/cmd/matchmaker/main.go': 'ported'
 }
@@ -138,6 +138,16 @@ export const auditServices = ({
   compare(dockerWorkloads, EXPECTED_DOCKER_WORKLOADS, 'Docker workload')
   compare(composeServices, EXPECTED_COMPOSE_SERVICES, 'compose service')
   compare(goEntrypoints, EXPECTED_GO_ENTRYPOINTS, 'Go entrypoint')
+
+  for (const [entrypoint, disposition] of Object.entries(
+    EXPECTED_GO_ENTRYPOINTS
+  )) {
+    if (disposition === 'retired') {
+      errors.push(
+        `${entrypoint} is an executable source entrypoint and cannot use an unexplained retirement disposition`
+      )
+    }
+  }
 
   for (const [workload, review] of Object.entries(EXPECTED_DOCKER_WORKLOADS)) {
     if (review.disposition === 'retired') {

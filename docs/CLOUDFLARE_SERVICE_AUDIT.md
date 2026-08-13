@@ -16,12 +16,15 @@ without reviewing this inventory fails the Cloudflare build.
 | `matchmaker` | `matchmaker-ts`, using Durable Objects and a separate match service. |
 | `server` | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`. The source server was already TypeScript. |
 | `game-analytics` | TypeScript Worker/Queue/R2 port is complete and tested. Production activation is blocked only by R2 not being enabled on the account. |
-| `chain` | Retired as a Cloud Weasel runtime. Rewards and purchases resolve to off-chain D1 inventory; WalletConnect remains read-only and optional. |
+| `chain` | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional. |
 
 `sheets` is an internal Tauri/Vite content tool, not a hosted player service.
 `asset-pipeline`, `bot`, and the Go GM/stress/migration utilities are operator,
 test, or build tooling rather than always-on workloads. The grant-cards operator
-flow has a dedicated off-chain TypeScript RPC adapter.
+flow has a dedicated off-chain TypeScript RPC adapter. The legacy JWT utility
+is superseded by Google OIDC for players, Cloudflare service bindings between
+Workers, and identity-scoped staff roles/capabilities; it is not a missing
+authentication runtime.
 
 ## Local infrastructure
 

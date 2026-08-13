@@ -82,3 +82,17 @@ test('rejects blanket retirement of a reviewed source workload', () => {
     EXPECTED_DOCKER_WORKLOADS.chain.disposition = original
   }
 })
+
+test('rejects unexplained retirement of an executable source entrypoint', () => {
+  const original = EXPECTED_GO_ENTRYPOINTS['api/cmd/util-jwt/main.go']
+  EXPECTED_GO_ENTRYPOINTS['api/cmd/util-jwt/main.go'] = 'retired'
+  try {
+    assert.ok(
+      auditServices(validInput()).errors.includes(
+        'api/cmd/util-jwt/main.go is an executable source entrypoint and cannot use an unexplained retirement disposition'
+      )
+    )
+  } finally {
+    EXPECTED_GO_ENTRYPOINTS['api/cmd/util-jwt/main.go'] = original
+  }
+})
