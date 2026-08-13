@@ -42,6 +42,12 @@ run only after that task settles.
 - Production Conquest modes are false in both the match service and API status.
 - Versioned Silver/Gold pool storage fails closed for missing, expired, or
   malformed pools.
+- A pool must start as `DRAFT`, freeze the exact ordered Silver/Gold card
+  manifest and counts in an immutable proposal receipt, receive independent
+  second-actor approval, and only then transition to `ACTIVE`. Settlement,
+  public weekly-Gold reads, readiness, and the database queue-enable guard all
+  share the approved-pool view. Direct `ACTIVE` inserts and legacy unapproved
+  active rows therefore have no authority.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
@@ -133,8 +139,9 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Conquest mode flags remain false until all checks pass against the deployed
   Worker version and an explicit pool configuration.
 
-Before enabling either mode, operations must create and review a bounded active
-pool, exercise one isolated three-win settlement through delayed delivery, and
+Before enabling either mode, operations must create a bounded draft pool,
+record its exact manifest proposal, obtain independent activation approval,
+then exercise one isolated three-win settlement through delayed delivery and
 insert the resulting settlement/delivery keys into
 `conquest_queue_readiness`. The database now verifies inventory/feed/receipt
 agreement itself; free-form readiness rows cannot open a queue. Production

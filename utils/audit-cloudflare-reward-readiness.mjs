@@ -16,7 +16,7 @@ const CURRENT_SEASON_SQL = `(CAST(
 
 export const REWARD_READINESS_QUERY = `SELECT
   (SELECT COUNT(*) FROM conquest_reward_pools) AS conquest_pools_total,
-  (SELECT COUNT(*) FROM conquest_reward_pools WHERE status = 'ACTIVE') AS conquest_pools_active,
+  (SELECT COUNT(*) FROM conquest_approved_active_reward_pools) AS conquest_pools_approved,
   (SELECT COUNT(*) FROM conquest_verified_queue_pools
     WHERE starts_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       AND ends_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) AS conquest_verified_pools,
@@ -77,7 +77,7 @@ export const REWARD_READINESS_QUERY = `SELECT
 
 const COUNT_FIELDS = [
   'conquest_pools_total',
-  'conquest_pools_active',
+  'conquest_pools_approved',
   'conquest_verified_pools',
   'leaderboard_schedules_total',
   'leaderboard_schedules_enabled',
@@ -110,7 +110,7 @@ export const rewardReadiness = row => {
   }
 
   for (const [active, total] of [
-    ['conquest_pools_active', 'conquest_pools_total'],
+    ['conquest_pools_approved', 'conquest_pools_total'],
     ['leaderboard_schedules_enabled', 'leaderboard_schedules_total'],
     ['conquest_v2_schedules_enabled', 'conquest_v2_schedules_total'],
     ['referral_schedules_active', 'referral_schedules_total'],
@@ -126,10 +126,10 @@ export const rewardReadiness = row => {
   }
   if (
     validFields.has('conquest_verified_pools') &&
-    validFields.has('conquest_pools_active') &&
-    row.conquest_verified_pools > row.conquest_pools_active
+    validFields.has('conquest_pools_approved') &&
+    row.conquest_verified_pools > row.conquest_pools_approved
   ) {
-    errors.push('conquest_verified_pools cannot exceed conquest_pools_active')
+    errors.push('conquest_verified_pools cannot exceed conquest_pools_approved')
   }
   if (
     validFields.has('leaderboard_ready') &&
@@ -177,7 +177,7 @@ export const rewardReadiness = row => {
     {
       track: 'Original Conquest card settlement',
       status: configuredTrack({
-        active: row.conquest_pools_active,
+        active: row.conquest_pools_approved,
         configured: row.conquest_pools_total,
         readiness: row.conquest_verified_pools
       }),

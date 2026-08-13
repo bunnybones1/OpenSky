@@ -288,15 +288,14 @@ export class ConquestRepository {
       .prepare(
         `SELECT pool.starts_at, pool.ends_at, cards.card_id,
                 COALESCE(SUM(items.balance), 0) AS total_supply
-         FROM conquest_reward_pools pool
+         FROM conquest_approved_active_reward_pools pool
          JOIN conquest_reward_pool_cards cards
            ON cards.pool_version = pool.version
           AND cards.item_type = 'SW_GOLD_CARDS'
          LEFT JOIN player_items items
            ON items.item_type = 'SW_GOLD_CARDS'
           AND items.token_id = cards.card_id AND items.balance > 0
-         WHERE pool.status = 'ACTIVE'
-           AND pool.starts_at <= ? AND pool.ends_at >= ?
+         WHERE pool.starts_at <= ? AND pool.ends_at >= ?
          GROUP BY pool.version, pool.starts_at, pool.ends_at, cards.card_id
          ORDER BY cards.card_id`
       )

@@ -9,7 +9,7 @@ import {
 
 const productionShape = () => ({
   conquest_pools_total: 0,
-  conquest_pools_active: 0,
+  conquest_pools_approved: 0,
   conquest_verified_pools: 0,
   leaderboard_schedules_total: 0,
   leaderboard_schedules_enabled: 0,
@@ -30,6 +30,8 @@ test('uses one read-only scalar SELECT', () => {
     /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE)\b/i
   )
   assert.match(REWARD_READINESS_QUERY, /conquest_verified_queue_pools[\s\S]*ends_at > strftime/)
+  assert.match(REWARD_READINESS_QUERY, /conquest_approved_active_reward_pools/)
+  assert.doesNotMatch(REWARD_READINESS_QUERY, /conquest_reward_pools WHERE status = 'ACTIVE'/)
   assert.match(REWARD_READINESS_QUERY, /ORDER BY version DESC LIMIT 1/)
   assert.match(REWARD_READINESS_QUERY, /activation\.policy_hash = '[0-9a-f]{64}'/)
   assert.match(REWARD_READINESS_QUERY, /2021-11-22T14:00:00\.000Z/)
@@ -58,7 +60,7 @@ test('distinguishes configuration, activation, readiness, and fully active track
   const configured = productionShape()
   Object.assign(configured, {
     conquest_pools_total: 2,
-    conquest_pools_active: 1,
+    conquest_pools_approved: 1,
     leaderboard_schedules_total: 1,
     leaderboard_schedules_enabled: 1,
     conquest_v2_schedules_total: 1,

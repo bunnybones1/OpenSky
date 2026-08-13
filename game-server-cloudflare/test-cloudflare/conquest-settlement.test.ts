@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { ConquestMatchResult, ConquestStatus, ItemType } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
 import {
   conquestRewardBundle,
   settleConquestRewardsForMatch,
@@ -12,11 +13,18 @@ import {
 const USER_ID = 'conquest-settlement-user'
 const USER_ID_2 = 'conquest-settlement-opponent'
 const SETTLED_AT = '2026-08-12T12:00:00.000Z'
-const POOL_VERSION = 'conquest-pool-test-v1'
+let poolVersion = 'conquest-pool-test-v1'
 
 const setup = async (
   wins: number,
-  options: { pool?: boolean; silver?: number[]; gold?: number[] } = {}
+  options: {
+    pool?: boolean
+    silver?: number[]
+    gold?: number[]
+    startsAt?: string
+    endsAt?: string
+    createdAt?: string
+  } = {}
 ) => {
   const now = '2026-08-12T11:00:00.000Z'
   const progress: Record<number, ConquestMatchResult> = {}
@@ -43,31 +51,15 @@ const setup = async (
   ]
   if (options.pool !== false) {
     statements.push(
-      env.AUTH_DB.prepare(
-        `INSERT INTO conquest_reward_pools
-           (version, status, starts_at, ends_at, created_at)
-         VALUES (?, 'ACTIVE', '2026-08-12T00:00:00.000Z',
-                 '2026-08-13T00:00:00.000Z', ?)`
-      ).bind(POOL_VERSION, now)
+      ...approvedConquestPoolStatements(env.AUTH_DB, {
+        version: poolVersion,
+        startsAt: options.startsAt ?? '2026-08-12T00:00:00.000Z',
+        endsAt: options.endsAt ?? '2026-08-13T00:00:00.000Z',
+        createdAt: options.createdAt ?? now,
+        silver: options.silver ?? [6, 68],
+        gold: options.gold ?? [136]
+      })
     )
-    for (const cardId of options.silver ?? [6, 68]) {
-      statements.push(
-        env.AUTH_DB.prepare(
-          `INSERT INTO conquest_reward_pool_cards
-             (pool_version, item_type, card_id)
-           VALUES (?, 'SW_SILVER_CARDS', ?)`
-        ).bind(POOL_VERSION, cardId)
-      )
-    }
-    for (const cardId of options.gold ?? [136]) {
-      statements.push(
-        env.AUTH_DB.prepare(
-          `INSERT INTO conquest_reward_pool_cards
-             (pool_version, item_type, card_id)
-           VALUES (?, 'SW_GOLD_CARDS', ?)`
-        ).bind(POOL_VERSION, cardId)
-      )
-    }
   }
   await env.AUTH_DB.batch(statements)
   return env.AUTH_DB.prepare(
@@ -122,6 +114,7 @@ const inventory = () =>
     }>()
 
 beforeEach(async () => {
+  poolVersion = `conquest-pool-test-${crypto.randomUUID()}`
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_conquest_inventory'
   ).run()
@@ -129,15 +122,17 @@ beforeEach(async () => {
     'DROP TRIGGER IF EXISTS reject_conquest_receipt_completion'
   ).run()
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ),
     env.AUTH_DB.prepare('DELETE FROM users'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pool_cards'),
     env.AUTH_DB.prepare('DELETE FROM player_items'),
     env.AUTH_DB.prepare('DELETE FROM player_conquests'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools'),
-    env.AUTH_DB.prepare('DELETE FROM game_accounts'),
+    env.AUTH_DB.prepare('DELETE FROM game_accounts')
   ])
 })
 
@@ -163,7 +158,7 @@ describe('source Conquest reward settlement', () => {
 
     expect(receipt).toMatchObject({
       applied: true,
-      poolVersion: POOL_VERSION,
+      poolVersion,
       wins: 2,
       silverCardIds: [68, 6],
       goldCardIds: [],
@@ -530,7 +525,7 @@ describe('source Conquest reward settlement', () => {
               'PREPARING', NULL
        FROM player_conquests WHERE id = ?`
     )
-      .bind(POOL_VERSION, SETTLED_AT, conquest!.id)
+      .bind(poolVersion, SETTLED_AT, conquest!.id)
       .run()
 
     await expect(
@@ -609,22 +604,22 @@ describe('source Conquest reward settlement', () => {
         `DELETE FROM conquest_reward_pool_cards
          WHERE pool_version = ? AND card_id = 6`
       )
-        .bind(POOL_VERSION)
+        .bind(poolVersion)
         .run()
-    ).rejects.toThrow('Used Conquest reward pool cards are immutable')
+    ).rejects.toThrow('Conquest reward pool cards are immutable')
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE conquest_reward_pools SET ends_at = ? WHERE version = ?`
       )
-        .bind('2026-08-14T00:00:00.000Z', POOL_VERSION)
+        .bind('2026-08-14T00:00:00.000Z', poolVersion)
         .run()
-    ).rejects.toThrow('Used Conquest reward pools are immutable')
+    ).rejects.toThrow('Conquest reward pool')
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE conquest_reward_pools SET status = 'RETIRED'
          WHERE version = ?`
       )
-        .bind(POOL_VERSION)
+        .bind(poolVersion)
         .run()
     ).resolves.toMatchObject({ success: true })
 
@@ -739,13 +734,12 @@ describe('source Conquest reward settlement', () => {
     })
   })
 
-  it('fails closed for expired and malformed configured pools', async () => {
-    const expired = await setup(1)
-    await env.AUTH_DB.prepare(
-      `UPDATE conquest_reward_pools
-       SET starts_at = '2026-08-10T00:00:00.000Z',
-           ends_at = '2026-08-11T00:00:00.000Z'`
-    ).run()
+  it('fails closed for an expired approved pool', async () => {
+    const expired = await setup(1, {
+      startsAt: '2026-08-10T00:00:00.000Z',
+      endsAt: '2026-08-11T00:00:00.000Z',
+      createdAt: '2026-08-10T01:00:00.000Z'
+    })
     await expect(
       settlePendingConquest(
         env.AUTH_DB,
@@ -754,27 +748,12 @@ describe('source Conquest reward settlement', () => {
         sequenceDraw(0)
       )
     ).rejects.toThrow('no active Conquest reward pool')
+  })
 
-    await env.AUTH_DB.prepare(
-      `UPDATE conquest_reward_pools
-       SET starts_at = '2026-08-12T00:00:00.000Z',
-           ends_at = '2026-08-13T00:00:00.000Z'`
-    ).run()
-    await env.AUTH_DB.prepare(
-      `INSERT INTO conquest_reward_pool_cards
-         (pool_version, item_type, card_id)
-       VALUES (?, 'SW_SILVER_CARDS', 999999)`
+  it('rejects an invalid card before a pool can be approved', async () => {
+    await expect(setup(1, { silver: [999999] })).rejects.toThrow(
+      'Conquest reward pool card is invalid'
     )
-      .bind(POOL_VERSION)
-      .run()
-    await expect(
-      settlePendingConquest(
-        env.AUTH_DB,
-        expired!.id,
-        SETTLED_AT,
-        sequenceDraw(0)
-      )
-    ).rejects.toThrow('active Conquest reward pool contains an invalid card')
     expect((await inventory()).results).toEqual([])
     expect(
       await env.AUTH_DB.prepare(
@@ -784,12 +763,7 @@ describe('source Conquest reward settlement', () => {
   })
 
   it('preserves the source pool end-time inclusivity', async () => {
-    const conquest = await setup(1)
-    await env.AUTH_DB.prepare(
-      `UPDATE conquest_reward_pools SET ends_at = ? WHERE version = ?`
-    )
-      .bind(SETTLED_AT, POOL_VERSION)
-      .run()
+    const conquest = await setup(1, { endsAt: SETTLED_AT })
     await expect(
       settlePendingConquest(
         env.AUTH_DB,

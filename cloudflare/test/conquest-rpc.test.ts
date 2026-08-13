@@ -8,6 +8,7 @@ import {
 } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { approvedConquestPoolStatements } from './helpers/conquest-pool'
 import { handleApiRequest } from '../src/api'
 import type { Env } from '../src/env'
 import {
@@ -41,8 +42,11 @@ const rpc = async (method: string, body: object, signedIn = true) => {
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ),
     env.AUTH_DB.prepare('DELETE FROM users'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools')
   ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
@@ -111,18 +115,16 @@ describe('source conquest RPC foundation', () => {
     const startsAt = new Date(now.getTime() - 60_000).toISOString()
     const endsAt = new Date(now.getTime() + 60_000).toISOString()
     const createdAt = now.toISOString()
+    const version = `rpc-active-pool-${crypto.randomUUID()}`
     await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `INSERT INTO conquest_reward_pools
-           (version, status, starts_at, ends_at, created_at)
-         VALUES ('rpc-active-pool', 'ACTIVE', ?, ?, ?)`
-      ).bind(startsAt, endsAt, createdAt),
-      env.AUTH_DB.prepare(
-        `INSERT INTO conquest_reward_pool_cards
-           (pool_version, item_type, card_id)
-         VALUES ('rpc-active-pool', 'SW_SILVER_CARDS', 6),
-                ('rpc-active-pool', 'SW_GOLD_CARDS', 136)`
-      ),
+      ...approvedConquestPoolStatements(env.AUTH_DB, {
+        version,
+        startsAt,
+        endsAt,
+        createdAt,
+        silver: [6],
+        gold: [136]
+      }),
       env.AUTH_DB.prepare(
         `INSERT INTO player_items
            (user_id, item_type, token_id, balance, is_new, unlock_source,

@@ -27,7 +27,7 @@ rollout drill.
 | Match XP and level unlocks | `core-live` | Match settlement and per-player XP receipts are deployed. |
 | Quest XP and basic SkyPass progression | `core-live` | Quest claim batches and immutable XP/referral receipts are deployed. |
 | SkyPass claim contents | `active` | 1 of 1 validated reward policies is active. |
-| Original Conquest card settlement | `dormant-policy` | 0 reward pools; therefore 0 receipt-verified active pools. |
+| Original Conquest card settlement | `dormant-policy` | 0 independently approved reward pools; therefore 0 receipt-verified active pools. |
 | Weekly leaderboard rewards | `dormant-policy` | 0 cadence rows and 0 independently approved schedules. |
 | Conquest V2 weekly treasure | `dormant-policy` | 0 cadence rows and 0 current-settings policy approvals. |
 | Referral sticker rewards | `dormant-policy` | 0 current-season schedules and 0 active schedules. |
@@ -63,7 +63,8 @@ itself.
 
 - SkyPass is safe to use now. Its source season-62 import was validated against
   the complete off-chain fulfillment digest and activated by migration.
-- Original Conquest requires a versioned Silver/Gold pool plus the existing
+- Original Conquest requires a versioned draft Silver/Gold pool, an immutable
+  exact-manifest proposal, independent activation approval, and the existing
   end-to-end receipt-backed drill before either queue becomes admissible.
 - Leaderboard requires one explicit UTC cadence and a second-actor activation
   of the pinned rank/card/ticket policy before its first boundary.

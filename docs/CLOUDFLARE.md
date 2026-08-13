@@ -367,8 +367,9 @@ and progress are not migrated.
   audit state.
   `GMGameModeSet` needs both `ADMIN` and a separately provisioned
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
-  enters immutable history. Conquest enablement additionally requires an active
-  reward pool and an out-of-band readiness record for the completed drill, so
+  enters immutable history. Conquest enablement additionally requires a draft
+  pool whose exact card manifest receives independent second-actor approval,
+  activation, and an out-of-band readiness record for the completed drill, so
   it remains disabled. D1-backed Ping, server Clock, current
   SkyPass hero-unlock levels, and the authenticated source XP-bonus read are
   also ported. The source Version RPC derives schema fields from the generated
@@ -593,14 +594,16 @@ and progress are not migrated.
   still need a Cloud Weasel product decision. Conquest settlement is
   implemented, but production has no active reward-pool rows; matchmaking
   remains disabled until an
-  explicitly approved pool and a pre-enable delivery drill pass.
+  explicitly approved pool and a pre-enable delivery drill pass. Direct SQL
+  cannot make an unreviewed pool settlement or queue-enablement authority.
 - Existing Go/Postgres account data will not be migrated into D1. Cloud Weasel
   launches with zero users, so source burner/account migration is deliberately
   retired rather than carried into the new identity model.
 
 ## Suggested next slice
 
-Approve and load a versioned Conquest reward pool, then run the source-derived
+Define, independently review, and activate a versioned Conquest reward pool,
+then run the source-derived
 enablement drill in
 [`CONQUEST_SETTLEMENT_PORT.md`](./CONQUEST_SETTLEMENT_PORT.md) before enabling
 either queue. Selection, settlement, pending-card reads, and delayed delivery

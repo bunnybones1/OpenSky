@@ -12,6 +12,7 @@ import {
 import { MatchRepository } from '../src/repository'
 import { currentEnabledGameModes } from '../src/worker'
 import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
+import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
 import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
 
@@ -27,7 +28,7 @@ const STARTER_CARD_IDS = [
   151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
 ]
 const READINESS_USER_ID = 'system:conquest-readiness-drill:match-service-test'
-const READINESS_POOL_VERSION = 'match-service-readiness-test-v1'
+let readinessPoolVersion = 'match-service-readiness-test-v1'
 
 const privateSeed = (cards: number[] = STARTER_CARD_IDS) => ({
   player: Array(20).fill(0xff),
@@ -173,11 +174,16 @@ const provisionSecondPlayer = async (level = 2) => {
 }
 
 beforeEach(async () => {
+  readinessPoolVersion = `match-service-readiness-${crypto.randomUUID()}`
   ;[PRINCIPAL, SECOND_PRINCIPAL] = await Promise.all([
     deriveGamePrincipal(USER_ID),
     deriveGamePrincipal(SECOND_USER_ID)
   ])
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_abandon_penalties_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_abandon_penalties'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
@@ -191,8 +197,6 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_profiles'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
     env.AUTH_DB.prepare('DELETE FROM users'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pool_cards'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools'),
     env.AUTH_DB.prepare(
       `UPDATE game_mode_status
        SET enabled = CASE
@@ -307,17 +311,14 @@ const provisionReceiptBackedConquestReadiness = async () => {
     env.AUTH_DB.prepare(
       `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
     ).bind(READINESS_USER_ID, startsAt),
-    env.AUTH_DB.prepare(
-      `INSERT INTO conquest_reward_pools
-         (version, status, starts_at, ends_at, created_at)
-       VALUES (?, 'ACTIVE', ?, ?, ?)`
-    ).bind(READINESS_POOL_VERSION, startsAt, endsAt, startsAt),
-    env.AUTH_DB.prepare(
-      `INSERT INTO conquest_reward_pool_cards
-         (pool_version, item_type, card_id)
-       VALUES (?, 'SW_SILVER_CARDS', 6),
-              (?, 'SW_GOLD_CARDS', 136)`
-    ).bind(READINESS_POOL_VERSION, READINESS_POOL_VERSION),
+    ...approvedConquestPoolStatements(env.AUTH_DB, {
+      version: readinessPoolVersion,
+      startsAt,
+      endsAt,
+      createdAt: startsAt,
+      silver: [6],
+      gold: [136]
+    }),
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
@@ -352,7 +353,7 @@ const provisionReceiptBackedConquestReadiness = async () => {
        VALUES (?, ?, ?, ?, 'system:test', 'before-delivery', ?)`
     )
       .bind(
-        READINESS_POOL_VERSION,
+        readinessPoolVersion,
         conquest!.id,
         settlement!.settlement_key,
         crypto.randomUUID(),
@@ -381,7 +382,7 @@ const provisionReceiptBackedConquestReadiness = async () => {
      VALUES (?, ?, ?, ?, 'system:test', 'receipt-backed-e2e', ?)`
   )
     .bind(
-      READINESS_POOL_VERSION,
+      readinessPoolVersion,
       conquest!.id,
       evidence!.settlement_key,
       evidence!.delivery_key,
@@ -481,14 +482,14 @@ describe('Cloud Weasel accepted-match service', () => {
         `UPDATE conquest_queue_readiness SET drill_reference = 'rewritten'
          WHERE pool_version = ?`
       )
-        .bind(READINESS_POOL_VERSION)
+        .bind(readinessPoolVersion)
         .run()
     ).rejects.toThrow('Conquest queue readiness receipts are immutable')
     await expect(
       env.AUTH_DB.prepare(
         `DELETE FROM conquest_queue_readiness WHERE pool_version = ?`
       )
-        .bind(READINESS_POOL_VERSION)
+        .bind(readinessPoolVersion)
         .run()
     ).rejects.toThrow('Conquest queue readiness receipts are immutable')
   })
