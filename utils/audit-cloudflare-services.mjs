@@ -13,11 +13,13 @@ export const EXPECTED_DOCKER_WORKLOADS = {
     evidence: ['handleApiRequest', 'async scheduled']
   },
   chain: {
-    disposition: 'retired',
+    disposition: 'superseded',
     evidenceFile: 'docs/OFFCHAIN_REWARD_POLICY.md',
     evidence: [
       'off-chain `player_items`',
-      'No game flow asks a player to mint a reward'
+      'No game flow asks a player to mint a reward',
+      'Every preserved source behavior that required minting grants an equivalent',
+      'Stripe or mobile-store receipts'
     ]
   },
   game: {
@@ -138,6 +140,11 @@ export const auditServices = ({
   compare(goEntrypoints, EXPECTED_GO_ENTRYPOINTS, 'Go entrypoint')
 
   for (const [workload, review] of Object.entries(EXPECTED_DOCKER_WORKLOADS)) {
+    if (review.disposition === 'retired') {
+      errors.push(
+        `${workload} is a reviewed source workload and cannot use a blanket retirement disposition`
+      )
+    }
     const evidence = evidenceSources[workload] ?? ''
     for (const token of review.evidence) {
       if (!evidence.includes(token)) {

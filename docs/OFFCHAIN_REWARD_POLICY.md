@@ -273,6 +273,13 @@ wrappers are excluded because they do not execute a product action themselves;
 any new use of one from product code is discovered and fails the build until it
 has an explicit Cloud Weasel replacement.
 
+The source `chain` Docker workload is superseded rather than treated as a
+retired product. Its contracts and deployment script implemented mint factories,
+wallet payments, and legacy exchanges; the corresponding player outcomes are
+now owned by authenticated D1 reward receipts, Stripe or mobile-store receipts,
+and the Silver/Gold inventory exchanges above. The service audit rejects a
+blanket retirement label for any reviewed source Docker workload.
+
 The source reward-producer audit starts one layer earlier. It inventories every
 Go file that directly grants XP, tickets, sticker points, heroes, starter decks,
 or item rows—even if that file never calls a contract itself. Exact callsite

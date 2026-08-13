@@ -68,3 +68,17 @@ test('rejects an analytics deploy command without the pinned Wrangler', () => {
     'game-analytics deploy does not use the workspace-pinned Wrangler'
   ])
 })
+
+test('rejects blanket retirement of a reviewed source workload', () => {
+  const original = EXPECTED_DOCKER_WORKLOADS.chain.disposition
+  EXPECTED_DOCKER_WORKLOADS.chain.disposition = 'retired'
+  try {
+    assert.ok(
+      auditServices(validInput()).errors.includes(
+        'chain is a reviewed source workload and cannot use a blanket retirement disposition'
+      )
+    )
+  } finally {
+    EXPECTED_DOCKER_WORKLOADS.chain.disposition = original
+  }
+})
