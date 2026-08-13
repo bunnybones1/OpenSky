@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -37,6 +37,8 @@
     "check:cloudflare:analytics": "pnpm --filter @opensky/game-analytics test",
     "check:cloudflare:release": "node --test ./utils/check-cloudflare-release-gate.test.mjs && node ./utils/check-cloudflare-release-gate.mjs",
     "audit:cloudflare:services": "node ./utils/audit-cloudflare-services.mjs",
+    "audit:cloudflare:reward-readiness": "node ./utils/audit-cloudflare-reward-readiness.mjs",
+    "check:cloudflare:reward-readiness": "node --test ./utils/audit-cloudflare-reward-readiness.test.mjs",
     "check:cloudflare:services": "node --test ./utils/audit-cloudflare-services.test.mjs && node ./utils/audit-cloudflare-services.mjs",
     "typecheck": "pnpm -r --no-bail exec tsc -p . --noEmit",
     "preview:cloudflare": "pnpm build:cloudflare && pnpm --dir cloudflare exec wrangler dev --config ../wrangler.jsonc",
