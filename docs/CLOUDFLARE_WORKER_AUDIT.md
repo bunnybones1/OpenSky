@@ -12,6 +12,17 @@ and failure incidents, as expected for the disabled-by-default rollout. Public
 webapp, Google-provider session, Ping, and the disabled public treasure-info
 projection returned HTTP 200.
 
+Production migration `0093_operator_item_grant_receipts.sql` and main Worker
+version `c83c8deb-ce71-4ae4-b5ef-11dc5cada6e1` were deployed on 2026-08-13 for
+the generic off-chain item-giveaway port. The deployed adapter returned HTTP
+401 to an anonymous `GMGrantItems` request, while the local-bot game entry and
+the original Quests, SkyPass, Practice, and Cache Info routes remained healthy.
+Read-only D1 verification found zero operator grant headers, zero operator
+inventory-grant rows, and zero player-support permission grants; the rollout
+therefore created no reward or production write authority. The release used
+the exact artifact that passed all static gates, 334 main-Worker tests, 216
+multiplayer tests, 6 analytics tests, and 24 browser/game tests.
+
 The central reward rule is: a gameplay reward must be delivered to authoritative
 off-chain inventory. It must not require a wallet, blockchain transaction, or
 mint. WalletConnect remains an optional ownership integration only.
@@ -79,7 +90,7 @@ later mint happens in another worker.
 The TypeScript reward-mutator gate closes the other side of that boundary. It
 inventories all direct writes to the seven authoritative reward/progression
 ledgers across the main Worker, game server, and match service. The reviewed
-inventory currently contains 18 modules and 62 writes; any count drift or new
+inventory currently contains 18 modules and 63 writes; any count drift or new
 module requires an explicit off-chain safety disposition before release.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
