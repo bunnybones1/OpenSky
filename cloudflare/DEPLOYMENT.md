@@ -1206,6 +1206,25 @@ settlement and delayed delivery against that pool.
   query reported one user, 31 inventory rows, zero SkyPass claims, auto-claims,
   failures, or notifications, migration 64, zero writes, and `changed_db:
   false`; the production URL returned HTTP 200.
+- API/web Worker version `2f8abff7-6c04-4ef3-b191-8d079d2db8fa` contains
+  SkyPass exact-policy milestone `3fedd99`. Migration
+  `0090_skypass_reward_policy_activation.sql` converts the preserved 127-row
+  season-62 track into immutable version 1 and passes it through the same D1
+  activation validator as every future import. CSV updates now create
+  player-invisible drafts; a distinct `ADMIN` with the dormant
+  `SKYPASS_REWARD_WRITE` permission must inspect and activate the exact source
+  and fulfillment digests. Player reads, manual claims, and season auto-claim
+  use only active definitions, and each new claim pins policy version 1 and
+  fulfillment hash `f6238e5e2c07a7e803c3b4f5c54c44d9f275fd94c2af04988a58301a40618bcb`.
+  The full release passed all policy/RPC/transaction audits, 326 main Worker
+  tests, 216 multiplayer tests, analytics tests, TypeScript checks, and the
+  browser/game production build. Live homepage, Version, Ping, and game-mode
+  probes returned `200`; Cloud Weasel branding remained intact, Practice Bot
+  stayed enabled, and both Conquest modes stayed disabled. Anonymous active
+  SkyPass, draft-review, and activation probes returned `401`. Post-cron D1
+  verification found all 127 active ordinals and one infinite reward, zero
+  claims, drafts, failures, close cycles, or capability grants, and unchanged
+  inventory at 31 rows / balance 31 with `changed_db: false`.
 - Wrangler OAuth now exposes two Cloudflare accounts. D1 commands must pass
   the repository config so its pinned account/database IDs select production.
   An explicit environment override produced Cloudflare `7403` before execution
