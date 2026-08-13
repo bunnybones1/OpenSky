@@ -66,3 +66,11 @@ claims are legacy-wallet content and cannot be stored for an identity principal.
 The D1 schema accepts policies owned by either an identity user or a legacy
 wallet account, validates the smaller identity policy, and removes each policy
 when its owning principal is deleted.
+
+App-shell milestone `3dd82f6` restored the original wallet-independent dialogs
+in production. Follow-up milestone `f988b30` fixed the identity-policy owner
+model discovered during live QA, and D1 migration `0092` plus Worker version
+`65ae3065-c58e-42e0-9f31-c3972eaec1a2` were deployed on 2026-08-13. Production
+verification found all six owner/policy/deletion triggers, no pending migration,
+and exactly the two Google-mode controls in the original dialog. The check used
+Cancel and left the signed-in user's consent unchanged.
