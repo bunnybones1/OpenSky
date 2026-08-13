@@ -51,6 +51,26 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'JOIN conquest_approved_active_reward_pools approved',
       'verified approved Conquest reward pool required'
     ].join('\n'),
+    poolOperationsMigration: [
+      'CREATE TABLE staff_conquest_reward_pool_permissions',
+      "permission IN ('PROPOSE', 'ACTIVATE', 'RETIRE')",
+      'CREATE TABLE staff_conquest_reward_pool_operations',
+      'CREATE UNIQUE INDEX staff_conquest_reward_pool_operations_once_idx',
+      'CREATE TRIGGER staff_conquest_reward_pool_operation_apply_guard',
+      'CREATE TABLE staff_conquest_reward_pool_audit',
+      'staff Conquest reward pool audit rows are immutable'
+    ].join('\n'),
+    poolOperations: [
+      "ConquestRewardPoolOperation = 'PROPOSE' | 'ACTIVATE' | 'RETIRE'",
+      'createdByUserId === actorUserId',
+      'cardManifest does not match proposal',
+      "'x-cloud-weasel-operation-key'",
+      'operation_key, operation, pool_version, actor_user_id'
+    ].join('\n'),
+    staff: [
+      'requireConquestRewardPoolWrite(',
+      'staff_conquest_reward_pool_permissions'
+    ].join('\n'),
     settlement: [
       'FROM conquest_approved_active_reward_pools',
       'SELECT 1 FROM conquest_approved_active_reward_pools'
@@ -63,6 +83,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'matchService',
     'migration',
     'poolActivation',
+    'poolOperationsMigration',
+    'poolOperations',
+    'staff',
     'settlement',
     'api',
     'readiness'

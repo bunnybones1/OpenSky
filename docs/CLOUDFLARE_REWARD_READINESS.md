@@ -66,6 +66,9 @@ itself.
 - Original Conquest requires a versioned draft Silver/Gold pool, an immutable
   exact-manifest proposal, independent activation approval, and the existing
   end-to-end receipt-backed drill before either queue becomes admissible.
+  Reviewed staff adapters now perform proposal, approval, and retirement
+  without direct SQL, while production retains zero capability grants and zero
+  pools until the fork owner supplies and reviews the contents.
 - Leaderboard requires one explicit UTC cadence and a second-actor activation
   of the pinned rank/card/ticket policy before its first boundary.
 - Conquest V2 requires an explicit cadence, current economy settings with at

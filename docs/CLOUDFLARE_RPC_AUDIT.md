@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs      |      17 |
 | Deliberately retired RPCs       |       3 |
 | Actionable source RPC gaps      |       0 |
-| Cloudflare-only RPC adapters    |       3 |
+| Cloudflare-only RPC adapters    |       7 |
 
 Together, 172/172 source contracts (100%) are functionally implemented,
 preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
@@ -60,9 +60,19 @@ all/prism selection and records an immutable receipt; it never prepares or
 sends a chain transaction. `GMGrantItems` preserves the source
 `GiveawayOffChainTokensRunner` item-type, item-ID, and quantity map behind the
 same dormant capability, with an immutable request and before/after receipt per
-item. `GMActivateSkypassRewards` is the third Cloudflare-only adapter because
+item. `GMActivateSkypassRewards` is a Cloudflare-only adapter because
 draft import and independent reward-policy activation are deliberately
 separate authorities.
+
+Four additional reviewed adapters operate the source-faithful original
+Conquest reward-pool replacement: `GMListConquestRewardPools`,
+`GMProposeConquestRewardPool`, `GMActivateConquestRewardPool`, and
+`GMRetireConquestRewardPool`. They expose the existing two-actor D1 lifecycle
+without inventing contents or requiring hand-written production SQL. Writes
+use separate dormant capabilities, exact-manifest confirmation, immutable
+idempotency receipts, and audits; none writes queue readiness or game-mode
+status. The RPC audit allowlists all seven adapters by name and rejects a new
+or missing Cloudflare-only method.
 
 ## Reviewed non-ports
 

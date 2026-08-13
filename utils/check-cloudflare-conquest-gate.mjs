@@ -122,6 +122,44 @@ export const conquestGateErrors = (config, evidence = {}) => {
       )
     }
   }
+  if (evidence.poolOperationsMigration !== undefined) {
+    for (const token of [
+      'CREATE TABLE staff_conquest_reward_pool_permissions',
+      "permission IN ('PROPOSE', 'ACTIVATE', 'RETIRE')",
+      'CREATE TABLE staff_conquest_reward_pool_operations',
+      'CREATE UNIQUE INDEX staff_conquest_reward_pool_operations_once_idx',
+      'CREATE TRIGGER staff_conquest_reward_pool_operation_apply_guard',
+      'CREATE TABLE staff_conquest_reward_pool_audit',
+      'staff Conquest reward pool audit rows are immutable'
+    ]) {
+      if (!evidence.poolOperationsMigration.includes(token)) {
+        errors.push(`Conquest pool operations migration is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.poolOperations !== undefined) {
+    for (const token of [
+      "ConquestRewardPoolOperation = 'PROPOSE' | 'ACTIVATE' | 'RETIRE'",
+      'createdByUserId === actorUserId',
+      'cardManifest does not match proposal',
+      "'x-cloud-weasel-operation-key'",
+      "operation_key, operation, pool_version, actor_user_id"
+    ]) {
+      if (!evidence.poolOperations.includes(token)) {
+        errors.push(`Conquest pool operations adapter is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.staff !== undefined) {
+    for (const token of [
+      'requireConquestRewardPoolWrite(',
+      'staff_conquest_reward_pool_permissions'
+    ]) {
+      if (!evidence.staff.includes(token)) {
+        errors.push(`Conquest pool staff authority is missing: ${token}`)
+      }
+    }
+  }
   if (evidence.settlement !== undefined) {
     for (const token of [
       'FROM conquest_approved_active_reward_pools',
@@ -161,6 +199,9 @@ const main = async () => {
     matchService,
     migration,
     poolActivation,
+    poolOperationsMigration,
+    poolOperations,
+    staff,
     cardLibrary,
     settlement,
     api,
@@ -189,6 +230,25 @@ const main = async () => {
       'utf8'
     ),
     readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0095_conquest_reward_pool_operations.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'src',
+        'conquest-reward-pool-operations.ts'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'staff.ts'), 'utf8'),
+    readFile(
       path.join(root, 'cloudflare', 'src', 'generated', 'card-library.json'),
       'utf8'
     ),
@@ -206,6 +266,9 @@ const main = async () => {
     matchService,
     migration,
     poolActivation,
+    poolOperationsMigration,
+    poolOperations,
+    staff,
     cardLibrary,
     settlement,
     api,

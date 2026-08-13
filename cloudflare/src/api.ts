@@ -49,6 +49,10 @@ import {
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
+import {
+  CONQUEST_REWARD_POOL_OPERATION_HEADER,
+  ConquestRewardPoolOperationsRepository
+} from './conquest-reward-pool-operations'
 import { ConquestV2EconomyRepository } from './conquest-v2-economy'
 import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
@@ -276,6 +280,9 @@ export const handleApiRequest = async (
     : undefined
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
+  const conquestRewardPools = new ConquestRewardPoolOperationsRepository(
+    env.AUTH_DB
+  )
   const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
@@ -1236,6 +1243,69 @@ export const handleApiRequest = async (
             accountName: row.account_name,
             progress: conquestTreasureProgress(row.current_points)
           }))
+        })
+      }
+
+      case 'GMListConquestRewardPools': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ version?: unknown }>(request)
+        return json(request, env, {
+          pools: await conquestRewardPools.list(body.version)
+        })
+      }
+
+      case 'GMProposeConquestRewardPool': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestRewardPoolWrite(principal.userId, 'PROPOSE')
+        const body = await requestBody<{
+          version?: unknown
+          startsAt?: unknown
+          endsAt?: unknown
+          silverCardIds?: unknown
+          goldCardIds?: unknown
+          reason?: unknown
+          reviewReference?: unknown
+        }>(request)
+        return json(request, env, {
+          pool: await conquestRewardPools.propose(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_REWARD_POOL_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMActivateConquestRewardPool': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestRewardPoolWrite(principal.userId, 'ACTIVATE')
+        const body = await requestBody<{
+          version?: unknown
+          cardManifest?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          pool: await conquestRewardPools.activate(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_REWARD_POOL_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMRetireConquestRewardPool': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestRewardPoolWrite(principal.userId, 'RETIRE')
+        const body = await requestBody<{
+          version?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          pool: await conquestRewardPools.retire(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_REWARD_POOL_OPERATION_HEADER)
+          )
         })
       }
 

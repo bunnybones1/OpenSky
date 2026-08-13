@@ -9,7 +9,8 @@ import {
   rpcFulfillmentSummary,
   partitionRpcGaps,
   summarizeRpcCategories,
-  tsRpcTombstoneAuditErrors
+  tsRpcTombstoneAuditErrors,
+  REVIEWED_CLOUDFLARE_RPC_ADAPTERS
 } from './audit-cloudflare-rpcs.mjs'
 
 test('extracts exported Go Server RPCs and TypeScript gateway cases', () => {
@@ -102,7 +103,7 @@ test('coverage check fails closed on count and critical regressions', () => {
     source: [],
     implemented: ['Ping'],
     missing: [],
-    adapters: []
+    adapters: [...REVIEWED_CLOUDFLARE_RPC_ADAPTERS]
   })
   assert.ok(errors.some(error => error.includes('count regressed')))
   assert.ok(errors.some(error => error.includes('GetAccount')))
@@ -173,10 +174,71 @@ test('fails closed when a source omission has no reviewed disposition', () => {
       'Version'
     ]],
     missing: ['EntirelyNewSourceRPC'],
-    adapters: []
+    adapters: [...REVIEWED_CLOUDFLARE_RPC_ADAPTERS]
   })
   assert.ok(
     errors.some(error => error === 'unreviewed actionable RPC gap: EntirelyNewSourceRPC')
+  )
+})
+
+test('allowlists every Cloudflare-only RPC adapter', () => {
+  const baseline = {
+    source: [],
+    implemented: Array.from({ length: 148 }, (_, index) => `Method${index}`),
+    sourceTombstones: [
+      'AvailableXPBonuses',
+      'ClaimQuestRewards',
+      'Clock',
+      'CheckDeck',
+      'ConquestPoints',
+      'ConquestStats',
+      'ConquestStatus',
+      'ConquestV2Progress',
+      'CreateDeck',
+      'DeleteDeck',
+      'EnterConquest',
+      'GetAccount',
+      'GetAccountByUsername',
+      'GetAccountStats',
+      'GetCardLibrary',
+      'GetCardsByDeckString',
+      'GetCardsByID',
+      'GetBatchItemSupply',
+      'GetFeed',
+      'GetEpicQuestChain',
+      'GetGameModesStatus',
+      'GetItemOwnershipByType',
+      'GetItemSummary',
+      'GetItemSuppliesByType',
+      'GetMatch',
+      'GetMatchLiveRecordsURI',
+      'ListDecks',
+      'ListLeaderboard',
+      'ListMatches',
+      'ListQuests',
+      'HeroUnlockLevels',
+      'Ping',
+      'SearchCards',
+      'SearchDecks',
+      'SetInvitedBy',
+      'ToggleDeckFavorite',
+      'UpdateAccount',
+      'UpdateDeck',
+      'UserStorageFetch',
+      'UserStorageSave',
+      'Version'
+    ],
+    missing: []
+  }
+  assert.ok(
+    checkRpcCoverage({ ...baseline, adapters: ['EntirelyNewAdapter'] }).some(
+      error => error.includes('unreviewed Cloudflare-only RPC adapter')
+    )
+  )
+  assert.ok(
+    checkRpcCoverage({ ...baseline, adapters: [] }).some(error =>
+      error.includes('reviewed Cloudflare-only RPC adapter disappeared')
+    )
   )
 })
 

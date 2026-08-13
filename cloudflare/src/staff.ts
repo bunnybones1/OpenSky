@@ -11,6 +11,7 @@ import type {
 
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { isConquestQueueReady } from './conquest-readiness'
+import type { ConquestRewardPoolOperation } from './conquest-reward-pool-operations'
 
 interface StatusCountRow {
   account_status: AccountStatus
@@ -284,6 +285,25 @@ export class StaffRepository {
       .first()
     if (!permission) {
       throw permissionDenied('Conquest config write access required')
+    }
+  }
+
+  async requireConquestRewardPoolWrite(
+    userId: string,
+    permission: ConquestRewardPoolOperation
+  ): Promise<void> {
+    await this.requireAdmin(userId)
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_conquest_reward_pool_permissions
+         WHERE user_id = ? AND permission = ?`
+      )
+      .bind(userId, permission)
+      .first()
+    if (!row) {
+      throw permissionDenied(
+        `Conquest reward pool ${permission.toLowerCase()} access required`
+      )
     }
   }
 

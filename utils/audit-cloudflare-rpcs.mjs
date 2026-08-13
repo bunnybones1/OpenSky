@@ -231,6 +231,16 @@ export const SUPERSEDED_SOURCE_RPCS = new Set([
 
 export const APPROVED_ACTIONABLE_SOURCE_RPCS = new Set([])
 
+export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
+  'GMActivateConquestRewardPool',
+  'GMActivateSkypassRewards',
+  'GMGrantBaseCards',
+  'GMGrantItems',
+  'GMListConquestRewardPools',
+  'GMProposeConquestRewardPool',
+  'GMRetireConquestRewardPool'
+])
+
 export const partitionRpcGaps = methods => ({
   retired: methods.filter(method => RETIRED_SOURCE_RPCS.has(method)).sort(),
   superseded: methods
@@ -263,6 +273,16 @@ export const checkRpcCoverage = audit => {
   for (const method of gaps.actionable) {
     if (!APPROVED_ACTIONABLE_SOURCE_RPCS.has(method)) {
       errors.push(`unreviewed actionable RPC gap: ${method}`)
+    }
+  }
+  for (const method of audit.adapters) {
+    if (!REVIEWED_CLOUDFLARE_RPC_ADAPTERS.has(method)) {
+      errors.push(`unreviewed Cloudflare-only RPC adapter: ${method}`)
+    }
+  }
+  for (const method of REVIEWED_CLOUDFLARE_RPC_ADAPTERS) {
+    if (!audit.adapters.includes(method)) {
+      errors.push(`reviewed Cloudflare-only RPC adapter disappeared: ${method}`)
     }
   }
   return errors

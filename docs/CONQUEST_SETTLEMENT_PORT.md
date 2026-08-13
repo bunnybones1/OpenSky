@@ -48,6 +48,12 @@ run only after that task settles.
   public weekly-Gold reads, readiness, and the database queue-enable guard all
   share the approved-pool view. Direct `ACTIVE` inserts and legacy unapproved
   active rows therefore have no authority.
+- Cloudflare-only staff adapters list, atomically propose, independently
+  activate, and retire those pools without direct production SQL. Proposal,
+  activation, and retirement use separate dormant capabilities, idempotency
+  keys, exact request/effect guards, and immutable before/after audits. They
+  never select card IDs, create a production pool, write readiness evidence,
+  or enable a queue on their own.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
@@ -139,8 +145,9 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Conquest mode flags remain false until all checks pass against the deployed
   Worker version and an explicit pool configuration.
 
-Before enabling either mode, operations must create a bounded draft pool,
-record its exact manifest proposal, obtain independent activation approval,
+Before enabling either mode, authorized operations must supply a bounded draft
+pool to `GMProposeConquestRewardPool`, independently echo its exact manifest to
+`GMActivateConquestRewardPool`,
 then exercise one isolated three-win settlement through delayed delivery and
 insert the resulting settlement/delivery keys into
 `conquest_queue_readiness`. The database now verifies inventory/feed/receipt
