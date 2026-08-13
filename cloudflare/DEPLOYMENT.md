@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`b17d2cee-ee47-490f-86d9-a05ac4b95aa9`)
+- API/web Worker: `opensky-webapp` (`2d9abc61-1f9b-49ee-93b3-09ccca81947e`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
@@ -40,8 +40,11 @@
   The API and match service also include `90dbfe7`: Conquest readiness is now
   backed by the real off-chain Silver settlement and delayed-Gold delivery
   receipts, and admission closes dynamically when that verified pool expires.
+  The API also includes `f9ec4ec`: referral-sticker metadata remains dormant
+  until an immutable two-actor schedule activates exact off-chain rewards, and
+  every point-deduction batch records the schedule version that authorized it.
 - Deployed: 2026-08-13 PDT
-- Applied D1 migrations: `0001` through `0086`; the remote migration check
+- Applied D1 migrations: `0001` through `0087`; the remote migration check
   reports no pending migrations.
 - Scheduled trigger: every minute for due Conquest Gold delivery, SkyPass
   season close and auto-claim, account
@@ -238,7 +241,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 44 files, 313 tests
+- API Worker: 44 files, 314 tests
 - Match service: 27 tests
 - Game Worker: 31 unit and 80 Worker tests
 - Matchmaker: 47 unit and 31 Worker tests
@@ -250,6 +253,21 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
+- API/web Worker version `2d9abc61-1f9b-49ee-93b3-09ccca81947e` serves commit
+  `f9ec4ec` at 100% traffic. Migration `0087` separates raw sticker metadata
+  from reward authority: a nonempty second actor must activate an exact,
+  immutable current-season schedule before the public reward catalog or
+  scheduler can use it, and immutable per-batch receipts prevent later or
+  retroactive schedules from authorizing point deductions. Production has zero
+  sticker metadata, schedules, schedule receipts, reward batches, awards, or
+  inventory grants, so season 62 remains deliberately `Coming Soon`. Live
+  Version, Ping, GetStickers, mode-status, and app-HTML probes returned `200`;
+  GetStickers returned an empty list and both Conquest modes remained false.
+  The final D1 read retained 31 inventory rows, made zero writes, and reported
+  `changed_db: false`; no migrations remain pending. The release passed all 314
+  API tests, 27 match-service tests, 31 game unit plus 80 game Worker tests, 47
+  matchmaker unit plus 31 Worker tests, six analytics tests, every TypeScript
+  check, the complete browser/game build, and 24 off-chain gate tests.
 - API/web Worker version `b17d2cee-ee47-490f-86d9-a05ac4b95aa9` and match
   service version `700ffbb4-f8ce-401f-afeb-ba856be1a5e9` serve commit
   `90dbfe7` at 100% traffic. Migration `0086` installed receipt-backed
