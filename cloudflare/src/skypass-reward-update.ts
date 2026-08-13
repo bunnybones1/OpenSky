@@ -8,6 +8,11 @@ import type {
 
 import { allLibraryCards } from './card-library'
 import { alreadyExists, invalidArgument } from './errors'
+import {
+  SKYPASS_REWARD_POLICY_HASH,
+  SKYPASS_REWARD_POLICY_VERSION,
+  SKYPASS_SUPPORTED_REWARD_ITEM_TYPES
+} from './skypass-reward-policy'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
 
 const MAX_CSV_BYTES = 1024 * 1024
@@ -45,6 +50,9 @@ const CARD_SETS = new Set([
 ])
 const HERO_IDS = new Set(Array.from({ length: 15 }, (_, index) => index + 1))
 const CARD_IDS = new Set(allLibraryCards().map(card => card.id))
+const SUPPORTED_REWARD_ITEM_TYPES = new Set<number>(
+  SKYPASS_SUPPORTED_REWARD_ITEM_TYPES
+)
 
 interface RewardAttributes {
   tokenIDs?: number[]
@@ -75,6 +83,24 @@ interface ParsedReward {
   isStarter: number
   attributes: RewardAttributes | null
   isInfinite: number
+}
+
+interface PolicyRow {
+  season: number
+  version: number
+  status: 'DRAFT' | 'ACTIVE'
+  mutation_id: string
+  source_origin: string
+  content_sha256: string
+  reward_count: number
+  fulfillment_policy_version: number
+  fulfillment_policy_hash: string
+  created_by_user_id: string
+  activated_by_user_id: string | null
+  activation_reason: string | null
+  review_reference: string | null
+  created_at: string
+  activated_at: string | null
 }
 
 export type SkypassRewardFetch = (
@@ -393,6 +419,9 @@ export class SkypassRewardUpdateRepository {
       const itemTypeName = record[2].trim()
       const itemType = ITEM_TYPE_ID[itemTypeName]
       if (!itemType) throw invalidArgument('item type is invalid')
+      if (!SUPPORTED_REWARD_ITEM_TYPES.has(itemType)) {
+        throw invalidArgument('item type has no off-chain SkyPass fulfillment')
+      }
       const amount = uint16(record[3], 'amount', true)
       const isStarter = sourceBool(record[4])
       const ids = tokenIds(record[5])
@@ -431,6 +460,9 @@ export class SkypassRewardUpdateRepository {
       if (itemTypeName === 'SW_CARD_BACKS' && !ids.length) {
         throw invalidArgument('card back rewards require token IDs')
       }
+      if (itemTypeName === 'SW_TITLES' && !ids.length) {
+        throw invalidArgument('title rewards require token IDs')
+      }
       if (itemTypeName === 'SW_STICKERS') {
         if (!ids.length) throw invalidArgument('sticker rewards require token IDs')
         const placeholders = ids.map(() => '?').join(', ')
@@ -467,19 +499,21 @@ export class SkypassRewardUpdateRepository {
         isInfinite: 0
       })
     }
+    if (!rewards.length) throw invalidArgument('reward CSV is empty')
     rewards[rewards.length - 1].isInfinite = 1
     return rewards
   }
 
-  private async rows(season: number) {
+  private async rows(season: number, version?: number) {
     const rows = await this.database
       .prepare(
         `SELECT id, level, season, tier, item_type, amount, is_starter,
                 attributes, is_infinite
-         FROM skypass_rewards WHERE season = ?
+         FROM ${version === undefined ? 'skypass_reward_active_rewards' : 'skypass_rewards'}
+         WHERE season = ?${version === undefined ? '' : ' AND policy_version = ?'}
          ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
       )
-      .bind(season)
+      .bind(...(version === undefined ? [season] : [season, version]))
       .all<RewardRow>()
     return rows.results
   }
@@ -517,45 +551,25 @@ export class SkypassRewardUpdateRepository {
     if (!actorGameAccountId) throw new Error('staff game account is missing')
     const expectedVersion =
       (await this.database
-        .prepare('SELECT version FROM skypass_reward_update_versions WHERE season = ?')
+        .prepare(
+          `SELECT MAX(version) AS version FROM skypass_reward_policy_versions
+           WHERE season = ?`
+        )
         .bind(season)
         .first<number>('version')) || 0
     const version = expectedVersion + 1
     const mutationId = crypto.randomUUID()
     const timestamp = at.toISOString()
-
-    const existingByIdentity = new Map<string, RewardRow>()
-    for (const row of before) {
-      existingByIdentity.set(`${row.level}:${row.tier}:${row.is_starter}`, row)
-    }
-    const retainedIds = new Set<number>()
-    for (const reward of rewards) {
-      const existing = existingByIdentity.get(
-        `${reward.level}:${reward.tier}:${reward.isStarter}`
-      )
-      if (existing) {
-        reward.id = existing.id
-        retainedIds.add(existing.id)
-      }
-    }
-    const activeMutation =
-      `(SELECT mutation_id FROM skypass_reward_update_versions WHERE season = ?) = ?`
     const statements: D1PreparedStatement[] = [
       this.database
         .prepare(
-          `INSERT INTO skypass_reward_update_versions
-             (season, version, mutation_id, source_origin, content_sha256,
-              reward_count, updated_by_user_id, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(season) DO UPDATE SET
-             version = excluded.version,
-             mutation_id = excluded.mutation_id,
-             source_origin = excluded.source_origin,
-             content_sha256 = excluded.content_sha256,
-             reward_count = excluded.reward_count,
-             updated_by_user_id = excluded.updated_by_user_id,
-             updated_at = excluded.updated_at
-           WHERE skypass_reward_update_versions.version = ?`
+          `INSERT INTO skypass_reward_policy_versions
+             (season, version, status, mutation_id, source_origin,
+              content_sha256, reward_count, fulfillment_policy_version,
+              fulfillment_policy_hash, created_by_user_id,
+              activated_by_user_id, activation_reason, review_reference,
+              created_at, activated_at)
+           VALUES (?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL)`
         )
         .bind(
           season,
@@ -564,70 +578,45 @@ export class SkypassRewardUpdateRepository {
           downloaded.origin,
           hash,
           rewards.length,
+          SKYPASS_REWARD_POLICY_VERSION,
+          SKYPASS_REWARD_POLICY_HASH,
           actorUserId,
-          timestamp,
-          expectedVersion
+          timestamp
         )
     ]
-    for (const reward of rewards) {
+    for (const [index, reward] of rewards.entries()) {
       const attributes = reward.attributes ? JSON.stringify(reward.attributes) : null
-      if (reward.id) {
-        statements.push(
-          this.database
-            .prepare(
-              `UPDATE skypass_rewards
-               SET level = ?, season = ?, tier = ?, item_type = ?, amount = ?,
-                   is_starter = ?, attributes = ?, updated_at = ?, updated_by = ?,
-                   is_infinite = ?
-               WHERE id = ? AND ${activeMutation}`
-            )
-            .bind(
-              reward.level,
-              season,
-              reward.tier,
-              reward.itemType,
-              reward.amount,
-              reward.isStarter,
-              attributes,
-              timestamp,
-              actorGameAccountId,
-              reward.isInfinite,
-              reward.id,
-              season,
-              mutationId
-            )
-        )
-      } else {
-        statements.push(
-          this.database
-            .prepare(
-              `INSERT INTO skypass_rewards
-                 (level, season, tier, item_type, amount, is_starter, attributes,
-                  updated_at, updated_by, is_infinite)
-               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activeMutation}`
-            )
-            .bind(
-              reward.level,
-              season,
-              reward.tier,
-              reward.itemType,
-              reward.amount,
-              reward.isStarter,
-              attributes,
-              timestamp,
-              actorGameAccountId,
-              reward.isInfinite,
-              season,
-              mutationId
-            )
-        )
-      }
-    }
-    for (const stale of before.filter(row => !retainedIds.has(row.id))) {
       statements.push(
         this.database
-          .prepare(`DELETE FROM skypass_rewards WHERE id = ? AND ${activeMutation}`)
-          .bind(stale.id, season, mutationId)
+          .prepare(
+            `INSERT INTO skypass_rewards
+               (level, season, tier, item_type, amount, is_starter, attributes,
+                updated_at, updated_by, is_infinite, policy_version,
+                policy_ordinal)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             WHERE EXISTS (
+               SELECT 1 FROM skypass_reward_policy_versions policy
+               WHERE policy.season = ? AND policy.version = ?
+                 AND policy.status = 'DRAFT' AND policy.mutation_id = ?
+             )`
+          )
+          .bind(
+            reward.level,
+            season,
+            reward.tier,
+            reward.itemType,
+            reward.amount,
+            reward.isStarter,
+            attributes,
+            timestamp,
+            actorGameAccountId,
+            reward.isInfinite,
+            version,
+            index + 1,
+            season,
+            version,
+            mutationId
+          )
       )
     }
     statements.push(
@@ -636,7 +625,12 @@ export class SkypassRewardUpdateRepository {
           `INSERT INTO staff_skypass_reward_audit
              (operation, season, version, actor_user_id, source_origin,
               content_sha256, before_json, after_json, created_at)
-           SELECT 'REPLACE', ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activeMutation}`
+           SELECT 'REPLACE', ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM skypass_reward_policy_versions policy
+             WHERE policy.season = ? AND policy.version = ?
+               AND policy.status = 'DRAFT' AND policy.mutation_id = ?
+           )`
         )
         .bind(
           season,
@@ -648,6 +642,7 @@ export class SkypassRewardUpdateRepository {
           JSON.stringify(rewards.map(semanticSnapshot)),
           timestamp,
           season,
+          version,
           mutationId
         )
     )
@@ -662,6 +657,102 @@ export class SkypassRewardUpdateRepository {
     }
     if (results[0].meta.changes !== 1) {
       throw alreadyExists('SkyPass reward definitions changed concurrently')
+    }
+    return (await this.rows(season, version)).map(present)
+  }
+
+  async review(season: number, version: number) {
+    if (!Number.isSafeInteger(season) || season < 1 || season > 65535) {
+      throw invalidArgument('season is invalid')
+    }
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw invalidArgument('version is invalid')
+    }
+    const policy = await this.database
+      .prepare(
+        `SELECT season, version, status, mutation_id, source_origin,
+                content_sha256, reward_count, fulfillment_policy_version,
+                fulfillment_policy_hash, created_by_user_id,
+                activated_by_user_id, activation_reason, review_reference,
+                created_at, activated_at
+         FROM skypass_reward_policy_versions
+         WHERE season = ? AND version = ?`
+      )
+      .bind(season, version)
+      .first<PolicyRow>()
+    if (!policy) throw invalidArgument('SkyPass reward policy does not exist')
+    const rewards = (await this.rows(season, version)).map(present)
+    return {
+      policy: {
+        season: policy.season,
+        version: policy.version,
+        status: policy.status,
+        mutationId: policy.mutation_id,
+        sourceOrigin: policy.source_origin,
+        contentSHA256: policy.content_sha256,
+        rewardCount: policy.reward_count,
+        fulfillmentPolicyVersion: policy.fulfillment_policy_version,
+        fulfillmentPolicyHash: policy.fulfillment_policy_hash,
+        createdByUserId: policy.created_by_user_id,
+        activatedByUserId: policy.activated_by_user_id,
+        activationReason: policy.activation_reason,
+        reviewReference: policy.review_reference,
+        createdAt: policy.created_at,
+        activatedAt: policy.activated_at
+      },
+      rewards
+    }
+  }
+
+  async activate(
+    actorUserId: string,
+    season: number,
+    version: number,
+    reason: string,
+    reviewReference: string,
+    at = new Date()
+  ): Promise<SkypassReward[]> {
+    if (!Number.isSafeInteger(season) || season < 1 || season > 65535) {
+      throw invalidArgument('season is invalid')
+    }
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw invalidArgument('version is invalid')
+    }
+    if (typeof reason !== 'string' || !reason.trim()) {
+      throw invalidArgument('reason is required')
+    }
+    if (typeof reviewReference !== 'string' || !reviewReference.trim()) {
+      throw invalidArgument('review reference is required')
+    }
+    let result: D1Result
+    try {
+      result = await this.database
+        .prepare(
+          `UPDATE skypass_reward_policy_versions
+           SET status = 'ACTIVE', activated_by_user_id = ?,
+               activation_reason = ?, review_reference = ?, activated_at = ?
+           WHERE season = ? AND version = ? AND status = 'DRAFT'`
+        )
+        .bind(
+          actorUserId,
+          reason.trim(),
+          reviewReference.trim(),
+          at.toISOString(),
+          season,
+          version
+        )
+        .run()
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('SkyPass reward policy activation is invalid')
+      ) {
+        throw invalidArgument('SkyPass reward policy activation is invalid')
+      }
+      throw error
+    }
+    if (result.meta.changes !== 1) {
+      throw invalidArgument('SkyPass reward draft does not exist')
     }
     return (await this.rows(season)).map(present)
   }

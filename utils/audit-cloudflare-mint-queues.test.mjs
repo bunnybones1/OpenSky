@@ -55,13 +55,13 @@ const evidence = {
   MintLeaderboardRewardsQueue:
     'leaderboard_reward_schedule_activations leaderboard_reward_cycle_policy_receipts player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid',
   MintCardBackRewardsQueue:
-    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_CARD_BACKS',
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid active SkyPass reward policy required SW_CARD_BACKS',
   MintSkypassConquestTicketsQueue:
-    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_CONQUEST_TICKET',
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid active SkyPass reward policy required SW_CONQUEST_TICKET',
   MintSkypassSilverCardsQueue:
-    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_SILVER_CARDS',
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid active SkyPass reward policy required SW_SILVER_CARDS',
   MintSkypassStickersQueue:
-    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_STICKERS'
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid active SkyPass reward policy required SW_STICKERS'
 }
 
 test('parses and accepts the complete reviewed transaction queue map', () => {

@@ -39,8 +39,8 @@ mint. WalletConnect remains an optional ownership integration only.
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `RankPointsSoftResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; each source mint behavior maps to an off-chain item/entitlement or an explicit whole-feature retirement. |
-| `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward off chain. |
-| `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds and complete once. |
+| `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward from the active exact policy off chain. |
+| `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds, read only the active exact reward policy, and complete once. |
 | `StripeEventRunner` | Ported | Verified Stripe webhooks fulfill purchases idempotently in D1. |
 | `TxnStatusRunner` | Retired | There are no reward-mint transactions whose chain status controls inventory. |
 
@@ -61,10 +61,10 @@ commented-out runner is accidentally counted as active.
 | `SendConquestExtraRewardQueue` | Whole feature retired: this is a treasury asset transfer, not a mint, and the source has no production producer or earning flow. |
 | `ConquestV2SendRewardQueue` | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise. |
 | `MintLeaderboardRewardsQueue` | Combined leaderboard Silver and ticket rewards are granted atomically under D1 cycle/player receipts. |
-| `MintCardBackRewardsQueue` | An earned SkyPass claim grants `SW_CARD_BACKS` through immutable per-token before/after receipts. |
-| `MintSkypassConquestTicketsQueue` | An earned SkyPass claim grants `SW_CONQUEST_TICKET` through an immutable before/after receipt. |
-| `MintSkypassSilverCardsQueue` | An earned SkyPass claim grants `SW_SILVER_CARDS` through immutable per-token before/after receipts. |
-| `MintSkypassStickersQueue` | An earned SkyPass claim grants `SW_STICKERS` through immutable per-token before/after receipts. |
+| `MintCardBackRewardsQueue` | An earned, active-policy SkyPass claim grants `SW_CARD_BACKS` through immutable per-token before/after receipts. |
+| `MintSkypassConquestTicketsQueue` | An earned, active-policy SkyPass claim grants `SW_CONQUEST_TICKET` through an immutable before/after receipt. |
+| `MintSkypassSilverCardsQueue` | An earned, active-policy SkyPass claim grants `SW_SILVER_CARDS` through immutable per-token before/after receipts. |
+| `MintSkypassStickersQueue` | An earned, active-policy SkyPass claim grants `SW_STICKERS` through immutable per-token before/after receipts. |
 
 The production mint-queue gate reads the implementation evidence behind every
 row. A queue is not accepted merely because its source producer is absent.

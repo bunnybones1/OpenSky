@@ -117,6 +117,9 @@ export const offchainGateErrors = ({
   conquestV2RewardSource = '',
   conquestV2RewardPolicySource = '',
   conquestV2RewardPolicyMigration = '',
+  skypassRewardSource = '',
+  skypassRewardPolicySource = '',
+  skypassRewardPolicyMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -669,6 +672,66 @@ export const offchainGateErrors = ({
       )
     }
   }
+  if (skypassRewardSource || skypassRewardPolicyMigration) {
+    for (const token of [
+      'skypass_reward_active_rewards',
+      'skypass_reward_active_policies',
+      'SKYPASS_REWARD_POLICY_HASH',
+      'reward_policy_version',
+      'reward_policy_hash',
+      'stableRewardIndex',
+      'Math.imul(hash, 16777619)',
+      'GMActivateSkypassRewards',
+      'item type has no off-chain SkyPass fulfillment'
+    ]) {
+      if (!skypassRewardSource.includes(token)) {
+        errors.push(`SkyPass reward is missing policy safeguard: ${token}`)
+      }
+    }
+    for (const token of [
+      'cloud-weasel-offchain-skypass-v1',
+      'cardCatalog: cardLibrary.cards.map',
+      'starterDecks: STARTER_DECKS.map',
+      'fnv1a32(userId:rewardId:index)',
+      "SW_BASE_CARDS: ['SW_BASE_CARDS', 'card-id', 'nonstackable']",
+      "SW_CONQUEST_TICKET: ['SW_CONQUEST_TICKET', 2, 'stackable']",
+      "SW_STICKERS: ['SW_STICKERS', 'token-id', 'stackable']",
+      "chainEffects: 'none; every source mint queue is identity-owned D1 inventory'",
+      'calculatedSkypassRewardPolicyHash'
+    ]) {
+      if (!skypassRewardPolicySource.includes(token)) {
+        errors.push(`SkyPass policy hash is missing source input: ${token}`)
+      }
+    }
+    for (const token of [
+      'skypass_reward_policy_versions',
+      "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE'))",
+      'activated_by_user_id <> created_by_user_id',
+      'skypass_reward_active_policies',
+      'skypass_reward_active_rewards',
+      "SET status = 'ACTIVE'",
+      'reward.item_type NOT IN (300, 302, 303, 401, 403, 405, 407, 500)',
+      'Versioned SkyPass reward rows are immutable',
+      'active SkyPass sticker metadata is immutable',
+      'active SkyPass reward policy required',
+      'SkyPass claim policy receipt is immutable'
+    ]) {
+      if (!skypassRewardPolicyMigration.includes(token)) {
+        errors.push(`SkyPass policy schema is missing safeguard: ${token}`)
+      }
+    }
+    const configuredHash = skypassRewardPolicySource.match(
+      /SKYPASS_REWARD_POLICY_HASH\s*=\s*\n?\s*['"]([0-9a-f]{64})['"]/
+    )?.[1]
+    if (
+      !configuredHash ||
+      !skypassRewardPolicyMigration.includes(configuredHash)
+    ) {
+      errors.push(
+        'SkyPass policy runtime hash is not pinned by the D1 activation schema'
+      )
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -766,7 +829,11 @@ const main = async () => {
     leaderboardRewardPolicySource,
     leaderboardRewardPolicyMigration,
     conquestV2RewardPolicySource,
-    conquestV2RewardPolicyMigration
+    conquestV2RewardPolicyMigration,
+    skypassRewardUpdateSource,
+    skypassRewardPolicySource,
+    skypassRewardPolicyMigration,
+    apiSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -1068,7 +1135,14 @@ const main = async () => {
         'cloudflare/migrations/0089_conquest_v2_reward_policy_activation.sql'
       ),
       'utf8'
-    )
+    ),
+    readFile(path.join(root, 'cloudflare/src/skypass-reward-update.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/skypass-reward-policy.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
@@ -1190,6 +1264,14 @@ const main = async () => {
     conquestV2RewardSource: conquestV2Rewards,
     conquestV2RewardPolicySource,
     conquestV2RewardPolicyMigration,
+    skypassRewardSource: [
+      playerRpc,
+      skypassAutoClaim,
+      skypassRewardUpdateSource,
+      apiSource
+    ].join('\n'),
+    skypassRewardPolicySource,
+    skypassRewardPolicyMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })

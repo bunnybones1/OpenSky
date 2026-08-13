@@ -13,6 +13,10 @@ import {
 import { PlayerRepository, STARTER_CARDS } from '../src/player'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { questPeriodAt } from '../src/quest-library'
+import {
+  clearTestSkypassPolicies,
+  createTestSkypassPolicy
+} from './helpers/skypass-policy'
 
 const testEnv = env as unknown as Env
 const ADMIN = 'staff-admin'
@@ -79,6 +83,7 @@ beforeEach(async () => {
        updated_at = ?`
     ).bind(new Date().toISOString())
   ])
+  await clearTestSkypassPolicies(env.AUTH_DB, [999])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users
@@ -2372,22 +2377,24 @@ describe('fail-closed Google identity staff authorization', () => {
   })
 
   it('lists source-shaped SkyPass definitions in source order for staff', async () => {
-    await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, is_infinite)
-       VALUES (2, 999, 1, 500, 0, 1,
-               '{"tokenIDs":[2],"unlockDeckClasses":["AGY"]}', ?, 0),
-              (1, 999, 2, 403, 1, 0, NULL, ?, 0),
-              (2, 999, 1, 300, 1, 0,
-               '{"cardSetsExcluded":["HEXBOUND_INVASION"]}', ?, 1)`
-    )
-      .bind(
-        '2026-08-12T00:00:00.000Z',
-        '2026-08-12T00:00:00.000Z',
-        '2026-08-12T00:00:00.000Z'
-      )
-      .run()
+    await createTestSkypassPolicy(env.AUTH_DB, 999, [
+      { level: 1, tier: 2, itemType: 403, amount: 1 },
+      {
+        level: 2,
+        tier: 1,
+        itemType: 500,
+        amount: 0,
+        isStarter: 1,
+        attributes: { tokenIDs: [2], unlockDeckClasses: ['AGY'] }
+      },
+      {
+        level: 2,
+        tier: 1,
+        itemType: 300,
+        amount: 1,
+        attributes: { cardSetsExcluded: ['HEXBOUND_INVASION'] }
+      }
+    ])
     expect(
       (await rpcAs(PLAYER, 'GMListSkypassRewards', { season: 999 })).status
     ).toBe(403)

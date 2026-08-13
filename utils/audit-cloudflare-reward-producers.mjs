@@ -119,7 +119,11 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
   'api/lib/skypass/reward_applier.go': {
     count: 6,
     disposition: 'offchain-skypass',
-    evidenceFiles: ['cloudflare/src/player-rpc.ts'],
+    evidenceFiles: [
+      'cloudflare/src/player-rpc.ts',
+      'cloudflare/src/skypass-reward-policy.ts',
+      'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'
+    ],
     evidence: [
       'player_skypass_claims',
       'SW_HERO',
@@ -129,7 +133,9 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
       'SW_STICKER_POINTS',
       'SW_SILVER_CARDS',
       'SW_CARD_BACKS',
-      'SW_TITLES'
+      'SW_TITLES',
+      'SKYPASS_REWARD_POLICY_HASH',
+      'active SkyPass reward policy required'
     ]
   },
   'api/rpc/decks.go': {

@@ -37,7 +37,9 @@ const discoverDueCycles = async (
   now: Date
 ): Promise<number> => {
   const seasons = await database
-    .prepare(`SELECT DISTINCT season FROM skypass_rewards ORDER BY season`)
+    .prepare(
+      `SELECT DISTINCT season FROM skypass_reward_active_rewards ORDER BY season`
+    )
     .all<SeasonRow>()
   let created = 0
   for (const row of seasons.results) {
@@ -81,7 +83,7 @@ const pendingPlayers = (database: D1Database, season: number) =>
              AND failure.season = ? AND failure.attempts >= 5
          )
          AND EXISTS (
-           SELECT 1 FROM skypass_rewards reward
+           SELECT 1 FROM skypass_reward_active_rewards reward
            LEFT JOIN player_skypass_season_stats stats
              ON stats.user_id = progression.user_id
             AND stats.season = reward.season

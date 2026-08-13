@@ -207,6 +207,32 @@ const validInput = () => ({
     'active Conquest V2 reward policy receipt required; ' +
     'Conquest V2 reward cycle policy receipts are immutable; ' +
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  skypassRewardSource:
+    'skypass_reward_active_rewards; skypass_reward_active_policies; ' +
+    'SKYPASS_REWARD_POLICY_HASH; reward_policy_version; reward_policy_hash; ' +
+    'stableRewardIndex; Math.imul(hash, 16777619); ' +
+    'GMActivateSkypassRewards; item type has no off-chain SkyPass fulfillment',
+  skypassRewardPolicySource:
+    'cloud-weasel-offchain-skypass-v1; cardCatalog: cardLibrary.cards.map; ' +
+    'starterDecks: STARTER_DECKS.map; fnv1a32(userId:rewardId:index); ' +
+    "SW_BASE_CARDS: ['SW_BASE_CARDS', 'card-id', 'nonstackable']; " +
+    "SW_CONQUEST_TICKET: ['SW_CONQUEST_TICKET', 2, 'stackable']; " +
+    "SW_STICKERS: ['SW_STICKERS', 'token-id', 'stackable']; " +
+    "chainEffects: 'none; every source mint queue is identity-owned D1 inventory'; " +
+    'calculatedSkypassRewardPolicyHash; ' +
+    "SKYPASS_REWARD_POLICY_HASH = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'",
+  skypassRewardPolicyMigration:
+    'skypass_reward_policy_versions; ' +
+    "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE')); " +
+    'activated_by_user_id <> created_by_user_id; ' +
+    'skypass_reward_active_policies; skypass_reward_active_rewards; ' +
+    "SET status = 'ACTIVE'; " +
+    'reward.item_type NOT IN (300, 302, 303, 401, 403, 405, 407, 500); ' +
+    'Versioned SkyPass reward rows are immutable; ' +
+    'active SkyPass sticker metadata is immutable; ' +
+    'active SkyPass reward policy required; ' +
+    'SkyPass claim policy receipt is immutable; ' +
+    'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -364,6 +390,16 @@ test('rejects Conquest V2 fulfillment without approved settings and exact policy
   )
   assert.ok(errors.some(error => error.includes('settings.mutation_id')))
   assert.ok(errors.some(error => error.includes('cycle policy receipts')))
+})
+
+test('rejects SkyPass fulfillment without an approved exact off-chain policy', () => {
+  const input = validInput()
+  input.skypassRewardSource = 'INSERT INTO player_items; delivery_key'
+  input.skypassRewardPolicyMigration = 'skypass_reward_policy_versions'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('SKYPASS_REWARD_POLICY_HASH')))
+  assert.ok(errors.some(error => error.includes('activated_by_user_id')))
+  assert.ok(errors.some(error => error.includes('claim policy receipt')))
 })
 
 test('rejects player inventory writes from an observational pipeline', () => {

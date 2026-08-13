@@ -13,6 +13,10 @@ import {
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
 import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
+import {
+  clearTestSkypassPolicies,
+  createTestSkypassPolicy
+} from './helpers/skypass-policy'
 
 const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
@@ -69,6 +73,7 @@ beforeEach(async () => {
     'DROP TRIGGER IF EXISTS reject_skypass_claim_completion'
   ).run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
+  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -2244,39 +2249,52 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('delivers every remaining source SkyPass reward into off-chain inventory', async () => {
-    const season = seasonFromDate()
-    const now = new Date().toISOString()
-    await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `INSERT INTO content_stickers (token_id, required_points, season)
-         VALUES (987, 0, ?)`
-      ).bind(season),
-      ...[
-        [101, 403, 3, null],
-        [102, 405, 0, JSON.stringify({ tokenIDs: [987] })],
-        [103, 303, 7, null],
-        [104, 401, 0, JSON.stringify({ tokenIDs: [1, 2] })],
-        [105, 407, 0, JSON.stringify({ tokenIDs: [11] })],
-        [106, 302, 0, JSON.stringify({ tokenIDs: [12] })]
-      ].map(([level, itemType, amount, attributes]) =>
-        env.AUTH_DB.prepare(
-          `INSERT INTO skypass_rewards
-             (level, season, tier, item_type, amount, is_starter, attributes,
-              updated_at, is_infinite)
-           VALUES (?, ?, 1, ?, ?, 0, ?, ?, 0)`
-        ).bind(level, season, itemType, amount, attributes, now)
-      ),
-      env.AUTH_DB.prepare(
-        `UPDATE player_progression SET basic_skypass_level = 106
-         WHERE user_id = ?`
-      ).bind(userId)
-    ])
-    const rows = await env.AUTH_DB.prepare(
-      `SELECT id FROM skypass_rewards
-       WHERE season = ? AND level BETWEEN 101 AND 106 ORDER BY level`
+    const season = 610
+    await env.AUTH_DB.prepare(
+      `INSERT INTO content_stickers (token_id, required_points, season)
+       VALUES (987, 0, ?)`
     )
       .bind(season)
-      .all<{ id: number }>()
+      .run()
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      { level: 101, tier: 1, itemType: 403, amount: 3 },
+      {
+        level: 102,
+        tier: 1,
+        itemType: 405,
+        amount: 0,
+        attributes: { tokenIDs: [987] }
+      },
+      { level: 103, tier: 1, itemType: 303, amount: 7 },
+      {
+        level: 104,
+        tier: 1,
+        itemType: 401,
+        amount: 0,
+        attributes: { tokenIDs: [1, 2] }
+      },
+      {
+        level: 105,
+        tier: 1,
+        itemType: 407,
+        amount: 0,
+        attributes: { tokenIDs: [11] }
+      },
+      {
+        level: 106,
+        tier: 1,
+        itemType: 302,
+        amount: 0,
+        attributes: { tokenIDs: [12] }
+      }
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE player_progression SET basic_skypass_level = 106
+       WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+    const rows = { results: policy.rows }
 
     const claimed = await rpc('ClaimSkypassRewards', {
       ids: rows.results.map(row => row.id)
@@ -2436,29 +2454,20 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('credits a concurrent SkyPass claim only once', async () => {
-    const season = seasonFromDate()
-    await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, is_infinite)
-       VALUES (120, ?, 1, 303, 9, 0, NULL, ?, 0)`
-    )
-      .bind(season, new Date().toISOString())
-      .run()
+    const season = 611
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      { level: 120, tier: 1, itemType: 303, amount: 9 }
+    ])
     await env.AUTH_DB.prepare(
       `UPDATE player_progression SET basic_skypass_level = 120 WHERE user_id = ?`
     )
       .bind(userId)
       .run()
-    const reward = await env.AUTH_DB.prepare(
-      `SELECT id FROM skypass_rewards WHERE season = ? AND level = 120`
-    )
-      .bind(season)
-      .first<{ id: number }>()
+    const reward = policy.rows[0]
 
     const responses = await Promise.all([
-      rpc('ClaimSkypassRewards', { ids: [reward!.id] }),
-      rpc('ClaimSkypassRewards', { ids: [reward!.id] })
+      rpc('ClaimSkypassRewards', { ids: [reward.id] }),
+      rpc('ClaimSkypassRewards', { ids: [reward.id] })
     ])
     expect(responses.map(response => response.status)).toEqual([200, 200])
     const item = await env.AUTH_DB.prepare(
@@ -2472,22 +2481,17 @@ describe('legacy player RPC compatibility', () => {
       `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
        FROM player_skypass_claims WHERE user_id = ? AND reward_id = ?`
     )
-      .bind(userId, reward!.id)
+      .bind(userId, reward.id)
       .first<{ count: number; keys: number }>()
     expect(receipt).toEqual({ count: 1, keys: 1 })
   })
 
   it('rolls back all SkyPass evidence when receipt completion fails', async () => {
-    const season = seasonFromDate()
-    const now = new Date().toISOString()
-    const inserted = await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, is_infinite)
-       VALUES (121, ?, 1, 303, 9, 0, NULL, ?, 0)`
-    )
-      .bind(season, now)
-      .run()
+    const season = 612
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      { level: 121, tier: 1, itemType: 303, amount: 9 }
+    ])
+    const rewardId = policy.rows[0].id
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
         `UPDATE player_progression SET basic_skypass_level = 121
@@ -2504,7 +2508,7 @@ describe('legacy player RPC compatibility', () => {
     ])
 
     const failed = await rpc('ClaimSkypassRewards', {
-      ids: [inserted.meta.last_row_id]
+      ids: [rewardId]
     })
     expect(failed.status).toBe(500)
     expect(
@@ -2520,11 +2524,11 @@ describe('legacy player RPC compatibility', () => {
       )
         .bind(
           userId,
-          inserted.meta.last_row_id,
+          rewardId,
           userId,
-          inserted.meta.last_row_id,
+          rewardId,
           userId,
-          `skypass:${inserted.meta.last_row_id}`
+          `skypass:${rewardId}`
         )
         .first()
     ).toEqual({ claims: 0, grants: 0, items: 0 })
@@ -2535,44 +2539,56 @@ describe('legacy player RPC compatibility', () => {
     expect(
       (
         await rpc('ClaimSkypassRewards', {
-          ids: [inserted.meta.last_row_id]
+          ids: [rewardId]
         })
       ).status
     ).toBe(200)
   })
 
   it('rejects incomplete SkyPass receipts and keeps grant proof immutable', async () => {
-    const season = seasonFromDate()
+    const season = 613
     const now = new Date().toISOString()
-    const inserted = await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, is_infinite)
-       VALUES (122, ?, 1, 403, 2, 0, NULL, ?, 0)`
-    )
-      .bind(season, now)
-      .run()
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      { level: 122, tier: 1, itemType: 403, amount: 2 }
+    ])
+    const rewardId = policy.rows[0].id
     await expect(
       env.AUTH_DB.prepare(
         `INSERT INTO player_skypass_claims
            (user_id, reward_id, rewards, claimed_at, delivery_key,
-            application_status, inventory_grants_json, completed_at)
+            application_status, inventory_grants_json, completed_at,
+            reward_policy_version, reward_policy_hash)
          VALUES (?, ?, '[{"type":"CONQUEST_TICKET"}]', ?, ?, 'PREPARING',
                  '[{"itemType":"SW_CONQUEST_TICKET","tokenId":3,"quantity":2,"stackable":1}]',
-                 NULL)`
+                 NULL, ?, ?)`
       )
-        .bind(userId, inserted.meta.last_row_id, now, crypto.randomUUID())
+        .bind(
+          userId,
+          rewardId,
+          now,
+          crypto.randomUUID(),
+          policy.version,
+          policy.policyHash
+        )
         .run()
     ).rejects.toThrow('SkyPass claim preparation is invalid')
     await env.AUTH_DB.prepare(
       `INSERT INTO player_skypass_claims
          (user_id, reward_id, rewards, claimed_at, delivery_key,
-          application_status, inventory_grants_json, completed_at)
+          application_status, inventory_grants_json, completed_at,
+          reward_policy_version, reward_policy_hash)
        VALUES (?, ?, '[{"type":"CONQUEST_TICKET"}]', ?, ?, 'PREPARING',
                '[{"itemType":"SW_CONQUEST_TICKET","tokenId":2,"quantity":2,"stackable":1}]',
-               NULL)`
+               NULL, ?, ?)`
     )
-      .bind(userId, inserted.meta.last_row_id, now, crypto.randomUUID())
+      .bind(
+        userId,
+        rewardId,
+        now,
+        crypto.randomUUID(),
+        policy.version,
+        policy.policyHash
+      )
       .run()
 
     await expect(
@@ -2581,7 +2597,7 @@ describe('legacy player RPC compatibility', () => {
          SET application_status = 'APPLIED', completed_at = claimed_at
          WHERE user_id = ? AND reward_id = ?`
       )
-        .bind(userId, inserted.meta.last_row_id)
+        .bind(userId, rewardId)
         .run()
     ).rejects.toThrow('SkyPass claim receipt completion is invalid')
 
@@ -2591,14 +2607,14 @@ describe('legacy player RPC compatibility', () => {
           before_balance, after_balance)
        VALUES (?, ?, 'SW_CONQUEST_TICKET', 2, 2, 1, 0, 2)`
     )
-      .bind(userId, inserted.meta.last_row_id)
+      .bind(userId, rewardId)
       .run()
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE player_skypass_claim_inventory_grants
          SET after_balance = 3 WHERE user_id = ? AND reward_id = ?`
       )
-        .bind(userId, inserted.meta.last_row_id)
+        .bind(userId, rewardId)
         .run()
     ).rejects.toThrow('SkyPass claim inventory grants are immutable')
   })

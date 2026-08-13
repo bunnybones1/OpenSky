@@ -9,9 +9,18 @@ import {
 } from '../src/identity-session'
 import { PlayerRepository } from '../src/player'
 import { SkypassRewardUpdateRepository } from '../src/skypass-reward-update'
+import {
+  calculatedSkypassRewardPolicyHash,
+  SKYPASS_REWARD_POLICY_HASH
+} from '../src/skypass-reward-policy'
+import {
+  clearTestSkypassPolicies,
+  createTestSkypassPolicy
+} from './helpers/skypass-policy'
 
 const testEnv = env as unknown as Env
 const ADMIN = 'skypass-reward-admin'
+const REVIEWER = 'skypass-reward-reviewer'
 const PLAYER = 'skypass-reward-player'
 const ORIGIN = 'https://rewards.cloudweasel.example'
 
@@ -38,8 +47,12 @@ const csvResponse = (body = validCsv()) =>
     headers: { 'content-type': 'text/csv' }
   })
 
-const rpcAs = async (
+const rpcMethodAs = async (
   userId: string,
+  method:
+    | 'GMUpdateSkypassRewards'
+    | 'GMActivateSkypassRewards'
+    | 'GMListSkypassRewards',
   body: object,
   options: {
     signedIn?: boolean
@@ -57,7 +70,7 @@ const rpcAs = async (
   }
   return handleApiRequest(
     new Request(
-      'https://opensky.example/api/rpc/SkyWeaverAPI/GMUpdateSkypassRewards',
+      `https://opensky.example/api/rpc/SkyWeaverAPI/${method}`,
       { method: 'POST', headers, body: JSON.stringify(body) }
     ),
     testEnv,
@@ -69,48 +82,77 @@ const rpcAs = async (
   )
 }
 
-const grantAdmin = async () => {
+const rpcAs = (
+  userId: string,
+  body: object,
+  options: Parameters<typeof rpcMethodAs>[3] = {}
+) => rpcMethodAs(userId, 'GMUpdateSkypassRewards', body, options)
+
+const activateAs = (userId: string, season: number, version: number) =>
+  rpcMethodAs(userId, 'GMActivateSkypassRewards', {
+    season,
+    version,
+    reason: 'reviewed exact off-chain SkyPass policy',
+    reviewReference: 'test:skypass-review'
+  })
+
+const reviewAs = (userId: string, season: number, version: number) =>
+  rpcMethodAs(userId, 'GMListSkypassRewards', { season, version })
+
+const grantAdmin = async (userId = ADMIN) => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_roles
        (user_id, role, granted_by_user_id, reason, created_at)
      VALUES (?, 'ADMIN', NULL, 'test bootstrap', ?)`
   )
-    .bind(ADMIN, new Date().toISOString())
+    .bind(userId, new Date().toISOString())
     .run()
 }
 
-const grantRewardWrite = async () => {
+const grantRewardWrite = async (userId = ADMIN) => {
   await env.AUTH_DB.prepare(
     `INSERT INTO staff_skypass_reward_permissions
        (user_id, granted_by_user_id, reason, created_at)
      VALUES (?, NULL, 'test bootstrap', ?)`
   )
-    .bind(ADMIN, new Date().toISOString())
+    .bind(userId, new Date().toISOString())
     .run()
 }
 
-const enableAdmin = async () => {
-  await grantAdmin()
-  await grantRewardWrite()
+const enableAdmin = async (userId = ADMIN) => {
+  await grantAdmin(userId)
+  await grantRewardWrite(userId)
 }
 
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DELETE FROM users').run()
+  await clearTestSkypassPolicies(
+    env.AUTH_DB,
+    [501, 502, 503, 504, 505, 506, 507, 508, 509, 510]
+  )
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users
        (id, display_name, primary_email, created_at, updated_at)
      VALUES (?, 'Reward Admin', 'reward-admin@example.com', ?, ?),
+            (?, 'Reward Reviewer', 'reward-reviewer@example.com', ?, ?),
             (?, 'Reward Player', 'reward-player@example.com', ?, ?)`
   )
-    .bind(ADMIN, now, now, PLAYER, now, now)
+    .bind(ADMIN, now, now, REVIEWER, now, now, PLAYER, now, now)
     .run()
   const players = new PlayerRepository(env.AUTH_DB)
   await players.bootstrap(ADMIN)
+  await players.bootstrap(REVIEWER)
   await players.bootstrap(PLAYER)
 })
 
 describe('SkyPass reward definition updates', () => {
+  it('pins the fulfillment digest to the generated catalog and off-chain mappings', async () => {
+    expect(await calculatedSkypassRewardPolicyHash()).toBe(
+      SKYPASS_REWARD_POLICY_HASH
+    )
+  })
+
   it('requires identity, ADMIN, and the separately dormant write capability', async () => {
     const fetcher = vi.fn(async () => csvResponse())
     expect(
@@ -166,25 +208,12 @@ describe('SkyPass reward definition updates', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('replaces a season atomically with source parsing, IDs, ordering, and infinity', async () => {
+  it('imports an invisible draft and atomically activates it after distinct review', async () => {
     await enableAdmin()
-    const inserted = await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, updated_by, is_infinite)
-       VALUES (3, 503, 1, 300, 1, 0, NULL, ?, 1, 1)`
-    )
-      .bind(new Date().toISOString())
-      .run()
-    const retainedId = inserted.meta.last_row_id
-    await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, updated_by, is_infinite)
-       VALUES (99, 503, 1, 300, 1, 0, NULL, ?, 1, 0)`
-    )
-      .bind(new Date().toISOString())
-      .run()
+    await enableAdmin(REVIEWER)
+    await createTestSkypassPolicy(env.AUTH_DB, 503, [
+      { level: 1, tier: 1, itemType: 303, amount: 1 }
+    ])
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe(`${ORIGIN}/private/rewards.csv?signature=do-not-log`)
       expect(init?.redirect).toBe('manual')
@@ -203,7 +232,6 @@ describe('SkyPass reward definition updates', () => {
     expect(body.rewards).toHaveLength(3)
     expect(body.rewards.map(reward => reward.level)).toEqual([3, 3, 4])
     expect(body.rewards[0]).toMatchObject({
-      id: retainedId,
       level: 3,
       tier: 'FREE',
       itemType: 'SW_BASE_CARDS',
@@ -224,7 +252,33 @@ describe('SkyPass reward definition updates', () => {
     })
     expect(
       await env.AUTH_DB.prepare(
-        'SELECT COUNT(*) AS count FROM skypass_rewards WHERE season = 503'
+        `SELECT COUNT(*) AS count FROM skypass_reward_active_rewards
+         WHERE season = 503 AND level = 1`
+      ).first('count')
+    ).toBe(1)
+    expect((await reviewAs(PLAYER, 503, 2)).status).toBe(403)
+    const review = await reviewAs(REVIEWER, 503, 2)
+    expect(review.status).toBe(200)
+    expect(await review.json()).toMatchObject({
+      policy: {
+        season: 503,
+        version: 2,
+        status: 'DRAFT',
+        rewardCount: 3,
+        fulfillmentPolicyVersion: 1,
+        fulfillmentPolicyHash: SKYPASS_REWARD_POLICY_HASH,
+        createdByUserId: ADMIN,
+        activatedByUserId: null
+      },
+      rewards: body.rewards
+    })
+    expect((await activateAs(ADMIN, 503, 2)).status).toBe(400)
+    const activated = await activateAs(REVIEWER, 503, 2)
+    expect(activated.status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM skypass_reward_active_rewards
+         WHERE season = 503`
       ).first('count')
     ).toBe(3)
     const audit = await env.AUTH_DB.prepare(
@@ -233,12 +287,13 @@ describe('SkyPass reward definition updates', () => {
     ).first<{ source_origin: string; before_json: string; after_json: string }>()
     expect(audit?.source_origin).toBe(ORIGIN)
     expect(JSON.stringify(audit)).not.toContain('do-not-log')
-    expect(JSON.parse(audit!.before_json)).toHaveLength(2)
+    expect(JSON.parse(audit!.before_json)).toHaveLength(1)
     expect(JSON.parse(audit!.after_json)).toHaveLength(3)
   })
 
   it('revalidates every redirect and enforces exact source content type', async () => {
     await enableAdmin()
+    await enableAdmin(REVIEWER)
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -256,6 +311,7 @@ describe('SkyPass reward definition updates', () => {
         })
       ).status
     ).toBe(200)
+    expect((await activateAs(REVIEWER, 504, 1)).status).toBe(200)
     expect(fetcher).toHaveBeenCalledTimes(2)
 
     const crossOrigin = vi.fn(async () =>
@@ -289,14 +345,9 @@ describe('SkyPass reward definition updates', () => {
 
   it('rejects malformed and duplicate rows without partially changing a season', async () => {
     await enableAdmin()
-    await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, updated_by, is_infinite)
-       VALUES (1, 507, 1, 300, 1, 0, NULL, ?, 1, 1)`
-    )
-      .bind(new Date().toISOString())
-      .run()
+    await createTestSkypassPolicy(env.AUTH_DB, 507, [
+      { level: 1, tier: 1, itemType: 300, amount: 1 }
+    ])
     const duplicate = csv(
       ['1', 'FREE', 'SW_BASE_CARDS', '1', '', '', '', ''],
       ['1', 'FREE', 'SW_CONQUEST_TICKET', '1', '0', '', '', '']
@@ -309,7 +360,7 @@ describe('SkyPass reward definition updates', () => {
     expect(response.status).toBe(400)
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT COUNT(*) AS count FROM skypass_rewards
+        `SELECT COUNT(*) AS count FROM skypass_reward_active_rewards
          WHERE season = 507 AND level = 1 AND amount = 1`
       ).first('count')
     ).toBe(1)
@@ -322,6 +373,7 @@ describe('SkyPass reward definition updates', () => {
 
   it('validates sticker rewards against the canonical off-chain content ID', async () => {
     await enableAdmin()
+    await enableAdmin(REVIEWER)
     await env.AUTH_DB.prepare(
       `INSERT INTO content_stickers (token_id, required_points, season)
        VALUES (77, 25, 510)`
@@ -342,6 +394,12 @@ describe('SkyPass reward definition updates', () => {
       { fetcher: async () => csvResponse(stickerCsv), allowedOrigins: ORIGIN }
     )
     expect(response.status).toBe(200)
+    expect((await activateAs(REVIEWER, 510, 1)).status).toBe(200)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE content_stickers SET required_points = 26 WHERE token_id = 77`
+      ).run()
+    ).rejects.toThrow('active SkyPass sticker metadata is immutable')
     expect(await response.json()).toMatchObject({
       rewards: [
         {
@@ -355,20 +413,16 @@ describe('SkyPass reward definition updates', () => {
 
   it('makes a season immutable after any reward definition was claimed', async () => {
     await enableAdmin()
-    const inserted = await env.AUTH_DB.prepare(
-      `INSERT INTO skypass_rewards
-         (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, updated_by, is_infinite)
-       VALUES (1, 508, 1, 300, 1, 0, NULL, ?, 1, 1)`
-    )
-      .bind(new Date().toISOString())
-      .run()
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, 508, [
+      { level: 1, tier: 1, itemType: 300, amount: 1 }
+    ])
+    const rewardId = policy.rows[0].id
     await env.AUTH_DB.prepare(
       `INSERT INTO player_skypass_claims
          (user_id, reward_id, rewards, claimed_at)
        VALUES (?, ?, '[]', ?)`
     )
-      .bind(PLAYER, inserted.meta.last_row_id, new Date().toISOString())
+      .bind(PLAYER, rewardId, new Date().toISOString())
       .run()
     expect(
       (
@@ -380,24 +434,19 @@ describe('SkyPass reward definition updates', () => {
     ).toBe(400)
     await expect(
       env.AUTH_DB.prepare('DELETE FROM skypass_rewards WHERE id = ?')
-        .bind(inserted.meta.last_row_id)
+        .bind(rewardId)
         .run()
-    ).rejects.toThrow('Claimed SkyPass rewards are immutable')
+    ).rejects.toThrow('Versioned SkyPass reward rows are immutable')
     await expect(
       env.AUTH_DB.prepare('UPDATE skypass_rewards SET amount = 2 WHERE id = ?')
-        .bind(inserted.meta.last_row_id)
+        .bind(rewardId)
         .run()
-    ).rejects.toThrow('Claimed SkyPass rewards are immutable')
+    ).rejects.toThrow('Versioned SkyPass reward rows are immutable')
     await expect(
-      env.AUTH_DB.prepare(
-        `INSERT INTO skypass_rewards
-           (level, season, tier, item_type, amount, is_starter, attributes,
-            updated_at, updated_by, is_infinite)
-         VALUES (2, 508, 1, 300, 1, 0, NULL, ?, 1, 0)`
-      )
-        .bind(new Date().toISOString())
-        .run()
-    ).rejects.toThrow('Claimed SkyPass rewards are immutable')
+      createTestSkypassPolicy(env.AUTH_DB, 508, [
+        { level: 2, tier: 1, itemType: 300, amount: 1 }
+      ])
+    ).rejects.toThrow('SkyPass reward policy activation is invalid')
     expect(
       await env.AUTH_DB.prepare(
         'SELECT COUNT(*) AS count FROM staff_skypass_reward_audit WHERE season = 508'
@@ -424,7 +473,8 @@ describe('SkyPass reward definition updates', () => {
     ).toBe(1)
     expect(
       await env.AUTH_DB.prepare(
-        'SELECT COUNT(*) AS count FROM skypass_rewards WHERE season = 509'
+        `SELECT COUNT(*) AS count FROM skypass_rewards
+         WHERE season = 509 AND policy_version = 1`
       ).first('count')
     ).toBe(3)
   })

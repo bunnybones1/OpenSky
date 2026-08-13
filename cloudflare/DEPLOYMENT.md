@@ -140,6 +140,11 @@
 - Admin-only SkyPass reward-definition and premium-entitlement reads, with
   premium modeled as optional per-season Google-identity state and the free
   track available without a wallet or entitlement row
+- Capability-gated SkyPass reward imports as invisible immutable drafts, exact
+  draft review through `GMListSkypassRewards`, and distinct-actor activation
+  through `GMActivateSkypassRewards`. Player reads and claims use only active
+  versions, with the exact off-chain fulfillment policy stored on every new
+  claim receipt
 - Admin-only event-2 Conquest treasure-progress listing with bounded cursors,
   source point ordering and thresholds, and identity account names
 - Admin-only Conquest V2 config and summary previews preserving the source

@@ -5,6 +5,10 @@ import { seasonStart } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
 import { PlayerRpcRepository } from '../src/player-rpc'
 import { runDueSkypassAutoClaims } from '../src/skypass-auto-claim'
+import {
+  clearTestSkypassPolicies,
+  createTestSkypassPolicy
+} from './helpers/skypass-policy'
 
 const SEASON = 10
 const DUE = new Date(seasonStart(SEASON + 1).getTime() + 10_000)
@@ -30,33 +34,21 @@ const setupPlayer = async (userId: string, premium = false) => {
   }
 }
 
-const addReward = async (tier: 1 | 2, amount: number, level = 1) => {
-  const result = await env.AUTH_DB.prepare(
-    `INSERT INTO skypass_rewards
-       (level, season, tier, item_type, amount, is_starter, attributes,
-        updated_at, is_infinite)
-     VALUES (?, ?, ?, 303, ?, 0, NULL, ?, 0)
-     RETURNING id`
-  )
-    .bind(level, SEASON, tier, amount, new Date().toISOString())
-    .first<{ id: number }>()
-  return result!.id
-}
-
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DELETE FROM users').run()
   await env.AUTH_DB.prepare('DELETE FROM skypass_season_close_cycles').run()
-  await env.AUTH_DB.prepare(
-    'DELETE FROM skypass_rewards WHERE season != 62'
-  ).run()
+  await clearTestSkypassPolicies(env.AUTH_DB, [SEASON])
 })
 
 describe('SkyPass season auto-claim', () => {
   it('delivers free and entitled premium rewards off chain exactly once', async () => {
     await setupPlayer('free-player')
     await setupPlayer('premium-player', true)
-    const freeReward = await addReward(1, 5)
-    const premiumReward = await addReward(2, 7)
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
+      { level: 1, tier: 1, itemType: 303, amount: 5 },
+      { level: 1, tier: 2, itemType: 303, amount: 7 }
+    ])
+    const [freeReward, premiumReward] = policy.rows.map(row => row.id)
 
     const premiumListing = await new PlayerRpcRepository(
       env.AUTH_DB
@@ -149,9 +141,16 @@ describe('SkyPass season auto-claim', () => {
 
   it('waits for the source close boundary and resumes bounded reward batches', async () => {
     await setupPlayer('batch-player')
-    for (let reward = 0; reward < 6; reward++) {
-      await addReward(1, 1, reward + 1)
-    }
+    await createTestSkypassPolicy(
+      env.AUTH_DB,
+      SEASON,
+      Array.from({ length: 6 }, (_, reward) => ({
+        level: reward + 1,
+        tier: 1 as const,
+        itemType: 303,
+        amount: 1
+      }))
+    )
     await env.AUTH_DB.prepare(
       `UPDATE player_progression SET basic_skypass_level = 6
        WHERE user_id = 'batch-player'`
@@ -196,22 +195,41 @@ describe('SkyPass season auto-claim', () => {
     expect(notificationCount?.count).toBe(1)
   })
 
-  it('records malformed reward failures and stops after five attempts', async () => {
+  it('rejects malformed reward authority before auto-claim can discover it', async () => {
     await setupPlayer('broken-player')
+    const createdAt = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO skypass_reward_policy_versions
+         (season, version, status, mutation_id, source_origin, content_sha256,
+          reward_count, fulfillment_policy_version, fulfillment_policy_hash,
+          created_by_user_id, activated_by_user_id, activation_reason,
+          review_reference, created_at, activated_at)
+       VALUES (?, 1, 'DRAFT', ?, 'test:malformed',
+               'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+               1, 1,
+               'f6238e5e2c07a7e803c3b4f5c54c44d9f275fd94c2af04988a58301a40618bcb',
+               'test:author', NULL, NULL, NULL, ?, NULL)`
+    )
+      .bind(SEASON, crypto.randomUUID(), createdAt)
+      .run()
     await env.AUTH_DB.prepare(
       `INSERT INTO skypass_rewards
          (level, season, tier, item_type, amount, is_starter, attributes,
-          updated_at, is_infinite)
-       VALUES (1, ?, 1, 999, 1, 0, NULL, ?, 0)`
+          updated_at, is_infinite, policy_version, policy_ordinal)
+       VALUES (1, ?, 1, 999, 1, 0, NULL, ?, 1, 1, 1)`
     )
-      .bind(SEASON, new Date().toISOString())
+      .bind(SEASON, createdAt)
       .run()
-
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      const run = await runDueSkypassAutoClaims(env.AUTH_DB, DUE)
-      expect(run.failures).toBe(1)
-      expect(run.seasonsCompleted).toBe(attempt === 5 ? 1 : 0)
-    }
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE skypass_reward_policy_versions
+         SET status = 'ACTIVE', activated_by_user_id = 'test:reviewer',
+             activation_reason = 'review', review_reference = 'test:bad',
+             activated_at = ? WHERE season = ? AND version = 1`
+      )
+        .bind(createdAt, SEASON)
+        .run()
+    ).rejects.toThrow('SkyPass reward policy activation is invalid')
     expect(await runDueSkypassAutoClaims(env.AUTH_DB, DUE)).toEqual({
       cyclesCreated: 0,
       seasonsCompleted: 0,
@@ -219,29 +237,13 @@ describe('SkyPass season auto-claim', () => {
       rewardsClaimed: 0,
       failures: 0
     })
-    const failure = await env.AUTH_DB.prepare(
-      `SELECT attempts, last_error FROM player_skypass_auto_claim_failures
-       WHERE user_id = 'broken-player' AND season = ?`
-    )
-      .bind(SEASON)
-      .first<{ attempts: number; last_error: string }>()
-    expect(failure).toEqual({
-      attempts: 5,
-      last_error: 'unsupported item type UNKNOWN'
-    })
-    await expect(
-      env.AUTH_DB.prepare(
-        `UPDATE player_skypass_auto_claim_failures SET attempts = 1
-         WHERE user_id = 'broken-player' AND season = ?`
-      )
-        .bind(SEASON)
-        .run()
-    ).rejects.toThrow('Invalid SkyPass auto-claim failure transition')
   })
 
   it('keeps concurrent scheduled delivery idempotent', async () => {
     await setupPlayer('concurrent-player')
-    await addReward(1, 9)
+    await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
+      { level: 1, tier: 1, itemType: 303, amount: 9 }
+    ])
 
     const runs = await Promise.all([
       runDueSkypassAutoClaims(env.AUTH_DB, DUE),

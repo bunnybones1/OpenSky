@@ -102,6 +102,18 @@ only after inventory, base-card unlocks, and starter-deck state agree. A failed
 mixed claim rolls back every reward and receipt together; retry and concurrent
 claim attempts cannot grant the same reward twice.
 
+An imported SkyPass CSV is preparation, not reward authority. It creates an
+immutable, player-invisible draft containing the exact source digest and every
+definition row. A different `ADMIN` holding `SKYPASS_REWARD_WRITE` must inspect
+and activate that exact version before player reads, manual claims, or season
+auto-claim can use it. Activation validates the supported source item types,
+quantities, card and sticker IDs, ordering, and one infinite row against a
+fulfillment digest that includes the generated card catalog, starter decks,
+deterministic Silver selection, and every off-chain inventory mapping. Each new
+claim records that policy version and digest. Active sticker metadata and all
+versioned definitions are immutable, so an approved reward cannot silently
+change before fulfillment.
+
 Weekly leaderboard rewards preserve the source rank projections, deterministic
 Silver selection, Conquest-ticket counts, per-mode feed records, and rank-up
 metadata without minting either asset. Each immutable award records the exact

@@ -128,12 +128,20 @@ export const EXPECTED_RUNNERS = {
   SkypassAutoClaimRunner: {
     disposition: 'ported',
     evidenceFile: 'cloudflare/src/skypass-auto-claim.ts',
-    evidence: ['claimSkypassRewards', 'player_skypass_auto_claims']
+    evidence: [
+      'claimSkypassRewards',
+      'player_skypass_auto_claims',
+      'skypass_reward_active_rewards'
+    ]
   },
   SkypassEndOfSeasonRunner: {
     disposition: 'ported',
     evidenceFile: 'cloudflare/src/skypass-auto-claim.ts',
-    evidence: ['seasonStart', 'skypass_season_close_cycles']
+    evidence: [
+      'seasonStart',
+      'skypass_season_close_cycles',
+      'skypass_reward_active_rewards'
+    ]
   },
   StripeEventRunner: {
     disposition: 'ported',

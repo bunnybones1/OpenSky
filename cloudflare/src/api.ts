@@ -1119,9 +1119,21 @@ export const handleApiRequest = async (
 
       case 'GMListSkypassRewards': {
         const principal = await identityPrincipal(request, env)
-        await staff.requireAdmin(principal.userId)
-        const body = await requestBody<{ season?: number }>(request)
+        const body = await requestBody<{ season?: number; version?: number }>(
+          request
+        )
         const season = body.season || seasonFromDate()
+        if (body.version !== undefined) {
+          await staff.requireSkypassRewardWrite(principal.userId)
+          const review = await new SkypassRewardUpdateRepository(
+            env.AUTH_DB,
+            services.skypassRewardFetch,
+            services.skypassRewardAllowedOrigins ??
+              env.SKYPASS_REWARDS_ALLOWED_ORIGINS
+          ).review(season, body.version)
+          return json(request, env, review)
+        }
+        await staff.requireAdmin(principal.userId)
         return json(request, env, {
           rewards: await playerRpc.listSkypassRewardDefinitions(season)
         })
@@ -1154,6 +1166,32 @@ export const handleApiRequest = async (
             principal.userId,
             body.season ?? 0,
             body.url ?? ''
+          )
+        })
+      }
+
+      case 'GMActivateSkypassRewards': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireSkypassRewardWrite(principal.userId)
+        const body = await requestBody<{
+          season?: number
+          version?: number
+          reason?: string
+          reviewReference?: string
+        }>(request)
+        const skypassRewardUpdates = new SkypassRewardUpdateRepository(
+          env.AUTH_DB,
+          services.skypassRewardFetch,
+          services.skypassRewardAllowedOrigins ??
+            env.SKYPASS_REWARDS_ALLOWED_ORIGINS
+        )
+        return json(request, env, {
+          rewards: await skypassRewardUpdates.activate(
+            principal.userId,
+            body.season ?? 0,
+            body.version ?? 0,
+            body.reason ?? '',
+            body.reviewReference ?? ''
           )
         })
       }

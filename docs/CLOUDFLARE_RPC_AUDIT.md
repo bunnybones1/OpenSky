@@ -39,8 +39,13 @@ transactions fail before reward storage.
 
 All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
-bounded fetches, atomic optimistic replacement, immutable audits, and a D1-
-enforced freeze after the first claim in a season.
+bounded fetches, immutable audits, and a D1-enforced freeze after the first
+claim in a season. An import now prepares an immutable, player-invisible draft
+instead of immediately replacing live rewards. `GMListSkypassRewards` retains
+its source-compatible active-list response by default and accepts an optional
+version for exact draft review. The Cloudflare-only
+`GMActivateSkypassRewards` adapter requires a different authorized actor and
+activates only the reviewed version and exact off-chain fulfillment digest.
 
 `GMGrantBaseCards` is the single Cloudflare-only adapter. It replaces the
 source `grant-cards` command's direct contract mint with a capability-gated,
@@ -129,6 +134,11 @@ Staff can also inspect SkyPass reward definitions and optional per-season
 premium status. Cloud Weasel stores premium as Google-identity entitlement
 state rather than authentication or wallet state, and a missing entitlement
 truthfully reads false without mutating the account.
+
+SkyPass definition review and activation require both `ADMIN` and the separate
+`SKYPASS_REWARD_WRITE` permission. Only active versions are player-visible;
+each new claim records its immutable policy version and digest, and every
+source mint-queue item is fulfilled as identity-owned D1 inventory.
 
 App Developer Key management is ported behind `ADMIN` plus a separately
 dormant `APP_DEV_KEY_WRITE` capability. It preserves source-format keys,

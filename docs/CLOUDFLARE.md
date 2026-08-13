@@ -477,6 +477,14 @@ and progress are not migrated.
   wallet-free. Claimed rewards are delivered directly to D1 inventory; the
   preserved post-claim Sequence-wallet conversion prompt is unreachable in
   Google mode.
+- SkyPass CSV imports now create immutable, player-invisible drafts. A distinct
+  `ADMIN` with `SKYPASS_REWARD_WRITE` can inspect the exact source digest,
+  fulfillment digest, and rows through `GMListSkypassRewards`, then activate
+  that version through the Cloudflare-only `GMActivateSkypassRewards` adapter.
+  Player reads, claims, and season auto-claim consume only the latest active
+  version, and each claim pins its policy version and digest. The fulfillment
+  digest covers every source reward mapping, generated card ID, starter deck,
+  and deterministic selection rule; no activation or claim has a chain effect.
 - Premium toggles require both `ADMIN` and a separately dormant
   `ENTITLEMENT_WRITE` capability. The source production giveaway limit is an
   explicit per-season D1 row and is checked before grant-versus-removal, while

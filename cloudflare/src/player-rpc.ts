@@ -326,6 +326,8 @@ interface RawSkypassRewardRow {
   amount: number
   is_starter: number
   attributes: string | null
+  policy_version: number
+  reward_policy_hash: string
 }
 
 interface SkypassInventoryGrant {
@@ -2902,7 +2904,7 @@ export class PlayerRpcRepository {
                   reward.attributes, reward.is_infinite,
                   CASE WHEN claim.reward_id IS NULL THEN 0 ELSE 1 END AS claimed,
                   claim.rewards AS gained_rewards
-           FROM skypass_rewards reward
+           FROM skypass_reward_active_rewards reward
            LEFT JOIN player_skypass_claims claim
              ON claim.reward_id = reward.id AND claim.user_id = ?
            WHERE reward.season = ?
@@ -2981,7 +2983,7 @@ export class PlayerRpcRepository {
       .prepare(
         `SELECT id, level, season, tier, item_type, amount, is_starter,
                 attributes, is_infinite
-         FROM skypass_rewards
+         FROM skypass_reward_active_rewards
          WHERE season = ?
          ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
       )
@@ -3428,10 +3430,15 @@ export class PlayerRpcRepository {
     const placeholders = uniqueIds.map(() => '?').join(',')
     const rawResult = await this.database
       .prepare(
-        `SELECT id, level, season, tier, item_type, amount, is_starter,
-                attributes
-         FROM skypass_rewards
-         WHERE id IN (${placeholders})`
+        `SELECT reward.id, reward.level, reward.season, reward.tier,
+                reward.item_type, reward.amount, reward.is_starter,
+                reward.attributes, reward.policy_version,
+                policy.fulfillment_policy_hash AS reward_policy_hash
+         FROM skypass_reward_active_rewards reward
+         JOIN skypass_reward_active_policies policy
+           ON policy.season = reward.season
+          AND policy.version = reward.policy_version
+         WHERE reward.id IN (${placeholders})`
       )
       .bind(...uniqueIds)
       .all<RawSkypassRewardRow>()
@@ -3539,8 +3546,9 @@ export class PlayerRpcRepository {
             `INSERT OR IGNORE INTO player_skypass_claims
                (user_id, reward_id, rewards, claimed_at, delivery_key,
                 auto_claim_season, application_status,
-                inventory_grants_json, completed_at)
-             VALUES (?, ?, ?, ?, ?, ?, 'PREPARING', ?, NULL)`
+                inventory_grants_json, completed_at, reward_policy_version,
+                reward_policy_hash)
+             VALUES (?, ?, ?, ?, ?, ?, 'PREPARING', ?, NULL, ?, ?)`
           )
           .bind(
             userId,
@@ -3549,7 +3557,9 @@ export class PlayerRpcRepository {
             now,
             deliveryKey,
             options.autoClaimSeason ?? null,
-            JSON.stringify(inventoryGrants)
+            JSON.stringify(inventoryGrants),
+            rawReward.policy_version,
+            rawReward.reward_policy_hash
           )
       )
       for (const grant of inventoryGrants) {
@@ -3642,7 +3652,7 @@ export class PlayerRpcRepository {
   async deckClassUnlockLevels(season: number): Promise<Record<string, number>> {
     const result = await this.database
       .prepare(
-        `SELECT level, attributes FROM skypass_rewards
+        `SELECT level, attributes FROM skypass_reward_active_rewards
          WHERE season = ? AND item_type = 500
          ORDER BY level ASC`
       )
@@ -3661,7 +3671,7 @@ export class PlayerRpcRepository {
   async heroUnlockLevels(season: number): Promise<Record<string, number>> {
     const result = await this.database
       .prepare(
-        `SELECT level, attributes FROM skypass_rewards
+        `SELECT level, attributes FROM skypass_reward_active_rewards
          WHERE season = ? AND item_type = 500
          ORDER BY level ASC`
       )

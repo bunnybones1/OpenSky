@@ -110,6 +110,7 @@ export const EXPECTED_QUEUES = {
       'player_skypass_claim_inventory_grants',
       'SkyPass claim inventory grants are immutable',
       'SkyPass claim receipt completion is invalid',
+      'active SkyPass reward policy required',
       'SW_CARD_BACKS'
     ]
   },
@@ -121,6 +122,7 @@ export const EXPECTED_QUEUES = {
       'player_skypass_claim_inventory_grants',
       'SkyPass claim inventory grants are immutable',
       'SkyPass claim receipt completion is invalid',
+      'active SkyPass reward policy required',
       'SW_CONQUEST_TICKET'
     ]
   },
@@ -132,6 +134,7 @@ export const EXPECTED_QUEUES = {
       'player_skypass_claim_inventory_grants',
       'SkyPass claim inventory grants are immutable',
       'SkyPass claim receipt completion is invalid',
+      'active SkyPass reward policy required',
       'SW_SILVER_CARDS'
     ]
   },
@@ -143,6 +146,7 @@ export const EXPECTED_QUEUES = {
       'player_skypass_claim_inventory_grants',
       'SkyPass claim inventory grants are immutable',
       'SkyPass claim receipt completion is invalid',
+      'active SkyPass reward policy required',
       'SW_STICKERS'
     ]
   }
@@ -313,6 +317,13 @@ const main = async () => {
         path.join(
           root,
           'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'
         ),
         'utf8'
       )

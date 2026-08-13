@@ -131,7 +131,8 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     evidenceFiles: [
       'cloudflare/migrations/0069_quest_claim_receipts.sql',
       'cloudflare/migrations/0005_legacy_rpc_compatibility.sql',
-      'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql'
+      'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql',
+      'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'
     ],
     evidence: [
       'player_quest_claim_receipts',
@@ -141,6 +142,9 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       "application_status = 'PREPARING'",
       'SkyPass claim inventory grants are immutable',
       'SkyPass claim receipt completion is invalid',
+      'skypass_reward_active_rewards',
+      'active SkyPass reward policy required',
+      'SkyPass claim policy receipt is immutable',
       'player_deferred_item_updates',
       'delivery_key',
       'database.batch'
