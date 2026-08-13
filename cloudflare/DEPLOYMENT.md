@@ -258,7 +258,10 @@ The SPA shell is served through the Worker with browser and Cloudflare edge
 HTML manifest. Fingerprinted web and game assets use a one-year immutable
 policy, while unhashed assets such as the service worker retain Cloudflare's
 revalidation behavior. The release gate verifies both the routing boundary and
-the cache-policy implementation.
+the cache-policy implementation. `pnpm deploy:cloudflare` now finishes by
+running `pnpm verify:cloudflare:deployment`; it compares both production HTML
+entry paths with the exact local artifact and validates the HTML and
+fingerprinted-asset cache headers before reporting a successful deployment.
 
 ## Latest verification
 
@@ -1224,7 +1227,7 @@ the cache-policy implementation.
   2026-08-24T14:00:10Z, so deployment created no cycle or claim. The final D1
   query reported one user, 31 inventory rows, zero SkyPass claims, auto-claims,
   failures, or notifications, migration 64, zero writes, and `changed_db:
-  false`; the production URL returned HTTP 200.
+false`; the production URL returned HTTP 200.
 - API/web Worker version `2f8abff7-6c04-4ef3-b191-8d079d2db8fa` contains
   SkyPass exact-policy milestone `3fedd99`. Migration
   `0090_skypass_reward_policy_activation.sql` converts the preserved 127-row
