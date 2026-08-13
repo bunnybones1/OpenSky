@@ -24,20 +24,6 @@
       "migrations_dir": "../cloudflare/migrations"
     }
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "GAME_ANALYTICS_QUEUE",
-        "queue": "cloud-weasel-game-analytics"
-      }
-    ]
-  },
-  "r2_buckets": [
-    {
-      "binding": "GAME_ANALYTICS",
-      "bucket_name": "cloud-weasel-game-analytics"
-    }
-  ],
   "migrations": [
     {
       "tag": "v1",

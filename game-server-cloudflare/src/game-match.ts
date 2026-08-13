@@ -61,8 +61,8 @@ export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
   DECK_RANK_COORDINATOR: DurableObjectNamespace
   AUTH_DB: D1Database
-  GAME_ANALYTICS_QUEUE: Queue<ReplayAnalyticsMessage>
-  GAME_ANALYTICS: R2Bucket
+  GAME_ANALYTICS_QUEUE?: Queue<ReplayAnalyticsMessage>
+  GAME_ANALYTICS?: R2Bucket
   INTERNAL_AUTH_SECRET: string
   MATCH_OWNER_PRIVATE_KEY: string
   ALLOWED_ORIGINS?: string
@@ -1544,6 +1544,12 @@ export class GameMatch implements DurableObject {
       metadata.expiredBeforeLoad ||
       !metadata.completionRecorded
     ) {
+      return
+    }
+    // Analytics is an optional observational adapter. Production must not
+    // block authoritative completion alarms while R2/the consumer are absent.
+    if (!this.env.GAME_ANALYTICS || !this.env.GAME_ANALYTICS_QUEUE) {
+      await this.state.storage.deleteAlarm()
       return
     }
     try {

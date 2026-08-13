@@ -29,5 +29,10 @@ The analytics Worker exposes only `/health`; replay archives and CSVs have no pu
 - Queues `cloud-weasel-game-analytics` and `cloud-weasel-game-analytics-dead-letter` are provisioned.
 - Production Worker deployment is intentionally waiting for R2 to be enabled on Cloudflare account `528badc1c29c30196335df252a73c5a6`; the Cloudflare API currently returns `10042` for R2 operations.
 - Do not deploy the game-server producer until bucket `cloud-weasel-game-analytics` exists and the analytics consumer is healthy.
+- The production game-server config intentionally omits both analytics bindings
+  while blocked. Match completion and off-chain rewards remain authoritative;
+  the optional adapter deletes its completion alarm instead of retrying a
+  binding that is not configured. Miniflare keeps both bindings so the complete
+  archive/queue path remains covered by integration tests.
 
 Analytics is observational and cannot grant gameplay items. The off-chain build gate scans the Worker for player inventory writes or transaction calls. All player-facing match, quest, conquest, and SkyPass rewards remain canonical off-chain inventory rows in D1; WalletConnect is not a dependency of this pipeline.

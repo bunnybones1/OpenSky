@@ -36,6 +36,7 @@ import {
 } from './fixture'
 
 const runtimeEnv = env as unknown as GameServerEnv
+const analyticsBucket = runtimeEnv.GAME_ANALYTICS!
 let proposalId = PROPOSAL_ID
 const fixture = (overrides: Parameters<typeof createMatchFixture>[0] = {}) =>
   createMatchFixture({ ...overrides, proposalId })
@@ -1364,7 +1365,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   })
 
   it('archives replay records and writes the manifest last', async () => {
-    const archived = await archiveReplayRecords(runtimeEnv.GAME_ANALYTICS, {
+    const archived = await archiveReplayRecords(analyticsBucket, {
       proposalId: 'archive-test',
       replayId: 'archive-replay',
       releaseVersion: 'test-release',
@@ -1379,7 +1380,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       archivePrefix: 'replays/test-release/archive-test/',
       replayRecordCount: 2
     })
-    const manifest = await runtimeEnv.GAME_ANALYTICS.get(
+    const manifest = await analyticsBucket.get(
       `${archived.archivePrefix}manifest.json`
     )
     expect(await manifest?.json()).toMatchObject({
@@ -1389,10 +1390,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       replayBytes: archived.replayBytes
     })
     expect(
-      await runtimeEnv.GAME_ANALYTICS.get(`${archived.archivePrefix}000000.json`)
+      await analyticsBucket.get(`${archived.archivePrefix}000000.json`)
     ).not.toBeNull()
     expect(
-      await runtimeEnv.GAME_ANALYTICS.get(`${archived.archivePrefix}000001.json`)
+      await analyticsBucket.get(`${archived.archivePrefix}000001.json`)
     ).not.toBeNull()
   })
 
