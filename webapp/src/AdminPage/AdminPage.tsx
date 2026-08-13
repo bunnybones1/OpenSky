@@ -3,6 +3,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useSnapshot } from 'valtio'
 
 import { SubNav } from '~/__deprecated__/SubNav'
+import { AuthenticatedPageLoader } from '~/shared/components/AuthenticatedPageLoader'
 import { FlexBox } from '~/shared/components/Base'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import useAdminAuth from '~/shared/hooks/useAdminAuth'
@@ -10,8 +11,9 @@ import { authenticationState } from '~/shared/state/authentication-state'
 
 const Admin = memo(() => {
   const { userAddress } = useSnapshot(authenticationState)
-  const { isAdmin } = useAdminAuth(userAddress)
+  const { isAdmin, loading } = useAdminAuth(userAddress)
 
+  if (loading || isAdmin === undefined) return <AuthenticatedPageLoader />
   if (isAdmin === false) return <Navigate to={ROUTES_CONFIG.directPath} />
 
   return (

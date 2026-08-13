@@ -44,7 +44,7 @@ const REVIEWED_LEGACY_ROUTES = {
   QUESTS: { disposition: 'preserved-offchain-rewards', mounted: true },
   CREATE_DECK: { disposition: 'preserved-original-page', mounted: true },
   ACCOUNT: { disposition: 'preserved-google-identity', mounted: true },
-  ADMIN: { disposition: 'operator-ui-review-pending', mounted: false },
+  ADMIN: { disposition: 'preserved-identity-rbac', mounted: true },
   SANCTIONS_LIST: {
     disposition: 'superseded-wallet-era-policy-copy',
     mounted: false
@@ -78,7 +78,9 @@ export const webappRouteAuditErrors = ({
   appLayoutSource,
   navBarSource,
   deckViewerSource,
-  deckViewerFooterSource
+  deckViewerFooterSource,
+  adminPageSource,
+  staffRepositorySource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -254,6 +256,38 @@ export const webappRouteAuditErrors = ({
   ) {
     errors.push('Google Deck Viewer exposes the legacy market-cart control')
   }
+  for (const token of [
+    'path={ROUTES_CONFIG.routes.ADMIN.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.USERS.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.USER.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.MATCHES.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.SIGNALS.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.PENDING_GOLDS.path}',
+    'path={ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.path}'
+  ]) {
+    if (!identitySource.includes(token)) {
+      errors.push(`Google admin route fidelity is missing: ${token}`)
+    }
+  }
+  const adminLoadingBarrier = adminPageSource.indexOf(
+    'if (loading || isAdmin === undefined) return <AuthenticatedPageLoader />'
+  )
+  const adminOutlet = adminPageSource.indexOf('<Outlet />')
+  if (
+    adminLoadingBarrier < 0 ||
+    adminOutlet < 0 ||
+    adminLoadingBarrier > adminOutlet
+  ) {
+    errors.push('Google admin child routes can mount before role confirmation')
+  }
+  for (const token of [
+    "WHERE user_id = ? AND role = 'ADMIN'",
+    "permission = 'CONTENT_WRITE'"
+  ]) {
+    if (!staffRepositorySource.includes(token)) {
+      errors.push(`Google admin server authorization is missing: ${token}`)
+    }
+  }
   return errors
 }
 
@@ -279,7 +313,9 @@ const main = async () => {
     appLayoutSource,
     navBarSource,
     deckViewerSource,
-    deckViewerFooterSource
+    deckViewerFooterSource,
+    adminPageSource,
+    staffRepositorySource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -339,7 +375,9 @@ const main = async () => {
         'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx'
       ),
       'utf8'
-    )
+    ),
+    readFile(path.join(root, 'webapp/src/AdminPage/AdminPage.tsx'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8')
   ])
   const errors = webappRouteAuditErrors({
     legacySource,
@@ -358,7 +396,9 @@ const main = async () => {
     appLayoutSource,
     navBarSource,
     deckViewerSource,
-    deckViewerFooterSource
+    deckViewerFooterSource,
+    adminPageSource,
+    staffRepositorySource
   })
   if (errors.length) {
     for (const error of errors)

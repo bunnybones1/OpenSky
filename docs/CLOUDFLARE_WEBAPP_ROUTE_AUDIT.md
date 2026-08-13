@@ -28,7 +28,7 @@ original 404/deleted-account destinations disappear.
 | `QUESTS`            | `preserved-offchain-rewards`           | Original quest UI with D1 progress and claims.                                                                          |
 | `CREATE_DECK`       | `preserved-original-page`              | Original creation flow.                                                                                                 |
 | `ACCOUNT`           | `preserved-google-identity`            | Original profile shell backed by Google identity and optional linked wallets.                                           |
-| `ADMIN`             | `operator-ui-review-pending`           | Backend staff contracts are ported; the wallet-era admin browser tree remains unmounted pending an identity/role audit. |
+| `ADMIN`             | `preserved-identity-rbac`              | Original staff browser tree behind D1 `ADMIN`; child outlets cannot mount before role confirmation, and writes require separate capabilities. |
 | `SANCTIONS_LIST`    | `superseded-wallet-era-policy-copy`    | The 2022 wallet/fiat policy copy is not presented as current Cloud Weasel policy.                                       |
 | `DELETED_ACCOUNT`   | `preserved-original-page`              | Original deletion-complete destination.                                                                                 |
 
@@ -78,6 +78,13 @@ reads use the ported `GetBanners` contract, which exposes only currently active
 D1 rows in source order. The original sanitized markup, external-link handling,
 local dismissal, and responsive page offsets are preserved. The Deck Viewer
 shares that global query result but cannot initiate a second banner request.
+
+The original nested admin browser tree is mounted behind its server-backed D1
+role probe. A loading barrier prevents any child outlet from issuing staff RPCs
+until `ADMIN` is confirmed; non-admins redirect to the player app. The Worker
+independently checks `staff_roles` on every staff read and requires separate,
+dormant capability rows for content, moderation, progression, entitlement, and
+other writes. Production currently has no staff roles or write capabilities.
 
 App-shell milestone `3dd82f6` restored the original wallet-independent dialogs
 in production. Follow-up milestone `f988b30` fixed the identity-policy owner

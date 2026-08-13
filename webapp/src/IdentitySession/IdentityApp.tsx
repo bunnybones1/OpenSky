@@ -1,10 +1,11 @@
-import { memo } from 'react'
+import { lazy, memo, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import AccountPage from '~/AccountPage/AccountPage'
 import AppLayout from '~/AppLayout/AppLayout'
 import DeletedAccountPage from '~/components/DeletedAccountPage'
 import FourOhFourPage from '~/components/FourOhFourPage'
+import { RouteLoaderComponent } from '~/components/RouteLoaderComponent'
 import { CreateDeckPage } from '~/CreateDeckPage/CreateDeckPage'
 import { DeckBuilder } from '~/DeckBuilder/DeckBuilder'
 import HeroFeaturePage from '~/HeroFeaturePage/HeroFeaturePage'
@@ -25,6 +26,34 @@ import { SkyPassPurchasePage } from '~/SkyPassPurchasePage/SkyPassPurchasePage'
 
 import { IdentityCapabilityPage } from './components/IdentityCapabilityPage'
 import { useIdentityAppShell } from './useIdentityAppShell'
+
+const AdminPage = lazy(() => import('~/AdminPage/AdminPage'))
+const AdminCommunity = lazy(
+  () => import('~/AdminPage/outlets/AdminComunity/AdminComunity')
+)
+const AdminBanners = lazy(
+  () => import('~/AdminPage/outlets/AdminComunity/outlets/AdminBanners/AdminBanners')
+)
+const AdminQueues = lazy(
+  () => import('~/AdminPage/outlets/AdminComunity/outlets/AdminQueues/AdminQueues')
+)
+const AdminStreamers = lazy(
+  () =>
+    import('~/AdminPage/outlets/AdminComunity/outlets/AdminStreamers/AdminStreamers')
+)
+const AdminNotifications = lazy(
+  () =>
+    import('~/AdminPage/outlets/AdminComunity/outlets/AdminNotifications/AdminNotifications')
+)
+const AdminUsers = lazy(() => import('~/AdminPage/outlets/AdminUsers/AdminUsers'))
+const AdminUser = lazy(() => import('~/AdminPage/outlets/AdminUser/AdminUser'))
+const AdminMatches = lazy(() => import('~/AdminPage/outlets/AdminMatches'))
+const AdminSignals = lazy(
+  () => import('~/AdminPage/outlets/AdminSignals/AdminSignals')
+)
+const AdminPendingGolds = lazy(
+  () => import('~/AdminPage/outlets/AdminPendingGolds/AdminPendingGolds')
+)
 
 export const IdentityApp = memo(() => {
   const { ErrorDialog, CookieSettingsDialog, OfflineDialog } = useIdentityAppShell()
@@ -105,6 +134,101 @@ export const IdentityApp = memo(() => {
             path={ROUTES_CONFIG.routes.SKY_PASS_PURCHASE.path}
           />
           <Route element={<AccountPage />} path={ROUTES_CONFIG.routes.ACCOUNT.path} />
+          <Route
+            path={ROUTES_CONFIG.routes.ADMIN.path}
+            element={
+              <Suspense fallback={<RouteLoaderComponent />}>
+                <AdminPage />
+              </Suspense>
+            }
+          >
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminCommunity />
+                </Suspense>
+              }
+            >
+              <Route
+                path={ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.routes.BANNERS.path}
+                element={
+                  <Suspense fallback={<RouteLoaderComponent />}>
+                    <AdminBanners />
+                  </Suspense>
+                }
+              />
+              <Route
+                path={ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.routes.QUEUES.path}
+                element={
+                  <Suspense fallback={<RouteLoaderComponent />}>
+                    <AdminQueues />
+                  </Suspense>
+                }
+              />
+              <Route
+                path={
+                  ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.routes.STREAMERS.path
+                }
+                element={
+                  <Suspense fallback={<RouteLoaderComponent />}>
+                    <AdminStreamers />
+                  </Suspense>
+                }
+              />
+              <Route
+                path={
+                  ROUTES_CONFIG.routes.ADMIN.routes.COMMUNITY.routes.NOTIFICATIONS
+                    .path
+                }
+                element={
+                  <Suspense fallback={<RouteLoaderComponent />}>
+                    <AdminNotifications />
+                  </Suspense>
+                }
+              />
+            </Route>
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.USERS.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminUsers />
+                </Suspense>
+              }
+            />
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.USER.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminUser />
+                </Suspense>
+              }
+            />
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.MATCHES.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminMatches />
+                </Suspense>
+              }
+            />
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.SIGNALS.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminSignals />
+                </Suspense>
+              }
+            />
+            <Route
+              path={ROUTES_CONFIG.routes.ADMIN.routes.PENDING_GOLDS.path}
+              element={
+                <Suspense fallback={<RouteLoaderComponent />}>
+                  <AdminPendingGolds />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route
             path={ROUTES_CONFIG.routes.LEADERBOARD.path}
             element={<LeaderboardPage />}

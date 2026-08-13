@@ -22,7 +22,9 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     appLayoutSource,
     navBarSource,
     deckViewerSource,
-    deckViewerFooterSource
+    deckViewerFooterSource,
+    adminPageSource,
+    staffRepositorySource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -52,7 +54,9 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     readFile(
       'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
       'utf8'
-    )
+    ),
+    readFile('webapp/src/AdminPage/AdminPage.tsx', 'utf8'),
+    readFile('cloudflare/src/staff.ts', 'utf8')
   ])
   assert.deepEqual(
     webappRouteAuditErrors({
@@ -72,7 +76,9 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       appLayoutSource,
       navBarSource,
       deckViewerSource,
-      deckViewerFooterSource
+      deckViewerFooterSource,
+      adminPageSource,
+      staffRepositorySource
     }),
     []
   )
@@ -96,7 +102,9 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     appLayoutSource,
     navBarSource,
     deckViewerSource,
-    deckViewerFooterSource
+    deckViewerFooterSource,
+    adminPageSource,
+    staffRepositorySource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -126,7 +134,9 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     readFile(
       'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
       'utf8'
-    )
+    ),
+    readFile('webapp/src/AdminPage/AdminPage.tsx', 'utf8'),
+    readFile('cloudflare/src/staff.ts', 'utf8')
   ])
   const errors = webappRouteAuditErrors({
     legacySource: legacySource.replace(
@@ -200,6 +210,14 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     deckViewerFooterSource: deckViewerFooterSource.replace(
       "env.AUTH_MODE !== 'google' && !isFullyUnlocked && !isDeckClassLocked",
       '!isFullyUnlocked && !isDeckClassLocked'
+    ),
+    adminPageSource: adminPageSource.replace(
+      'if (loading || isAdmin === undefined) return <AuthenticatedPageLoader />',
+      'const missingAdminLoadingBarrier = true'
+    ),
+    staffRepositorySource: staffRepositorySource.replace(
+      "permission = 'CONTENT_WRITE'",
+      "permission = 'UNSAFE_WRITE'"
     )
   })
   assert.ok(errors.some(error => error.includes('unreviewed legacy')))
@@ -226,4 +244,6 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('banner strip')))
   assert.ok(errors.some(error => error.includes('absent banner query')))
   assert.ok(errors.some(error => error.includes('market-cart control')))
+  assert.ok(errors.some(error => error.includes('role confirmation')))
+  assert.ok(errors.some(error => error.includes('server authorization')))
 })
