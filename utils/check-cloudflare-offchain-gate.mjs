@@ -286,9 +286,11 @@ export const offchainGateErrors = ({
     }
 
     const controls = identityCardDetails.controls ?? ''
-    const identityControls = controls.match(
-      /const IdentityItemsCardDetailsControls[\s\S]*?IdentityItemsCardDetailsControls\.displayName/
-    )?.[0]
+    const identityControls =
+      identityCardDetails.identityControls ??
+      controls.match(
+        /const IdentityItemsCardDetailsControls[\s\S]*?IdentityItemsCardDetailsControls\.displayName/
+      )?.[0]
     if (
       !/env\.AUTH_MODE\s*===\s*['"]google['"]\s*\?\s*IdentityItemsCardDetailsControls\s*:\s*LegacyItemsCardDetailsControls/.test(
         controls
@@ -564,6 +566,7 @@ const main = async () => {
     selectSilverCardDetails,
     selectGoldCardDetails,
     itemsCardDetailsControls,
+    identityItemsCardDetailsControls,
     tokenInfoSection,
     gradeRow,
     gradeRowGrade,
@@ -703,6 +706,13 @@ const main = async () => {
       path.join(
         root,
         'webapp/src/ItemsPage/ItemsCardDetails/components/ItemsCardDetailsControls.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/ItemsPage/ItemsCardDetails/components/IdentityItemsCardDetailsControls.tsx'
       ),
       'utf8'
     ),
@@ -880,6 +890,7 @@ const main = async () => {
         goldExchange: selectGoldCardDetails
       },
       controls: itemsCardDetailsControls,
+      identityControls: identityItemsCardDetailsControls,
       tokenInfo: tokenInfoSection,
       gradeRow,
       gradeLabel: gradeRowGrade,

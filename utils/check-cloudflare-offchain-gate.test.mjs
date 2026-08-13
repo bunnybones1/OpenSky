@@ -48,10 +48,11 @@ const validInput = () => ({
       goldExchange: "inventoryOnly={env.AUTH_MODE === 'google'}"
     },
     controls:
-      'const IdentityItemsCardDetailsControls = () => ' +
-      'cardDetails.offchainInventory; IdentityItemsCardDetailsControls.displayName; ' +
       "export const ItemsCardDetailsControls = env.AUTH_MODE === 'google' ? " +
       'IdentityItemsCardDetailsControls : LegacyItemsCardDetailsControls',
+    identityControls:
+      'const IdentityItemsCardDetailsControls = () => ' +
+      'cardDetails.offchainInventory; IdentityItemsCardDetailsControls.displayName',
     tokenInfo:
       'inventoryOnly?: boolean; cardDetails.inventoryBalance; !inventoryOnly',
     gradeRow:
@@ -333,11 +334,9 @@ test('rejects a Google Hero exchange that can fall through to a wallet', () => {
 test('rejects market queries from Google inventory card details', () => {
   const input = validInput()
   input.identityCardDetails.routes.items = '<CardDetailsPage />'
-  input.identityCardDetails.controls =
+  input.identityCardDetails.identityControls =
     'const IdentityItemsCardDetailsControls = () => useTokenPriceAndSupply(); ' +
-    'IdentityItemsCardDetailsControls.displayName; ' +
-    "export const ItemsCardDetailsControls = env.AUTH_MODE === 'google' ? " +
-    'IdentityItemsCardDetailsControls : LegacyItemsCardDetailsControls'
+    'IdentityItemsCardDetailsControls.displayName'
   input.identityCardDetails.gradeRow = '<GradeRowPrices />'
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('route items')))
