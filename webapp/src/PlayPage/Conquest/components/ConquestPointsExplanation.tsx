@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
 import { Tooltip } from '~/shared/components/Tooltip/Tooltip'
@@ -23,7 +24,11 @@ const PointsTooltip = memo(() => {
         PointsTooltipStyle
       )}
     >
-      {t('play.conquestDeckPointsTooltipMessage')}
+      {t(
+        env.AUTH_MODE === 'google'
+          ? 'play.conquestDeckPointsTooltipMessageOffchain'
+          : 'play.conquestDeckPointsTooltipMessage'
+      )}
     </div>
   )
 })

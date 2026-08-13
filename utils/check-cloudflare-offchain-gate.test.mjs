@@ -43,6 +43,14 @@ const validInput = () => ({
       'tooltip.silverCardsExplainerLineTwoOffchain',
     conquestProgressTooltip:
       "env.AUTH_MODE === 'google'; tooltip.progressionInfoOffchain",
+    conquestPointsExplanation:
+      "env.AUTH_MODE === 'google'; play.conquestDeckPointsTooltipMessageOffchain",
+    conquestTreasureTooltip:
+      "env.AUTH_MODE === 'google'; play.treasureToolTipHeaderOffchain",
+    conquestTreasureReward:
+      "env.AUTH_MODE !== 'google'; play.treasureRewardsInactive",
+    conquestNotifications: "env.AUTH_MODE === 'google'",
+    conquestRewardFeed: "env.AUTH_MODE !== 'google'",
     tradableBadge: "if (env.AUTH_MODE === 'google') return null",
     skypassThumbnail: "env.AUTH_MODE !== 'google'"
   },

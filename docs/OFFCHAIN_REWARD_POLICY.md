@@ -61,6 +61,13 @@ The former USDC amount is reconciliation metadata only: it must never become
 inventory, a claim, a notification value, or player-facing promise without a
 separately reviewed noncash reward design.
 
+The Google-auth webapp must project only deliverable Conquest V2 value. With no
+enabled safe schedule, treasure tooltips say rewards are inactive. With one,
+the public source-shaped contract reports exact Silver counts and always zero
+USDC. Identity-mode notification and feed branches fail closed against legacy
+cash fields, while the preserved wallet UI may continue rendering its original
+contracts outside `IdentityApp`.
+
 The Legacy Hero exchange is also governed by this policy. It retains the
 source product's price of ten identity-owned Gold cards per Hero skin, but D1
 atomically debits the selected Gold inventory and credits `SW_HERO_SKINS`.

@@ -5,6 +5,7 @@ import cardLibrary from '../src/generated/card-library.json'
 import { ContentRepository } from '../src/content'
 import {
   conquestV2LegacyUsdcMicros,
+  conquestV2OffchainTreasureInfo,
   conquestV2RewardCardIds,
   conquestV2SilverCardCount,
   mostRecentConquestV2RewardTime,
@@ -227,6 +228,28 @@ describe('Conquest V2 off-chain weekly rewards', () => {
         'SELECT COUNT(*) AS count FROM conquest_v2_reward_cycles'
       ).first('count')
     ).toBe(0)
+  })
+
+  it('advertises only enabled off-chain Silver and never legacy USDC', async () => {
+    expect(
+      await conquestV2OffchainTreasureInfo(env.AUTH_DB, SNAPSHOT_NOW)
+    ).toEqual(
+      Object.fromEntries(
+        Array.from({ length: 11 }, (_, level) => [
+          level,
+          { amountSilver: 0, amountUSDC: 0 }
+        ])
+      )
+    )
+    await setWeightPerSilver(1)
+    await enableSchedule()
+    const info = await conquestV2OffchainTreasureInfo(env.AUTH_DB, SNAPSHOT_NOW)
+    expect(info[0]).toEqual({ amountSilver: 0, amountUSDC: 0 })
+    expect(info[1]).toEqual({ amountSilver: 1, amountUSDC: 0 })
+    expect(info[10]).toEqual({ amountSilver: 218, amountUSDC: 0 })
+    expect(Object.values(info).every(value => value.amountUSDC === 0)).toBe(
+      true
+    )
   })
 
   it('rolls over points once, delays delivery, and grants only D1 Silvers', async () => {

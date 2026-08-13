@@ -60,6 +60,19 @@ export interface ConquestV2RewardRun {
   delivered: number
 }
 
+export type ConquestV2OffchainTreasureInfo = Record<
+  number,
+  { amountSilver: number; amountUSDC: 0 }
+>
+
+const emptyTreasureInfo = (): ConquestV2OffchainTreasureInfo =>
+  Object.fromEntries(
+    Array.from({ length: 11 }, (_, level) => [
+      level,
+      { amountSilver: 0, amountUSDC: 0 as const }
+    ])
+  )
+
 const goFloat32 = (value: number) => Math.fround(value)
 
 export const conquestV2SilverCardCount = (
@@ -235,6 +248,43 @@ const cycleSeasonWeek = (
     season: firstSeason + Math.floor(absoluteWeek / 4),
     week: (absoluteWeek % 4) + 1
   }
+}
+
+/**
+ * Public identity-mode projection of actual deliverable value. The legacy
+ * USDC field stays zero for wire compatibility; no cash/token estimate is
+ * exposed. A missing, future, disabled, or unsafe schedule advertises no
+ * reward rather than promising value that the Worker would refuse to grant.
+ */
+export const conquestV2OffchainTreasureInfo = async (
+  database: D1Database,
+  now = new Date()
+): Promise<ConquestV2OffchainTreasureInfo> => {
+  const empty = emptyTreasureInfo()
+  const schedule = await activeSchedule(database, now)
+  if (!schedule) return empty
+  const { first, rewardCardSets } = validatedSchedule(schedule)
+  const scheduledAt = mostRecentConquestV2RewardTime(first, now)
+  if (!scheduledAt) return empty
+  const { season } = cycleSeasonWeek(schedule, scheduledAt)
+  if (conquestV2RewardCardIds(season, rewardCardSets).length === 0) return empty
+  const config = await new ConquestV2EconomyRepository(database).config()
+  const weightPerSilverCard = config.settings.weightPerSilverCard
+  if (
+    weightPerSilverCard <= 0 ||
+    conquestV2SilverCardCount(weightPerSilverCard, 1) < 1
+  ) {
+    return empty
+  }
+  return Object.fromEntries(
+    Array.from({ length: 11 }, (_, level) => [
+      level,
+      {
+        amountSilver: conquestV2SilverCardCount(weightPerSilverCard, level),
+        amountUSDC: 0 as const
+      }
+    ])
+  )
 }
 
 const ensureCycle = async (

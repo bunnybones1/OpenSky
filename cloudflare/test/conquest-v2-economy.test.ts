@@ -300,6 +300,8 @@ describe('Conquest V2 economy preview', () => {
     ).json<{
       treasures: Record<string, { amountSilver: number; amountUSDC: number }>
     }>()
+    // Pool settings alone are not an activation switch. Without an immutable
+    // reward schedule, even Silver projections remain disabled.
     expect(Object.values(treasures.treasures)).toEqual(
       Array.from({ length: 11 }, () => ({ amountSilver: 0, amountUSDC: 0 }))
     )

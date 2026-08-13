@@ -81,8 +81,13 @@ describe('source conquest RPC foundation', () => {
     })
     const treasures = await (
       await rpc('ConquestTreasuresInfo', {}, false)
-    ).json<{ treasures: Record<string, unknown> }>()
+    ).json<{
+      treasures: Record<string, { amountSilver: number; amountUSDC: number }>
+    }>()
     expect(Object.keys(treasures.treasures)).toHaveLength(11)
+    expect(Object.values(treasures.treasures)).toEqual(
+      Array.from({ length: 11 }, () => ({ amountSilver: 0, amountUSDC: 0 }))
+    )
 
     const now = new Date().toISOString()
     await env.AUTH_DB.prepare(

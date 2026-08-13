@@ -48,6 +48,20 @@ const GOOGLE_REWARD_UI_REQUIREMENTS = {
     "env.AUTH_MODE === 'google'",
     'tooltip.progressionInfoOffchain'
   ],
+  conquestPointsExplanation: [
+    "env.AUTH_MODE === 'google'",
+    'play.conquestDeckPointsTooltipMessageOffchain'
+  ],
+  conquestTreasureTooltip: [
+    "env.AUTH_MODE === 'google'",
+    'play.treasureToolTipHeaderOffchain'
+  ],
+  conquestTreasureReward: [
+    "env.AUTH_MODE !== 'google'",
+    'play.treasureRewardsInactive'
+  ],
+  conquestNotifications: ["env.AUTH_MODE === 'google'"],
+  conquestRewardFeed: ["env.AUTH_MODE !== 'google'"],
   tradableBadge: ["env.AUTH_MODE === 'google') return null"],
   skypassThumbnail: ["env.AUTH_MODE !== 'google'"]
 }
@@ -231,6 +245,11 @@ const main = async () => {
     goldCardTooltip,
     silverCardTooltip,
     conquestProgressTooltip,
+    conquestPointsExplanation,
+    conquestTreasureTooltip,
+    conquestTreasureReward,
+    conquestNotifications,
+    conquestRewardFeed,
     tradableBadge,
     skypassThumbnail,
     englishLocaleSource,
@@ -339,6 +358,35 @@ const main = async () => {
     readFile(
       path.join(
         root,
+        'webapp/src/PlayPage/Conquest/components/ConquestPointsExplanation.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PlayPage/Conquest/ConquestProgressBar/ConquestTreasureImage/ConquestTreasureImage.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PlayPage/Conquest/ConquestProgressBar/ConquestTreasureImage/components/TreasureImageTooltipSection.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/HomePage/NotificationsDialog/NotificationsDialog.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'webapp/src/shared/queries/useFeed.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
         'webapp/src/shared/components/TradableBadge/TradableBadge.tsx'
       ),
       'utf8'
@@ -369,6 +417,11 @@ const main = async () => {
       goldCardTooltip,
       silverCardTooltip,
       conquestProgressTooltip,
+      conquestPointsExplanation,
+      conquestTreasureTooltip,
+      conquestTreasureReward,
+      conquestNotifications,
+      conquestRewardFeed,
       tradableBadge,
       skypassThumbnail
     },
@@ -381,6 +434,9 @@ const main = async () => {
       englishLocale.play.delayedDelivery_one,
       englishLocale.play.delayedDelivery_other,
       englishLocale.play.rewards.levelWeeklyTreasureLineTwoOffchain,
+      englishLocale.play.conquestDeckPointsTooltipMessageOffchain,
+      englishLocale.play.treasureRewardsInactive,
+      englishLocale.play.treasureToolTipHeaderOffchain,
       englishLocale.tooltip.conquestRulesLineSevenOffchain,
       englishLocale.tooltip.goldCardsExplainerLineOneOffchain,
       englishLocale.tooltip.goldCardsExplainerLineTwoOffchain,

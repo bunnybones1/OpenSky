@@ -50,6 +50,7 @@ import {
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import { ConquestV2EconomyRepository } from './conquest-v2-economy'
+import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
@@ -1353,12 +1354,7 @@ export const handleApiRequest = async (
       case 'ConquestTreasuresInfo': {
         await requestBody<Record<string, never>>(request)
         return json(request, env, {
-          treasures: Object.fromEntries(
-            Array.from({ length: 11 }, (_, level) => [
-              level,
-              { amountSilver: 0, amountUSDC: 0 }
-            ])
-          )
+          treasures: await conquestV2OffchainTreasureInfo(env.AUTH_DB)
         })
       }
 

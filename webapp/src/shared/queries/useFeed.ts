@@ -8,6 +8,7 @@ import {
 import { getBaseID, getItemType } from '@opensky/shared/assetsIDs'
 import { useQuery } from '@tanstack/react-query'
 
+import env from '~/env'
 import { APIClient } from '~/shared/clients'
 
 import { AllCardBacks } from '../constants/card-backs'
@@ -184,6 +185,7 @@ const processEvents = (
     }
 
     if (
+      env.AUTH_MODE !== 'google' &&
       event.type === FeedEventType.CONQUEST_V2_REWARD &&
       event.conquestV2Reward &&
       event.conquestV2TreasureLevel

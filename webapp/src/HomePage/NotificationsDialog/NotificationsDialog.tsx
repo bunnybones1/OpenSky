@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUnmount } from 'react-use'
 
+import env from '~/env'
 import { GlobalQueryClient } from '~/shared/clients'
 import { Box, FlexBox } from '~/shared/components/Base'
 import { FancyCloseButton } from '~/shared/components/FancyCloseButton/FancyCloseButton'
@@ -53,7 +54,10 @@ const NotificationsDialog = memo(() => {
 
         if (notification.type === NotificationType.CONQUEST_V2_REWARD) {
           //No USDC to show, so remove USDC notification
-          if (!notification.conquestV2Reward?.amountUSDC) {
+          if (
+            env.AUTH_MODE === 'google' ||
+            !notification.conquestV2Reward?.amountUSDC
+          ) {
             notificationArray.splice(i, 1)
           }
           // Has silver cards, create Card reward notification
