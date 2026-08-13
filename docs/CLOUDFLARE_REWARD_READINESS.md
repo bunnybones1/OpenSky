@@ -82,9 +82,13 @@ itself.
   has zero capability grants and zero schedule rows, so this operational
   surface remains dormant until those economy choices are supplied.
 - Referral stickers require source-equivalent current-season sticker metadata
-  and a distinct actor to activate its exact thresholds. With no season-62
-  source schedule in the repository, the original screen correctly says
-  `Coming Soon`.
+  and a distinct actor to activate its exact thresholds. Reviewed staff
+  adapters now atomically import and propose one exact current-season manifest,
+  list every immutable version, and require a separately authorized actor to
+  confirm and activate that same manifest. Raw metadata remains invisible and
+  cannot authorize a reward. Production retains zero capability grants and
+  zero schedules, so with no approved source schedule the original screen
+  correctly says `Coming Soon`.
 
 No audit or scheduler is permission to guess these choices. Activation is a
 product/economy decision and should remain a separate committed milestone with

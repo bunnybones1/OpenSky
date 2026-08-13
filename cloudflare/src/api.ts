@@ -95,6 +95,10 @@ import {
   STAFF_PROGRESSION_OPERATION_HEADER
 } from './progression-support'
 import { replayArchive } from './replays'
+import {
+  REFERRAL_STICKER_SCHEDULE_OPERATION_HEADER,
+  ReferralStickerScheduleOperationsRepository
+} from './referral-sticker-schedule-operations'
 import { SocialRepository } from './social'
 import { SocialInfoRepository, type SocialInfoFetch } from './social-info'
 import {
@@ -296,6 +300,8 @@ export const handleApiRequest = async (
     new ConquestV2RewardScheduleOperationsRepository(env.AUTH_DB)
   const leaderboardRewardSchedules =
     new LeaderboardRewardScheduleOperationsRepository(env.AUTH_DB)
+  const referralStickerSchedules =
+    new ReferralStickerScheduleOperationsRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
@@ -1513,6 +1519,61 @@ export const handleApiRequest = async (
             principal.userId,
             body,
             request.headers.get(CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMListReferralStickerSchedules': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ version?: unknown }>(request)
+        return json(request, env, {
+          currentSeason: seasonFromDate(),
+          schedules: await referralStickerSchedules.list(body.version)
+        })
+      }
+
+      case 'GMProposeReferralStickerSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireReferralStickerScheduleWrite(
+          principal.userId,
+          'PROPOSE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          replacesVersion?: unknown
+          season?: unknown
+          entries?: unknown
+          reason?: unknown
+          reviewReference?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await referralStickerSchedules.propose(
+            principal.userId,
+            body,
+            request.headers.get(REFERRAL_STICKER_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMActivateReferralStickerSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireReferralStickerScheduleWrite(
+          principal.userId,
+          'ACTIVATE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          season?: unknown
+          entries?: unknown
+          reviewReference?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await referralStickerSchedules.activate(
+            principal.userId,
+            body,
+            request.headers.get(REFERRAL_STICKER_SCHEDULE_OPERATION_HEADER)
           )
         })
       }

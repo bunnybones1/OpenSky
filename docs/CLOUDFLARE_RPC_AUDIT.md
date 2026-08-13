@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs      |      17 |
 | Deliberately retired RPCs       |       3 |
 | Actionable source RPC gaps      |       0 |
-| Cloudflare-only RPC adapters    |      15 |
+| Cloudflare-only RPC adapters    |      18 |
 
 Together, 172/172 source contracts (100%) are functionally implemented,
 preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
@@ -88,6 +88,13 @@ source algorithm digest, 11-level Silver vector, eligible card sets, UTC
 cadence, season/week anchor, and delivery delay. Separate dormant capabilities,
 monotonic versions, immutable receipts, and a second actor keep production
 inert until those product inputs are deliberately approved.
+
+Three reviewed referral-sticker adapters list versions, atomically import and
+propose one exact current-season sticker manifest, and independently activate
+that same manifest. The catalog remains player-invisible until activation;
+monotonic versions, separate dormant capabilities, immutable idempotency
+receipts, and exact-threshold confirmation keep metadata from becoming reward
+authority by itself.
 
 ## Reviewed non-ports
 

@@ -14,6 +14,7 @@ import { isConquestQueueReady } from './conquest-readiness'
 import type { ConquestRewardPoolOperation } from './conquest-reward-pool-operations'
 import type { ConquestV2RewardScheduleOperation } from './conquest-v2-reward-schedule-operations'
 import type { LeaderboardRewardScheduleOperation } from './leaderboard-reward-schedule-operations'
+import type { ReferralStickerScheduleOperation } from './referral-sticker-schedule-operations'
 
 interface StatusCountRow {
   account_status: AccountStatus
@@ -343,6 +344,25 @@ export class StaffRepository {
     if (!row) {
       throw permissionDenied(
         `leaderboard reward schedule ${permission.toLowerCase()} access required`
+      )
+    }
+  }
+
+  async requireReferralStickerScheduleWrite(
+    userId: string,
+    permission: ReferralStickerScheduleOperation
+  ): Promise<void> {
+    await this.requireAdmin(userId)
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_referral_sticker_schedule_permissions
+         WHERE user_id = ? AND permission = ?`
+      )
+      .bind(userId, permission)
+      .first()
+    if (!row) {
+      throw permissionDenied(
+        `referral sticker schedule ${permission.toLowerCase()} access required`
       )
     }
   }
