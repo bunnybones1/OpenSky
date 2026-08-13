@@ -18,6 +18,7 @@ import {
 } from '~/shared/style/SearchbarStyle.css'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
+import { IdentityMarketStickersOwnershipFilter } from './components/IdentityMarketStickersOwnershipFilter'
 import { MarketStickersSearchInput } from './components/MarketStickersSearchInput'
 import { MarketStickersSideSwitcher } from './components/MarketStickersSideSwitcher'
 import { MarketStickersSortSelect } from './components/MarketStickersSortSelect'
@@ -30,59 +31,69 @@ const SearchResultsFontSize = {
   desktop: '16px'
 } as const
 
-export const MarketStickersSearchBar = memo(() => {
-  const { numSearchResults } = useSnapshot(marketStickersState)
-  const { t } = useTranslation()
-  const dispatch = useDispatch()
+interface MarketStickersSearchBarProps {
+  inventoryOnly?: boolean
+}
 
-  const onItemsClick = useCallback(() => {
-    dispatch(push(makeItemsStickersRoute()))
-  }, [dispatch])
+export const MarketStickersSearchBar = memo(
+  ({ inventoryOnly }: MarketStickersSearchBarProps) => {
+    const { numSearchResults } = useSnapshot(marketStickersState)
+    const { t } = useTranslation()
+    const dispatch = useDispatch()
 
-  return (
-    <SearchBar
-      background="default"
-      justifyContent="flex-start"
-      className={BasicSearchBarStyle}
-    >
-      {() => (
-        <>
-          <div className={SearchBarSideStyle}>
-            <MarketStickersSideSwitcher />
-            <MarketStickersSortSelect />
-            {numSearchResults !== undefined && (
-              <div
-                className={clsx(
-                  Sprinkles({
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-start'
-                  }),
-                  SearchResultsWrapper
-                )}
-              >
-                <Text color="purple9" fontSize={SearchResultsFontSize}>
-                  {t('search.searchResults', { results: numSearchResults })}
-                </Text>
-              </div>
-            )}
-          </div>
-          <div className={clsx(SearchBarSideStyle, 'isRight')}>
-            {!!isSecretShopVisible && (
-              <Button
-                frameType="rounded"
-                colorType="default"
-                isToggled
-                onClick={onItemsClick}
-                leftAdornment={MarketButtonAdornment}
-              />
-            )}
-            <MarketStickersSearchInput />
-          </div>
-        </>
-      )}
-    </SearchBar>
-  )
-})
+    const onItemsClick = useCallback(() => {
+      dispatch(push(makeItemsStickersRoute()))
+    }, [dispatch])
+
+    return (
+      <SearchBar
+        background="default"
+        justifyContent="flex-start"
+        className={BasicSearchBarStyle}
+      >
+        {() => (
+          <>
+            <div className={SearchBarSideStyle}>
+              {inventoryOnly ? (
+                <IdentityMarketStickersOwnershipFilter />
+              ) : (
+                <MarketStickersSideSwitcher />
+              )}
+              <MarketStickersSortSelect inventoryOnly={inventoryOnly} />
+              {numSearchResults !== undefined && (
+                <div
+                  className={clsx(
+                    Sprinkles({
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start'
+                    }),
+                    SearchResultsWrapper
+                  )}
+                >
+                  <Text color="purple9" fontSize={SearchResultsFontSize}>
+                    {t('search.searchResults', { results: numSearchResults })}
+                  </Text>
+                </div>
+              )}
+            </div>
+            <div className={clsx(SearchBarSideStyle, 'isRight')}>
+              {!!isSecretShopVisible && (
+                <Button
+                  frameType="rounded"
+                  colorType="default"
+                  isToggled
+                  onClick={onItemsClick}
+                  leftAdornment={MarketButtonAdornment}
+                />
+              )}
+              <MarketStickersSearchInput />
+            </div>
+          </>
+        )}
+      </SearchBar>
+    )
+  }
+)
 
 MarketStickersSearchBar.displayName = 'MarketStickersSearchBar'

@@ -6,31 +6,31 @@ disposition below. `pnpm check:cloudflare:webapp-routes` fails when the source
 adds or removes a route, when a reviewed Google mount changes, or when the
 original 404/deleted-account destinations disappear.
 
-| Source route        | Disposition                            | Google identity behavior                                                                                                |
-| ------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `SECRET_DEBUG`      | `legacy-diagnostic`                    | Not mounted; the wallet/debug surface requires a separate review.                                                       |
-| `HOME`              | `preserved-original-page`              | Original Home page.                                                                                                     |
-| `PLAYGROUND`        | `local-development-only`               | Source itself mounts this only on localhost.                                                                            |
-| `PLAY`              | `preserved-original-page`              | Original Play page with deployment-gated modes.                                                                         |
-| `PURCHASE_CONQUEST` | `offchain-exchange-substitution`       | Redirects to the original Silver-card selection flow with D1 exchange controls; paid Conquest remains gated.            |
-| `PENDING_GOLDS`     | `preserved-offchain-copy`              | Original delivery page with mint language replaced.                                                                     |
-| `SELECT_SILVERS`    | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
-| `SKY_PASS`          | `preserved-offchain-rewards`           | Original free and premium tracks backed by active D1 reward policy.                                                     |
-| `SKY_PASS_PURCHASE` | `preserved-identity-commerce`          | Original page/artwork with Google-only Stripe controls and exact off-chain fulfillment.                                 |
-| `CACHE_INFO`        | `preserved-browser-diagnostic`         | Original browser/game cache overview, linked from the preserved footer and backed entirely by local browser storage.    |
-| `SHOP`              | `unreleased-source-mock`               | Not mounted: its source data is explicitly `MOCK_SHOP_ITEMS`, its copy is placeholder lorem ipsum, and every offer button is wired to `noop`; there is no earning, purchase, or API behavior to retire. |
-| `HERO_FEATURE`      | `preserved-offchain-controls`          | Original Hero page with Google Gold-card exchange.                                                                      |
-| `SELECT_GOLDS`      | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
-| `LEADERBOARD`       | `preserved-original-page`              | Original player and deck leaderboards.                                                                                  |
-| `MARKET`            | `preserved-read-only-market`           | Original card catalog and deck browser backed by local metadata and D1 ownership; wallet prices, cart, buy, and sell controls remain excluded. |
-| `ITEMS`             | `preserved-identity-inventory`         | Original collection pages backed by D1; linked wallet contents are optional/read-only.                                  |
-| `DECK_BUILDER`      | `preserved-original-page`              | Original deck editor.                                                                                                   |
-| `QUESTS`            | `preserved-offchain-rewards`           | Original quest UI with D1 progress and claims.                                                                          |
-| `CREATE_DECK`       | `preserved-original-page`              | Original creation flow.                                                                                                 |
-| `ACCOUNT`           | `preserved-google-identity`            | Original profile shell backed by Google identity and optional linked wallets.                                           |
-| `ADMIN`             | `preserved-identity-rbac`              | Original staff browser tree behind D1 `ADMIN`; child outlets cannot mount before role confirmation, and writes require separate capabilities. |
-| `SANCTIONS_LIST`    | `superseded-wallet-era-policy-copy`    | The 2022 wallet/fiat policy copy is not presented as current Cloud Weasel policy.                                       |
-| `DELETED_ACCOUNT`   | `preserved-original-page`              | Original deletion-complete destination.                                                                                 |
+| Source route        | Disposition                         | Google identity behavior                                                                                                                                                                                |
+| ------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SECRET_DEBUG`      | `legacy-diagnostic`                 | Not mounted; the wallet/debug surface requires a separate review.                                                                                                                                       |
+| `HOME`              | `preserved-original-page`           | Original Home page.                                                                                                                                                                                     |
+| `PLAYGROUND`        | `local-development-only`            | Source itself mounts this only on localhost.                                                                                                                                                            |
+| `PLAY`              | `preserved-original-page`           | Original Play page with deployment-gated modes.                                                                                                                                                         |
+| `PURCHASE_CONQUEST` | `offchain-exchange-substitution`    | Redirects to the original Silver-card selection flow with D1 exchange controls; paid Conquest remains gated.                                                                                            |
+| `PENDING_GOLDS`     | `preserved-offchain-copy`           | Original delivery page with mint language replaced.                                                                                                                                                     |
+| `SELECT_SILVERS`    | `preserved-offchain-controls`       | Original selection UI with identity-owned D1 exchange.                                                                                                                                                  |
+| `SKY_PASS`          | `preserved-offchain-rewards`        | Original free and premium tracks backed by active D1 reward policy.                                                                                                                                     |
+| `SKY_PASS_PURCHASE` | `preserved-identity-commerce`       | Original page/artwork with Google-only Stripe controls and exact off-chain fulfillment.                                                                                                                 |
+| `CACHE_INFO`        | `preserved-browser-diagnostic`      | Original browser/game cache overview, linked from the preserved footer and backed entirely by local browser storage.                                                                                    |
+| `SHOP`              | `unreleased-source-mock`            | Not mounted: its source data is explicitly `MOCK_SHOP_ITEMS`, its copy is placeholder lorem ipsum, and every offer button is wired to `noop`; there is no earning, purchase, or API behavior to retire. |
+| `HERO_FEATURE`      | `preserved-offchain-controls`       | Original Hero page with Google Gold-card exchange.                                                                                                                                                      |
+| `SELECT_GOLDS`      | `preserved-offchain-controls`       | Original selection UI with identity-owned D1 exchange.                                                                                                                                                  |
+| `LEADERBOARD`       | `preserved-original-page`           | Original player and deck leaderboards.                                                                                                                                                                  |
+| `MARKET`            | `preserved-read-only-market`        | Original card, sticker, and deck catalogs backed by local metadata and D1 ownership; wallet prices, cart, buy, and sell controls remain excluded.                                                       |
+| `ITEMS`             | `preserved-identity-inventory`      | Original collection pages backed by D1; linked wallet contents are optional/read-only.                                                                                                                  |
+| `DECK_BUILDER`      | `preserved-original-page`           | Original deck editor.                                                                                                                                                                                   |
+| `QUESTS`            | `preserved-offchain-rewards`        | Original quest UI with D1 progress and claims.                                                                                                                                                          |
+| `CREATE_DECK`       | `preserved-original-page`           | Original creation flow.                                                                                                                                                                                 |
+| `ACCOUNT`           | `preserved-google-identity`         | Original profile shell backed by Google identity and optional linked wallets.                                                                                                                           |
+| `ADMIN`             | `preserved-identity-rbac`           | Original staff browser tree behind D1 `ADMIN`; child outlets cannot mount before role confirmation, and writes require separate capabilities.                                                           |
+| `SANCTIONS_LIST`    | `superseded-wallet-era-policy-copy` | The 2022 wallet/fiat policy copy is not presented as current Cloud Weasel policy.                                                                                                                       |
+| `DELETED_ACCOUNT`   | `preserved-original-page`           | Original deletion-complete destination.                                                                                                                                                                 |
 
 The Google app additionally mounts the source Invite Friends pages, which were
 present in the repository and navigation but omitted from `LegacyApp` routing.
@@ -66,11 +66,13 @@ original deck browser: the same Market navigation, ranking filters, prism
 filters, deck cards, ownership progress, and global Deck Viewer now consume the
 ported `SearchDeckRanks` and inventory contracts. The second slice restores the
 original Cards catalog, search/filter panel, card art, grade and ownership
-filters, D1 balance badges, and card-details viewer. Price sorting is replaced
-by local card or D1 quantity sorting. Legacy Sequence price overlays, hero,
-sticker, and card-back listings, order cart, and buy/sell controls do not mount
-in identity mode. Optional WalletConnect remains an ownership-read integration
-and does not make off-chain rewards tradable by implication.
+filters, D1 balance badges, and card-details viewer. The next slice preserves
+the source sticker catalog, search, ownership filters, art, inventory balances,
+detail viewer, and equip controls. Price sorting is replaced by local card or
+D1 quantity sorting. Legacy Sequence price overlays, hero and card-back
+listings, order cart, and buy/sell controls do not mount in identity mode.
+Optional WalletConnect remains an ownership-read integration and does not make
+off-chain rewards tradable by implication.
 
 ## Production rollout
 

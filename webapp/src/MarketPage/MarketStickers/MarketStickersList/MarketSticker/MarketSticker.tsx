@@ -19,20 +19,22 @@ import { MarketStickerButton } from './components/MarketStickerButton'
 
 export interface MarketStickerProps {
   id: number
+  inventoryOnly?: boolean
 }
 
-const MarketStickerBalance = memo(({ id }: MarketStickerProps) => {
+const MarketStickerBalance = memo(({ id, inventoryOnly }: MarketStickerProps) => {
   const mode = useMarketStickersShopMode()
   const { data: balance } = useTokenBalance(ItemType.SW_STICKERS, id)
   const { data: priceAndSupply } = useTokenPriceAndSupply({
     mode,
     id,
-    quantity: 1
+    quantity: 1,
+    isDisabled: inventoryOnly
   })
 
   const { t } = useTranslation()
 
-  const { data: cartItem } = useCartItem(id, mode)
+  const { data: cartItem } = useCartItem(id, mode, !inventoryOnly)
 
   const balances = useMemo<BalanceOrPrice[] | undefined>(() => {
     if (balance === undefined) return undefined
@@ -59,6 +61,17 @@ const MarketStickerBalance = memo(({ id }: MarketStickerProps) => {
 
   const sticker = useMemo(() => AllStickers.get(id), [id])
 
+  if (inventoryOnly) {
+    return (
+      <StickerBalanceAndPriceInfo
+        balances={balances}
+        id={id}
+        name={sticker?.name}
+        areBalancesLoading={balances === undefined}
+      />
+    )
+  }
+
   return (
     <StickerBalanceAndPriceInfo
       balances={balances}
@@ -75,20 +88,20 @@ const MarketStickerBalance = memo(({ id }: MarketStickerProps) => {
 
 MarketStickerBalance.displayName = 'MarketStickerBalance'
 
-export const MarketSticker = memo(({ id }: MarketStickerProps) => {
+export const MarketSticker = memo(({ id, inventoryOnly }: MarketStickerProps) => {
   const dispatch = useDispatch()
 
   const onClick = useCallback(() => {
     dispatch(push(makeMarketStickerFeatureRoute(id)))
   }, [dispatch, id])
 
+  const BalanceInfo = useCallback(
+    () => <MarketStickerBalance id={id} inventoryOnly={inventoryOnly} />,
+    [id, inventoryOnly]
+  )
+
   return (
-    <Sticker
-      id={id}
-      onClick={onClick}
-      isTiltable
-      BalanceAndPriceInfo={MarketStickerBalance}
-    />
+    <Sticker id={id} onClick={onClick} isTiltable BalanceAndPriceInfo={BalanceInfo} />
   )
 })
 

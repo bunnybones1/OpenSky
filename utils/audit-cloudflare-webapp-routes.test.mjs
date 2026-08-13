@@ -12,6 +12,10 @@ const readMarketFidelitySources = async () => {
     marketCardBalanceSource,
     marketCardsSearchSource,
     marketCardDetailsSource,
+    marketStickersListSource,
+    marketStickerSource,
+    marketStickersSearchSource,
+    marketStickerFeatureSource,
     cartQuerySource
   ] = await Promise.all([
     readFile('webapp/src/MarketPage/components/MarketPageSubNav.tsx', 'utf8'),
@@ -35,6 +39,22 @@ const readMarketFidelitySources = async () => {
       'webapp/src/MarketPage/MarketCardDetails/MarketCardDetails.tsx',
       'utf8'
     ),
+    readFile(
+      'webapp/src/MarketPage/MarketStickers/MarketStickersList/MarketStickersList.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketStickers/MarketStickersList/MarketSticker/MarketSticker.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketStickers/MarketStickersSearchBar/MarketStickersSearchBar.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketStickerFeature/MarketStickerFeature.tsx',
+      'utf8'
+    ),
     readFile('webapp/src/shared/queries/useCart.ts', 'utf8')
   ])
   return {
@@ -44,6 +64,10 @@ const readMarketFidelitySources = async () => {
     marketCardBalanceSource,
     marketCardsSearchSource,
     marketCardDetailsSource,
+    marketStickersListSource,
+    marketStickerSource,
+    marketStickersSearchSource,
+    marketStickerFeatureSource,
     cartQuerySource
   }
 }
@@ -243,7 +267,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
       .replace(
         'element={<FourOhFourPage />}',
         'element={<Navigate to={ROUTES_CONFIG.routes.HOME.directPath} />}'
-    ),
+      ),
     policySource: policySource.replace('`preserved-original-page`', '`wrong`'),
     authenticationClientSource: authenticationClientSource.replace(
       'identityClient.startAccountDeletion(',
@@ -255,7 +279,10 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     ),
     identityShellSource: identityShellSource
       .replace('Element: ErrorDialog', 'Element: MissingErrorDialog')
-      .replace('useUpdatePageOffsets()', 'useUpdatePageOffsets({ includeBanners: false })')
+      .replace(
+        'useUpdatePageOffsets()',
+        'useUpdatePageOffsets({ includeBanners: false })'
+      )
       .concat('\nSequenceConfirmSignatureDialog'),
     accountSettingsSource: accountSettingsSource
       .replace(
@@ -356,4 +383,122 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('Shop prototype changed')))
   assert.ok(errors.some(error => error.includes('legacy trading UI')))
   assert.ok(errors.some(error => error.includes('cart guard')))
+})
+
+test('rejects sticker catalog wallet controls in Google mode', async () => {
+  const marketFidelitySources = await readMarketFidelitySources()
+  const base = {
+    legacySource: await readFile('webapp/src/App.tsx', 'utf8'),
+    identitySource: await readFile(
+      'webapp/src/IdentitySession/IdentityApp.tsx',
+      'utf8'
+    ),
+    policySource: await readFile(
+      'docs/CLOUDFLARE_WEBAPP_ROUTE_AUDIT.md',
+      'utf8'
+    ),
+    authenticationClientSource: await readFile(
+      'webapp/src/clients/AuthenticationClient/AuthenticationClient.ts',
+      'utf8'
+    ),
+    identityApiSource: await readFile('cloudflare/src/identity-api.ts', 'utf8'),
+    identityShellSource: await readFile(
+      'webapp/src/IdentitySession/useIdentityAppShell.ts',
+      'utf8'
+    ),
+    accountSettingsSource: await readFile(
+      'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/SettingsButton/AccountSettingsDialog/components/AccountSettingsControls.tsx',
+      'utf8'
+    ),
+    pageOffsetSource: await readFile(
+      'webapp/src/hooks/useUpdatePageOffset.ts',
+      'utf8'
+    ),
+    bannerQuerySource: await readFile(
+      'webapp/src/shared/queries/useBanners.ts',
+      'utf8'
+    ),
+    cookieDialogSource: await readFile(
+      'webapp/src/hooks/useAppDialogs/components/CookieSettingsDialog.tsx',
+      'utf8'
+    ),
+    cookieDisclaimerSource: await readFile(
+      'webapp/src/AppLayout/components/CookieDisclaimer.tsx',
+      'utf8'
+    ),
+    cookieRepositorySource: await readFile(
+      'cloudflare/src/cookie-policies.ts',
+      'utf8'
+    ),
+    cookieMigrationSource: await readFile(
+      'cloudflare/migrations/0092_identity_cookie_policy.sql',
+      'utf8'
+    ),
+    appLayoutSource: await readFile(
+      'webapp/src/AppLayout/AppLayout.tsx',
+      'utf8'
+    ),
+    navBarSource: await readFile(
+      'webapp/src/AppLayout/NavBar/NavBar.tsx',
+      'utf8'
+    ),
+    deckViewerSource: await readFile(
+      'webapp/src/AppLayout/DeckViewer/DeckViewer.tsx',
+      'utf8'
+    ),
+    deckViewerFooterSource: await readFile(
+      'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
+      'utf8'
+    ),
+    adminPageSource: await readFile(
+      'webapp/src/AdminPage/AdminPage.tsx',
+      'utf8'
+    ),
+    staffRepositorySource: await readFile('cloudflare/src/staff.ts', 'utf8'),
+    shopPrototypeSource: await Promise.all([
+      readFile('webapp/src/ShopPage/shared/queries/mock-data.ts', 'utf8'),
+      readFile('webapp/src/ShopPage/ShopSection/ShopSection.tsx', 'utf8'),
+      readFile(
+        'webapp/src/ShopPage/ShopSection/ShopBox/components/PriceButton.tsx',
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
+    identityMarketSource: await readFile(
+      'webapp/src/MarketPage/IdentityMarketPage.tsx',
+      'utf8'
+    ),
+    marketDeckSource: await readFile(
+      'webapp/src/MarketPage/MarketDecks/MarketDecksList/MarketDeck/MarketDeck.tsx',
+      'utf8'
+    ),
+    marketNavSource: await readFile(
+      'webapp/src/AppLayout/NavBar/LinkSection/components/MarketLink.tsx',
+      'utf8'
+    ),
+    ...marketFidelitySources
+  }
+
+  const errors = webappRouteAuditErrors({
+    ...base,
+    marketStickerSource: marketFidelitySources.marketStickerSource
+      .replace('isDisabled: inventoryOnly', 'isDisabled: false')
+      .replace(
+        'useCartItem(id, mode, !inventoryOnly)',
+        'useCartItem(id, mode)'
+      ),
+    marketStickersSearchSource:
+      marketFidelitySources.marketStickersSearchSource.replace(
+        '<IdentityMarketStickersOwnershipFilter />',
+        '<MarketStickersSideSwitcher />'
+      ),
+    marketStickerFeatureSource:
+      marketFidelitySources.marketStickerFeatureSource.replace(
+        'ShopControls={inventoryOnly ? undefined : ShopControls}',
+        'ShopControls={ShopControls}'
+      )
+  })
+
+  assert.ok(errors.some(error => error.includes('transaction guard')))
+  assert.ok(errors.some(error => error.includes('filter substitution')))
+  assert.ok(errors.some(error => error.includes('detail substitution')))
 })

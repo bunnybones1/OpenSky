@@ -10,6 +10,8 @@ import { MarketPageSubNav } from './components/MarketPageSubNav'
 import { MarketCardDetails } from './MarketCardDetails/MarketCardDetails'
 import { MarketCards } from './MarketCards/MarketCards'
 import MarketDecks from './MarketDecks/MarketDecks'
+import { MarketStickerFeature } from './MarketStickerFeature/MarketStickerFeature'
+import { MarketStickers } from './MarketStickers/MarketStickers'
 
 export const IdentityMarketPage = memo(() => {
   useMount(() => {
@@ -43,6 +45,14 @@ export const IdentityMarketPage = memo(() => {
         <Route
           element={<MarketDecks />}
           path={ROUTES_CONFIG.routes.MARKET.routes.DECKS.path}
+        />
+        <Route
+          element={<MarketStickers inventoryOnly />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.STICKERS.path}
+        />
+        <Route
+          element={<MarketStickerFeature inventoryOnly />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.STICKER.path}
         />
         <Route
           path="*"

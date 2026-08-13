@@ -91,6 +91,10 @@ export const webappRouteAuditErrors = ({
   marketCardBalanceSource,
   marketCardsSearchSource,
   marketCardDetailsSource,
+  marketStickersListSource,
+  marketStickerSource,
+  marketStickersSearchSource,
+  marketStickerFeatureSource,
   cartQuerySource
 }) => {
   const errors = []
@@ -327,7 +331,11 @@ export const webappRouteAuditErrors = ({
     '<MarketCards />',
     '<MarketCardDetails />',
     'ROUTES_CONFIG.routes.MARKET.routes.CARDS.path',
-    'ROUTES_CONFIG.routes.MARKET.routes.CARD.path'
+    'ROUTES_CONFIG.routes.MARKET.routes.CARD.path',
+    '<MarketStickers inventoryOnly />',
+    '<MarketStickerFeature inventoryOnly />',
+    'ROUTES_CONFIG.routes.MARKET.routes.STICKERS.path',
+    'ROUTES_CONFIG.routes.MARKET.routes.STICKER.path'
   ]) {
     if (!identityMarketSource.includes(token)) {
       errors.push(`Google read-only Market fidelity is missing: ${token}`)
@@ -336,11 +344,12 @@ export const webappRouteAuditErrors = ({
   for (const forbidden of [
     'ViewOrderButton',
     'MarketHeroes',
-    'MarketStickers',
     'MarketCardBacks'
   ]) {
     if (identityMarketSource.includes(forbidden)) {
-      errors.push(`Google read-only Market mounts legacy trading UI: ${forbidden}`)
+      errors.push(
+        `Google read-only Market mounts legacy trading UI: ${forbidden}`
+      )
     }
   }
   if (
@@ -349,7 +358,11 @@ export const webappRouteAuditErrors = ({
   ) {
     errors.push('Google read-only Market does not suppress legacy deck prices')
   }
-  for (const token of ['makeMarketCardsRoute()', 'makeNavigateToMarketDecksRoute()']) {
+  for (const token of [
+    'makeMarketCardsRoute()',
+    'makeNavigateToMarketDecksRoute()',
+    'makeMarketStickersRoute()'
+  ]) {
     if (!marketSubNavSource.includes(token)) {
       errors.push(`Google read-only Market subnav is missing: ${token}`)
     }
@@ -361,6 +374,43 @@ export const webappRouteAuditErrors = ({
   ]) {
     if (!marketCardsListSource.includes(token)) {
       errors.push(`Google card catalog sorting guard is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'useMarketStickersList(inventoryOnly)',
+    'ItemComponent={inventoryOnly ? IdentityMarketSticker : MarketSticker}'
+  ]) {
+    if (!marketStickersListSource.includes(token)) {
+      errors.push(`Google sticker catalog adapter is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'isDisabled: inventoryOnly',
+    'useCartItem(id, mode, !inventoryOnly)',
+    'if (inventoryOnly) {'
+  ]) {
+    if (!marketStickerSource.includes(token)) {
+      errors.push(
+        `Google sticker catalog transaction guard is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    '<IdentityMarketStickersOwnershipFilter />',
+    '<MarketStickersSortSelect inventoryOnly={inventoryOnly} />'
+  ]) {
+    if (!marketStickersSearchSource.includes(token)) {
+      errors.push(
+        `Google sticker catalog filter substitution is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    'ShopControls={inventoryOnly ? undefined : ShopControls}',
+    'EquipControls={inventoryOnly ? InventoryEquipControls : EquipControls}'
+  ]) {
+    if (!marketStickerFeatureSource.includes(token)) {
+      errors.push(`Google sticker detail substitution is missing: ${token}`)
     }
   }
   for (const token of [
@@ -384,7 +434,9 @@ export const webappRouteAuditErrors = ({
     '<MarketCardsSideSwitcher />'
   ]) {
     if (!marketCardsSearchSource.includes(token)) {
-      errors.push(`Google card catalog filter substitution is missing: ${token}`)
+      errors.push(
+        `Google card catalog filter substitution is missing: ${token}`
+      )
     }
   }
   for (const token of [
@@ -392,11 +444,15 @@ export const webappRouteAuditErrors = ({
     "inventoryOnly={env.AUTH_MODE === 'google'}"
   ]) {
     if (!marketCardDetailsSource.includes(token)) {
-      errors.push(`Google card catalog detail substitution is missing: ${token}`)
+      errors.push(
+        `Google card catalog detail substitution is missing: ${token}`
+      )
     }
   }
   if (!cartQuerySource.includes('enabled: enabled && !!userAddress')) {
-    errors.push('disabled Google card catalog cart queries can still reach the API')
+    errors.push(
+      'disabled Google card catalog cart queries can still reach the API'
+    )
   }
   for (const token of [
     "const isIdentityMarket = env.AUTH_MODE === 'google'",
@@ -446,6 +502,10 @@ const main = async () => {
     marketCardBalanceSource,
     marketCardsSearchSource,
     marketCardDetailsSource,
+    marketStickersListSource,
+    marketStickerSource,
+    marketStickersSearchSource,
+    marketStickerFeatureSource,
     cartQuerySource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
@@ -473,8 +533,14 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'webapp/src/hooks/useUpdatePageOffset.ts'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/shared/queries/useBanners.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/hooks/useUpdatePageOffset.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'webapp/src/shared/queries/useBanners.ts'),
+      'utf8'
+    ),
     readFile(
       path.join(
         root,
@@ -492,10 +558,7 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'webapp/src/AppLayout/AppLayout.tsx'), 'utf8'),
-    readFile(
-      path.join(root, 'webapp/src/AppLayout/NavBar/NavBar.tsx'),
-      'utf8'
-    ),
+    readFile(path.join(root, 'webapp/src/AppLayout/NavBar/NavBar.tsx'), 'utf8'),
     readFile(
       path.join(root, 'webapp/src/AppLayout/DeckViewer/DeckViewer.tsx'),
       'utf8'
@@ -544,12 +607,73 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'webapp/src/MarketPage/components/MarketPageSubNav.tsx'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCardsList.tsx'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCard.tsx'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCardBalance/MarketCardBalance.tsx'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/MarketPage/MarketCards/MarketCardsSearchBar/MarketCardsSearchBar.tsx'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/MarketPage/MarketCardDetails/MarketCardDetails.tsx'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/MarketPage/components/MarketPageSubNav.tsx'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCardsList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCard.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCardBalance/MarketCardBalance.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCards/MarketCardsSearchBar/MarketCardsSearchBar.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCardDetails/MarketCardDetails.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketStickers/MarketStickersList/MarketStickersList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketStickers/MarketStickersList/MarketSticker/MarketSticker.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketStickers/MarketStickersSearchBar/MarketStickersSearchBar.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketStickerFeature/MarketStickerFeature.tsx'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'webapp/src/shared/queries/useCart.ts'), 'utf8')
   ])
   const errors = webappRouteAuditErrors({
@@ -582,6 +706,10 @@ const main = async () => {
     marketCardBalanceSource,
     marketCardsSearchSource,
     marketCardDetailsSource,
+    marketStickersListSource,
+    marketStickerSource,
+    marketStickersSearchSource,
+    marketStickerFeatureSource,
     cartQuerySource
   })
   if (errors.length) {

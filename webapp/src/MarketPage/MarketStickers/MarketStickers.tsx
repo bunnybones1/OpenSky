@@ -6,7 +6,11 @@ import { MarketStickersEmptyList } from './components/MarketStickersEmptyList'
 import { MarketStickersList } from './MarketStickersList/MarketStickersList'
 import { MarketStickersSearchBar } from './MarketStickersSearchBar/MarketStickersSearchBar'
 
-export const MarketStickers = memo(() => {
+interface MarketStickersProps {
+  inventoryOnly?: boolean
+}
+
+export const MarketStickers = memo(({ inventoryOnly }: MarketStickersProps) => {
   return (
     <div
       className={Sprinkles({
@@ -17,9 +21,9 @@ export const MarketStickers = memo(() => {
         justifyContent: 'flex-start'
       })}
     >
-      <MarketStickersSearchBar />
+      <MarketStickersSearchBar inventoryOnly={inventoryOnly} />
       <MarketStickersEmptyList />
-      <MarketStickersList />
+      <MarketStickersList inventoryOnly={inventoryOnly} />
     </div>
   )
 })

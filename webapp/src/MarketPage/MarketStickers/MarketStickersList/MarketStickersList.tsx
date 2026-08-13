@@ -21,43 +21,55 @@ const getId = ({ id }: MarketStickerProps) => {
   return id
 }
 
-export const MarketStickersList = memo(() => {
-  const numColumns = useStickerListNumColumns()
+interface MarketStickersListProps {
+  inventoryOnly?: boolean
+}
 
-  const { marketStickerList } = useMarketStickersList()
+const IdentityMarketSticker = memo((props: MarketStickerProps) => (
+  <MarketSticker {...props} inventoryOnly />
+))
 
-  const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
-    numColumns,
-    columnGap: COLUMN_GAP,
-    paddingBottom: PADDING_BOTTOM,
-    ratio: STICKER_RATIO
-  })
+IdentityMarketSticker.displayName = 'IdentityMarketSticker'
 
-  return (
-    <div
-      className={Sprinkles({
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-        flexDirection: 'column',
-        display: 'flex',
-        width: 'full',
-        paddingX: ITEM_LIST_PADDING_X,
-        paddingBottom: ITEM_LIST_PADDING_BOTTOM
-      })}
-      ref={listParentRef}
-    >
-      <VirtualizedItemList<MarketStickerProps>
-        ItemComponent={MarketSticker}
-        getItemId={getId}
-        items={marketStickerList || DEFAULT_LIST}
-        columnGap={`${COLUMN_GAP}px`}
-        rowPaddingBottom={`${PADDING_BOTTOM}px`}
-        estimateSize={estimateSize}
-        numColumns={numColumns}
-        isLoadingList={marketStickerList === undefined}
-      />
-    </div>
-  )
-})
+export const MarketStickersList = memo(
+  ({ inventoryOnly }: MarketStickersListProps) => {
+    const numColumns = useStickerListNumColumns()
+
+    const { marketStickerList } = useMarketStickersList(inventoryOnly)
+
+    const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
+      numColumns,
+      columnGap: COLUMN_GAP,
+      paddingBottom: PADDING_BOTTOM,
+      ratio: STICKER_RATIO
+    })
+
+    return (
+      <div
+        className={Sprinkles({
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          flexDirection: 'column',
+          display: 'flex',
+          width: 'full',
+          paddingX: ITEM_LIST_PADDING_X,
+          paddingBottom: ITEM_LIST_PADDING_BOTTOM
+        })}
+        ref={listParentRef}
+      >
+        <VirtualizedItemList<MarketStickerProps>
+          ItemComponent={inventoryOnly ? IdentityMarketSticker : MarketSticker}
+          getItemId={getId}
+          items={marketStickerList || DEFAULT_LIST}
+          columnGap={`${COLUMN_GAP}px`}
+          rowPaddingBottom={`${PADDING_BOTTOM}px`}
+          estimateSize={estimateSize}
+          numColumns={numColumns}
+          isLoadingList={marketStickerList === undefined}
+        />
+      </div>
+    )
+  }
+)
 
 MarketStickersList.displayName = 'MarketStickersList'
