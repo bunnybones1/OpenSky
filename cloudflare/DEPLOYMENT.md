@@ -250,7 +250,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 44 files, 318 tests
+- API Worker: 44 files, 325 tests
 - Match service: 27 tests
 - Game Worker: 31 unit and 80 Worker tests
 - Matchmaker: 47 unit and 31 Worker tests
@@ -262,6 +262,24 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
+- API/web Worker version `59ef2c34-4490-4cff-b38a-c1f400b1a2b0` serves commit
+  `500d2d5` at 100% traffic. Migration `0089` makes an enabled Conquest V2
+  cadence inert until two actors approve the exact current economy-settings
+  mutation, source algorithm digest, eleven per-level Silver quantities, and
+  generated-card catalog. Each started cycle freezes its exact ordered,
+  season-valid card pool and settings in an immutable receipt; settings drift
+  blocks new cycles but cannot strand rewards after point rollover. D1 rejects
+  caller-selected pools, incomplete snapshots, incorrect quantities,
+  out-of-pool cards, and awards without an active receipt. Production has 62
+  immutable catalog ranges expanding to all 856 generated cards, but zero
+  schedules, activations, cycles, policy receipts, entries, or awards. Live
+  Version, Ping, mode-status, and app-HTML probes returned `200`; both Conquest
+  modes remain false. The final read retained 31 inventory rows and total
+  balance 31, made zero writes, reported `changed_db: false`, and found no
+  pending migrations. The release passed all 325 API tests, 27 match-service
+  tests, 31 game unit plus 80 game Worker tests, 47 matchmaker unit plus 31
+  Worker tests, six analytics tests, every TypeScript check and safety audit,
+  and the complete original browser/game production build.
 - API/web Worker version `0caeb7a2-11b0-4146-b47d-21596795a102` serves commit
   `d1cd5a6` at 100% traffic. Migration `0088` requires two actors to activate
   the exact approved leaderboard reward digest before any enabled cadence can
