@@ -185,3 +185,18 @@ No wallet price, cart, buy, sell, review-order, or WalletConnect transaction
 control rendered. The release passed 334 main Worker tests, 216 multiplayer
 tests, analytics tests, browser/game tests, and every off-chain reward,
 mint-queue, route, auth-mode, and transaction safety gate.
+
+Read-only card-Market milestone `7677fad` and canonical Market landing fix
+`27f14ae` were deployed on 2026-08-13 as Worker version
+`517d8981-31a0-42f3-a6d9-01d8d29fc617`. Production HTML referenced the exact
+tested entry asset `index-f0638ad6.js`, and the local-bot game entry returned
+HTTP 200. A signed-in Home client linked Market directly to the original Cards
+catalog. The catalog rendered all 856 cards, the original ownership, card type,
+set, element, trait, effect, and cost filters, D1-backed ownership quantities,
+and quantity sorting in place of wallet price sorting. The original Foul Stench
+detail viewer rendered its art, metadata, rules text, Cloud Weasel gameplay and
+collection copy, and a zero Silver inventory balance. No price, cart, order,
+buy, sell, or WalletConnect transaction control rendered. The release passed
+334 main Worker tests, 216 multiplayer tests, 24 browser/game tests, analytics
+tests, and every off-chain reward, mint-queue, route, auth-mode, and transaction
+safety gate.
