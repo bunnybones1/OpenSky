@@ -61,10 +61,10 @@ commented-out runner is accidentally counted as active.
 | `SendConquestExtraRewardQueue` | Whole feature retired: this is a treasury asset transfer, not a mint, and the source has no production producer or earning flow. |
 | `ConquestV2SendRewardQueue` | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise. |
 | `MintLeaderboardRewardsQueue` | Combined leaderboard Silver and ticket rewards are granted atomically under D1 cycle/player receipts. |
-| `MintCardBackRewardsQueue` | An earned SkyPass claim grants `SW_CARD_BACKS` under `player_skypass_claims`. |
-| `MintSkypassConquestTicketsQueue` | An earned SkyPass claim grants `SW_CONQUEST_TICKET` under `player_skypass_claims`. |
-| `MintSkypassSilverCardsQueue` | An earned SkyPass claim grants `SW_SILVER_CARDS` under `player_skypass_claims`. |
-| `MintSkypassStickersQueue` | An earned SkyPass claim grants `SW_STICKERS` under `player_skypass_claims`. |
+| `MintCardBackRewardsQueue` | An earned SkyPass claim grants `SW_CARD_BACKS` through immutable per-token before/after receipts. |
+| `MintSkypassConquestTicketsQueue` | An earned SkyPass claim grants `SW_CONQUEST_TICKET` through an immutable before/after receipt. |
+| `MintSkypassSilverCardsQueue` | An earned SkyPass claim grants `SW_SILVER_CARDS` through immutable per-token before/after receipts. |
+| `MintSkypassStickersQueue` | An earned SkyPass claim grants `SW_STICKERS` through immutable per-token before/after receipts. |
 
 The production mint-queue gate reads the implementation evidence behind every
 row. A queue is not accepted merely because its source producer is absent.

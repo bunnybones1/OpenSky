@@ -328,6 +328,15 @@ interface RawSkypassRewardRow {
   attributes: string | null
 }
 
+interface SkypassInventoryGrant {
+  itemType: ItemType
+  tokenId: number
+  quantity: number
+  stackable: 0 | 1
+  unlockSource?: string
+  isNew?: 0 | 1
+}
+
 interface SkypassDefinitionRow extends RawSkypassRewardRow {
   is_infinite: number
 }
@@ -3026,54 +3035,41 @@ export class PlayerRpcRepository {
   }
 
   private gainSkypassItem(
-    userId: string,
-    reward: RawSkypassRewardRow,
-    deliveryKey: string,
     itemType: ItemType,
     tokenId: number,
     amount: number,
-    now: string,
-    statements: D1PreparedStatement[],
-    stackable = true
+    grants: SkypassInventoryGrant[],
+    stackable = true,
+    unlockSource?: string,
+    isNew: 0 | 1 = 1
   ): void {
-    const conflict = stackable
-      ? `ON CONFLICT(user_id, item_type, token_id)
-         DO UPDATE SET balance = balance + excluded.balance,
-                       is_new = 1, updated_at = excluded.updated_at`
-      : `ON CONFLICT(user_id, item_type, token_id) DO NOTHING`
-    statements.push(
-      this.database
-        .prepare(
-          `INSERT INTO player_items
-             (user_id, item_type, token_id, balance, is_new, unlock_source,
-              created_at, updated_at)
-           SELECT ?, ?, ?, ?, 1, ?, ?, ?
-           WHERE EXISTS (
-             SELECT 1 FROM player_skypass_claims
-             WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
-           )
-           ${conflict}`
-        )
-        .bind(
-          userId,
-          itemType,
-          tokenId,
-          amount,
-          `skypass:${reward.id}`,
-          now,
-          now,
-          userId,
-          reward.id,
-          deliveryKey
-        )
+    const normalizedStackable = stackable ? 1 : 0
+    const existing = grants.find(
+      grant => grant.itemType === itemType && grant.tokenId === tokenId
     )
+    if (existing) {
+      if (existing.stackable !== normalizedStackable) {
+        throw new Error('SkyPass inventory grant has conflicting semantics')
+      }
+      if (stackable) existing.quantity += amount
+      return
+    }
+    grants.push({
+      itemType,
+      tokenId,
+      quantity: stackable ? amount : 1,
+      stackable: normalizedStackable,
+      ...(unlockSource ? { unlockSource } : {}),
+      isNew
+    })
   }
 
   private async applyBaseCardSkypassReward(
     userId: string,
     reward: RawSkypassRewardRow,
     deliveryKey: string,
-    statements: D1PreparedStatement[]
+    statements: D1PreparedStatement[],
+    grants: SkypassInventoryGrant[]
   ): Promise<Array<Record<string, unknown>>> {
     const ownedResult = await this.database
       .prepare(`SELECT card_id FROM player_card_unlocks WHERE user_id = ?`)
@@ -3127,29 +3123,13 @@ export class PlayerRpcRepository {
             deliveryKey
           )
       )
-      const now = new Date().toISOString()
-      statements.push(
-        this.database
-          .prepare(
-            `INSERT OR IGNORE INTO player_items
-               (user_id, item_type, token_id, balance, is_new, unlock_source,
-                created_at, updated_at)
-             SELECT ?, 'SW_BASE_CARDS', ?, 1, 1, ?, ?, ?
-             WHERE EXISTS (
-               SELECT 1 FROM player_skypass_claims
-               WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
-             )`
-          )
-          .bind(
-            userId,
-            cardId,
-            `skypass:${reward.id}`,
-            now,
-            now,
-            userId,
-            reward.id,
-            deliveryKey
-          )
+      this.gainSkypassItem(
+        'SW_BASE_CARDS' as ItemType,
+        cardId,
+        1,
+        grants,
+        false,
+        `skypass:${reward.id}`
       )
     }
 
@@ -3162,7 +3142,8 @@ export class PlayerRpcRepository {
     userId: string,
     reward: RawSkypassRewardRow,
     deliveryKey: string,
-    statements: D1PreparedStatement[]
+    statements: D1PreparedStatement[],
+    grants: SkypassInventoryGrant[]
   ): Promise<Array<Record<string, unknown>>> {
     const attributes = parseAttributes(reward.attributes)
     const heroIds = attributes.tokenIDs
@@ -3176,28 +3157,13 @@ export class PlayerRpcRepository {
 
     for (const heroId of heroIds) {
       const deckClass = HERO_DECK_CLASS[heroId]
-      statements.push(
-        this.database
-          .prepare(
-            `INSERT OR IGNORE INTO player_items
-               (user_id, item_type, token_id, balance, is_new, unlock_source,
-                created_at, updated_at)
-             SELECT ?, 'SW_HERO', ?, 1, 1, ?, ?, ?
-             WHERE EXISTS (
-               SELECT 1 FROM player_skypass_claims
-               WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
-             )`
-          )
-          .bind(
-            userId,
-            heroId,
-            `skypass:${reward.id}`,
-            now,
-            now,
-            userId,
-            reward.id,
-            deliveryKey
-          )
+      this.gainSkypassItem(
+        'SW_HERO' as ItemType,
+        heroId,
+        1,
+        grants,
+        false,
+        `skypass:${reward.id}`
       )
 
       const starterDeck = STARTER_DECK_BY_HERO_ID.get(heroId)
@@ -3249,28 +3215,14 @@ export class PlayerRpcRepository {
                 deliveryKey
               )
           )
-          statements.push(
-            this.database
-              .prepare(
-                `INSERT OR IGNORE INTO player_items
-                   (user_id, item_type, token_id, balance, is_new, unlock_source,
-                    created_at, updated_at)
-                 SELECT ?, 'SW_BASE_CARDS', ?, 1, 0, ?, ?, ?
-                 WHERE EXISTS (
-                   SELECT 1 FROM player_skypass_claims
-                   WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
-                 )`
-              )
-              .bind(
-                userId,
-                cardId,
-                `starter-deck:${starterDeck.deckClass}`,
-                now,
-                now,
-                userId,
-                reward.id,
-                deliveryKey
-              )
+          this.gainSkypassItem(
+            'SW_BASE_CARDS' as ItemType,
+            cardId,
+            1,
+            grants,
+            false,
+            `starter-deck:${starterDeck.deckClass}`,
+            0
           )
         }
 
@@ -3295,31 +3247,23 @@ export class PlayerRpcRepository {
   }
 
   private applyConquestTicketSkypassReward(
-    userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Array<Record<string, unknown>> {
     this.gainSkypassItem(
-      userId,
-      reward,
-      deliveryKey,
       'SW_CONQUEST_TICKET' as ItemType,
       2,
       Math.max(1, reward.amount),
-      now,
-      statements
+      grants,
+      true,
+      `skypass:${reward.id}`
     )
     return [{ accountID: 0, type: 'CONQUEST_TICKET' }]
   }
 
   private async applyStickerSkypassReward(
-    userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Promise<Array<Record<string, unknown>>> {
     const requested = [
       ...new Set(
@@ -3342,36 +3286,29 @@ export class PlayerRpcRepository {
     if (!stickerIds.length) throw new Error('no stickers provided')
     for (const tokenId of stickerIds) {
       this.gainSkypassItem(
-        userId,
-        reward,
-        deliveryKey,
         'SW_STICKERS' as ItemType,
         tokenId,
         1,
-        now,
-        statements
+        grants,
+        true,
+        `skypass:${reward.id}`
       )
     }
     return [{ accountID: 0, type: 'STICKER' }]
   }
 
   private applyStickerPointsSkypassReward(
-    userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Array<Record<string, unknown>> {
     if (reward.amount === 0) throw new Error('no amount provided')
     this.gainSkypassItem(
-      userId,
-      reward,
-      deliveryKey,
       'SW_STICKER_POINTS' as ItemType,
       0,
       reward.amount,
-      now,
-      statements
+      grants,
+      true,
+      `skypass:${reward.id}`
     )
     return [
       { accountID: 0, type: 'STICKER_POINTS', stickerPoints: reward.amount }
@@ -3381,9 +3318,7 @@ export class PlayerRpcRepository {
   private applySilverCardSkypassReward(
     userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Array<Record<string, unknown>> {
     const attributes = parseAttributes(reward.attributes)
     const requested = attributes.tokenIDs
@@ -3411,14 +3346,12 @@ export class PlayerRpcRepository {
       if (cardId === undefined) continue
       cardIds.push(cardId)
       this.gainSkypassItem(
-        userId,
-        reward,
-        deliveryKey,
         'SW_SILVER_CARDS' as ItemType,
         cardId,
         1,
-        now,
-        statements
+        grants,
+        true,
+        `skypass:${reward.id}`
       )
     }
     if (!cardIds.length) throw new Error('no cards provided')
@@ -3428,11 +3361,8 @@ export class PlayerRpcRepository {
   }
 
   private applyCardBackSkypassReward(
-    userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Array<Record<string, unknown>> {
     const cardBackIds = parseAttributes(reward.attributes)
       .tokenIDs.map(Number)
@@ -3440,14 +3370,12 @@ export class PlayerRpcRepository {
     if (!cardBackIds.length) throw new Error('no card backs provided')
     for (const tokenId of cardBackIds) {
       this.gainSkypassItem(
-        userId,
-        reward,
-        deliveryKey,
         'SW_CARD_BACKS' as ItemType,
         tokenId,
         1,
-        now,
-        statements
+        grants,
+        true,
+        `skypass:${reward.id}`
       )
     }
     return [{ accountID: 0, type: 'CARD_BACK' }]
@@ -3456,9 +3384,7 @@ export class PlayerRpcRepository {
   private async applyTitleSkypassReward(
     userId: string,
     reward: RawSkypassRewardRow,
-    deliveryKey: string,
-    statements: D1PreparedStatement[],
-    now: string
+    grants: SkypassInventoryGrant[]
   ): Promise<Array<Record<string, unknown>>> {
     const titleIds = [
       ...new Set(
@@ -3481,15 +3407,12 @@ export class PlayerRpcRepository {
     const granted = titleIds.filter(tokenId => !owned.has(tokenId))
     for (const tokenId of granted) {
       this.gainSkypassItem(
-        userId,
-        reward,
-        deliveryKey,
         'SW_TITLES' as ItemType,
         tokenId,
         1,
-        now,
-        statements,
-        false
+        grants,
+        false,
+        `skypass:${reward.id}`
       )
     }
     return granted.length ? [{ accountID: 0, type: 'TITLE' }] : []
@@ -3554,68 +3477,55 @@ export class PlayerRpcRepository {
       const itemType = ITEM_TYPE_BY_ID[rawReward.item_type]
       const deliveryKey = crypto.randomUUID()
       const rewardStatements: D1PreparedStatement[] = []
+      const inventoryGrants: SkypassInventoryGrant[] = []
       const applied =
         itemType === ('SW_BASE_CARDS' as ItemType)
           ? await this.applyBaseCardSkypassReward(
               userId,
               rawReward,
               deliveryKey,
-              rewardStatements
+              rewardStatements,
+              inventoryGrants
             )
           : itemType === ('SW_HERO' as ItemType)
             ? await this.applyHeroSkypassReward(
                 userId,
                 rawReward,
                 deliveryKey,
-                rewardStatements
+                rewardStatements,
+                inventoryGrants
               )
             : itemType === ('SW_CONQUEST_TICKET' as ItemType)
               ? this.applyConquestTicketSkypassReward(
-                  userId,
                   rawReward,
-                  deliveryKey,
-                  rewardStatements,
-                  now
+                  inventoryGrants
                 )
               : itemType === ('SW_STICKERS' as ItemType)
                 ? await this.applyStickerSkypassReward(
-                    userId,
                     rawReward,
-                    deliveryKey,
-                    rewardStatements,
-                    now
+                    inventoryGrants
                   )
                 : itemType === ('SW_STICKER_POINTS' as ItemType)
                   ? this.applyStickerPointsSkypassReward(
-                      userId,
                       rawReward,
-                      deliveryKey,
-                      rewardStatements,
-                      now
+                      inventoryGrants
                     )
                   : itemType === ('SW_SILVER_CARDS' as ItemType)
                     ? this.applySilverCardSkypassReward(
                         userId,
                         rawReward,
-                        deliveryKey,
-                        rewardStatements,
-                        now
+                        inventoryGrants
                       )
                     : itemType === ('SW_CARD_BACKS' as ItemType)
                       ? this.applyCardBackSkypassReward(
-                          userId,
                           rawReward,
-                          deliveryKey,
-                          rewardStatements,
-                          now
+                          inventoryGrants
                         )
                       : itemType === ('SW_TITLES' as ItemType)
                         ? await this.applyTitleSkypassReward(
                             userId,
                             rawReward,
-                            deliveryKey,
-                            rewardStatements,
-                            now
+                            inventoryGrants
                           )
                         : (() => {
                             throw new Error(
@@ -3628,8 +3538,9 @@ export class PlayerRpcRepository {
           .prepare(
             `INSERT OR IGNORE INTO player_skypass_claims
                (user_id, reward_id, rewards, claimed_at, delivery_key,
-                auto_claim_season)
-             VALUES (?, ?, ?, ?, ?, ?)`
+                auto_claim_season, application_status,
+                inventory_grants_json, completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'PREPARING', ?, NULL)`
           )
           .bind(
             userId,
@@ -3637,10 +3548,91 @@ export class PlayerRpcRepository {
             JSON.stringify(applied),
             now,
             deliveryKey,
-            options.autoClaimSeason ?? null
+            options.autoClaimSeason ?? null,
+            JSON.stringify(inventoryGrants)
           )
       )
+      for (const grant of inventoryGrants) {
+        statements.push(
+          this.database
+            .prepare(
+              `INSERT INTO player_skypass_claim_inventory_grants
+                 (user_id, reward_id, item_type, token_id, quantity,
+                  stackable, before_balance, after_balance)
+               SELECT claim.user_id, claim.reward_id, ?, ?, ?, ?,
+                      COALESCE(item.balance, 0),
+                      CASE ? WHEN 1 THEN COALESCE(item.balance, 0) + ?
+                             ELSE MAX(COALESCE(item.balance, 0), 1) END
+               FROM player_skypass_claims claim
+               LEFT JOIN player_items item
+                 ON item.user_id = claim.user_id
+                AND item.item_type = ? AND item.token_id = ?
+               WHERE claim.user_id = ? AND claim.reward_id = ?
+                 AND claim.delivery_key = ?
+                 AND claim.application_status = 'PREPARING'`
+            )
+            .bind(
+              grant.itemType,
+              grant.tokenId,
+              grant.quantity,
+              grant.stackable,
+              grant.stackable,
+              grant.quantity,
+              grant.itemType,
+              grant.tokenId,
+              userId,
+              id,
+              deliveryKey
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO player_items
+                 (user_id, item_type, token_id, balance, is_new, unlock_source,
+                  created_at, updated_at)
+               SELECT claim.user_id, ?, ?, ?, ?, ?, ?, ?
+               FROM player_skypass_claims claim
+               WHERE claim.user_id = ? AND claim.reward_id = ?
+                 AND claim.delivery_key = ?
+                 AND claim.application_status = 'PREPARING'
+               ON CONFLICT(user_id, item_type, token_id) DO UPDATE SET
+                 balance = CASE ?
+                   WHEN 1 THEN player_items.balance + excluded.balance
+                   ELSE MAX(player_items.balance, 1)
+                 END,
+                 is_new = CASE ?
+                   WHEN 1 THEN 1 ELSE player_items.is_new
+                 END,
+                 updated_at = excluded.updated_at
+               WHERE ? = 1`
+            )
+            .bind(
+              grant.itemType,
+              grant.tokenId,
+              grant.quantity,
+              grant.isNew ?? 1,
+              grant.unlockSource ?? `skypass:${rawReward.id}`,
+              now,
+              now,
+              userId,
+              id,
+              deliveryKey,
+              grant.stackable,
+              grant.isNew ?? 1,
+              grant.stackable
+            )
+        )
+      }
       statements.push(...rewardStatements)
+      statements.push(
+        this.database
+          .prepare(
+            `UPDATE player_skypass_claims
+             SET application_status = 'APPLIED', completed_at = claimed_at
+             WHERE user_id = ? AND reward_id = ? AND delivery_key = ?
+               AND application_status = 'PREPARING'`
+          )
+          .bind(userId, id, deliveryKey)
+      )
     }
 
     if (statements.length) await this.database.batch(statements)

@@ -126,16 +126,21 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/player-rpc.ts': {
-    count: 14,
-    disposition: 'claims-and-player-owned-state',
+    count: 11,
+    disposition: 'receipt-backed-claims-and-player-owned-state',
     evidenceFiles: [
       'cloudflare/migrations/0069_quest_claim_receipts.sql',
-      'cloudflare/migrations/0005_legacy_rpc_compatibility.sql'
+      'cloudflare/migrations/0005_legacy_rpc_compatibility.sql',
+      'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql'
     ],
     evidence: [
       'player_quest_claim_receipts',
       'quest claim receipts are immutable',
       'player_skypass_claims',
+      'player_skypass_claim_inventory_grants',
+      "application_status = 'PREPARING'",
+      'SkyPass claim inventory grants are immutable',
+      'SkyPass claim receipt completion is invalid',
       'player_deferred_item_updates',
       'delivery_key',
       'database.batch'

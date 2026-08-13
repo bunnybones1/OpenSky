@@ -82,6 +82,15 @@ proves its exact before balance, 100-unit credit, and resulting balance in
 `player_items`. A failed finalization rolls the entire delivery back for a
 clean retry, and parallel scheduled runs cannot double-credit it.
 
+SkyPass retains all source reward variants. The four former mint queues—
+Conquest tickets, stickers, Silver cards, and card backs—join the already
+database-owned base cards, heroes, sticker points, and titles in one identity-
+inventory claim. Each claim declares its complete per-token grant plan while
+`PREPARING`, records immutable before/after balances, and becomes `APPLIED`
+only after inventory, base-card unlocks, and starter-deck state agree. A failed
+mixed claim rolls back every reward and receipt together; retry and concurrent
+claim attempts cannot grant the same reward twice.
+
 Weekly leaderboard rewards preserve the source rank projections, deterministic
 Silver selection, Conquest-ticket counts, per-mode feed records, and rank-up
 metadata without minting either asset. Each immutable award records the exact
