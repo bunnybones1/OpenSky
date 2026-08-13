@@ -229,6 +229,26 @@ have an explicit disposition and reviewed callsite count. A new callsite, a
 newly reachable legacy product surface, or an identity exchange that can fall
 through to the wallet branch fails the production build.
 
+Off-chain fulfillment must remain player-visible, not merely reconcilable in
+D1. The reward-visibility audit binds every non-retired transaction queue to
+the original product surface that shows its result:
+
+- Conquest Silver and pending/delivered Gold appear in the rewards feed and
+  pending-delivery page.
+- Leaderboard and Conquest V2 awards atomically create feed and inbox rows; the
+  original Home dialog renders their cards, ranks, and tickets.
+- SkyPass claims return exact reward objects to the original claim dialog and
+  persist matching feed/inventory state.
+- Referral stickers appear as new items in the original sticker collection.
+- Purchased tickets appear in the top/account identity inventory.
+
+Because leaderboard and Conquest V2 awards are delivered by scheduled Workers,
+the Home inbox query refreshes once per minute while mounted. It does not poll
+in background tabs. Inventory collections retain their existing one-minute
+refresh, and immediate claim/exchange paths continue invalidating their exact
+queries. A new queue, a removed projection, or a day-stale inbox now fails the
+Cloudflare build.
+
 Identity-mode card details preserve the source grade and balance interface but
 read it as Cloud Weasel inventory. The Items library, Silver exchange selector,
 and Gold exchange selector all opt into the same inventory-only projection.

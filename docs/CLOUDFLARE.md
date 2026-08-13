@@ -611,6 +611,13 @@ explicit Cloud Weasel UTC weekday/time configuration are deployed together; the
 committed example configurations disagree, so production policy must not be
 inferred from either one.
 
+Player visibility is a separate release invariant. Every active former mint
+queue is statically bound to an immediate claim result, rewards feed,
+notification, pending-delivery page, or identity inventory surface. Home polls
+the authoritative notification inbox once per minute while mounted so a
+scheduled off-chain leaderboard or Conquest V2 award does not remain hidden by
+the legacy one-day browser cache.
+
 The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
 `pnpm check:cloudflare:rpcs` to reproduce it and guard the critical compatibility
