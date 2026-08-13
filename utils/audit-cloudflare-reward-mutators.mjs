@@ -250,10 +250,17 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/stripe-checkout.ts': {
     count: 3,
     disposition: 'receipt-backed-stripe-commerce',
-    evidenceFiles: ['cloudflare/migrations/0051_stripe_checkout.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0051_stripe_checkout.sql',
+      'cloudflare/migrations/0085_stripe_fulfillment_receipts.sql'
+    ],
     evidence: [
       'stripe_checkout_events',
+      'stripe_checkout_fulfillment_receipts',
       'Stripe events are immutable',
+      'Stripe payment preparation is invalid',
+      'Stripe fulfillment receipts are immutable',
+      'Stripe payment fulfillment is invalid',
       'event_id TEXT PRIMARY KEY',
       'database.batch'
     ]

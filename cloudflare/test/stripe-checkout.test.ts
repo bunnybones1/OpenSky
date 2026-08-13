@@ -179,12 +179,16 @@ beforeEach(async () => {
       'DROP TRIGGER IF EXISTS stripe_checkout_events_no_delete'
     ),
     env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS stripe_checkout_fulfillment_receipts_no_delete'
+    ),
+    env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS stripe_checkout_payments_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_logs'),
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_payment_staff_ids'),
+    env.AUTH_DB.prepare('DELETE FROM stripe_checkout_fulfillment_receipts'),
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_events'),
     env.AUTH_DB.prepare('DELETE FROM stripe_checkout_payments'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id = ?`).bind(userId)
@@ -204,6 +208,19 @@ beforeEach(async () => {
       `CREATE TRIGGER stripe_checkout_events_no_delete
        BEFORE DELETE ON stripe_checkout_events
        BEGIN SELECT RAISE(ABORT, 'Stripe events are immutable'); END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER stripe_checkout_fulfillment_receipts_no_delete
+       BEFORE DELETE ON stripe_checkout_fulfillment_receipts
+       WHEN EXISTS (
+         SELECT 1
+         FROM stripe_checkout_payments payment
+         JOIN users ON users.id = payment.user_id
+         WHERE payment.id = OLD.payment_id
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'Stripe fulfillment receipts are immutable');
+       END`
     ),
     env.AUTH_DB.prepare(
       `CREATE TRIGGER stripe_checkout_payments_no_delete
@@ -453,6 +470,24 @@ describe('dormant Stripe Checkout port', () => {
         'SELECT COUNT(*) AS count FROM stripe_checkout_events'
       ).first('count')
     ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, quantity, stackable, before_balance,
+                after_balance, before_has_premium, after_has_premium
+         FROM stripe_checkout_fulfillment_receipts WHERE payment_id = ?`
+      )
+        .bind(payment.id)
+        .first()
+    ).toEqual({
+      item_type: 'SW_SKYPASS',
+      token_id: season,
+      quantity: 1,
+      stackable: 0,
+      before_balance: 0,
+      after_balance: 1,
+      before_has_premium: 0,
+      after_has_premium: 1
+    })
   })
 
   it('accepts the signed public source webhook RPC without a login session', async () => {
@@ -572,6 +607,15 @@ describe('dormant Stripe Checkout port', () => {
       'cs_test_ticket_retry'
     )
     await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_CONQUEST_TICKET', 2, 7, 0, 'test-existing-ticket',
+               ?, ?)`
+    )
+      .bind(userId, NOW.toISOString(), NOW.toISOString())
+      .run()
+    await env.AUTH_DB.prepare(
       `CREATE TRIGGER reject_stripe_skypass_fulfillment
        BEFORE INSERT ON player_items
        WHEN NEW.unlock_source LIKE 'stripe:%'
@@ -585,13 +629,24 @@ describe('dormant Stripe Checkout port', () => {
       await env.AUTH_DB.prepare(
         `SELECT
            (SELECT COUNT(*) FROM stripe_checkout_events) AS events,
+           (SELECT COUNT(*) FROM stripe_checkout_fulfillment_receipts)
+             AS fulfillments,
            (SELECT COUNT(*) FROM player_items
             WHERE unlock_source LIKE 'stripe:%') AS items,
+           (SELECT balance FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+              AND token_id = 2) AS balance,
            (SELECT status FROM stripe_checkout_payments WHERE id = ?) AS status`
       )
-        .bind(payment.id)
+        .bind(userId, payment.id)
         .first()
-    ).toEqual({ events: 0, items: 0, status: 'PENDING' })
+    ).toEqual({
+      events: 0,
+      fulfillments: 0,
+      items: 0,
+      balance: 7,
+      status: 'PENDING'
+    })
 
     await env.AUTH_DB.prepare(
       'DROP TRIGGER reject_stripe_skypass_fulfillment'
@@ -607,12 +662,86 @@ describe('dormant Stripe Checkout port', () => {
       )
         .bind(userId)
         .first('balance')
-    ).toBe(1)
+    ).toBe(8)
     expect(
       await env.AUTH_DB.prepare(
         'SELECT COUNT(*) AS count FROM stripe_checkout_events'
       ).first('count')
     ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, quantity, stackable, before_balance,
+                after_balance, before_has_premium, after_has_premium
+         FROM stripe_checkout_fulfillment_receipts WHERE payment_id = ?`
+      )
+        .bind(payment.id)
+        .first()
+    ).toEqual({
+      item_type: 'SW_CONQUEST_TICKET',
+      token_id: 2,
+      quantity: 1,
+      stackable: 1,
+      before_balance: 7,
+      after_balance: 8,
+      before_has_premium: null,
+      after_has_premium: null
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE stripe_checkout_fulfillment_receipts
+         SET after_balance = after_balance + 1 WHERE payment_id = ?`
+      )
+        .bind(payment.id)
+        .run()
+    ).rejects.toThrow('Stripe fulfillment receipts are immutable')
+  })
+
+  it('refuses to mark a paid Stripe payment successful without fulfillment evidence', async () => {
+    const { payment } = await createPending(
+      'conquest_tickets_0001',
+      'cs_test_incomplete_fulfillment'
+    )
+    const receivedAt = NOW.toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO stripe_checkout_events
+         (event_id, event_type, stripe_session_id, payment_id,
+          payload_sha256, outcome, received_at)
+       VALUES ('evt_incomplete_fulfillment', 'checkout.session.completed',
+               ?, ?, ?, 'SUCCEEDED', ?)`
+    )
+      .bind(payment.stripe_session_id, payment.id, 'f'.repeat(64), receivedAt)
+      .run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE stripe_checkout_payments
+         SET status = 'SUCCEEDED', currency = 'usd', amount_total = 1495,
+             fulfilled_season = ?, completed_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(seasonFromDate(NOW), receivedAt, receivedAt, payment.id)
+        .run()
+    ).rejects.toThrow('Stripe payment fulfillment is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO stripe_checkout_payments
+           (id, user_id, product_code, item_type, quantity, checkout_season,
+            fulfilled_season, status, stripe_session_id, checkout_url,
+            currency, amount_total, created_at, updated_at, completed_at)
+         VALUES (?, ?, 'conquest_tickets_0001', 'SW_CONQUEST_TICKET', 1,
+                 ?, ?, 'SUCCEEDED', 'cs_forged_success',
+                 'https://checkout.stripe.com/forged', 'usd', 1495, ?, ?, ?)`
+      )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          seasonFromDate(NOW),
+          seasonFromDate(NOW),
+          receivedAt,
+          receivedAt,
+          receivedAt
+        )
+        .run()
+    ).rejects.toThrow('Stripe payment preparation is invalid')
   })
 
   it('records expiration without granting inventory', async () => {

@@ -95,10 +95,12 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
     disposition: 'offchain-commerce',
     evidenceFiles: [
       'cloudflare/src/stripe-checkout.ts',
-      'cloudflare/src/mobile-store-fulfillment.ts'
+      'cloudflare/src/mobile-store-fulfillment.ts',
+      'cloudflare/migrations/0085_stripe_fulfillment_receipts.sql'
     ],
     evidence: [
       'stripe_checkout_events',
+      'stripe_checkout_fulfillment_receipts',
       'mobile_store_payments',
       'SW_CONQUEST_TICKET',
       'player_skypass_season_stats'

@@ -574,6 +574,38 @@ export class StripeCheckoutRepository {
         statements.push(
           this.database
             .prepare(
+              `INSERT OR IGNORE INTO stripe_checkout_fulfillment_receipts
+                 (payment_id, event_id, user_id, item_type, token_id,
+                  quantity, stackable, before_balance, after_balance,
+                  before_has_premium, after_has_premium, created_at)
+               SELECT payment.id, event.event_id, payment.user_id,
+                      payment.item_type, ?, payment.quantity, 0,
+                      COALESCE(item.balance, 0),
+                      MAX(COALESCE(item.balance, 0), 1),
+                      COALESCE(stats.has_premium, 0), 1, ?
+               FROM stripe_checkout_payments payment
+               JOIN stripe_checkout_events event
+                 ON event.payment_id = payment.id
+                AND event.event_id = ? AND event.payload_sha256 = ?
+                AND event.outcome = 'SUCCEEDED'
+               LEFT JOIN player_items item
+                 ON item.user_id = payment.user_id
+                AND item.item_type = payment.item_type AND item.token_id = ?
+               LEFT JOIN player_skypass_season_stats stats
+                 ON stats.user_id = payment.user_id AND stats.season = ?
+               WHERE payment.id = ? AND payment.status IN ('PENDING', 'FAILED')`
+            )
+            .bind(
+              fulfilledSeason,
+              receivedAt,
+              event.id,
+              digest,
+              fulfilledSeason,
+              fulfilledSeason,
+              payment.id
+            ),
+          this.database
+            .prepare(
               `INSERT INTO player_items
                  (user_id, item_type, token_id, balance, is_new, unlock_source,
                   created_at, updated_at)
@@ -624,6 +656,28 @@ export class StripeCheckoutRepository {
         )
       } else {
         statements.push(
+          this.database
+            .prepare(
+              `INSERT OR IGNORE INTO stripe_checkout_fulfillment_receipts
+                 (payment_id, event_id, user_id, item_type, token_id,
+                  quantity, stackable, before_balance, after_balance,
+                  before_has_premium, after_has_premium, created_at)
+               SELECT payment.id, event.event_id, payment.user_id,
+                      payment.item_type, 2, payment.quantity, 1,
+                      COALESCE(item.balance, 0),
+                      COALESCE(item.balance, 0) + payment.quantity,
+                      NULL, NULL, ?
+               FROM stripe_checkout_payments payment
+               JOIN stripe_checkout_events event
+                 ON event.payment_id = payment.id
+                AND event.event_id = ? AND event.payload_sha256 = ?
+                AND event.outcome = 'SUCCEEDED'
+               LEFT JOIN player_items item
+                 ON item.user_id = payment.user_id
+                AND item.item_type = payment.item_type AND item.token_id = 2
+               WHERE payment.id = ? AND payment.status IN ('PENDING', 'FAILED')`
+            )
+            .bind(receivedAt, event.id, digest, payment.id),
           this.database
             .prepare(
               `INSERT INTO player_items
