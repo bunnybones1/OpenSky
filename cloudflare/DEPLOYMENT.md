@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`a73193d6-373d-45e8-a41d-cc5e8f9fcabd`)
+- API/web Worker: `opensky-webapp` (`577d8280-80de-42de-a33d-9f1815b83cb6`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
@@ -35,7 +35,8 @@
   `8aaac21` for build-enforced Go-worker inventory and `d50c553` for off-chain
   SkyPass season close and auto-claim. The current API/web artifact also
   includes `8ec460f` for inventory-only card details and `fd60828` for safe
-  Base/Silver/Gold navigation.
+  Base/Silver/Gold navigation, plus `cdba69e` for isolated identity and legacy
+  card-control component boundaries.
 - Deployed: 2026-08-13 PDT
 - Applied D1 migrations: `0001` through `0085`; the remote migration check
   reports no pending migrations.
@@ -245,14 +246,18 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
-- API/web Worker version `a73193d6-373d-45e8-a41d-cc5e8f9fcabd` serves commit
-  `fd60828` at 100% traffic. A signed-in production browser navigated a real
+- API/web Worker version `577d8280-80de-42de-a33d-9f1815b83cb6` serves commit
+  `cdba69e` at 100% traffic. A signed-in production browser navigated a real
   card from Base to Silver to Gold with the original art, lore, grades, and
   balances intact; every grade displayed off-chain inventory copy, no price,
   stock, supply, buy, or sell controls, no error boundary, and no console
   errors. The off-chain gate has 23 tests and rejects both wallet-market
   regressions and expression-bodied scroll effects that can return an invalid
-  React cleanup value.
+  React cleanup value. Quests, basic SkyPass, decks, Heroes inventory,
+  leaderboards, account, and Practice Bot also rendered under the retained
+  Google session without a boundary or console error. The direct localbot URL
+  reached a rendered mulligan board and hand in WebGL; it did not stop at a
+  blank canvas or loading shell.
 - Remote D1 after migration `0029`: zero deck ranks, per-player deck wins, or
   completion receipts before the first new ranked match; the public list was
   empty, authenticated search rejected anonymous access, and the read-only
