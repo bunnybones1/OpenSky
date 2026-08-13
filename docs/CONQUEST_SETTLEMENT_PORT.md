@@ -63,8 +63,12 @@ run only after that task settles.
   regranting.
 - Silver is granted immediately. Gold is exposed as pending for 24 hours and a
   minute Worker schedule delivers it atomically to identity inventory.
-- Concurrent delivery claims are receipt-keyed; retries are idempotent;
-  malformed or repeatedly failing deliveries dead-letter after five attempts.
+- Concurrent Gold delivery claims move through a separate
+  `READY` -> `PREPARING` -> `APPLIED` receipt state in one D1 batch. Each card
+  quantity has an immutable serialized before/after inventory balance, and the
+  final transition validates that grant plus the source-shaped delivered feed
+  event. Retries remain idempotent; malformed or repeatedly failing deliveries
+  return to `READY` and dead-letter after five attempts.
 
 ## Remaining authoritative input
 

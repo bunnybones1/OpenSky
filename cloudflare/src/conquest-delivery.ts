@@ -41,6 +41,7 @@ export const pendingConquestCards = async (
               attempt_count
        FROM player_conquest_gold_deliveries
        WHERE user_id = ? AND status = 'PENDING'
+         AND application_status = 'READY'
        ORDER BY deliver_at, conquest_id`
     )
     .bind(userId)
@@ -85,7 +86,8 @@ export const deliverDueConquestGold = async (
       `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
               attempt_count
        FROM player_conquest_gold_deliveries
-       WHERE status = 'PENDING' AND deliver_at <= ?
+       WHERE status = 'PENDING' AND application_status = 'READY'
+         AND deliver_at <= ?
          AND NOT EXISTS (
            SELECT 1 FROM player_account_settings settings
            WHERE settings.user_id = player_conquest_gold_deliveries.user_id
@@ -121,14 +123,41 @@ export const deliverDueConquestGold = async (
         database
           .prepare(
             `UPDATE player_conquest_gold_deliveries
-             SET status = 'DELIVERED', delivery_key = ?, delivered_at = ?,
-                 attempt_count = attempt_count + 1, last_error = NULL
+             SET application_status = 'PREPARING', application_key = ?
              WHERE conquest_id = ? AND status = 'PENDING'
+               AND application_status = 'READY'
                AND deliver_at <= ?`
           )
-          .bind(deliveryKey, deliveredAt, row.conquest_id, deliveredAt)
+          .bind(deliveryKey, row.conquest_id, deliveredAt)
       ]
       for (const [cardId, count] of counts) {
+        statements.push(
+          database
+            .prepare(
+              `INSERT INTO player_conquest_gold_delivery_inventory_grants
+                 (conquest_id, item_type, card_id, quantity, before_balance,
+                  after_balance)
+               SELECT delivery.conquest_id, 'SW_GOLD_CARDS', ?, ?,
+                      COALESCE(item.balance, 0),
+                      COALESCE(item.balance, 0) + ?
+               FROM player_conquest_gold_deliveries delivery
+               LEFT JOIN player_items item
+                 ON item.user_id = delivery.user_id
+                AND item.item_type = 'SW_GOLD_CARDS'
+                AND item.token_id = ?
+               WHERE delivery.conquest_id = ?
+                 AND delivery.application_status = 'PREPARING'
+                 AND delivery.application_key = ?`
+            )
+            .bind(
+              cardId,
+              count,
+              count,
+              cardId,
+              row.conquest_id,
+              deliveryKey
+            )
+        )
         statements.push(
           database
             .prepare(
@@ -138,8 +167,9 @@ export const deliverDueConquestGold = async (
                SELECT ?, 'SW_GOLD_CARDS', ?, ?, 1, ?, ?, ?
                WHERE EXISTS (
                  SELECT 1 FROM player_conquest_gold_deliveries
-                 WHERE conquest_id = ? AND status = 'DELIVERED'
-                   AND delivery_key = ?
+                 WHERE conquest_id = ?
+                   AND application_status = 'PREPARING'
+                   AND application_key = ?
                )
                ON CONFLICT(user_id, item_type, token_id)
                DO UPDATE SET balance = balance + excluded.balance,
@@ -165,17 +195,32 @@ export const deliverDueConquestGold = async (
              SELECT user_id, conquest_id, 'DELAYED_REWARD_MINTED',
                     token_ids_json, ?
              FROM player_conquest_gold_deliveries
-             WHERE conquest_id = ? AND status = 'DELIVERED'
-               AND delivery_key = ?
+             WHERE conquest_id = ? AND application_status = 'PREPARING'
+               AND application_key = ?
              ON CONFLICT(conquest_id, event_type) DO NOTHING`
           )
           .bind(deliveredAt, row.conquest_id, deliveryKey)
+      )
+      statements.push(
+        database
+          .prepare(
+            `UPDATE player_conquest_gold_deliveries
+             SET status = 'DELIVERED', delivery_key = application_key,
+                 attempt_count = attempt_count + 1, last_error = NULL,
+                 delivered_at = ?, application_status = 'APPLIED',
+                 application_completed_at = ?
+             WHERE conquest_id = ? AND status = 'PENDING'
+               AND application_status = 'PREPARING'
+               AND application_key = ?`
+          )
+          .bind(deliveredAt, deliveredAt, row.conquest_id, deliveryKey)
       )
       await database.batch(statements)
       const claimed = await database
         .prepare(
           `SELECT 1 FROM player_conquest_gold_deliveries
-           WHERE conquest_id = ? AND delivery_key = ?`
+           WHERE conquest_id = ? AND application_status = 'APPLIED'
+             AND application_key = ? AND delivery_key = application_key`
         )
         .bind(row.conquest_id, deliveryKey)
         .first()
@@ -188,7 +233,8 @@ export const deliverDueConquestGold = async (
                status = CASE WHEN attempt_count + 1 >= ?
                              THEN 'FAILED' ELSE 'PENDING' END,
                last_error = ?
-           WHERE conquest_id = ? AND status = 'PENDING'`
+           WHERE conquest_id = ? AND status = 'PENDING'
+             AND application_status = 'READY'`
         )
         .bind(
           MAX_ATTEMPTS,
@@ -205,7 +251,8 @@ export const deliverDueConquestGold = async (
   const remaining = await database
     .prepare(
       `SELECT COUNT(*) AS count FROM player_conquest_gold_deliveries
-       WHERE status = 'PENDING' AND deliver_at <= ?`
+       WHERE status = 'PENDING' AND application_status = 'READY'
+         AND deliver_at <= ?`
     )
     .bind(deliveredAt)
     .first<{ count: number }>()

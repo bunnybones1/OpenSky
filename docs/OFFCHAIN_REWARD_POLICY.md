@@ -74,6 +74,13 @@ deployment. The release gate scans every producer module for both canonical
 `player_items` writes and an idempotent receipt/delivery key, in addition to
 excluding transaction code from the Google-identity route tree.
 
+Delayed Conquest Gold keeps the source 24-hour delivery boundary but replaces
+the mint with identity inventory. One cron claim owns a
+`READY` -> `PREPARING` -> `APPLIED` receipt, immutable per-card quantities and
+before/after balances, and the delivered feed event in one D1 batch. A failed
+batch rolls all of those effects back before incrementing its bounded retry
+counter; moderation can disable and later restore only unapplied deliveries.
+
 Quest rewards preserve the source `SW_XP` contract as identity-owned
 progression; they never mint an item. Each completed assignment owns one
 immutable receipt keyed by identity and source quest. A D1 claim batch computes

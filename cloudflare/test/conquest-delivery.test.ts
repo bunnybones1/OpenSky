@@ -76,6 +76,9 @@ const setupDelivery = async (
 
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_gold_delivery').run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_gold_receipt_completion'
+  ).run()
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM player_conquest_gold_deliveries'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_feed_events'),
@@ -158,7 +161,9 @@ describe('delayed Conquest Gold delivery', () => {
     })
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status, attempt_count, delivery_key, delivered_at
+        `SELECT status, attempt_count, delivery_key, delivered_at,
+                application_status, application_key,
+                application_completed_at
          FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
       )
         .bind(conquestId)
@@ -167,7 +172,32 @@ describe('delayed Conquest Gold delivery', () => {
       status: 'DELIVERED',
       attempt_count: 1,
       delivered_at: DUE_AT,
-      delivery_key: expect.any(String)
+      delivery_key: expect.any(String),
+      application_status: 'APPLIED',
+      application_key: expect.any(String),
+      application_completed_at: DUE_AT
+    })
+    const deliveryReceipt = await env.AUTH_DB.prepare(
+      `SELECT delivery_key, application_key
+       FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+    )
+      .bind(conquestId)
+      .first<{ delivery_key: string; application_key: string }>()
+    expect(deliveryReceipt!.delivery_key).toBe(deliveryReceipt!.application_key)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, card_id, quantity, before_balance, after_balance
+         FROM player_conquest_gold_delivery_inventory_grants
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({
+      item_type: ItemType.SW_GOLD_CARDS,
+      card_id: 136,
+      quantity: 1,
+      before_balance: 0,
+      after_balance: 1
     })
     expect(
       await env.AUTH_DB.prepare(
@@ -207,6 +237,120 @@ describe('delayed Conquest Gold delivery', () => {
         .bind(USER_ID)
         .first()
     ).toEqual({ balance: 1 })
+  })
+
+  it('records the serialized Gold balance transition over existing inventory', async () => {
+    const conquestId = await setupDelivery()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_GOLD_CARDS', 136, 3, 0, 'prior-reward', ?, ?)`
+    )
+      .bind(USER_ID, CREATED_AT, CREATED_AT)
+      .run()
+
+    expect(
+      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT quantity, before_balance, after_balance
+         FROM player_conquest_gold_delivery_inventory_grants
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({ quantity: 1, before_balance: 3, after_balance: 4 })
+  })
+
+  it('keeps applied delivery and grant receipts immutable', async () => {
+    const conquestId = await setupDelivery()
+    await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_deliveries
+         SET attempt_count = attempt_count + 1 WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold delivery transition is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_delivery_inventory_grants
+         SET after_balance = after_balance + 1 WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold grant receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_feed_events SET token_ids_json = '[131209]'
+         WHERE conquest_id = ? AND event_type = 'DELAYED_REWARD_MINTED'`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold delivery feed receipts are immutable')
+  })
+
+  it('rolls back inventory and feed when final receipt validation fails, then retries', async () => {
+    const conquestId = await setupDelivery()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_gold_receipt_completion
+       BEFORE UPDATE OF application_status ON player_conquest_gold_deliveries
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Gold receipt failure');
+       END`
+    ).run()
+
+    expect(
+      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    ).toEqual({ delivered: 0, failed: 1, remaining: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count, application_status, application_key
+         FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({
+      status: 'PENDING',
+      attempt_count: 1,
+      application_status: 'READY',
+      application_key: null
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_items
+            WHERE item_type = 'SW_GOLD_CARDS') AS items,
+           (SELECT COUNT(*)
+            FROM player_conquest_gold_delivery_inventory_grants) AS grants,
+           (SELECT COUNT(*) FROM player_conquest_feed_events
+            WHERE event_type = 'DELAYED_REWARD_MINTED') AS events`
+      ).first()
+    ).toEqual({ items: 0, grants: 0, events: 0 })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_gold_receipt_completion'
+    ).run()
+    expect(
+      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count, application_status
+         FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({
+      status: 'DELIVERED',
+      attempt_count: 2,
+      application_status: 'APPLIED'
+    })
   })
 
   it('rolls back an injected grant failure and dead-letters after five tries', async () => {

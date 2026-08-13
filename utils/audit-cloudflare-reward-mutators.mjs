@@ -25,10 +25,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/conquest-delivery.ts': {
     count: 1,
     disposition: 'receipt-backed-conquest-delivery',
-    evidenceFiles: ['cloudflare/migrations/0028_conquest_gold_delivery.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0028_conquest_gold_delivery.sql',
+      'cloudflare/migrations/0076_conquest_gold_delivery_receipts.sql'
+    ],
     evidence: [
       'player_conquest_gold_deliveries',
       'delivery_key TEXT UNIQUE',
+      'player_conquest_gold_delivery_inventory_grants',
+      "application_status = 'PREPARING'",
+      'Conquest Gold delivery transition is invalid',
+      'Conquest Gold grant receipts are immutable',
+      'Conquest Gold delivery feed receipts are immutable',
       'database.batch'
     ]
   },
