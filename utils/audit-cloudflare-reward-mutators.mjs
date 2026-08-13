@@ -151,13 +151,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     disposition: 'audited-player-support',
     evidenceFiles: [
       'cloudflare/migrations/0039_player_support_operations.sql',
-      'cloudflare/migrations/0066_offchain_operator_card_grants.sql'
+      'cloudflare/migrations/0066_offchain_operator_card_grants.sql',
+      'cloudflare/migrations/0084_operator_card_grant_fulfillment_receipts.sql'
     ],
     evidence: [
       'staff_player_support_audit',
       'staff player support audit rows are immutable',
       'player_operator_card_grants',
+      'player_operator_card_grant_inventory_grants',
+      "application_status = 'PREPARING'",
       'Operator card grant receipts are immutable',
+      'Operator card inventory grants are immutable',
+      'Operator card grant receipt completion is invalid',
       'database.batch'
     ]
   },

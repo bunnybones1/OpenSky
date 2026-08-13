@@ -392,8 +392,9 @@ export class PlayerSupportRepository {
           .prepare(
             `INSERT INTO player_operator_card_grants
                (request_key, delivery_key, user_id, actor_user_id, prism,
-                card_ids_json, granted_card_count, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                card_ids_json, granted_card_count, created_at,
+                application_status, completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', NULL)`
           )
           .bind(
             requestKey,
@@ -405,6 +406,26 @@ export class PlayerSupportRepository {
             cardIds.length,
             now
           ),
+        this.database
+          .prepare(
+            `INSERT INTO player_operator_card_grant_inventory_grants
+               (operator_grant_id, user_id, token_id, quantity,
+                before_balance, after_balance)
+             SELECT grant_receipt.id, grant_receipt.user_id,
+                    CAST(card.value AS INTEGER), 1,
+                    COALESCE(item.balance, 0), COALESCE(item.balance, 0) + 1
+             FROM player_operator_card_grants grant_receipt
+             JOIN json_each(grant_receipt.card_ids_json) card
+             LEFT JOIN player_items item
+               ON item.user_id = grant_receipt.user_id
+              AND item.item_type = 'SW_BASE_CARDS'
+              AND item.token_id = CAST(card.value AS INTEGER)
+             WHERE grant_receipt.actor_user_id = ?
+               AND grant_receipt.request_key = ?
+               AND grant_receipt.delivery_key = ?
+               AND grant_receipt.application_status = 'PREPARING'`
+          )
+          .bind(actorUserId, requestKey, deliveryKey),
         this.database
           .prepare(
             `INSERT INTO player_items
@@ -458,7 +479,15 @@ export class PlayerSupportRepository {
             actorUserId,
             requestKey,
             deliveryKey
+          ),
+        this.database
+          .prepare(
+            `UPDATE player_operator_card_grants
+             SET application_status = 'APPLIED', completed_at = created_at
+             WHERE actor_user_id = ? AND request_key = ?
+               AND delivery_key = ? AND application_status = 'PREPARING'`
           )
+          .bind(actorUserId, requestKey, deliveryKey)
       ])
     } catch (error) {
       if (!String(error).toLowerCase().includes('unique')) throw error

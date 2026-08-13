@@ -628,6 +628,32 @@ describe('fail-closed Google identity staff authorization', () => {
         item.unlock_source.startsWith('operator-card-grant:')
       )
     ).toBe(true)
+    const grantEvidence = await env.AUTH_DB.prepare(
+      `SELECT inventory_grant.token_id, inventory_grant.quantity,
+              inventory_grant.before_balance, inventory_grant.after_balance
+       FROM player_operator_card_grant_inventory_grants inventory_grant
+       JOIN player_operator_card_grants grant_receipt
+         ON grant_receipt.id = inventory_grant.operator_grant_id
+       WHERE grant_receipt.actor_user_id = ?
+         AND grant_receipt.request_key = ?
+       ORDER BY inventory_grant.token_id`
+    )
+      .bind(ADMIN, request.requestKey)
+      .all<{
+        token_id: number
+        quantity: number
+        before_balance: number
+        after_balance: number
+      }>()
+    expect(grantEvidence.results).toHaveLength(strengthCards.length)
+    expect(
+      grantEvidence.results.every(
+        grant =>
+          grant.quantity === 1 &&
+          grant.before_balance === (beforeBalance.get(grant.token_id) ?? 0) &&
+          grant.after_balance === grant.before_balance + 1
+      )
+    ).toBe(true)
 
     const retry = await rpcAs(ADMIN, 'GMGrantBaseCards', request)
     expect(await retry.json()).toEqual(result)
@@ -699,7 +725,8 @@ describe('fail-closed Google identity staff authorization', () => {
     ).toEqual({ count: 1 })
 
     const receipt = await env.AUTH_DB.prepare(
-      `SELECT user_id, actor_user_id, prism, granted_card_count
+      `SELECT user_id, actor_user_id, prism, granted_card_count,
+              application_status, completed_at IS NOT NULL AS completed
        FROM player_operator_card_grants
        WHERE actor_user_id = ? AND request_key = ?`
     )
@@ -709,7 +736,9 @@ describe('fail-closed Google identity staff authorization', () => {
       user_id: grantPlayer,
       actor_user_id: ADMIN,
       prism: 'strength',
-      granted_card_count: strengthCards.length
+      granted_card_count: strengthCards.length,
+      application_status: 'APPLIED',
+      completed: 1
     })
     await expect(
       env.AUTH_DB.prepare(
@@ -719,6 +748,119 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(ADMIN, request.requestKey)
         .run()
     ).rejects.toThrow('Operator card grant receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_operator_card_grant_inventory_grants
+         SET after_balance = after_balance + 1
+         WHERE operator_grant_id = (
+           SELECT id FROM player_operator_card_grants
+           WHERE actor_user_id = ? AND request_key = ?
+         )`
+      )
+        .bind(ADMIN, request.requestKey)
+        .run()
+    ).rejects.toThrow('Operator card inventory grants are immutable')
+
+    const incompleteDeliveryKey = crypto.randomUUID()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_operator_card_grants
+         (request_key, delivery_key, user_id, actor_user_id, prism,
+          card_ids_json, granted_card_count, created_at, application_status)
+       VALUES ('operator-grant-incomplete', ?, ?, ?, 'strength', '[2]', 1,
+               ?, 'PREPARING')`
+    )
+      .bind(incompleteDeliveryKey, grantPlayer, ADMIN, now)
+      .run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_operator_card_grants
+         SET application_status = 'APPLIED', completed_at = created_at
+         WHERE delivery_key = ?`
+      )
+        .bind(incompleteDeliveryKey)
+        .run()
+    ).rejects.toThrow('Operator card grant receipt completion is invalid')
+
+    const failedRequest = {
+      accountAddress: `identity:${grantPlayer}`,
+      prism: 'agility',
+      requestKey: 'operator-grant-agility-failure'
+    }
+    const agilityIdsJson = JSON.stringify(
+      allLibraryCards()
+        .filter(card => card.class === 'AGY')
+        .map(card => card.id)
+    )
+    const agilityBefore = await env.AUTH_DB.prepare(
+      `SELECT COALESCE(SUM(balance), 0) AS balance
+       FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, agilityIdsJson)
+      .first<{ balance: number }>()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_operator_card_grant_completion
+       BEFORE UPDATE OF application_status ON player_operator_card_grants
+       WHEN NEW.request_key = 'operator-grant-agility-failure'
+         AND NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected operator card grant failure');
+       END`
+    ).run()
+    const failed = await rpcAs(ADMIN, 'GMGrantBaseCards', failedRequest)
+    expect(failed.status).toBe(500)
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_operator_card_grant_completion'
+    ).run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_operator_card_grants
+            WHERE actor_user_id = ? AND request_key = ?) AS receipts,
+           (SELECT COUNT(*)
+            FROM player_operator_card_grant_inventory_grants inventory_grant
+            JOIN player_operator_card_grants grant_receipt
+              ON grant_receipt.id = inventory_grant.operator_grant_id
+            WHERE grant_receipt.actor_user_id = ?
+              AND grant_receipt.request_key = ?) AS grants,
+           (SELECT COALESCE(SUM(balance), 0) FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+              AND token_id IN (SELECT value FROM json_each(?))) AS balance`
+      )
+        .bind(
+          ADMIN,
+          failedRequest.requestKey,
+          ADMIN,
+          failedRequest.requestKey,
+          grantPlayer,
+          agilityIdsJson
+        )
+        .first()
+    ).toEqual({
+      receipts: 0,
+      grants: 0,
+      balance: agilityBefore!.balance
+    })
+    const recovered = await rpcAs(ADMIN, 'GMGrantBaseCards', failedRequest)
+    expect(recovered.status).toBe(200)
+    expect(await recovered.json()).toMatchObject({
+      ok: true,
+      prism: 'agility',
+      grantedCardCount: allLibraryCards().filter(card => card.class === 'AGY')
+        .length
+    })
+    const agilityAfter = await env.AUTH_DB.prepare(
+      `SELECT COALESCE(SUM(balance), 0) AS balance
+       FROM player_items
+       WHERE user_id = ? AND item_type = 'SW_BASE_CARDS'
+         AND token_id IN (SELECT value FROM json_each(?))`
+    )
+      .bind(grantPlayer, agilityIdsJson)
+      .first<{ balance: number }>()
+    expect(agilityAfter!.balance - agilityBefore!.balance).toBe(
+      allLibraryCards().filter(card => card.class === 'AGY').length
+    )
   })
 
   it('gates, scopes, and immutably audits quest support repairs', async () => {
