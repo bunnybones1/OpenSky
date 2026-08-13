@@ -7,37 +7,64 @@ const EXPECTED_QUEUES = {
     task: 'ExitConquestTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_conquest_settlements', 'player_items']
+    evidence: [
+      'player_conquest_settlement_inventory_grants',
+      'Conquest inventory grant receipts are immutable',
+      'Conquest settlement completion is invalid'
+    ]
   },
   MintConquestEntriesQueue: {
     task: 'MintConquestEntriesTask',
     sourceProducer: false,
     disposition: 'offchain-commerce',
-    evidence: ['stripe_checkout_events', 'SW_CONQUEST_TICKET']
+    evidence: [
+      'stripe_checkout_fulfillment_receipts',
+      'Stripe fulfillment receipts are immutable',
+      'Stripe payment fulfillment is invalid',
+      'SW_CONQUEST_TICKET'
+    ]
   },
   MintSilverCardRewardsQueue: {
     task: 'MintSilverCardRewardsTask',
     sourceProducer: false,
     disposition: 'offchain-leaderboard',
-    evidence: ['player_leaderboard_reward_awards', 'SW_SILVER_CARDS']
+    evidence: [
+      'player_leaderboard_reward_inventory_grants',
+      'leaderboard reward inventory grants are immutable',
+      'leaderboard reward receipt completion is invalid',
+      'SW_SILVER_CARDS'
+    ]
   },
   MintTicketRewardsQueue: {
     task: 'MintTicketRewardsTask',
     sourceProducer: false,
     disposition: 'offchain-leaderboard',
-    evidence: ['player_leaderboard_reward_awards', 'SW_CONQUEST_TICKET']
+    evidence: [
+      'player_leaderboard_reward_inventory_grants',
+      'leaderboard reward inventory grants are immutable',
+      'leaderboard reward receipt completion is invalid',
+      'SW_CONQUEST_TICKET'
+    ]
   },
   MintStickerRewardsQueue: {
     task: 'MintStickerRewardsTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['referral_sticker_reward_awards', 'player_items']
+    evidence: [
+      'referral_sticker_reward_inventory_grants',
+      'referral sticker inventory grants are immutable',
+      'referral sticker reward batch update is invalid'
+    ]
   },
   DelayedMintingQueue: {
     task: 'DelayedMintingTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_conquest_gold_deliveries', 'player_items']
+    evidence: [
+      'player_conquest_gold_delivery_inventory_grants',
+      'Conquest Gold grant receipts are immutable',
+      'Conquest Gold delivery transition is invalid'
+    ]
   },
   SendConquestExtraRewardQueue: {
     task: 'SendConquestExtraRewardTask',
@@ -49,37 +76,65 @@ const EXPECTED_QUEUES = {
     task: 'ConquestV2SendRewardTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_conquest_v2_reward_awards', 'player_items']
+    evidence: [
+      'player_conquest_v2_reward_inventory_grants',
+      'Conquest V2 reward inventory grants are immutable',
+      'Conquest V2 reward receipt completion is invalid'
+    ]
   },
   MintLeaderboardRewardsQueue: {
     task: 'MintLeaderboardRewardsTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_leaderboard_reward_awards', 'player_items']
+    evidence: [
+      'player_leaderboard_reward_inventory_grants',
+      'leaderboard reward inventory grants are immutable',
+      'leaderboard reward receipt completion is invalid'
+    ]
   },
   MintCardBackRewardsQueue: {
     task: 'MintCardBackRewardsTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_skypass_claims', 'SW_CARD_BACKS']
+    evidence: [
+      'player_skypass_claim_inventory_grants',
+      'SkyPass claim inventory grants are immutable',
+      'SkyPass claim receipt completion is invalid',
+      'SW_CARD_BACKS'
+    ]
   },
   MintSkypassConquestTicketsQueue: {
     task: 'MintSkypassConquestTicketsTask',
     sourceProducer: false,
     disposition: 'offchain-skypass',
-    evidence: ['player_skypass_claims', 'SW_CONQUEST_TICKET']
+    evidence: [
+      'player_skypass_claim_inventory_grants',
+      'SkyPass claim inventory grants are immutable',
+      'SkyPass claim receipt completion is invalid',
+      'SW_CONQUEST_TICKET'
+    ]
   },
   MintSkypassSilverCardsQueue: {
     task: 'MintSkypassSilverCardsTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_skypass_claims', 'SW_SILVER_CARDS']
+    evidence: [
+      'player_skypass_claim_inventory_grants',
+      'SkyPass claim inventory grants are immutable',
+      'SkyPass claim receipt completion is invalid',
+      'SW_SILVER_CARDS'
+    ]
   },
   MintSkypassStickersQueue: {
     task: 'MintSkypassStickersTask',
     sourceProducer: true,
     disposition: 'offchain',
-    evidence: ['player_skypass_claims', 'SW_STICKERS']
+    evidence: [
+      'player_skypass_claim_inventory_grants',
+      'SkyPass claim inventory grants are immutable',
+      'SkyPass claim receipt completion is invalid',
+      'SW_STICKERS'
+    ]
   }
 }
 
@@ -163,20 +218,65 @@ const main = async () => {
     stripeCheckout,
     policy
   ] = await Promise.all([
-    readFile(
-      path.join(root, 'game-server-cloudflare/src/conquest-settlement.ts'),
-      'utf8'
-    ),
-    readFile(path.join(root, 'cloudflare/src/conquest-delivery.ts'), 'utf8'),
-    readFile(
-      path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
-      'utf8'
-    ),
-    readFile(
-      path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
-      'utf8'
-    ),
-    readFile(path.join(root, 'cloudflare/src/player-rpc.ts'), 'utf8'),
+    Promise.all([
+      readFile(
+        path.join(root, 'game-server-cloudflare/src/conquest-settlement.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0075_conquest_settlement_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
+    Promise.all([
+      readFile(path.join(root, 'cloudflare/src/conquest-delivery.ts'), 'utf8'),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0076_conquest_gold_delivery_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
+    Promise.all([
+      readFile(
+        path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0082_referral_sticker_delivery_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
+    Promise.all([
+      readFile(
+        path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0080_leaderboard_reward_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
+    Promise.all([
+      readFile(path.join(root, 'cloudflare/src/player-rpc.ts'), 'utf8'),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
     Promise.all([
       readFile(
         path.join(root, 'cloudflare/src/conquest-v2-economy.ts'),
@@ -188,9 +288,25 @@ const main = async () => {
       ),
       readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
       readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
-      readFile(path.join(root, 'docs/CLOUDFLARE_RPC_AUDIT.md'), 'utf8')
+      readFile(path.join(root, 'docs/CLOUDFLARE_RPC_AUDIT.md'), 'utf8'),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0079_conquest_v2_reward_receipts.sql'
+        ),
+        'utf8'
+      )
     ]).then(parts => parts.join('\n')),
-    readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
+    Promise.all([
+      readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0085_stripe_fulfillment_receipts.sql'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n')),
     readFile(path.join(root, 'docs/OFFCHAIN_REWARD_POLICY.md'), 'utf8')
   ])
   const evidenceSources = {

@@ -35,23 +35,32 @@ const activeTasks = [
   'MintSkypassStickersTask'
 ]
 const evidence = {
-  ExitConquestQueue: 'player_conquest_settlements player_items',
-  MintConquestEntriesQueue: 'stripe_checkout_events SW_CONQUEST_TICKET',
+  ExitConquestQueue:
+    'player_conquest_settlement_inventory_grants Conquest inventory grant receipts are immutable Conquest settlement completion is invalid',
+  MintConquestEntriesQueue:
+    'stripe_checkout_fulfillment_receipts Stripe fulfillment receipts are immutable Stripe payment fulfillment is invalid SW_CONQUEST_TICKET',
   MintSilverCardRewardsQueue:
-    'player_leaderboard_reward_awards SW_SILVER_CARDS',
+    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_SILVER_CARDS',
   MintTicketRewardsQueue:
-    'player_leaderboard_reward_awards SW_CONQUEST_TICKET',
-  MintStickerRewardsQueue: 'referral_sticker_reward_awards player_items',
-  DelayedMintingQueue: 'player_conquest_gold_deliveries player_items',
+    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_CONQUEST_TICKET',
+  MintStickerRewardsQueue:
+    'referral_sticker_reward_inventory_grants referral sticker inventory grants are immutable referral sticker reward batch update is invalid',
+  DelayedMintingQueue:
+    'player_conquest_gold_delivery_inventory_grants Conquest Gold grant receipts are immutable Conquest Gold delivery transition is invalid',
   SendConquestExtraRewardQueue:
     'SendConquestExtraRewardQueue has no production producer',
-  ConquestV2SendRewardQueue: 'player_conquest_v2_reward_awards player_items',
-  MintLeaderboardRewardsQueue: 'player_leaderboard_reward_awards player_items',
-  MintCardBackRewardsQueue: 'player_skypass_claims SW_CARD_BACKS',
+  ConquestV2SendRewardQueue:
+    'player_conquest_v2_reward_inventory_grants Conquest V2 reward inventory grants are immutable Conquest V2 reward receipt completion is invalid',
+  MintLeaderboardRewardsQueue:
+    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid',
+  MintCardBackRewardsQueue:
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_CARD_BACKS',
   MintSkypassConquestTicketsQueue:
-    'player_skypass_claims SW_CONQUEST_TICKET',
-  MintSkypassSilverCardsQueue: 'player_skypass_claims SW_SILVER_CARDS',
-  MintSkypassStickersQueue: 'player_skypass_claims SW_STICKERS'
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_CONQUEST_TICKET',
+  MintSkypassSilverCardsQueue:
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_SILVER_CARDS',
+  MintSkypassStickersQueue:
+    'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_STICKERS'
 }
 
 test('parses and accepts the complete reviewed transaction queue map', () => {
@@ -82,4 +91,23 @@ test('rejects a new queue, a revived producerless queue, and missing evidence', 
     errors.some(error => error.includes('gained 1 production producer'))
   )
   assert.ok(errors.some(error => error.includes('missing Cloudflare evidence')))
+})
+
+test('rejects a mint replacement that loses exact fulfillment evidence', () => {
+  const errors = mintQueueAuditErrors({
+    runnerSource,
+    goSource: activeTasks.map(task => `${task}{}`).join('\n'),
+    evidenceSources: {
+      ...evidence,
+      MintConquestEntriesQueue:
+        'stripe_checkout_events player_items SW_CONQUEST_TICKET'
+    }
+  })
+  assert.ok(
+    errors.some(
+      error =>
+        error.includes('MintConquestEntriesQueue') &&
+        error.includes('stripe_checkout_fulfillment_receipts')
+    )
+  )
 })
