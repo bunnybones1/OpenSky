@@ -214,3 +214,19 @@ no price, cart, order, buy, sell, or WalletConnect transaction control rendered
 on either page. The release passed 334 main Worker tests, 216 multiplayer tests,
 24 browser/game tests, six analytics tests, and every off-chain reward,
 mint-queue, route, auth-mode, and transaction safety gate.
+
+Off-chain card-back-catalog milestone `86106f4` was deployed on 2026-08-13 as
+Worker version `637b86d8-3d42-429a-955e-ff3f5ca72c35`. A no-cache production
+request referenced the exact tested entry asset `index-e4be8115.js`, and the
+local-bot game entry returned HTTP 200. The first cache-busted root request was
+served an older edge-cached HTML response; a request with explicit no-cache
+headers returned the new manifest, so the served hash was verified before UI
+QA rather than inferred from the successful upload. A signed-in client rendered
+the original Cards, Decks, Stickers, and Card Backs Market subnav, all 17 source
+card backs, source search, ownership filtering, D1 quantity sorting and
+balances, and the original Hexed feature viewer. The zero-balance feature view
+remained locked and exposed no equip mutation; no price, cart, order, buy, sell,
+or WalletConnect transaction control rendered on either page. The release
+passed 334 main Worker tests, 216 multiplayer tests, 24 browser/game tests, six
+analytics tests, and every off-chain reward, mint-queue, route, auth-mode, and
+transaction safety gate.
