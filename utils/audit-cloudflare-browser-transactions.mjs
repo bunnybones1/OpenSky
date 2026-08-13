@@ -6,29 +6,33 @@ const TRANSACTION_PATTERN =
   /\.sendTransaction\s*\(|\bprepareOnChain(?:InCurrency|InItems)?Transaction\s*\(|\bprepareTransferAssetsFromBurnerTransaction\s*\(|\buseSendTransactions\s*\(/g
 
 const EXPECTED_FILES = {
-  'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts': {
-    count: 1,
-    disposition: 'google-offchain-guarded-hero'
-  },
+  'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts':
+    {
+      count: 1,
+      disposition: 'google-offchain-guarded-hero'
+    },
   'MarketPage/ViewOrderButton/CartDialog/components/CartControlsRow.tsx': {
     count: 1,
     disposition: 'excluded-product-surface',
     routeToken: 'MarketPage'
   },
-  'PurchaseConquestPage/PurchaseWithUSDCDialog/hooks/useProcessConquestUSDCOrder.ts': {
-    count: 4,
-    disposition: 'excluded-product-surface',
-    routeToken: 'PurchaseConquestPage'
-  },
-  'SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversControlsRow/components/ConfirmConvertSilverCardsDialog.tsx': {
-    count: 2,
-    disposition: 'google-offchain-guarded'
-  },
-  'SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/hooks/useProcessSPUSDCOrder.ts': {
-    count: 4,
-    disposition: 'excluded-product-surface',
-    routeToken: 'SkyPassPurchasePage'
-  },
+  'PurchaseConquestPage/PurchaseWithUSDCDialog/hooks/useProcessConquestUSDCOrder.ts':
+    {
+      count: 4,
+      disposition: 'excluded-product-surface',
+      routeToken: 'PurchaseConquestPage'
+    },
+  'SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversControlsRow/components/ConfirmConvertSilverCardsDialog.tsx':
+    {
+      count: 2,
+      disposition: 'google-offchain-guarded'
+    },
+  'SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/hooks/useProcessSPUSDCOrder.ts':
+    {
+      count: 4,
+      disposition: 'google-control-substituted',
+      routeToken: 'SkyPassPurchasePage'
+    },
   'clients/AuthenticationClient/AuthenticationClient.ts': {
     count: 2,
     disposition: 'legacy-wallet-infrastructure'
@@ -61,11 +65,15 @@ const sourceFiles = async directory => {
 
 export const browserTransactionAuditErrors = ({
   sources,
-  identityRoutes
+  identityRoutes,
+  skypassPurchaseControls = ''
 }) => {
   const errors = []
   const actualFiles = Object.entries(sources)
-    .map(([file, source]) => [file, [...source.matchAll(TRANSACTION_PATTERN)].length])
+    .map(([file, source]) => [
+      file,
+      [...source.matchAll(TRANSACTION_PATTERN)].length
+    ])
     .filter(([, count]) => count > 0)
 
   for (const [file, count] of actualFiles) {
@@ -99,7 +107,7 @@ export const browserTransactionAuditErrors = ({
   const silverFile = Object.entries(EXPECTED_FILES).find(
     ([, review]) => review.disposition === 'google-offchain-guarded'
   )?.[0]
-  const silverSource = silverFile ? sources[silverFile] ?? '' : ''
+  const silverSource = silverFile ? (sources[silverFile] ?? '') : ''
   const googleGuard = silverSource.indexOf("env.AUTH_MODE === 'google'")
   const offchainExchange = silverSource.indexOf(
     'identityClient.exchangeSilverCardsForTickets',
@@ -119,7 +127,7 @@ export const browserTransactionAuditErrors = ({
   const heroFile = Object.entries(EXPECTED_FILES).find(
     ([, review]) => review.disposition === 'google-offchain-guarded-hero'
   )?.[0]
-  const heroSource = heroFile ? sources[heroFile] ?? '' : ''
+  const heroSource = heroFile ? (sources[heroFile] ?? '') : ''
   const heroGoogleGuard = heroSource.indexOf("env.AUTH_MODE === 'google'")
   const heroOffchainExchange = heroSource.indexOf(
     'identityClient.exchangeGoldCardsForHeroSkins',
@@ -139,11 +147,28 @@ export const browserTransactionAuditErrors = ({
     errors.push('reviewed Hero callsite no longer exits through D1 first')
   }
 
+  if (identityRoutes.includes('SkyPassPurchasePage')) {
+    for (const token of [
+      "env.AUTH_MODE === 'google'",
+      'IdentitySkyPassPurchaseButtons',
+      'LegacySkyPassPurchaseButtons'
+    ]) {
+      if (!skypassPurchaseControls.includes(token)) {
+        errors.push(
+          `Google SkyPass purchase control substitution is missing: ${token}`
+        )
+      }
+    }
+  }
+
   return errors
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const webappSourceRoot = path.join(root, 'webapp/src')
   const files = await sourceFiles(webappSourceRoot)
   const sources = Object.fromEntries(
@@ -158,7 +183,18 @@ const main = async () => {
     path.join(webappSourceRoot, 'IdentitySession/IdentityApp.tsx'),
     'utf8'
   )
-  const errors = browserTransactionAuditErrors({ sources, identityRoutes })
+  const skypassPurchaseControls = await readFile(
+    path.join(
+      webappSourceRoot,
+      'SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/SkyPassPurchaseButtons.tsx'
+    ),
+    'utf8'
+  )
+  const errors = browserTransactionAuditErrors({
+    sources,
+    identityRoutes,
+    skypassPurchaseControls
+  })
   if (errors.length) {
     for (const error of errors)
       process.stderr.write(`Browser transaction audit: ${error}\n`)

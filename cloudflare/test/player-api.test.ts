@@ -6,23 +6,30 @@ import {
   createIdentitySession,
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
-import { handlePlayerRequest } from '../src/player-api'
+import { handlePlayerRequest, type PlayerApiServices } from '../src/player-api'
 
 const testEnv = env as unknown as Env
 const userId = 'player-user-id'
 
-const request = async (path: string, init?: RequestInit, signedIn = true) => {
+const request = async (
+  path: string,
+  init?: RequestInit,
+  signedIn = true,
+  requestEnv: Env = testEnv,
+  services?: PlayerApiServices
+) => {
   const headers = new Headers(init?.headers)
   if (signedIn) {
     const token = await createIdentitySession(
       userId,
-      testEnv.SESSION_SIGNING_KEY
+      requestEnv.SESSION_SIGNING_KEY
     )
     headers.set('Cookie', `${IDENTITY_SESSION_COOKIE}=${token}`)
   }
   return handlePlayerRequest(
     new Request(`https://opensky.example${path}`, { ...init, headers }),
-    testEnv
+    requestEnv,
+    services
   )
 }
 
@@ -143,6 +150,85 @@ describe('Cloudflare player API', () => {
     })
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ code: 'player.forbidden' })
+  })
+
+  it('projects fail-closed Premium SkyPass commerce without exposing secrets', async () => {
+    const response = await request('/api/player/commerce/capabilities')
+    expect(response.status).toBe(200)
+    const body = await response.json<{
+      commerce: { premiumSkyPass: { available: boolean } }
+    }>()
+    expect(body).toEqual({
+      commerce: {
+        premiumSkyPass: {
+          available: false,
+          provider: 'STRIPE',
+          productCode: 'skypass_0001',
+          fulfillment: 'OFFCHAIN',
+          price: { currency: 'USD', amountMinor: 1_495, display: '$14.95' }
+        }
+      }
+    })
+    expect(JSON.stringify(body)).not.toContain('sk_')
+    const checkout = await request('/api/player/commerce/skypass/checkout', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    expect(checkout.status).toBe(503)
+    expect(await checkout.json()).toMatchObject({
+      code: 'player.commerce_unavailable'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM stripe_checkout_payments'
+      ).first('count')
+    ).toBe(0)
+  })
+
+  it('creates same-origin identity checkout only when the capability is complete', async () => {
+    const configuredEnv = {
+      ...testEnv,
+      STRIPE_SECRET_KEY: 'sk_test_cloud_weasel',
+      STRIPE_WEBHOOK_SECRET: 'whsec_cloud_weasel',
+      STRIPE_SKYPASS_PRICE_ID: 'price_skypass_test',
+      STRIPE_SUCCESS_URL: 'https://opensky.example/skypass',
+      STRIPE_CANCEL_URL: 'https://opensky.example/skypass-purchase'
+    } as Env
+    const createStripeCheckout = async (
+      checkoutUserId: string,
+      productCode: 'skypass_0001'
+    ) => {
+      expect(checkoutUserId).toBe(userId)
+      expect(productCode).toBe('skypass_0001')
+      return { url: 'https://checkout.stripe.com/c/pay/cs_test_player_api' }
+    }
+    const crossOrigin = await request(
+      '/api/player/commerce/skypass/checkout',
+      {
+        method: 'POST',
+        headers: { Origin: 'https://evil.example' }
+      },
+      true,
+      configuredEnv,
+      { createStripeCheckout }
+    )
+    expect(crossOrigin.status).toBe(403)
+    const response = await request(
+      '/api/player/commerce/skypass/checkout',
+      {
+        method: 'POST',
+        headers: { Origin: 'https://opensky.example' }
+      },
+      true,
+      configuredEnv,
+      { createStripeCheckout }
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      checkout: {
+        url: 'https://checkout.stripe.com/c/pay/cs_test_player_api'
+      }
+    })
   })
 
   it('atomically exchanges source-priced Silver cards for off-chain tickets', async () => {
@@ -394,7 +480,11 @@ describe('Cloudflare player API', () => {
     )
       .bind(userId, now, now)
       .run()
-    const exchange = (requestKey: string, quantity = 1, origin = 'https://opensky.example') =>
+    const exchange = (
+      requestKey: string,
+      quantity = 1,
+      origin = 'https://opensky.example'
+    ) =>
       request('/api/player/exchanges/silver-tickets', {
         method: 'POST',
         headers: { Origin: origin, 'Content-Type': 'application/json' },
@@ -404,14 +494,19 @@ describe('Cloudflare player API', () => {
         })
       })
 
-    expect((await exchange('silver-cross-origin-0001', 1, 'https://evil.example')).status).toBe(403)
+    expect(
+      (await exchange('silver-cross-origin-0001', 1, 'https://evil.example'))
+        .status
+    ).toBe(403)
     expect((await exchange('silver-insufficient-0001', 2)).status).toBe(400)
 
     const concurrent = await Promise.all([
       exchange('silver-concurrent-0001'),
       exchange('silver-concurrent-0002')
     ])
-    expect(concurrent.map(response => response.status).sort()).toEqual([200, 400])
+    expect(concurrent.map(response => response.status).sort()).toEqual([
+      200, 400
+    ])
     const ticket = await env.AUTH_DB.prepare(
       `SELECT balance FROM player_items WHERE user_id = ?
        AND item_type = 'SW_CONQUEST_TICKET' AND token_id = 2`
@@ -718,14 +813,8 @@ describe('Cloudflare player API', () => {
       })
 
     expect(
-      (
-        await exchange(
-          'hero-cross-origin-0001',
-          1,
-          10,
-          'https://evil.example'
-        )
-      ).status
+      (await exchange('hero-cross-origin-0001', 1, 10, 'https://evil.example'))
+        .status
     ).toBe(403)
     expect((await exchange('hero-invalid-id-0001', 999999)).status).toBe(400)
     expect((await exchange('hero-wrong-price-0001', 1, 9)).status).toBe(400)
@@ -734,7 +823,9 @@ describe('Cloudflare player API', () => {
       exchange('hero-concurrent-0001'),
       exchange('hero-concurrent-0002')
     ])
-    expect(concurrent.map(response => response.status).sort()).toEqual([200, 400])
+    expect(concurrent.map(response => response.status).sort()).toEqual([
+      200, 400
+    ])
     const skins = await env.AUTH_DB.prepare(
       `SELECT COALESCE(SUM(balance), 0) AS balance FROM player_items
        WHERE user_id = ? AND item_type = 'SW_HERO_SKINS'`

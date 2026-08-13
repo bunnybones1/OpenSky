@@ -32,12 +32,16 @@ interface ProductDefinition {
   itemType: ItemType
   quantity: number
   priceId: string
+  currency: 'usd'
+  amountTotal: number
 }
 
 interface StripeSessionResponse {
   id?: unknown
   object?: unknown
   url?: unknown
+  currency?: unknown
+  amount_total?: unknown
 }
 
 class StripeRequestError extends Error {}
@@ -126,6 +130,36 @@ const cursorOffset = (value?: string): number => {
 const configured = (value: string | undefined): value is string =>
   typeof value === 'string' && value.length > 0
 
+const SKYPASS_PRODUCT_CODE = 'skypass_0001'
+const CONQUEST_TICKET_PRODUCT_CODE = 'conquest_tickets_0001'
+
+const productPricePolicy = (
+  productCode: string
+): {
+  itemType: ItemType
+  quantity: 1
+  currency: 'usd'
+  amountTotal: number
+} => {
+  if (productCode === SKYPASS_PRODUCT_CODE) {
+    return {
+      itemType: 'SW_SKYPASS' as ItemType,
+      quantity: 1,
+      currency: 'usd',
+      amountTotal: 1_495
+    }
+  }
+  if (productCode === CONQUEST_TICKET_PRODUCT_CODE) {
+    return {
+      itemType: 'SW_CONQUEST_TICKET' as ItemType,
+      quantity: 1,
+      currency: 'usd',
+      amountTotal: 150
+    }
+  }
+  throw invalidArgument('Stripe product is invalid')
+}
+
 const validateRedirect = (value: string, field: string): string => {
   let url: URL
   try {
@@ -141,6 +175,44 @@ const validateRedirect = (value: string, field: string): string => {
   }
   return url.toString()
 }
+
+const validRedirectConfiguration = (value: string | undefined): boolean => {
+  if (!configured(value)) return false
+  try {
+    validateRedirect(value, 'Stripe redirect URL')
+    return true
+  } catch {
+    return false
+  }
+}
+
+export interface PremiumSkypassCommerceCapability {
+  available: boolean
+  provider: 'STRIPE'
+  productCode: 'skypass_0001'
+  fulfillment: 'OFFCHAIN'
+  price: {
+    currency: 'USD'
+    amountMinor: 1495
+    display: '$14.95'
+  }
+}
+
+export const premiumSkypassCommerceCapability = (
+  env: Env
+): PremiumSkypassCommerceCapability => ({
+  available:
+    configured(env.STRIPE_SECRET_KEY) &&
+    configured(env.STRIPE_WEBHOOK_SECRET) &&
+    configured(env.STRIPE_SKYPASS_PRICE_ID) &&
+    env.STRIPE_SKYPASS_PRICE_ID.startsWith('price_') &&
+    validRedirectConfiguration(env.STRIPE_SUCCESS_URL) &&
+    validRedirectConfiguration(env.STRIPE_CANCEL_URL),
+  provider: 'STRIPE',
+  productCode: SKYPASS_PRODUCT_CODE,
+  fulfillment: 'OFFCHAIN',
+  price: { currency: 'USD', amountMinor: 1_495, display: '$14.95' }
+})
 
 const hex = (bytes: Uint8Array): string =>
   [...bytes].map(value => value.toString(16).padStart(2, '0')).join('')
@@ -240,7 +312,14 @@ export class StripeCheckoutRepository {
     if (!configured(priceId) || !priceId.startsWith('price_')) {
       throw internal('Stripe price configuration is invalid')
     }
-    return { ...product, priceId }
+    const pricePolicy = productPricePolicy(product.code)
+    if (
+      product.itemType !== pricePolicy.itemType ||
+      product.quantity !== pricePolicy.quantity
+    ) {
+      throw internal('Stripe product configuration is invalid')
+    }
+    return { ...product, ...pricePolicy, priceId }
   }
 
   async createCheckout(
@@ -362,6 +441,14 @@ export class StripeCheckoutRepository {
         new URL(body.url).hostname !== 'checkout.stripe.com'
       ) {
         throw new Error('Stripe returned an invalid Checkout Session')
+      }
+      if (
+        body.currency !== product.currency ||
+        body.amount_total !== product.amountTotal
+      ) {
+        throw new StripeRequestError(
+          'Stripe Checkout Session price does not match product policy'
+        )
       }
       await this.database.batch([
         this.database
@@ -502,7 +589,10 @@ export class StripeCheckoutRepository {
     }
 
     const eventMetadata = metadata(session.metadata)
+    const pricePolicy = productPricePolicy(payment.product_code)
     if (
+      payment.item_type !== pricePolicy.itemType ||
+      payment.quantity !== pricePolicy.quantity ||
       session.client_reference_id !== payment.user_id ||
       eventMetadata.cloud_weasel_payment_id !== payment.id ||
       eventMetadata.cloud_weasel_user_id !== payment.user_id ||
@@ -528,12 +618,12 @@ export class StripeCheckoutRepository {
       const amountTotal = session.amount_total
       const currency = session.currency
       if (
-        !Number.isSafeInteger(amountTotal) ||
-        (amountTotal as number) < 0 ||
-        typeof currency !== 'string' ||
-        !/^[a-z]{3}$/.test(currency)
+        amountTotal !== pricePolicy.amountTotal ||
+        currency !== pricePolicy.currency
       ) {
-        throw invalidArgument('Stripe payment amount is invalid')
+        throw invalidArgument(
+          'Stripe payment price does not match product policy'
+        )
       }
       const statements: D1PreparedStatement[] = [
         this.database

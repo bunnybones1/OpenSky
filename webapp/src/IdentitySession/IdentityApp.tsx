@@ -19,6 +19,7 @@ import { SelectGoldCardsForSkinPage } from '~/SelectGoldCardsForSkinPage/SelectG
 import { SelectSilversPage } from '~/SelectSilversPage/SelectSilversPage'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import SkyPassPage from '~/SkyPassPage/SkyPassPage'
+import { SkyPassPurchasePage } from '~/SkyPassPurchasePage/SkyPassPurchasePage'
 
 import { IdentityCapabilityPage } from './components/IdentityCapabilityPage'
 
@@ -91,6 +92,10 @@ export const IdentityApp = memo(() => (
       <Route
         element={<SkyPassPage />}
         path={ROUTES_CONFIG.routes.SKY_PASS.directPath}
+      />
+      <Route
+        element={<SkyPassPurchasePage />}
+        path={ROUTES_CONFIG.routes.SKY_PASS_PURCHASE.path}
       />
       <Route element={<AccountPage />} path={ROUTES_CONFIG.routes.ACCOUNT.path} />
       <Route

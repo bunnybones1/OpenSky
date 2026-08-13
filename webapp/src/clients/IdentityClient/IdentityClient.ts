@@ -105,6 +105,22 @@ export interface PlayerState {
   decks: PlayerDeck[]
 }
 
+export interface PremiumSkyPassCommerceCapability {
+  available: boolean
+  provider: 'STRIPE'
+  productCode: 'skypass_0001'
+  fulfillment: 'OFFCHAIN'
+  price: {
+    currency: 'USD'
+    amountMinor: 1495
+    display: '$14.95'
+  }
+}
+
+export interface CommerceCapabilities {
+  premiumSkyPass: PremiumSkyPassCommerceCapability
+}
+
 export type IdentitySession =
   | {
       authenticated: false
@@ -241,6 +257,39 @@ class IdentityClient {
       throw new Error('Unable to set up your Cloud Weasel player.')
     }
     return response.json()
+  }
+
+  public getCommerceCapabilities = async (): Promise<CommerceCapabilities> => {
+    const response = await fetch('/api/player/commerce/capabilities', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    })
+    const body = (await response.json()) as {
+      commerce?: CommerceCapabilities
+      message?: string
+    }
+    if (!response.ok || !body.commerce) {
+      throw new Error(body.message || 'Unable to load commerce availability.')
+    }
+    return body.commerce
+  }
+
+  public createPremiumSkyPassCheckout = async (): Promise<{
+    url: string
+  }> => {
+    const response = await fetch('/api/player/commerce/skypass/checkout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    })
+    const body = (await response.json()) as {
+      checkout?: { url?: string }
+      message?: string
+    }
+    if (!response.ok || typeof body.checkout?.url !== 'string') {
+      throw new Error(body.message || 'Unable to start Premium SkyPass checkout.')
+    }
+    return { url: body.checkout.url }
   }
 
   public exchangeSilverCardsForTickets = async (input: {

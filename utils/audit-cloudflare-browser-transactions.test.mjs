@@ -29,7 +29,8 @@ test('accepts the complete reviewed browser transaction map', () => {
   assert.deepEqual(
     browserTransactionAuditErrors({
       sources: reviewedSources,
-      identityRoutes: 'export const IdentityApp = () => <Routes />'
+      identityRoutes: 'export const IdentityApp = () => <Routes />',
+      skypassPurchaseControls: ''
     }),
     []
   )
@@ -40,8 +41,9 @@ test('rejects new, expanded, and Google-routable transaction surfaces', () => {
     ...reviewedSources,
     'NewRewardPage.tsx': 'wallet.sendTransaction()'
   }
-  sources['MarketPage/ViewOrderButton/CartDialog/components/CartControlsRow.tsx'] +=
-    '; wallet.sendTransaction()'
+  sources[
+    'MarketPage/ViewOrderButton/CartDialog/components/CartControlsRow.tsx'
+  ] += '; wallet.sendTransaction()'
   sources[silverFile] =
     "if (env.AUTH_MODE === 'google') { identityClient.exchangeSilverCardsForTickets() } AuthenticationClient.wallet; prepareOnChainInItemsTransaction(); wallet.sendTransaction()"
   sources[
@@ -50,11 +52,33 @@ test('rejects new, expanded, and Google-routable transaction surfaces', () => {
     "if (env.AUTH_MODE === 'google') { identityClient.exchangeGoldCardsForHeroSkins() } getHeroMintTxns(); useSendTransactions()"
   const errors = browserTransactionAuditErrors({
     sources,
-    identityRoutes: 'import { MarketPage } from "~/MarketPage/MarketPage"'
+    identityRoutes: 'import { MarketPage } from "~/MarketPage/MarketPage"',
+    skypassPurchaseControls: ''
   })
   assert.ok(errors.some(error => error.includes('unreviewed browser')))
   assert.ok(errors.some(error => error.includes('reviewed count')))
   assert.ok(errors.some(error => error.includes('MarketPage')))
   assert.ok(errors.some(error => error.includes('exits through D1 first')))
   assert.ok(errors.some(error => error.includes('Hero callsite')))
+})
+
+test('allows SkyPass page only with an identity control substitution', () => {
+  const identityRoutes =
+    'import { SkyPassPurchasePage } from "~/SkyPassPurchasePage/SkyPassPurchasePage"'
+  assert.deepEqual(
+    browserTransactionAuditErrors({
+      sources: reviewedSources,
+      identityRoutes,
+      skypassPurchaseControls:
+        "env.AUTH_MODE === 'google' ? IdentitySkyPassPurchaseButtons : LegacySkyPassPurchaseButtons"
+    }),
+    []
+  )
+  assert.ok(
+    browserTransactionAuditErrors({
+      sources: reviewedSources,
+      identityRoutes,
+      skypassPurchaseControls: 'LegacySkyPassPurchaseButtons'
+    }).some(error => error.includes('control substitution'))
+  )
 })

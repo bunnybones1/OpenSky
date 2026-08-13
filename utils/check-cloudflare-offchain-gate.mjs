@@ -2,10 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const LEGACY_TRANSACTION_SURFACES = [
-  'SkyPassPurchasePage',
-  'PurchaseConquestPage'
-]
+const LEGACY_TRANSACTION_SURFACES = ['PurchaseConquestPage']
 
 const TRANSACTION_PATTERNS = [
   /prepareOnChain/i,
@@ -68,6 +65,23 @@ const GOOGLE_REWARD_UI_REQUIREMENTS = {
     "env.AUTH_MODE === 'google') return",
     "env.AUTH_MODE !== 'google'",
     'openConversionDialog'
+  ],
+  skypassPurchaseInfo: [
+    "env.AUTH_MODE === 'google'",
+    'skypass.premiumDescOffchain'
+  ],
+  skypassCardBackDetail: [
+    "env.AUTH_MODE !== 'google'",
+    'skypass.detailsDescsOffchain.CardBack'
+  ],
+  skypassExpansionDetail: ["env.AUTH_MODE !== 'google'"],
+  skypassStickerDetail: [
+    "env.AUTH_MODE !== 'google'",
+    'skypass.detailsDescsOffchain.NewSticker'
+  ],
+  skypassSilverDetail: [
+    "env.AUTH_MODE !== 'google'",
+    'skypass.detailsDescsOffchain.SilverCard'
   ]
 }
 
@@ -121,7 +135,8 @@ export const offchainGateErrors = ({
   skypassRewardPolicySource = '',
   skypassRewardPolicyMigration = '',
   observationalSources = {},
-  optionalWalletSource = ''
+  optionalWalletSource = '',
+  skypassCommerce = {}
 }) => {
   const errors = []
   if (webappConfig?.AUTH_MODE !== 'google') {
@@ -147,6 +162,60 @@ export const offchainGateErrors = ({
       errors.push(
         `IdentityApp contains legacy transaction code: ${pattern.source}`
       )
+    }
+  }
+  if (identityRoutes.includes('SkyPassPurchasePage')) {
+    const required = {
+      controls: [
+        "env.AUTH_MODE === 'google'",
+        'IdentitySkyPassPurchaseButtons',
+        'LegacySkyPassPurchaseButtons'
+      ],
+      identityControls: [
+        'identityClient.createPremiumSkyPassCheckout',
+        'purchaseSkypass.unavailable'
+      ],
+      playerApi: [
+        '/api/player/commerce/capabilities',
+        '/api/player/commerce/skypass/checkout',
+        'premiumSkypassCommerceCapability'
+      ],
+      stripe: [
+        'amountTotal: 1_495',
+        "currency: 'usd'",
+        'Stripe Checkout Session price does not match product policy',
+        'Stripe payment price does not match product policy'
+      ],
+      priceMigration: [
+        'Stripe payment product policy is invalid',
+        'Stripe payment price policy is invalid',
+        'NEW.amount_total = 1495',
+        'NEW.amount_total = 150'
+      ],
+      purchaseInfo: [
+        "env.AUTH_MODE === 'google'",
+        'skypass.premiumDescOffchain'
+      ],
+      locale: [
+        'premiumDescOffchain',
+        'detailsDescsOffchain',
+        'Cloud Weasel inventory'
+      ]
+    }
+    for (const [name, tokens] of Object.entries(required)) {
+      const source = skypassCommerce[name] || ''
+      for (const token of tokens) {
+        if (!source.includes(token)) {
+          errors.push(`Google SkyPass commerce ${name} is missing: ${token}`)
+        }
+      }
+    }
+    for (const pattern of TRANSACTION_PATTERNS) {
+      if (pattern.test(skypassCommerce.identityControls || '')) {
+        errors.push(
+          `Google SkyPass commerce contains legacy transaction code: ${pattern.source}`
+        )
+      }
     }
   }
   const normalizedPolicySource = policySource.replace(/\s+/g, ' ')
@@ -547,9 +616,7 @@ export const offchainGateErrors = ({
       'active referral sticker schedule receipt required'
     ]) {
       if (!referralStickerScheduleMigration.includes(token)) {
-        errors.push(
-          `referral sticker schedule is missing safeguard: ${token}`
-        )
+        errors.push(`referral sticker schedule is missing safeguard: ${token}`)
       }
     }
   }
@@ -565,9 +632,7 @@ export const offchainGateErrors = ({
       '% pool.length'
     ]) {
       if (!leaderboardRewardSource.includes(token)) {
-        errors.push(
-          `leaderboard reward is missing policy safeguard: ${token}`
-        )
+        errors.push(`leaderboard reward is missing policy safeguard: ${token}`)
       }
     }
     for (const token of [
@@ -652,7 +717,7 @@ export const offchainGateErrors = ({
       'conquest_v2_reward_cycle_policy_receipts',
       'Conquest V2 reward cycle creation is invalid',
       'Conquest V2 reward snapshot is incomplete',
-      "json_array_length(NEW.silver_card_ids_json) = CAST(json_extract(",
+      'json_array_length(NEW.silver_card_ids_json) = CAST(json_extract(',
       'active Conquest V2 reward policy receipt required',
       'Conquest V2 reward cycle policy receipts are immutable'
     ]) {
@@ -815,6 +880,11 @@ const main = async () => {
     tradableBadge,
     skypassThumbnail,
     skypassClaim,
+    skypassPurchaseInfo,
+    skypassCardBackDetail,
+    skypassExpansionDetail,
+    skypassStickerDetail,
+    skypassSilverDetail,
     englishLocaleSource,
     analyticsWorker,
     walletContents,
@@ -833,7 +903,11 @@ const main = async () => {
     skypassRewardUpdateSource,
     skypassRewardPolicySource,
     skypassRewardPolicyMigration,
-    apiSource
+    apiSource,
+    skypassPurchaseControls,
+    identitySkypassPurchaseControls,
+    playerApiSource,
+    stripePricePolicyMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -1070,6 +1144,41 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseInfo.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseDetails/components/CardBackDetail.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseDetails/components/ExpansionDetails.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseDetails/components/NewStickerDetail.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseDetails/components/SilverCardDetail.tsx'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8'),
     readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/wallet-contents.ts'), 'utf8'),
@@ -1136,13 +1245,44 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare/src/skypass-reward-update.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare/src/skypass-reward-policy.ts'), 'utf8'),
     readFile(
-      path.join(root, 'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'),
+      path.join(root, 'cloudflare/src/skypass-reward-update.ts'),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
+    readFile(
+      path.join(root, 'cloudflare/src/skypass-reward-policy.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/SkyPassPurchaseButtons.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/IdentitySkyPassPurchaseButtons.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/player-api.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0091_stripe_product_price_policy.sql'
+      ),
+      'utf8'
+    )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
@@ -1198,7 +1338,12 @@ const main = async () => {
       conquestRewardFeed,
       tradableBadge,
       skypassThumbnail,
-      skypassClaim
+      skypassClaim,
+      skypassPurchaseInfo,
+      skypassCardBackDetail,
+      skypassExpansionDetail,
+      skypassStickerDetail,
+      skypassSilverDetail
     },
     googleRewardCopy: [
       englishLocale.generic.Collected,
@@ -1234,7 +1379,13 @@ const main = async () => {
       englishLocale.cardDetails.inventoryBalance,
       englishLocale.cardDetails.baseExplanationOffchain,
       englishLocale.cardDetails.goldExplanationOffchain,
-      englishLocale.cardDetails.silverExplanationOffchain
+      englishLocale.cardDetails.silverExplanationOffchain,
+      englishLocale.skypass.premiumDescOffchain,
+      englishLocale.skypass.detailsDescsOffchain.CardBack,
+      englishLocale.skypass.detailsDescsOffchain.ConquestTickets,
+      englishLocale.skypass.detailsDescsOffchain.NewSticker,
+      englishLocale.skypass.detailsDescsOffchain.SilverCard,
+      englishLocale.skypass.detailsDescsOffchain.StickerPoints
     ],
     rewardSources: {
       conquestDelivery,
@@ -1273,7 +1424,16 @@ const main = async () => {
     skypassRewardPolicySource,
     skypassRewardPolicyMigration,
     observationalSources: { analyticsWorker, walletContents },
-    optionalWalletSource: `${walletConnector}\n${walletSettings}`
+    optionalWalletSource: `${walletConnector}\n${walletSettings}`,
+    skypassCommerce: {
+      controls: skypassPurchaseControls,
+      identityControls: identitySkypassPurchaseControls,
+      playerApi: playerApiSource,
+      stripe: stripeCheckout,
+      priceMigration: stripePricePolicyMigration,
+      purchaseInfo: skypassPurchaseInfo,
+      locale: englishLocaleSource
+    }
   })
   if (errors.length) {
     for (const error of errors)

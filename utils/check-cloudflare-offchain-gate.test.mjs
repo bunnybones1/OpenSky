@@ -100,7 +100,16 @@ const validInput = () => ({
       "const onDialogClose = () => { if (env.AUTH_MODE === 'google') return; " +
       'openConversionDialog() }; ' +
       "else if (env.AUTH_MODE !== 'google' && reward) { " +
-      'if (!!shouldSeeConversionDialog()) { openConversionDialog() } }'
+      'if (!!shouldSeeConversionDialog()) { openConversionDialog() } }',
+    skypassPurchaseInfo:
+      "env.AUTH_MODE === 'google'; skypass.premiumDescOffchain",
+    skypassCardBackDetail:
+      "env.AUTH_MODE !== 'google'; skypass.detailsDescsOffchain.CardBack",
+    skypassExpansionDetail: "env.AUTH_MODE !== 'google'",
+    skypassStickerDetail:
+      "env.AUTH_MODE !== 'google'; skypass.detailsDescsOffchain.NewSticker",
+    skypassSilverDetail:
+      "env.AUTH_MODE !== 'google'; skypass.detailsDescsOffchain.SilverCard"
   },
   googleRewardCopy: [
     'Collected',
@@ -238,23 +247,63 @@ const validInput = () => ({
   },
   optionalWalletSource:
     "methods: ['personal_sign']; swaps: false; onramp: false; " +
-    'receive: false; send: false; analytics: false'
+    'receive: false; send: false; analytics: false',
+  skypassCommerce: {}
 })
 
 test('current Cloudflare identity routing satisfies the off-chain gate', async () => {
-  const [configSource, identityRoutes, appSource, policySource] =
-    await Promise.all([
-      readFile('webapp/config/webapp.cloudflare.json', 'utf8'),
-      readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
-      readFile('webapp/src/App.tsx', 'utf8'),
-      readFile('docs/OFFCHAIN_REWARD_POLICY.md', 'utf8')
-    ])
+  const [
+    configSource,
+    identityRoutes,
+    appSource,
+    policySource,
+    controls,
+    identityControls,
+    playerApi,
+    stripe,
+    priceMigration,
+    purchaseInfo,
+    locale
+  ] = await Promise.all([
+    readFile('webapp/config/webapp.cloudflare.json', 'utf8'),
+    readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
+    readFile('webapp/src/App.tsx', 'utf8'),
+    readFile('docs/OFFCHAIN_REWARD_POLICY.md', 'utf8'),
+    readFile(
+      'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/SkyPassPurchaseButtons.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseButtons/IdentitySkyPassPurchaseButtons.tsx',
+      'utf8'
+    ),
+    readFile('cloudflare/src/player-api.ts', 'utf8'),
+    readFile('cloudflare/src/stripe-checkout.ts', 'utf8'),
+    readFile(
+      'cloudflare/migrations/0091_stripe_product_price_policy.sql',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/SkyPassPurchasePage/SkyPassPurchaseInfo/SkyPassPurchaseInfo.tsx',
+      'utf8'
+    ),
+    readFile('webapp/locales/en/webapp.json', 'utf8')
+  ])
   assert.deepEqual(
     offchainGateErrors({
       webappConfig: JSON.parse(configSource),
       identityRoutes,
       appSource,
-      policySource
+      policySource,
+      skypassCommerce: {
+        controls,
+        identityControls,
+        playerApi,
+        stripe,
+        priceMigration,
+        purchaseInfo,
+        locale
+      }
     }),
     []
   )
@@ -271,17 +320,44 @@ test('rejects wallet auth and automatic wallet registration', () => {
   assert.ok(errors.some(error => error.includes('auto-register')))
 })
 
-test('rejects a legacy purchase or transaction path in IdentityApp', () => {
+test('rejects an unreviewed purchase or transaction path in IdentityApp', () => {
   const input = validInput()
   input.identityRoutes = `
-    import { SkyPassPurchasePage } from '../SkyPassPurchasePage'
+    import { PurchaseConquestPage } from '../PurchaseConquestPage'
     APIClient.opensky.prepareOnChainTransaction()
     wallet.sendTransaction([])
   `
   const errors = offchainGateErrors(input)
-  assert.ok(errors.some(error => error.includes('SkyPassPurchasePage')))
+  assert.ok(errors.some(error => error.includes('PurchaseConquestPage')))
   assert.ok(errors.some(error => error.includes('prepareOnChain')))
   assert.ok(errors.some(error => error.includes('sendTransaction')))
+})
+
+test('requires guarded off-chain commerce to expose the SkyPass page', () => {
+  const input = validInput()
+  input.identityRoutes =
+    'import { SkyPassPurchasePage } from "~/SkyPassPurchasePage"'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('controls is missing')))
+  input.skypassCommerce = {
+    controls:
+      "env.AUTH_MODE === 'google' ? IdentitySkyPassPurchaseButtons : LegacySkyPassPurchaseButtons",
+    identityControls:
+      'identityClient.createPremiumSkyPassCheckout; purchaseSkypass.unavailable',
+    playerApi:
+      '/api/player/commerce/capabilities; /api/player/commerce/skypass/checkout; premiumSkypassCommerceCapability',
+    stripe:
+      "amountTotal: 1_495; currency: 'usd'; " +
+      'Stripe Checkout Session price does not match product policy; ' +
+      'Stripe payment price does not match product policy',
+    priceMigration:
+      'Stripe payment product policy is invalid; ' +
+      'Stripe payment price policy is invalid; ' +
+      'NEW.amount_total = 1495; NEW.amount_total = 150',
+    purchaseInfo: "env.AUTH_MODE === 'google'; skypass.premiumDescOffchain",
+    locale: 'premiumDescOffchain; detailsDescsOffchain; Cloud Weasel inventory'
+  }
+  assert.deepEqual(offchainGateErrors(input), [])
 })
 
 test('rejects removal of an off-chain grant invariant', () => {
@@ -355,8 +431,7 @@ test('rejects Conquest points without capped immutable player receipts', () => {
 
 test('rejects referral sticker fulfillment without reviewed schedule activation', () => {
   const input = validInput()
-  input.referralStickerScheduleMigration =
-    'referral_sticker_schedule_versions'
+  input.referralStickerScheduleMigration = 'referral_sticker_schedule_versions'
   input.referralStickerContentSource = 'FROM content_stickers WHERE season = ?'
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('activated_by_user_id')))
@@ -373,8 +448,14 @@ test('rejects leaderboard fulfillment without an approved exact policy', () => {
   input.leaderboardRewardPolicyMigration =
     'leaderboard_reward_schedule_activations'
   const errors = offchainGateErrors(input)
-  assert.ok(errors.some(error => error.includes('LEADERBOARD_REWARD_POLICY_HASH')))
-  assert.ok(errors.some(error => error.includes('two') || error.includes('activated_by_user_id')))
+  assert.ok(
+    errors.some(error => error.includes('LEADERBOARD_REWARD_POLICY_HASH'))
+  )
+  assert.ok(
+    errors.some(
+      error => error.includes('two') || error.includes('activated_by_user_id')
+    )
+  )
   assert.ok(errors.some(error => error.includes('cycle policy receipts')))
 })
 

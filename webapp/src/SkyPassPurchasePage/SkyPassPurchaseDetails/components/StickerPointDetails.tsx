@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
@@ -59,7 +60,11 @@ export const StickerPointDetails = memo(() => {
             {t('skypass.detailsTitles.StickerPoints')}
           </div>
           <div className={SkyPassDetailDesc}>
-            {t('skypass.detailsDescs.StickerPoints')}
+            {t(
+              env.AUTH_MODE === 'google'
+                ? 'skypass.detailsDescsOffchain.StickerPoints'
+                : 'skypass.detailsDescs.StickerPoints'
+            )}
           </div>
         </div>
         {!!getAssetUrl && (

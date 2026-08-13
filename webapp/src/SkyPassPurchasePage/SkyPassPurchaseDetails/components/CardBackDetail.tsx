@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { useSkyPassInfo } from '~/shared/queries/useSkyPassInfo'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
@@ -39,7 +40,7 @@ export const CardBackDetail = memo(() => {
         'isCardBack'
       )}
     >
-      {!!getAssetUrl && (
+      {!!getAssetUrl && env.AUTH_MODE !== 'google' && (
         <div
           className={clsx(
             Sprinkles({
@@ -91,9 +92,14 @@ export const CardBackDetail = memo(() => {
             )}`}
           </div>
           <div className={SkyPassDetailDesc}>
-            {t('skypass.detailsDescs.CardBack', {
-              name: skyPassInfo?.seasonName || t('quests.subNavSeasonal')
-            })}
+            {t(
+              env.AUTH_MODE === 'google'
+                ? 'skypass.detailsDescsOffchain.CardBack'
+                : 'skypass.detailsDescs.CardBack',
+              {
+                name: skyPassInfo?.seasonName || t('quests.subNavSeasonal')
+              }
+            )}
           </div>
         </div>
         <div

@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
@@ -29,7 +30,7 @@ export const SilverCardDetail = memo(() => {
         SkyPassDetail
       )}
     >
-      {!!getAssetUrl && (
+      {!!getAssetUrl && env.AUTH_MODE !== 'google' && (
         <div
           className={clsx(
             Sprinkles({
@@ -77,7 +78,11 @@ export const SilverCardDetail = memo(() => {
             {t('skypass.detailsTitles.SilverCard')}
           </div>
           <div className={SkyPassDetailDesc}>
-            {t('skypass.detailsDescs.SilverCard')}
+            {t(
+              env.AUTH_MODE === 'google'
+                ? 'skypass.detailsDescsOffchain.SilverCard'
+                : 'skypass.detailsDescs.SilverCard'
+            )}
           </div>
         </div>
         {!!getAssetUrl && (

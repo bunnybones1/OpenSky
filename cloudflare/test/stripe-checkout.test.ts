@@ -10,6 +10,7 @@ import {
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
 import {
+  premiumSkypassCommerceCapability,
   StripeCheckoutRepository,
   type StripeFetch
 } from '../src/stripe-checkout'
@@ -101,7 +102,9 @@ const createPending = async (
     return Response.json({
       id: sessionId,
       object: 'checkout.session',
-      url: `https://checkout.stripe.com/c/pay/${sessionId}`
+      url: `https://checkout.stripe.com/c/pay/${sessionId}`,
+      amount_total: productCode === 'skypass_0001' ? 1_495 : 150,
+      currency: 'usd'
     })
   }
   const repository = new StripeCheckoutRepository(
@@ -149,7 +152,7 @@ const eventFor = (
       id: payment.stripe_session_id,
       object: 'checkout.session',
       payment_status: 'paid',
-      amount_total: 1_495,
+      amount_total: payment.product_code === 'skypass_0001' ? 1_495 : 150,
       currency: 'usd',
       client_reference_id: userId,
       metadata: {
@@ -250,6 +253,13 @@ describe('dormant Stripe Checkout port', () => {
   }
 
   it('fails closed without complete configuration and creates no payment', async () => {
+    expect(premiumSkypassCommerceCapability(env as unknown as Env)).toEqual({
+      available: false,
+      provider: 'STRIPE',
+      productCode: 'skypass_0001',
+      fulfillment: 'OFFCHAIN',
+      price: { currency: 'USD', amountMinor: 1_495, display: '$14.95' }
+    })
     const repository = new StripeCheckoutRepository(
       env.AUTH_DB,
       env as unknown as Env
@@ -289,13 +299,41 @@ describe('dormant Stripe Checkout port', () => {
     expect(form.get('client_reference_id')).toBe(userId)
   })
 
+  it('fails closed before redirect when a Stripe Price ID has the wrong price', async () => {
+    const repository = new StripeCheckoutRepository(
+      env.AUTH_DB,
+      configuredEnv(),
+      async () =>
+        Response.json({
+          id: 'cs_test_wrong_price',
+          object: 'checkout.session',
+          url: 'https://checkout.stripe.com/c/pay/cs_test_wrong_price',
+          amount_total: 1,
+          currency: 'usd'
+        })
+    )
+    await expect(
+      repository.createCheckout(userId, 'skypass_0001', NOW)
+    ).rejects.toThrow('create payment intent')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, last_error FROM stripe_checkout_payments`
+      ).first()
+    ).toEqual({
+      status: 'FAILED',
+      last_error: 'Stripe Checkout Session price does not match product policy'
+    })
+  })
+
   it('preserves the authenticated source RPC checkout response', async () => {
     const stripeFetch: StripeFetch = async request => {
       if (request.method === 'GET') return stripeEventLookup(request)
       return Response.json({
         id: 'cs_test_checkout_rpc',
         object: 'checkout.session',
-        url: 'https://checkout.stripe.com/c/pay/cs_test_checkout_rpc'
+        url: 'https://checkout.stripe.com/c/pay/cs_test_checkout_rpc',
+        amount_total: 1_495,
+        currency: 'usd'
       })
     }
     const token = await createIdentitySession(
@@ -372,7 +410,9 @@ describe('dormant Stripe Checkout port', () => {
         return Response.json({
           id: 'cs_test_recovered_checkout',
           object: 'checkout.session',
-          url: 'https://checkout.stripe.com/c/pay/cs_test_recovered_checkout'
+          url: 'https://checkout.stripe.com/c/pay/cs_test_recovered_checkout',
+          amount_total: 1_495,
+          currency: 'usd'
         })
       }
     )
@@ -411,7 +451,9 @@ describe('dormant Stripe Checkout port', () => {
         return Response.json({
           id: 'cs_test_concurrent_checkout',
           object: 'checkout.session',
-          url: 'https://checkout.stripe.com/c/pay/cs_test_concurrent_checkout'
+          url: 'https://checkout.stripe.com/c/pay/cs_test_concurrent_checkout',
+          amount_total: 1_495,
+          currency: 'usd'
         })
       }
     )
@@ -575,6 +617,12 @@ describe('dormant Stripe Checkout port', () => {
         NOW
       )
     ).rejects.toThrow('Stripe payment metadata does not match')
+    await expect(
+      repository.handleWebhook(
+        await signedWebhook(eventFor(payment, { amount_total: 1 })),
+        NOW
+      )
+    ).rejects.toThrow('Stripe payment price does not match product policy')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status FROM stripe_checkout_payments WHERE id = ?`
@@ -714,7 +762,7 @@ describe('dormant Stripe Checkout port', () => {
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE stripe_checkout_payments
-         SET status = 'SUCCEEDED', currency = 'usd', amount_total = 1495,
+         SET status = 'SUCCEEDED', currency = 'usd', amount_total = 150,
              fulfilled_season = ?, completed_at = ?, updated_at = ?
          WHERE id = ?`
       )
@@ -742,6 +790,24 @@ describe('dormant Stripe Checkout port', () => {
         )
         .run()
     ).rejects.toThrow('Stripe payment preparation is invalid')
+  })
+
+  it('pins the exact source price in D1 independently of Worker validation', async () => {
+    const { payment } = await createPending(
+      'conquest_tickets_0001',
+      'cs_test_wrong_d1_price'
+    )
+    const receivedAt = NOW.toISOString()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE stripe_checkout_payments
+         SET status = 'SUCCEEDED', currency = 'usd', amount_total = 1495,
+             fulfilled_season = ?, completed_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(seasonFromDate(NOW), receivedAt, receivedAt, payment.id)
+        .run()
+    ).rejects.toThrow('Stripe payment price policy is invalid')
   })
 
   it('records expiration without granting inventory', async () => {

@@ -15,6 +15,19 @@ import {
   SilverTicketExchangeRepository,
   type SilverCardExchangeInput
 } from './silver-ticket-exchange'
+import {
+  premiumSkypassCommerceCapability,
+  StripeCheckoutRepository,
+  type StripeFetch
+} from './stripe-checkout'
+
+export interface PlayerApiServices {
+  stripeFetch?: StripeFetch
+  createStripeCheckout?: (
+    userId: string,
+    productCode: 'skypass_0001'
+  ) => Promise<{ url: string }>
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -36,7 +49,8 @@ const sameOrigin = (request: Request): boolean => {
 
 export const handlePlayerRequest = async (
   request: Request,
-  env: Env
+  env: Env,
+  services: PlayerApiServices = {}
 ): Promise<Response> => {
   const userId = await authenticatedUserId(request, env)
   if (!userId) {
@@ -92,6 +106,48 @@ export const handlePlayerRequest = async (
             },
             404
           )
+    }
+    if (
+      url.pathname === '/api/player/commerce/capabilities' &&
+      request.method === 'GET'
+    ) {
+      return json({
+        commerce: {
+          premiumSkyPass: premiumSkypassCommerceCapability(env)
+        }
+      })
+    }
+    if (
+      url.pathname === '/api/player/commerce/skypass/checkout' &&
+      request.method === 'POST'
+    ) {
+      if (!sameOrigin(request)) {
+        return json(
+          {
+            code: 'player.forbidden',
+            message: 'Cross-origin requests are not allowed.'
+          },
+          403
+        )
+      }
+      const capability = premiumSkypassCommerceCapability(env)
+      if (!capability.available) {
+        return json(
+          {
+            code: 'player.commerce_unavailable',
+            message: 'Premium SkyPass checkout is not available.'
+          },
+          503
+        )
+      }
+      const checkout = services.createStripeCheckout
+        ? await services.createStripeCheckout(userId, capability.productCode)
+        : await new StripeCheckoutRepository(
+            env.AUTH_DB,
+            env,
+            services.stripeFetch
+          ).createCheckout(userId, capability.productCode)
+      return json({ checkout })
     }
     if (
       url.pathname === '/api/player/exchanges/silver-tickets' &&

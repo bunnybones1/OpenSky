@@ -1018,7 +1018,8 @@
     "dismiss": "Don't show me this again"
   },
   "purchaseSkypass": {
-    "inAppPurchase": "In-App Purchase"
+    "inAppPurchase": "In-App Purchase",
+    "unavailable": "COMING SOON"
   },
   "quests": {
     "NewQuests": "NEW QUESTS!",
@@ -1195,6 +1196,13 @@
       "SilverCard": "Obtain a tradable Silver card from the latest expansion set.",
       "StickerPoints": "Collect points to obtain limited time tradable Stickers from the Invite-A-Friend rewards track."
     },
+    "detailsDescsOffchain": {
+      "CardBack": "The {{ name }} Card Back is an exclusive limited-time reward delivered to your Cloud Weasel inventory.",
+      "ConquestTickets": "Use Conquest Tickets from your Cloud Weasel inventory to enter Conquest mode and compete for off-chain rewards.",
+      "NewSticker": "The {{ name }} Sticker is an exclusive limited-time reward delivered to your Cloud Weasel inventory.",
+      "SilverCard": "Obtain a Silver card from the latest expansion set in your Cloud Weasel inventory.",
+      "StickerPoints": "Collect points toward limited-time Stickers from the Invite-A-Friend rewards track in your Cloud Weasel inventory."
+    },
     "detailsTitles": {
       "ConquestTickets": "Conquest Tickets",
       "FreshReleaseCards": "Fresh Release Cards",
@@ -1209,6 +1217,7 @@
     "loadingSkypassPrices": "LOADING PRICE",
     "premium": "Premium",
     "premiumDesc": "Activate the Premium Skypass to obtain all Seasonal rewards you’ve unlocked, including limited time tradable items!",
+    "premiumDescOffchain": "Activate the Premium Skypass to obtain all Seasonal rewards you’ve unlocked in your Cloud Weasel inventory.",
     "PREMIUMSKYPASS": "PREMIUM SKYPASS",
     "reachLevel": "Reach Level {{level}}",
     "rewardClaimed": "Reward Claimed",
