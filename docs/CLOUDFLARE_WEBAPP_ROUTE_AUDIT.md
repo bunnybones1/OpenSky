@@ -80,3 +80,13 @@ model discovered during live QA, and D1 migration `0092` plus Worker version
 verification found all six owner/policy/deletion triggers, no pending migration,
 and exactly the two Google-mode controls in the original dialog. The check used
 Cancel and left the signed-in user's consent unchanged.
+
+Deck Viewer milestone `053e3df` was deployed on 2026-08-13 as Worker version
+`7dddea06-6b87-4de6-8236-e41b2d1d7cf9`. Raw production HTML referenced the
+verified local entry asset `index-5f942297.js`. A fresh signed-in browser client
+opened the existing Ada Starter deck in the original viewer, rendered its card
+list and Edit Deck control, and did not render the legacy “Add missing to cart”
+action. Verification returned to the deck list without changing the deck. An
+earlier upload raced the final asset build and retained the prior manifest; the
+served entry hash is therefore an explicit rollout check, not inferred from a
+successful Worker upload.
