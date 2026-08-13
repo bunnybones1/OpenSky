@@ -21,7 +21,11 @@ const validInput = () => ({
     ])
   ),
   analyticsPackageSource:
-    'pnpm --dir ../cloudflare exec wrangler deploy --config ../game-analytics/wrangler.jsonc'
+    'node ../utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc',
+  productionRunnerSource: [
+    "['--dir', 'cloudflare', 'exec', 'wrangler', ...args]",
+    'CLOUDFLARE_ACCOUNT_ID: config.account_id'
+  ].join('\n')
 })
 
 test('extracts top-level compose services only', () => {
@@ -61,12 +65,18 @@ test('rejects new workloads and missing implementation evidence', () => {
   ])
 })
 
-test('rejects an analytics deploy command without the pinned Wrangler', () => {
+test('rejects an analytics deploy command without the reviewed target runner', () => {
   const input = validInput()
   input.analyticsPackageSource = 'wrangler deploy --config wrangler.jsonc'
   assert.deepEqual(auditServices(input).errors, [
-    'game-analytics deploy does not use the workspace-pinned Wrangler'
+    'game-analytics deploy does not use the reviewed target runner'
   ])
+})
+
+test('rejects a target runner without its explicit account and pinned Wrangler child', () => {
+  const input = validInput()
+  input.productionRunnerSource = ''
+  assert.equal(auditServices(input).errors.length, 2)
 })
 
 test('rejects blanket retirement of a reviewed source workload', () => {

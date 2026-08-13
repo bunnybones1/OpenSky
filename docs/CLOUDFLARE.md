@@ -186,9 +186,16 @@ pnpm --dir cloudflare exec wrangler d1 create opensky-auth --config ../wrangler.
 Apply migrations and configure the secrets above before deploying:
 
 ```sh
-pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --remote --config ../wrangler.jsonc
+pnpm db:migrate:cloudflare:remote
 pnpm deploy:cloudflare
 ```
+
+Production package scripts use one reviewed target runner. It pins the Cloud
+Weasel account, Worker names, and `opensky-auth` database ID from the checked-in
+inventory, explicitly sets `CLOUDFLARE_ACCOUNT_ID`, and refuses a conflicting
+environment value. This matters when the local Wrangler login can access more
+than one Cloudflare account; do not replace these scripts with a direct remote
+Wrangler command.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:

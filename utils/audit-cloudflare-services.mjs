@@ -123,7 +123,8 @@ export const auditServices = ({
   composeServices,
   goEntrypoints,
   evidenceSources,
-  analyticsPackageSource
+  analyticsPackageSource,
+  productionRunnerSource
 }) => {
   const errors = []
   const compare = (actual, expected, label) => {
@@ -167,10 +168,18 @@ export const auditServices = ({
 
   if (
     !analyticsPackageSource.includes(
-      'pnpm --dir ../cloudflare exec wrangler deploy --config ../game-analytics/wrangler.jsonc'
+      'node ../utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc'
     )
   ) {
-    errors.push('game-analytics deploy does not use the workspace-pinned Wrangler')
+    errors.push('game-analytics deploy does not use the reviewed target runner')
+  }
+  for (const token of [
+    "['--dir', 'cloudflare', 'exec', 'wrangler', ...args]",
+    'CLOUDFLARE_ACCOUNT_ID: config.account_id'
+  ]) {
+    if (!productionRunnerSource.includes(token)) {
+      errors.push(`production target runner is missing: ${token}`)
+    }
   }
 
   const byDisposition = {}
@@ -220,6 +229,10 @@ export const loadServiceAudit = async root => {
     evidenceSources,
     analyticsPackageSource: await readFile(
       path.join(root, 'game-analytics/package.json'),
+      'utf8'
+    ),
+    productionRunnerSource: await readFile(
+      path.join(root, 'utils/run-cloudflare-production.mjs'),
       'utf8'
     )
   })
