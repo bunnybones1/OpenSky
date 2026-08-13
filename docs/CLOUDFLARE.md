@@ -503,8 +503,11 @@ and progress are not migrated.
   EOA signatures are verified locally; Polygon smart-contract wallets use the
   chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.
   RPC failure fails closed and never creates a wallet link. The WalletConnect
-  browser adapter and merged wallet-content reads remain pending a public
-  project ID and origin allowlist. The authenticated
+  browser adapter is available in the preserved account-settings dialog and
+  requests only `personal_sign`; all connector transaction and commerce
+  features are disabled. Set the public `WALLETCONNECT_PROJECT_ID` in
+  `webapp/config/webapp.cloudflare.json` and allowlist the exact production and
+  development origins in the Reown dashboard to activate it. The authenticated
   `GET /api/auth/wallet/contents` adapter is implemented but remains inert
   until a reviewed Polygon asset contract and Sequence Indexer URL/access key
   are configured. It filters every returned row by linked address, chain, and
@@ -535,14 +538,15 @@ enablement drill in
 either queue. Selection, settlement, pending-card reads, and delayed delivery
 are deployed, so this is now a product-configuration and rollout gate rather
 than an unported code path.
-WalletConnect can then be added independently in account settings: connect a
-wallet, sign a session-owned nonce, persist the verified address, and merge
-wallet contents at read boundaries without granting the wallet authority over
-the user's login session. Leaderboard reward timing should be exposed only
-after the weekly distribution worker, retry/idempotency behavior, and an
-explicit Cloud Weasel UTC weekday/time configuration are deployed together;
-the committed example configurations disagree, so production policy must not
-be inferred from either one.
+WalletConnect ownership is now independently available in account settings:
+connect a wallet, sign a session-owned nonce, persist the verified address, and
+read external wallet contents without granting the wallet authority over the
+user's login session. It remains inactive until the public Reown project ID and
+origin allowlist are configured. Leaderboard reward timing should be exposed
+only after the weekly distribution worker, retry/idempotency behavior, and an
+explicit Cloud Weasel UTC weekday/time configuration are deployed together; the
+committed example configurations disagree, so production policy must not be
+inferred from either one.
 
 The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run

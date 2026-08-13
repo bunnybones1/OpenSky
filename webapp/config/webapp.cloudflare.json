@@ -1,5 +1,5 @@
 {
-  "!!": "Cloudflare profile: Google identity plus browser-hosted localbot game; wallet linking is optional and not enabled yet",
+  "!!": "Cloudflare profile: Google identity plus browser-hosted localbot game; wallet linking is optional and gated by a public project ID",
   "ASSETS_URL": "https://assets.skyweaver.net",
   "ASSETS_VERSION_HASH": "",
   "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
@@ -13,6 +13,7 @@
   "MATCHMAKER_URL": "/api/matchmaker/",
   "ANALYTICS": false,
   "ONE_SIGNAL_APP_ID": "",
+  "WALLETCONNECT_PROJECT_ID": "",
   "SEQUENCE_API_KEY": "",
   "SEQUENCE_API_HOST": "https://api.sequence.app",
   "SEQUENCE_METADATA_HOST": "https://metadata.sequence.app",

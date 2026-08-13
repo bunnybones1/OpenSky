@@ -63,7 +63,10 @@ const validInput = () => ({
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
   },
-  observationalSources: { analytics: 'INSERT INTO multiplayer_match_analytics' }
+  observationalSources: { analytics: 'INSERT INTO multiplayer_match_analytics' },
+  optionalWalletSource:
+    "methods: ['personal_sign']; swaps: false; onramp: false; " +
+    'receive: false; send: false; analytics: false'
 })
 
 test('current Cloudflare identity routing satisfies the off-chain gate', async () => {
@@ -136,6 +139,19 @@ test('rejects player inventory writes from an observational pipeline', () => {
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('mutate player rewards')))
   assert.ok(errors.some(error => error.includes('transaction code')))
+})
+
+test('rejects transaction capabilities from the optional wallet integration', () => {
+  const input = validInput()
+  input.optionalWalletSource =
+    "methods: ['personal_sign', 'eth_sendTransaction']; swaps: true; " +
+    'onramp: false; receive: false; send: true; analytics: true; ' +
+    'wallet_sendCalls()'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('swaps: false')))
+  assert.ok(errors.some(error => error.includes('send: false')))
+  assert.ok(errors.some(error => error.includes('eth_sendTransaction')))
+  assert.ok(errors.some(error => error.includes('wallet_sendCalls')))
 })
 
 test('rejects player-facing mint language from Google Pending Gold UI', () => {

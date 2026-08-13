@@ -18,6 +18,7 @@ import { TitleButton } from './components/TitleButton'
 import { UserNameSettingInput } from './components/UserNameSettingInput'
 import { DeleteAccountSettings } from './DeleteAccountSettings/DeleteAccountSettings'
 import { SoundSettings } from './SoundSettings/SoundSettings'
+import { WalletConnectionsSettings } from './WalletConnectionsSettings/WalletConnectionsSettings'
 
 interface DefaultSettingsListProps {
   setListMode: (mode: 'default' | 'art' | 'country' | 'title') => void
@@ -141,6 +142,7 @@ const IdentityDefaultSettingsList = memo(
         <SoundSettings />
         <GameCacheSettings />
         <MobileSettings />
+        <WalletConnectionsSettings />
       </>
     )
   }

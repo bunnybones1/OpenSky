@@ -66,6 +66,24 @@ const GOOGLE_REWARD_UI_REQUIREMENTS = {
   skypassThumbnail: ["env.AUTH_MODE !== 'google'"]
 }
 
+const OPTIONAL_WALLET_REQUIREMENTS = [
+  "methods: ['personal_sign']",
+  'swaps: false',
+  'onramp: false',
+  'receive: false',
+  'send: false',
+  'analytics: false'
+]
+
+const OPTIONAL_WALLET_FORBIDDEN_PATTERNS = [
+  /eth_sendTransaction/i,
+  /eth_signTransaction/i,
+  /wallet_sendCalls/i,
+  /sendTransaction/i,
+  /AuthenticationClient/,
+  /useSendTransactions/
+]
+
 export const offchainGateErrors = ({
   webappConfig,
   identityRoutes,
@@ -77,7 +95,8 @@ export const offchainGateErrors = ({
   googleRewardUi = {},
   googleRewardCopy = [],
   rewardSources = {},
-  observationalSources = {}
+  observationalSources = {},
+  optionalWalletSource = ''
 }) => {
   const errors = []
   if (webappConfig?.AUTH_MODE !== 'google') {
@@ -211,6 +230,20 @@ export const offchainGateErrors = ({
       }
     }
   }
+  if (optionalWalletSource) {
+    for (const token of OPTIONAL_WALLET_REQUIREMENTS) {
+      if (!optionalWalletSource.includes(token)) {
+        errors.push(`optional wallet integration is missing safeguard: ${token}`)
+      }
+    }
+    for (const pattern of OPTIONAL_WALLET_FORBIDDEN_PATTERNS) {
+      if (pattern.test(optionalWalletSource)) {
+        errors.push(
+          `optional wallet integration contains transaction capability: ${pattern.source}`
+        )
+      }
+    }
+  }
   return errors
 }
 
@@ -254,7 +287,9 @@ const main = async () => {
     skypassThumbnail,
     englishLocaleSource,
     analyticsWorker,
-    walletContents
+    walletContents,
+    walletConnector,
+    walletSettings
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -401,7 +436,18 @@ const main = async () => {
     ),
     readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8'),
     readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare/src/wallet-contents.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare/src/wallet-contents.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/IdentitySession/walletconnect.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/SettingsButton/AccountSettingsDialog/DefaultSettingsList/WalletConnectionsSettings/WalletConnectionsSettings.tsx'
+      ),
+      'utf8'
+    )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
@@ -459,7 +505,8 @@ const main = async () => {
       mobileStoreFulfillment,
       skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`
     },
-    observationalSources: { analyticsWorker, walletContents }
+    observationalSources: { analyticsWorker, walletContents },
+    optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })
   if (errors.length) {
     for (const error of errors)

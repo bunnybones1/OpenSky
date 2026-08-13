@@ -15,6 +15,42 @@ export interface WalletConnection {
   verifiedAt: string
 }
 
+export interface WalletLinkChallenge {
+  challengeId: string
+  namespace: 'eip155'
+  address: string
+  chainId: number
+  message: string
+  expiresAt: string
+}
+
+export interface ExternalWalletHolding {
+  itemType: string
+  tokenId: number
+  rawTokenId: string
+  balance: string
+  rawBalance: string
+}
+
+export interface ExternalWalletContents {
+  address: string
+  label?: string
+  verifiedAt: string
+  holdings: ExternalWalletHolding[]
+  totals: Record<string, string>
+  truncated: boolean
+}
+
+export type WalletContentsProjection =
+  | { status: 'not_configured'; chainId: 137; wallets: [] }
+  | {
+      status: 'available'
+      chainId: 137
+      contractAddress: string
+      wallets: ExternalWalletContents[]
+      totals: Record<string, string>
+    }
+
 export interface PlayerQuest {
   key: string
   title: string
@@ -102,6 +138,69 @@ class IdentityClient {
     window.location.assign(
       `/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`
     )
+  }
+
+  private walletRequest = async <T>(
+    path: string,
+    method: 'POST' | 'DELETE',
+    body: unknown
+  ): Promise<T> => {
+    const response = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
+    const result = (await response.json()) as T & { message?: string }
+    if (!response.ok) {
+      throw new Error(result.message || 'Unable to update linked wallets.')
+    }
+    return result
+  }
+
+  public createWalletChallenge = async (input: {
+    address: string
+    chainId: 137
+  }): Promise<WalletLinkChallenge> => {
+    const response = await this.walletRequest<{
+      challenge: WalletLinkChallenge
+    }>('/api/auth/wallet/challenge', 'POST', input)
+    return response.challenge
+  }
+
+  public verifyWalletChallenge = async (input: {
+    challengeId: string
+    signature: string
+    label?: string
+  }): Promise<WalletConnection[]> => {
+    const response = await this.walletRequest<{
+      wallets: WalletConnection[]
+    }>('/api/auth/wallet/verify', 'POST', input)
+    return response.wallets
+  }
+
+  public unlinkWallet = async (address: string): Promise<WalletConnection[]> => {
+    const response = await this.walletRequest<{
+      wallets: WalletConnection[]
+    }>('/api/auth/wallet', 'DELETE', { address })
+    return response.wallets
+  }
+
+  public getWalletContents = async (): Promise<WalletContentsProjection> => {
+    const response = await fetch('/api/auth/wallet/contents', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    })
+    const result = (await response.json()) as WalletContentsProjection & {
+      message?: string
+    }
+    if (!response.ok) {
+      throw new Error(result.message || 'Unable to read linked wallet contents.')
+    }
+    return result
   }
 
   public startAccountDeletion = async (

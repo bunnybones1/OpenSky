@@ -21,6 +21,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   The wallet-content adapter is an authenticated observational projection. It
   filters a configured chain and contract, never writes `player_items`, and is
   included in the same release-gate scan as game analytics.
+  The browser connector requests only `personal_sign`; transaction signing,
+  sending, swaps, on-ramps, wallet-based authentication, and connector
+  analytics are disabled and guarded by the production release check.
 - Legacy burner/account migration is retired for the zero-user launch. Future
   identity providers must link to the Google-owned account through a new
   reviewed flow, not revive the source migration RPCs.
