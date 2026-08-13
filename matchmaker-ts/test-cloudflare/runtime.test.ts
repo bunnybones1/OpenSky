@@ -673,13 +673,31 @@ describe('Cloudflare matchmaker Worker', () => {
     const firstAcceptance = nextMessage(first)
     const secondAcceptance = nextMessage(second)
     first.send(JSON.stringify({ type: 'accept_match' }))
-    await firstAcceptance
-    await secondAcceptance
+    await Promise.all([firstAcceptance, secondAcceptance])
     const firstSawSecond = nextMessage(first)
     const secondSawSecond = nextMessage(second)
     second.send(JSON.stringify({ type: 'accept_match' }))
-    await firstSawSecond
-    await secondSawSecond
+    await Promise.all([firstSawSecond, secondSawSecond])
+
+    await expect
+      .poll(async () =>
+        runInDurableObject(
+          pool() as DurableObjectStub<MatchmakerPool>,
+          async (_instance, state) => {
+            const proposals = await state.storage.list<
+              Record<string, unknown>
+            >({ prefix: 'proposal:' })
+            const proposal = [...proposals.values()][0]
+            return proposal
+              ? {
+                  status: proposal.status,
+                  dispatchAttempts: proposal.dispatchAttempts
+                }
+              : undefined
+          }
+        )
+      )
+      .toEqual({ status: 'ACCEPTED', dispatchAttempts: 1 })
 
     await runInDurableObject(
       pool() as DurableObjectStub<MatchmakerPool>,
@@ -703,11 +721,15 @@ describe('Cloudflare matchmaker Worker', () => {
     const firstRematched = nextMessage(first)
     const secondRematched = nextMessage(second)
     expect(await runDurableObjectAlarm(pool())).toBe(true)
-    expect(await firstRematched).toMatchObject({
+    const [firstResult, secondResult] = await Promise.all([
+      firstRematched,
+      secondRematched
+    ])
+    expect(firstResult).toMatchObject({
       type: 'match_found',
       mode: GameMode.RANKED_CONSTRUCTED
     })
-    expect(await secondRematched).toMatchObject({
+    expect(secondResult).toMatchObject({
       type: 'match_found',
       mode: GameMode.RANKED_CONSTRUCTED
     })
