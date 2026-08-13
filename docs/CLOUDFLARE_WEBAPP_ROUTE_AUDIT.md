@@ -232,3 +232,18 @@ or WalletConnect transaction control rendered on either page. The release
 passed 334 main Worker tests, 216 multiplayer tests, 24 browser/game tests, six
 analytics tests, and every off-chain reward, mint-queue, route, auth-mode, and
 transaction safety gate.
+
+Off-chain hero-catalog milestone `8d8895e` was deployed on 2026-08-13 as Worker
+version `9f46666d-5c7d-499d-9ab6-c42c22197dcb`. A no-cache production request
+referenced the exact tested entry asset `index-2e8eccd1.js`, and the local-bot
+game entry returned HTTP 200. A signed-in client rendered the original Cards,
+Decks, Heroes, Stickers, and Card Backs Market subnav, all 15 source hero skins,
+source search and ownership filtering, and D1 quantity sorting and balances.
+Following the original first catalog item opened `/hero/1` with the Legacy Ada
+art, flavor text, 10-Gold requirement, and Select control. That control remains
+the audited Google Gold-card-to-hero D1 exchange; production verification did
+not click it or mutate inventory. No mint, price, buy, sell, order, or wallet
+control rendered on the catalog or feature page. The release passed 334 main
+Worker tests, 216 multiplayer tests, 24 browser/game tests, six analytics tests,
+and every off-chain reward, mint-queue, route, auth-mode, and transaction safety
+gate.
