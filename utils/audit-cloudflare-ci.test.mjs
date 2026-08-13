@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { ciWorkflowAuditErrors } from './audit-cloudflare-ci.mjs'
+
+const validWorkflow = `
+pull_request:
+contents: read
+cancel-in-progress: true
+timeout-minutes: 30
+RELEASE_VERSION: cloudflare
+GITCOMMIT: cloudflare
+actions/checkout@v7.0.1
+persist-credentials: false
+pnpm/action-setup@v6.0.10
+actions/setup-node@v7.0.0
+node-version-file: .nvmrc
+pnpm install --frozen-lockfile
+pnpm build:cloudflare
+`
+
+test('accepts the read-only complete pull-request release contract', () => {
+  assert.deepEqual(ciWorkflowAuditErrors(validWorkflow, '24.5.0'), [])
+})
+
+test('rejects a partial workflow or stale Node runtime', () => {
+  const errors = ciWorkflowAuditErrors(
+    validWorkflow.replace('pnpm build:cloudflare', 'pnpm typecheck'),
+    '18.6.0'
+  )
+  assert.ok(errors.some(error => error.includes('pnpm build:cloudflare')))
+  assert.ok(errors.some(error => error.includes('Wrangler >=22')))
+})
+
+test('rejects deployment authority in pull-request CI', () => {
+  for (const forbidden of [
+    'wrangler deploy',
+    'deploy:cloudflare',
+    'CLOUDFLARE_API_TOKEN',
+    'secrets.CLOUDFLARE_TOKEN'
+  ]) {
+    const errors = ciWorkflowAuditErrors(`${validWorkflow}\n${forbidden}`, '24')
+    assert.ok(errors.some(error => error.includes(forbidden.split('.')[0])))
+  }
+})

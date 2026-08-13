@@ -28,6 +28,11 @@ Install the workspace dependencies, then run:
 pnpm build:cloudflare
 ```
 
+The long-lived pull request runs that same command through
+`.github/workflows/cloudflare-release.yml` on Node 24 with a frozen pnpm lockfile.
+The workflow is read-only and never receives Cloudflare secrets or deployment
+authority; production deployment remains an explicit reviewed action.
+
 The build uses the `cloudflare` runtime profiles, builds both Vite packages, and assembles this
 layout in `webapp/dist`:
 
