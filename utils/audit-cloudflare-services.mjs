@@ -120,7 +120,8 @@ export const auditServices = ({
   dockerWorkloads,
   composeServices,
   goEntrypoints,
-  evidenceSources
+  evidenceSources,
+  analyticsPackageSource
 }) => {
   const errors = []
   const compare = (actual, expected, label) => {
@@ -145,6 +146,14 @@ export const auditServices = ({
         )
       }
     }
+  }
+
+  if (
+    !analyticsPackageSource.includes(
+      'pnpm --dir ../cloudflare exec wrangler deploy --config ../game-analytics/wrangler.jsonc'
+    )
+  ) {
+    errors.push('game-analytics deploy does not use the workspace-pinned Wrangler')
   }
 
   const byDisposition = {}
@@ -191,7 +200,11 @@ export const loadServiceAudit = async root => {
       await readFile(path.join(root, 'docker-compose.yml'), 'utf8')
     ),
     goEntrypoints: extractGoEntrypoints(await walkGo(root)),
-    evidenceSources
+    evidenceSources,
+    analyticsPackageSource: await readFile(
+      path.join(root, 'game-analytics/package.json'),
+      'utf8'
+    )
   })
 }
 

@@ -19,7 +19,9 @@ const validInput = () => ({
       workload,
       review.evidence.join('\n')
     ])
-  )
+  ),
+  analyticsPackageSource:
+    'pnpm --dir ../cloudflare exec wrangler deploy --config ../game-analytics/wrangler.jsonc'
 })
 
 test('extracts top-level compose services only', () => {
@@ -56,5 +58,13 @@ test('rejects new workloads and missing implementation evidence', () => {
     'unreviewed Go entrypoint: api/cmd/new-daemon/main.go',
     'api is missing ported evidence: handleApiRequest',
     'api is missing ported evidence: async scheduled'
+  ])
+})
+
+test('rejects an analytics deploy command without the pinned Wrangler', () => {
+  const input = validInput()
+  input.analyticsPackageSource = 'wrangler deploy --config wrangler.jsonc'
+  assert.deepEqual(auditServices(input).errors, [
+    'game-analytics deploy does not use the workspace-pinned Wrangler'
   ])
 })

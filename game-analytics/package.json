@@ -11,7 +11,7 @@
     "start": "FUNCTION_TARGET=getVersionAndIDFromReplay npx functions-framework --signature-type=cloudevent",
     "start2": "FUNCTION_TARGET=pubMatchData npx functions-framework --signature-type=cloudevent --port=8081",
     "gen-sample-analytics": "tsx ./scripts/gen-sample-analytics",
-    "deploy:cloudflare": "wrangler deploy --config wrangler.jsonc",
+    "deploy:cloudflare": "pnpm --dir ../cloudflare exec wrangler deploy --config ../game-analytics/wrangler.jsonc",
     "typecheck:cloudflare": "tsc -p tsconfig.cloudflare.json --noEmit"
   },
   "dependencies": {
