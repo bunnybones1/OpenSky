@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -27,6 +27,7 @@
     "check:cloudflare:chain-effects": "node --test ./utils/audit-cloudflare-chain-effects.test.mjs && node ./utils/audit-cloudflare-chain-effects.mjs",
     "check:cloudflare:mint-queues": "node --test ./utils/audit-cloudflare-mint-queues.test.mjs && node ./utils/audit-cloudflare-mint-queues.mjs",
     "check:cloudflare:browser-transactions": "node --test ./utils/audit-cloudflare-browser-transactions.test.mjs && node ./utils/audit-cloudflare-browser-transactions.mjs",
+    "check:cloudflare:main-worker": "pnpm --filter @opensky/cloudflare test",
     "check:cloudflare:analytics": "pnpm --filter @opensky/game-analytics test",
     "check:cloudflare:release": "node --test ./utils/check-cloudflare-release-gate.test.mjs && node ./utils/check-cloudflare-release-gate.mjs",
     "audit:cloudflare:services": "node ./utils/audit-cloudflare-services.mjs",

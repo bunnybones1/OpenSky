@@ -218,7 +218,7 @@ describe('identity-native account deletion', () => {
         `deletion-race-${testSequence}`,
         userId,
         `identity:${userId}`,
-        '2026-08-13T00:00:00.000Z',
+        '2099-08-13T00:00:00.000Z',
         now,
         now
       )
