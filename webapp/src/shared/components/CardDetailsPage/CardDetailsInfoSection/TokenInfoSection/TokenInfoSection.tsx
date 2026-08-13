@@ -23,10 +23,11 @@ interface TokenInfoSectionProps {
   )[]
   id: number
   switchCard?: (id: number) => void
+  inventoryOnly?: boolean
 }
 
 export const TokenInfoSection = memo(
-  ({ allowedGrades, id, switchCard }: TokenInfoSectionProps) => {
+  ({ allowedGrades, id, switchCard, inventoryOnly }: TokenInfoSectionProps) => {
     const gradesToUse = useMemo(() => {
       if (!allowedGrades) return DEFAULT_GRADES
       return DEFAULT_GRADES.filter((grade) => allowedGrades.includes(grade))
@@ -59,6 +60,7 @@ export const TokenInfoSection = memo(
             }),
             TokenInfoSectionHeader
           )}
+          style={inventoryOnly ? { gridTemplateColumns: '1fr 1fr' } : undefined}
         >
           <div
             className={Sprinkles({
@@ -79,45 +81,57 @@ export const TokenInfoSection = memo(
             })}
           >
             <Text fontSize="14px" color="purple8">
-              {t('generic.Ownership')}
+              {t(
+                inventoryOnly ? 'cardDetails.inventoryBalance' : 'generic.Ownership'
+              )}
             </Text>
           </div>
-          <div
-            className={Sprinkles({
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              display: 'flex'
-            })}
-          >
-            <Text fontSize="14px" color="purple8">
-              {t('general.price')}
-            </Text>
-          </div>
-          <div
-            className={Sprinkles({
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              display: 'flex'
-            })}
-          >
-            <Text fontSize="14px" color="purple8">
-              {t('general.stock')}
-            </Text>
-          </div>
-          <div
-            className={Sprinkles({
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              display: 'flex'
-            })}
-          >
-            <Text fontSize="14px" color="purple8">
-              {t('general.supply')}
-            </Text>
-          </div>
+          {!inventoryOnly && (
+            <>
+              <div
+                className={Sprinkles({
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  display: 'flex'
+                })}
+              >
+                <Text fontSize="14px" color="purple8">
+                  {t('general.price')}
+                </Text>
+              </div>
+              <div
+                className={Sprinkles({
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  display: 'flex'
+                })}
+              >
+                <Text fontSize="14px" color="purple8">
+                  {t('general.stock')}
+                </Text>
+              </div>
+              <div
+                className={Sprinkles({
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  display: 'flex'
+                })}
+              >
+                <Text fontSize="14px" color="purple8">
+                  {t('general.supply')}
+                </Text>
+              </div>
+            </>
+          )}
         </div>
         {gradesToUse.map((grade) => (
-          <GradeRow key={grade} grade={grade} activeId={id} switchCard={switchCard} />
+          <GradeRow
+            key={grade}
+            grade={grade}
+            activeId={id}
+            switchCard={switchCard}
+            inventoryOnly={inventoryOnly}
+          />
         ))}
       </div>
     )

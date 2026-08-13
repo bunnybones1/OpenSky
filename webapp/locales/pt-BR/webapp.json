@@ -58,13 +58,18 @@
   "cardDetails": {
     "artist": "Arte por",
     "baseExplanation": "Não negociável, desbloqueie ao subir de nível",
+    "baseExplanationOffchain": "Desbloqueada pela progressão do Cloud Weasel e armazenada no seu inventário.",
     "baseNotTradable": "Cartas Base não são negociáveis.",
     "enchantNotTradable": "Encantos não são negociáveis.",
     "goldExplanation": "Negociável, oferta limitada, ganhe através da Conquista",
+    "goldExplanationOffchain": "Carta Ouro cosmética obtida na Conquista e entregue no seu inventário do Cloud Weasel.",
+    "inventoryBalance": "Inventário",
     "newBadge": "NOVA",
+    "offchainInventory": "Item do inventário do Cloud Weasel. Disponível para jogar e colecionar.",
     "relatedCards": "CARTAS RELACIONADAS",
     "relatedDecks": "BARALHOS RELACIONADOS",
     "silverExplanation": "Negociável, ganhe através de Conquista e Classificação",
+    "silverExplanationOffchain": "Carta Prata cosmética obtida na Conquista ou Classificação e armazenada no seu inventário do Cloud Weasel.",
     "tokenNotTradable": "Cartas Token não são negociáveis."
   },
   "cards": {

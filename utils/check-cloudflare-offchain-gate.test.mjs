@@ -22,8 +22,7 @@ const validInput = () => ({
     'identityClient.exchangeSilverCardsForTickets(); return } ' +
     'AuthenticationClient.wallet',
   silverExchangeReview: {
-    list:
-      "env.AUTH_MODE === 'google'; play.exchangeRate; play.ticketsReceived",
+    list: "env.AUTH_MODE === 'google'; play.exchangeRate; play.ticketsReceived",
     row:
       "env.AUTH_MODE === 'google' ? (play.silverExchangeRate) : " +
       "(<CardPrice />); env.AUTH_MODE === 'google' ? " +
@@ -40,6 +39,29 @@ const validInput = () => ({
     "if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeGoldCardsForHeroSkins(); return } ' +
     'getHeroMintTxns()',
+  identityCardDetails: {
+    routes: {
+      items: "inventoryOnly={env.AUTH_MODE === 'google'}",
+      silverExchange: "inventoryOnly={env.AUTH_MODE === 'google'}",
+      goldExchange: "inventoryOnly={env.AUTH_MODE === 'google'}"
+    },
+    controls:
+      'const IdentityItemsCardDetailsControls = () => ' +
+      'cardDetails.offchainInventory; IdentityItemsCardDetailsControls.displayName; ' +
+      "export const ItemsCardDetailsControls = env.AUTH_MODE === 'google' ? " +
+      'IdentityItemsCardDetailsControls : LegacyItemsCardDetailsControls',
+    tokenInfo:
+      'inventoryOnly?: boolean; cardDetails.inventoryBalance; !inventoryOnly',
+    gradeRow:
+      '!inventoryOnly && (<GradeRowPrices /><GradeRowSupply />' +
+      '<GradeRowTotalSupply />)',
+    gradeLabel: "${inventoryOnly ? 'Offchain' : ''}",
+    locale:
+      'cardDetails.offchainInventory; cardDetails.inventoryBalance; ' +
+      'cardDetails.baseExplanationOffchain; ' +
+      'cardDetails.goldExplanationOffchain; ' +
+      'cardDetails.silverExplanationOffchain'
+  },
   googleRewardUi: {
     conquestInfo:
       "env.AUTH_MODE === 'google'; play.delayedGoldDelivery; " +
@@ -304,6 +326,30 @@ test('rejects a Google Hero exchange that can fall through to a wallet', () => {
   assert.ok(
     offchainGateErrors(input).some(error => error.includes('Hero exchange'))
   )
+})
+
+test('rejects market queries from Google inventory card details', () => {
+  const input = validInput()
+  input.identityCardDetails.routes.items = '<CardDetailsPage />'
+  input.identityCardDetails.controls =
+    'const IdentityItemsCardDetailsControls = () => useTokenPriceAndSupply(); ' +
+    'IdentityItemsCardDetailsControls.displayName; ' +
+    "export const ItemsCardDetailsControls = env.AUTH_MODE === 'google' ? " +
+    'IdentityItemsCardDetailsControls : LegacyItemsCardDetailsControls'
+  input.identityCardDetails.gradeRow = '<GradeRowPrices />'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('route items')))
+  assert.ok(errors.some(error => error.includes('market control')))
+  assert.ok(errors.some(error => error.includes('price or supply queries')))
+})
+
+test('requires off-chain card-detail tooltips and copy', () => {
+  const input = validInput()
+  input.identityCardDetails.gradeLabel = 'cardDetails.goldExplanation'
+  input.identityCardDetails.locale = 'cardDetails.inventoryBalance'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('off-chain copy')))
+  assert.ok(errors.some(error => error.includes('offchainInventory')))
 })
 
 test('rejects legacy ownership language from Google reward surfaces', () => {

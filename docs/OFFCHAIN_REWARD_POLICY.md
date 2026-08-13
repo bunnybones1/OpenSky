@@ -187,6 +187,15 @@ have an explicit disposition and reviewed callsite count. A new callsite, a
 newly reachable legacy product surface, or an identity exchange that can fall
 through to the wallet branch fails the production build.
 
+Identity-mode card details preserve the source grade and balance interface but
+read it as Cloud Weasel inventory. The Items library, Silver exchange selector,
+and Gold exchange selector all opt into the same inventory-only projection.
+That projection mounts balance rows and off-chain explanations, never market
+price, stock, total-supply, or cart controls. The legacy components and copy
+remain available only to the legacy-wallet app, and the off-chain release gate
+checks both branches so a reusable card detail cannot silently reconnect D1
+inventory to wallet-market authority.
+
 The source chain-effect audit is broader than the transaction-queue and browser
 audits. It discovers executable Go calls that mint, send a transaction, compose
 a token transfer, or compose an on-chain payment. Every current callsite has an

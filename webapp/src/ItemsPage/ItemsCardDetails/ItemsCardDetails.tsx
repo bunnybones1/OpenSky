@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect } from 'react'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { CardDetailsPage } from '~/shared/components/CardDetailsPage/CardDetailsPage'
 import { makeItemsCardDetailsRoute } from '~/shared/helpers/routes/items-page'
 import { useDispatch, useSelector } from '~/shared/redux/index'
@@ -29,6 +30,7 @@ export const ItemsCardDetails = memo(() => {
       Controls={ItemsCardDetailsControls}
       id={id}
       switchCard={switchCard}
+      inventoryOnly={env.AUTH_MODE === 'google'}
     />
   )
 })

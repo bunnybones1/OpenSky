@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { memo, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Button } from '~/shared/components/Button'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
@@ -27,7 +28,32 @@ interface ItemsCardDetailsControlsProps {
   id: number
 }
 
-export const ItemsCardDetailsControls = memo(
+const IdentityItemsCardDetailsControls = memo(() => {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      className={clsx(
+        Sprinkles({
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          width: 'full'
+        }),
+        ItemCardDetailsControlsStyle
+      )}
+    >
+      <Icon type="info-empty" height="16px" color="purple9" />
+      <Text marginLeft="8px" fontSize="16px" color="purple9">
+        {t('cardDetails.offchainInventory')}
+      </Text>
+    </div>
+  )
+})
+
+IdentityItemsCardDetailsControls.displayName = 'IdentityItemsCardDetailsControls'
+
+const LegacyItemsCardDetailsControls = memo(
   ({ id }: ItemsCardDetailsControlsProps) => {
     const card = useMemo(() => Cards.get(id), [id])
 
@@ -86,8 +112,8 @@ export const ItemsCardDetailsControls = memo(
                 isEnchant
                   ? 'enchantNotTradable'
                   : isToken
-                  ? 'tokenNotTradable'
-                  : 'baseNotTradable'
+                    ? 'tokenNotTradable'
+                    : 'baseNotTradable'
               }`
             )}
           </Text>
@@ -137,5 +163,12 @@ export const ItemsCardDetailsControls = memo(
     )
   }
 )
+
+LegacyItemsCardDetailsControls.displayName = 'LegacyItemsCardDetailsControls'
+
+export const ItemsCardDetailsControls =
+  env.AUTH_MODE === 'google'
+    ? IdentityItemsCardDetailsControls
+    : LegacyItemsCardDetailsControls
 
 ItemsCardDetailsControls.displayName = 'ItemsCardDetailsControls'

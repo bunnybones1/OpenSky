@@ -23,6 +23,7 @@ interface CardDetailsInfoSectionProps {
   )[]
   switchCard?: (id: number) => void
   hideTokenInfo?: boolean
+  inventoryOnly?: boolean
 }
 
 export const CardDetailsInfoSection = memo(
@@ -31,7 +32,8 @@ export const CardDetailsInfoSection = memo(
     id,
     allowedGrades,
     switchCard,
-    hideTokenInfo
+    hideTokenInfo,
+    inventoryOnly
   }: CardDetailsInfoSectionProps) => {
     const isTabletWide = useResponsiveQuery('tabletWide')
 
@@ -53,6 +55,7 @@ export const CardDetailsInfoSection = memo(
             switchCard={switchCard}
             allowedGrades={allowedGrades}
             id={id}
+            inventoryOnly={inventoryOnly}
           />
         )}
         {!isTabletWide && <FlavorTextSection id={id} />}

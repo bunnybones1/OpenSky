@@ -25,6 +25,7 @@ interface CardDetailsPageProps {
   )[]
   switchCard?: (id: number) => void
   hideTokenInfo?: boolean
+  inventoryOnly?: boolean
 }
 
 export const CardDetailsPage = memo(
@@ -33,7 +34,8 @@ export const CardDetailsPage = memo(
     Controls,
     switchCard,
     allowedGrades,
-    hideTokenInfo
+    hideTokenInfo,
+    inventoryOnly
   }: CardDetailsPageProps) => {
     const card = useMemo(() => Cards.get(id), [id])
 
@@ -87,6 +89,7 @@ export const CardDetailsPage = memo(
             Controls={Controls}
             allowedGrades={allowedGrades}
             hideTokenInfo={hideTokenInfo}
+            inventoryOnly={inventoryOnly}
           />
         </div>
       </div>

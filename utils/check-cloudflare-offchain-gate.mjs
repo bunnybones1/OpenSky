@@ -98,6 +98,7 @@ export const offchainGateErrors = ({
   silverExchangeUi = '',
   silverExchangeReview = {},
   heroExchangeUi = '',
+  identityCardDetails = {},
   googleRewardUi = {},
   googleRewardCopy = [],
   rewardSources = {},
@@ -207,10 +208,7 @@ export const offchainGateErrors = ({
         'play.silverExchangeFinal',
         'play.silverExchangeFinalTooltip'
       ],
-      confirm: [
-        "env.AUTH_MODE === 'google'",
-        'play.silverExchangeWarning'
-      ],
+      confirm: ["env.AUTH_MODE === 'google'", 'play.silverExchangeWarning'],
       locale: [
         'Exchange Rate',
         '1 Silver → 1 Ticket',
@@ -264,6 +262,91 @@ export const offchainGateErrors = ({
       legacyWallet < googleReturn
     ) {
       errors.push('Google Hero exchange can reach the legacy wallet path')
+    }
+  }
+  if (Object.keys(identityCardDetails).length) {
+    for (const [name, source] of Object.entries(
+      identityCardDetails.routes ?? {}
+    )) {
+      if (!source.includes("inventoryOnly={env.AUTH_MODE === 'google'}")) {
+        errors.push(
+          `Google card details route ${name} does not select inventory-only data`
+        )
+      }
+    }
+
+    const controls = identityCardDetails.controls ?? ''
+    const identityControls = controls.match(
+      /const IdentityItemsCardDetailsControls[\s\S]*?IdentityItemsCardDetailsControls\.displayName/
+    )?.[0]
+    if (
+      !/env\.AUTH_MODE\s*===\s*['"]google['"]\s*\?\s*IdentityItemsCardDetailsControls\s*:\s*LegacyItemsCardDetailsControls/.test(
+        controls
+      )
+    ) {
+      errors.push(
+        'Google Items card details do not select the inventory-only controls'
+      )
+    }
+    if (!identityControls?.includes('cardDetails.offchainInventory')) {
+      errors.push('Google Items card details are missing inventory-only copy')
+    }
+    for (const pattern of [
+      /useTokenPriceAndSupply/,
+      /useAddToCart/,
+      /useRemoveFromCart/,
+      /useCartItem/,
+      /formatUSDCBalance/
+    ]) {
+      if (identityControls && pattern.test(identityControls)) {
+        errors.push(
+          `Google Items card details mount a market control: ${pattern.source}`
+        )
+      }
+    }
+
+    const tokenInfo = identityCardDetails.tokenInfo ?? ''
+    for (const token of [
+      'inventoryOnly?: boolean',
+      'cardDetails.inventoryBalance',
+      '!inventoryOnly'
+    ]) {
+      if (!tokenInfo.includes(token)) {
+        errors.push(
+          `Google card grade table is missing inventory guard: ${token}`
+        )
+      }
+    }
+
+    const gradeRow = identityCardDetails.gradeRow ?? ''
+    if (
+      !/!inventoryOnly\s*&&\s*\([\s\S]*?<GradeRowPrices[\s\S]*?<GradeRowSupply[\s\S]*?<GradeRowTotalSupply/.test(
+        gradeRow
+      )
+    ) {
+      errors.push(
+        'Google card grade table can mount market price or supply queries'
+      )
+    }
+    if (
+      !(identityCardDetails.gradeLabel ?? '').includes(
+        "${inventoryOnly ? 'Offchain' : ''}"
+      )
+    ) {
+      errors.push('Google card grade tooltip does not select off-chain copy')
+    }
+
+    const locale = identityCardDetails.locale ?? ''
+    for (const token of [
+      'cardDetails.offchainInventory',
+      'cardDetails.inventoryBalance',
+      'cardDetails.baseExplanationOffchain',
+      'cardDetails.goldExplanationOffchain',
+      'cardDetails.silverExplanationOffchain'
+    ]) {
+      if (!locale.includes(token)) {
+        errors.push(`Google card details copy is missing: ${token}`)
+      }
     }
   }
   if (Object.keys(googleRewardUi).length) {
@@ -372,7 +455,9 @@ export const offchainGateErrors = ({
         errors.push(`match XP receipt schema is missing safeguard: ${token}`)
       }
     }
-    if (/\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(matchRewardSource)) {
+    if (
+      /\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(matchRewardSource)
+    ) {
       errors.push('match XP grant contains a legacy chain effect')
     }
   }
@@ -383,7 +468,9 @@ export const offchainGateErrors = ({
       'POINTS_CAP'
     ]) {
       if (!conquestPointSource.includes(token)) {
-        errors.push(`Conquest point grant is missing receipt safeguard: ${token}`)
+        errors.push(
+          `Conquest point grant is missing receipt safeguard: ${token}`
+        )
       }
     }
     for (const token of [
@@ -392,10 +479,14 @@ export const offchainGateErrors = ({
       'match Conquest point receipts are immutable'
     ]) {
       if (!conquestPointMigration.includes(token)) {
-        errors.push(`Conquest point receipt schema is missing safeguard: ${token}`)
+        errors.push(
+          `Conquest point receipt schema is missing safeguard: ${token}`
+        )
       }
     }
-    if (/\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(conquestPointSource)) {
+    if (
+      /\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(conquestPointSource)
+    ) {
       errors.push('Conquest point grant contains a legacy chain effect')
     }
   }
@@ -459,6 +550,13 @@ const main = async () => {
     silverExchangeTotal,
     silverExchangeUi,
     heroExchangeUi,
+    itemsCardDetails,
+    selectSilverCardDetails,
+    selectGoldCardDetails,
+    itemsCardDetailsControls,
+    tokenInfoSection,
+    gradeRow,
+    gradeRowGrade,
     conquestInfo,
     weeklyGoldCard,
     rewardFeed,
@@ -567,6 +665,55 @@ const main = async () => {
       path.join(
         root,
         'webapp/src/HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/useConfirmHeroMintOrder.ts'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/ItemsPage/ItemsCardDetails/ItemsCardDetails.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectSilversPage/SelectSilversCardDetails/SelectSilversCardDetails.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectGoldCardsForSkinPage/SelectGoldsCardDetails/SelectGoldsCardDetails.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/ItemsPage/ItemsCardDetails/components/ItemsCardDetailsControls.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/shared/components/CardDetailsPage/CardDetailsInfoSection/TokenInfoSection/TokenInfoSection.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/shared/components/CardDetailsPage/CardDetailsInfoSection/TokenInfoSection/GradeRow/GradeRow.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/shared/components/CardDetailsPage/CardDetailsInfoSection/TokenInfoSection/GradeRow/components/GradeRowGrade.tsx'
       ),
       'utf8'
     ),
@@ -685,7 +832,10 @@ const main = async () => {
       'utf8'
     ),
     readFile(
-      path.join(root, 'cloudflare/migrations/0070_match_experience_receipts.sql'),
+      path.join(
+        root,
+        'cloudflare/migrations/0070_match_experience_receipts.sql'
+      ),
       'utf8'
     ),
     readFile(
@@ -713,6 +863,29 @@ const main = async () => {
       locale: englishLocaleSource
     },
     heroExchangeUi,
+    identityCardDetails: {
+      routes: {
+        items: itemsCardDetails,
+        silverExchange: selectSilverCardDetails,
+        goldExchange: selectGoldCardDetails
+      },
+      controls: itemsCardDetailsControls,
+      tokenInfo: tokenInfoSection,
+      gradeRow,
+      gradeLabel: gradeRowGrade,
+      locale: [
+        'cardDetails.offchainInventory',
+        'cardDetails.inventoryBalance',
+        'cardDetails.baseExplanationOffchain',
+        'cardDetails.goldExplanationOffchain',
+        'cardDetails.silverExplanationOffchain'
+      ]
+        .map(key => {
+          const [, name] = key.split('.')
+          return `${key}=${englishLocale.cardDetails[name]}`
+        })
+        .join('\n')
+    },
     googleRewardUi: {
       conquestInfo,
       weeklyGoldCard,
@@ -758,7 +931,12 @@ const main = async () => {
       englishLocale.play.silverExchangeRate,
       englishLocale.play.silverExchangeWarning,
       englishLocale.play.silverTicketsReceived_one,
-      englishLocale.play.silverTicketsReceived_other
+      englishLocale.play.silverTicketsReceived_other,
+      englishLocale.cardDetails.offchainInventory,
+      englishLocale.cardDetails.inventoryBalance,
+      englishLocale.cardDetails.baseExplanationOffchain,
+      englishLocale.cardDetails.goldExplanationOffchain,
+      englishLocale.cardDetails.silverExplanationOffchain
     ],
     rewardSources: {
       conquestDelivery,

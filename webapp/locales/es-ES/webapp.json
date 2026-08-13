@@ -47,13 +47,18 @@
   "cardDetails": {
     "artist": "Arte por",
     "baseExplanation": "No intercambiable, desbloqueado al subir de nivel",
+    "baseExplanationOffchain": "Se desbloquea con la progresión de Cloud Weasel y se guarda en tu inventario.",
     "baseNotTradable": "Las cartas base no son intercambiables.",
     "enchantNotTradable": "Las cartas de encantamiento no son intercambiables.",
     "goldExplanation": "Intercambiable, cantidad limitada, ganado a través de Conquista",
+    "goldExplanationOffchain": "Carta Oro cosmética obtenida en Conquista y entregada en tu inventario de Cloud Weasel.",
+    "inventoryBalance": "Inventario",
     "newBadge": "NUEVO",
+    "offchainInventory": "Objeto del inventario de Cloud Weasel. Disponible para jugar y coleccionar.",
     "relatedCards": "CARTAS RELACIONADAS",
     "relatedDecks": "MAZOS RELACIONADOS",
     "silverExplanation": "Intercambiable, ganado a través de Conquista y Tabla de clasificación",
+    "silverExplanationOffchain": "Carta Plata cosmética obtenida en Conquista o la clasificación y guardada en tu inventario de Cloud Weasel.",
     "tokenNotTradable": "Las cartas de ficha no son intercambiables."
   },
   "cards": {

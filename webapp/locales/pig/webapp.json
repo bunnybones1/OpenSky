@@ -58,13 +58,18 @@
   "cardDetails": {
     "artist": "Artay Byay",
     "baseExplanation": "Onnay-adabletray, unlockeday byay evelinglay upay",
+    "baseExplanationOffchain": "Unlockeday roughthay Oudclay Easelway ogressionpray anday oredstay inay ouryay inventoryay.",
     "baseNotTradable": "Asebay ardscay areyay otnay adabletray.",
     "enchantNotTradable": "Enchantay ardscay areyay otnay adabletray.",
     "goldExplanation": "Adabletray, imitedlay upplysay, onway roughthay Onquestcay",
+    "goldExplanationOffchain": "Osmeticcay Oldgay ardcay earneday roughthay Onquestcay anday eliveredday otay ouryay Oudclay Easelway inventoryay.",
+    "inventoryBalance": "Inventoryay",
     "newBadge": "EWNAY",
+    "offchainInventory": "Oudclay Easelway inventoryay itemay. Availableyay orfay ameplaygay anday ollectioncay.",
     "relatedCards": "ELATEDRAY ARDSCAY",
     "relatedDecks": "ELATEDRAY ECKSDAY",
     "silverExplanation": "Adabletray, onway roughthay Onquestcay anday Eaderboardlay",
+    "silverExplanationOffchain": "Osmeticcay Ilversay ardcay earneday roughthay Onquestcay oryay Eaderboardlay anday oredstay inay ouryay Oudclay Easelway inventoryay.",
     "tokenNotTradable": "Okentay ardscay areyay otnay adabletray."
   },
   "cards": {

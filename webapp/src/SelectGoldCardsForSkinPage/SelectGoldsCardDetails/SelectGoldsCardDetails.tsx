@@ -24,7 +24,7 @@ export const SelectGoldsCardDetails = memo(() => {
       Controls={SelectGoldCardDetailsControls}
       id={id}
       allowedGrades={ALLOWED_GRADE}
-      hideTokenInfo={env.AUTH_MODE === 'google'}
+      inventoryOnly={env.AUTH_MODE === 'google'}
     />
   )
 })

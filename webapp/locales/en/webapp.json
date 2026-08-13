@@ -58,13 +58,18 @@
   "cardDetails": {
     "artist": "Art By",
     "baseExplanation": "Non-tradable, unlocked by leveling up",
+    "baseExplanationOffchain": "Unlocked through Cloud Weasel progression and stored in your inventory.",
     "baseNotTradable": "Base cards are not tradable.",
     "enchantNotTradable": "Enchant cards are not tradable.",
     "goldExplanation": "Tradable, limited supply, won through Conquest",
+    "goldExplanationOffchain": "Cosmetic Gold card earned through Conquest and delivered to your Cloud Weasel inventory.",
+    "inventoryBalance": "Inventory",
     "newBadge": "NEW",
+    "offchainInventory": "Cloud Weasel inventory item. Available for gameplay and collection.",
     "relatedCards": "RELATED CARDS",
     "relatedDecks": "RELATED DECKS",
     "silverExplanation": "Tradable, won through Conquest and Leaderboard",
+    "silverExplanationOffchain": "Cosmetic Silver card earned through Conquest or Leaderboard and stored in your Cloud Weasel inventory.",
     "tokenNotTradable": "Token cards are not tradable."
   },
   "cards": {
