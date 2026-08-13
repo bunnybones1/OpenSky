@@ -283,14 +283,19 @@ its D1 batch runs, applies only that delta, and then completes the receipt.
 Concurrent distinct reports cannot claim the same remaining progress, while
 simultaneous retries of one report cannot replay it.
 
-The Cloudflare release gate also keeps the preserved legacy transaction pages
-out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
-Stripe configuration are ready, its original page may return only after the
-USDC/silver mint controls are removed and Checkout continues to fulfill the
-off-chain receipt contract. The same rule applies to any future paid Conquest
-ticket UI. The Hero-skin interface may be exposed to Google identities only
-through the off-chain Gold exchange; its legacy wallet transaction
-implementation remains excluded.
+The Cloudflare release gate also keeps preserved legacy transaction controls
+out of `IdentityApp`. Premium SkyPass retains its original page, artwork, reward
+details, and premium-track entry, but Google identities mount only an
+identity-native Stripe control; the nested USDC/silver wallet path cannot
+mount. Stripe availability is an authenticated server capability and remains
+disabled until all secrets, exact Price ID, webhook, and redirect configuration
+are present. Checkout creation and the retrieved signed event must match the
+source USD 14.95 price, while D1 independently refuses a successful SkyPass
+payment at any other amount. Google copy describes D1 inventory and hides the
+legacy mint badges. The same rule applies to any future paid Conquest ticket
+UI, whose source price is pinned at USD 1.50. The Hero-skin interface may be
+exposed to Google identities only through the off-chain Gold exchange; its
+legacy wallet transaction implementation remains excluded.
 
 ## Source RPC disposition
 

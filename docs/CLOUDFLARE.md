@@ -262,6 +262,14 @@ and progress are not migrated.
   make retries and concurrent cron ticks idempotent.
 - Authenticated identities can load the original payment-provider product
   catalog, including the Stripe SkyPass product code used by the preserved UI.
+  The Google identity app now mounts the original Season SkyPass purchase page
+  and premium-track entry while substituting its wallet/USDC controls with an
+  identity-native Stripe button. The player capability projection is
+  authenticated and reveals no secrets; its checkout start is same-origin.
+  Source prices are policy rather than display hints: Checkout creation, the
+  retrieved signed event, and D1 success triggers all require USD 14.95 for
+  `skypass_0001` or USD 1.50 for `conquest_tickets_0001` before off-chain
+  fulfillment can complete.
   Source-compatible Stripe Checkout creation and webhook fulfillment are ported
   behind optional configuration. The webhook verifies Stripe's raw-body
   signature, retrieves the event from Stripe, validates local identity/product
@@ -269,7 +277,14 @@ and progress are not migrated.
   as an immutable event receipt. Creation reuses its Stripe idempotency key after
   an indeterminate response; fulfillment tolerates duplicates, concurrency,
   retries, delayed methods, and out-of-order success after failure. Production
-  has no Stripe configuration, so this surface remains dormant. Mobile receipt
+  has no Stripe configuration, so the preserved page truthfully renders a
+  disabled `COMING SOON` control. Migration
+  `0091_stripe_product_price_policy.sql` and Worker version
+  `f06a78c7-d375-446a-ab01-21e82c8c13b6` were deployed on 2026-08-13. Live
+  signed-in verification confirmed `GO PREMIUM` navigation, Season 62 reward
+  content, Google off-chain copy, and a disabled checkout. Anonymous capability
+  access returned 401; D1 retained zero payment, event, and fulfillment rows
+  with both price-policy triggers installed and no migrations pending. Mobile receipt
   verification and Sequence/on-chain transaction composition remain disabled.
   The source staff payment list and per-payment log list are also ported behind
   the existing deny-by-default `ADMIN` role. A database-assigned numeric ID
