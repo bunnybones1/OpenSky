@@ -114,6 +114,9 @@ export const offchainGateErrors = ({
   leaderboardRewardSource = '',
   leaderboardRewardPolicySource = '',
   leaderboardRewardPolicyMigration = '',
+  conquestV2RewardSource = '',
+  conquestV2RewardPolicySource = '',
+  conquestV2RewardPolicyMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -606,6 +609,66 @@ export const offchainGateErrors = ({
       )
     }
   }
+  if (conquestV2RewardSource || conquestV2RewardPolicyMigration) {
+    for (const token of [
+      'conquest_v2_reward_schedule_activations',
+      'CONQUEST_V2_REWARD_POLICY_VERSION',
+      'CONQUEST_V2_REWARD_POLICY_HASH',
+      'conquest_v2_reward_cycle_policy_receipts',
+      'schedule!.settings_version === schedule!.current_settings_version',
+      'resumableSchedule(database, now)',
+      'value !==\n          conquestV2SilverCardCount(',
+      "crypto.subtle.digest(\n      'SHA-256'",
+      'encoder.encode(`${seed}:${index}`)',
+      '% pool.length'
+    ]) {
+      if (!conquestV2RewardSource.includes(token)) {
+        errors.push(`Conquest V2 reward is missing policy safeguard: ${token}`)
+      }
+    }
+    for (const token of [
+      'cloud-weasel-offchain-conquest-v2-v1',
+      'CONQUEST_V2_TREASURE_TOTAL_POINTS',
+      'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS',
+      'Math.fround',
+      "inventory: ['SW_SILVER_CARDS', 'card-id', 1]",
+      "legacyUsdc: 'audit-only; player inventory and notification value are zero'",
+      'calculatedConquestV2RewardPolicyHash'
+    ]) {
+      if (!conquestV2RewardPolicySource.includes(token)) {
+        errors.push(`Conquest V2 policy hash is missing source input: ${token}`)
+      }
+    }
+    for (const token of [
+      'conquest_v2_reward_schedule_activations',
+      "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE'))",
+      'activated_by_user_id <> created_by_user_id',
+      'settings.mutation_id = NEW.settings_mutation_id',
+      'NEW.silver_counts_json IS NOT OLD.silver_counts_json',
+      'conquest_v2_reward_policy_cards',
+      'conquest_v2_reward_cycle_policy_receipts',
+      'Conquest V2 reward cycle creation is invalid',
+      'Conquest V2 reward snapshot is incomplete',
+      "json_array_length(NEW.silver_card_ids_json) = CAST(json_extract(",
+      'active Conquest V2 reward policy receipt required',
+      'Conquest V2 reward cycle policy receipts are immutable'
+    ]) {
+      if (!conquestV2RewardPolicyMigration.includes(token)) {
+        errors.push(`Conquest V2 policy schema is missing safeguard: ${token}`)
+      }
+    }
+    const configuredHash = conquestV2RewardPolicySource.match(
+      /CONQUEST_V2_REWARD_POLICY_HASH\s*=\s*\n?\s*['"]([0-9a-f]{64})['"]/
+    )?.[1]
+    if (
+      !configuredHash ||
+      !conquestV2RewardPolicyMigration.includes(configuredHash)
+    ) {
+      errors.push(
+        'Conquest V2 policy runtime hash is not pinned by the D1 activation schema'
+      )
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -701,7 +764,9 @@ const main = async () => {
     conquestPointMigration,
     referralStickerScheduleMigration,
     leaderboardRewardPolicySource,
-    leaderboardRewardPolicyMigration
+    leaderboardRewardPolicyMigration,
+    conquestV2RewardPolicySource,
+    conquestV2RewardPolicyMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -992,6 +1057,17 @@ const main = async () => {
         'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
       ),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/conquest-v2-reward-policy.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0089_conquest_v2_reward_policy_activation.sql'
+      ),
+      'utf8'
     )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
@@ -1111,6 +1187,9 @@ const main = async () => {
     leaderboardRewardSource: leaderboardRewards,
     leaderboardRewardPolicySource,
     leaderboardRewardPolicyMigration,
+    conquestV2RewardSource: conquestV2Rewards,
+    conquestV2RewardPolicySource,
+    conquestV2RewardPolicyMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })

@@ -141,7 +141,16 @@ protected by an immutable cycle entry and award receipt. Each award moves from
 the exact feed payload, and the zero-USDC notification all agree. A failed
 completion rolls back all four effects, and a retry cannot double-credit them.
 Activation is rejected unless every qualifying treasure level receives at
-least one off-chain item.
+least one off-chain item. An enabled schedule is not reward authority: a
+second actor must activate a digest covering the source thresholds, float32
+quantity math, generated card catalog and season rules, deterministic draw,
+off-chain item mapping, and zero-USDC player contract. Approval also binds the
+exact current economy-settings version, mutation ID, Silver weight, and all
+eleven resulting level quantities. A settings edit makes that approval dormant
+before a cycle starts. Once a cycle freezes its exact settings and ordered
+eligible-card pool in an immutable receipt and rolls over points, delivery
+continues from that receipt even if settings later change, so an earned reward
+cannot be stranded.
 The former USDC amount is reconciliation metadata only: it must never become
 inventory, a claim, a notification value, or player-facing promise without a
 separately reviewed noncash reward design.

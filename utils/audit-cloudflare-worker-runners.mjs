@@ -27,6 +27,8 @@ export const EXPECTED_RUNNERS = {
     evidenceFile: 'cloudflare/src/conquest-v2-reward-worker.ts',
     evidence: [
       'runDueConquestV2Rewards',
+      'conquest_v2_reward_schedule_activations',
+      'conquest_v2_reward_cycle_policy_receipts',
       'player_conquest_v2_reward_awards',
       'player_items'
     ]

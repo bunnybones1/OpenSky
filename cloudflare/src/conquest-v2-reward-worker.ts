@@ -1,15 +1,16 @@
-import cardLibrary from './generated/card-library.json'
-
 import { ConquestV2EconomyRepository } from './conquest-v2-economy'
+import {
+  CONQUEST_V2_REWARD_POLICY_HASH,
+  CONQUEST_V2_REWARD_POLICY_VERSION,
+  CONQUEST_V2_TREASURE_TOTAL_WEIGHTS,
+  conquestV2RewardCardIds,
+  conquestV2SilverCardCount
+} from './conquest-v2-reward-policy'
 
 const EVENT_ID = 2
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_PLAYERS_PER_RUN = 5
 const SILVER_TOKEN_OFFSET = 65_536
-
-const TREASURE_TOTAL_WEIGHTS = [
-  0, 1, 3.19, 6.9, 12.65, 21.32, 34.29, 53.99, 84.67, 134.32, 218.69
-] as const
 
 interface ScheduleRow {
   version: number
@@ -23,6 +24,17 @@ interface ScheduleRow {
   delivery_delay_seconds: number | null
   reward_card_sets_json: string | null
   starts_at: string
+  activation_status: 'DRAFT' | 'ACTIVE' | null
+  policy_version: number | null
+  policy_hash: string | null
+  policy_activated_at: string | null
+  settings_version: number | null
+  settings_mutation_id: string | null
+  approved_weight_per_silver_card: number | null
+  silver_counts_json: string | null
+  current_settings_version: number
+  current_settings_mutation_id: string
+  current_weight_per_silver_card: number
 }
 
 interface CycleRow {
@@ -75,16 +87,10 @@ const emptyTreasureInfo = (): ConquestV2OffchainTreasureInfo =>
 
 const goFloat32 = (value: number) => Math.fround(value)
 
-export const conquestV2SilverCardCount = (
-  weightPerSilverCard: number,
-  treasureLevel: number
-): number =>
-  Math.floor(
-    Math.fround(
-      Math.fround(TREASURE_TOTAL_WEIGHTS[treasureLevel] ?? 0) *
-        Math.fround(weightPerSilverCard)
-    )
-  )
+export {
+  conquestV2RewardCardIds,
+  conquestV2SilverCardCount
+} from './conquest-v2-reward-policy'
 
 export const conquestV2LegacyUsdcMicros = (
   poolAmount: number,
@@ -94,22 +100,9 @@ export const conquestV2LegacyUsdcMicros = (
   const divisor = totalWeight === 0 ? 1 : totalWeight
   const share = Math.fround(
     Math.fround(Math.fround(poolAmount) / Math.fround(divisor)) *
-      Math.fround(TREASURE_TOTAL_WEIGHTS[treasureLevel] ?? 0)
+    Math.fround(CONQUEST_V2_TREASURE_TOTAL_WEIGHTS[treasureLevel] ?? 0)
   )
   return Math.round(Number(share) * 1_000_000)
-}
-
-export const conquestV2RewardCardIds = (
-  season: number,
-  cardSets: string[]
-): number[] => {
-  const validCards = cardLibrary.cards.filter(
-    card => card.validFromSeason <= season
-  )
-  const selected = validCards.filter(card => cardSets.includes(card.set))
-  // CardIndex.GetRandomCardFromList falls back to all season-valid PLAY cards
-  // when every configured-set card is excluded. Preserve that source behavior.
-  return (selected.length > 0 ? selected : validCards).map(card => card.id)
 }
 
 export const mostRecentConquestV2RewardTime = (
@@ -127,22 +120,70 @@ export const mostRecentConquestV2RewardTime = (
   return new Date(firstRunAt.getTime() + weeks * WEEK_MS)
 }
 
+const scheduleSelect = `
+  SELECT schedule.version, schedule.enabled, schedule.weekday_utc,
+         schedule.hour_utc, schedule.minute_utc, schedule.first_run_at,
+         schedule.first_season, schedule.first_week,
+         schedule.delivery_delay_seconds, schedule.reward_card_sets_json,
+         schedule.starts_at, activation.status AS activation_status,
+         activation.policy_version, activation.policy_hash,
+         activation.activated_at AS policy_activated_at,
+         activation.settings_version, activation.settings_mutation_id,
+         activation.weight_per_silver_card AS approved_weight_per_silver_card,
+         activation.silver_counts_json, settings.version AS current_settings_version,
+         settings.mutation_id AS current_settings_mutation_id,
+         settings.weight_per_silver_card AS current_weight_per_silver_card
+  FROM conquest_v2_reward_schedule_versions schedule
+  LEFT JOIN conquest_v2_reward_schedule_activations activation
+    ON activation.schedule_version = schedule.version
+  JOIN conquest_v2_pool_settings settings ON settings.singleton = 1`
+
+const approvedSchedule = (schedule: ScheduleRow | null, now: Date) =>
+  schedule?.enabled === 1 &&
+  schedule.activation_status === 'ACTIVE' &&
+  schedule.policy_version === CONQUEST_V2_REWARD_POLICY_VERSION &&
+  schedule.policy_hash === CONQUEST_V2_REWARD_POLICY_HASH &&
+  schedule.policy_activated_at !== null &&
+  schedule.policy_activated_at <= now.toISOString()
+
 const activeSchedule = async (
   database: D1Database,
   now: Date
 ): Promise<ScheduleRow | null> => {
   const schedule = await database
     .prepare(
-      `SELECT version, enabled, weekday_utc, hour_utc, minute_utc,
-              first_run_at, first_season, first_week,
-              delivery_delay_seconds, reward_card_sets_json, starts_at
-       FROM conquest_v2_reward_schedule_versions
-       WHERE starts_at <= ?
-       ORDER BY version DESC LIMIT 1`
+      `${scheduleSelect}
+       WHERE schedule.starts_at <= ?
+       ORDER BY schedule.version DESC LIMIT 1`
     )
     .bind(now.toISOString())
     .first<ScheduleRow>()
-  return schedule?.enabled === 1 ? schedule : null
+  return approvedSchedule(schedule, now) &&
+    schedule!.settings_version === schedule!.current_settings_version &&
+    schedule!.settings_mutation_id ===
+      schedule!.current_settings_mutation_id &&
+    schedule!.approved_weight_per_silver_card ===
+      schedule!.current_weight_per_silver_card
+    ? schedule
+    : null
+}
+
+const resumableSchedule = async (
+  database: D1Database,
+  now: Date
+): Promise<ScheduleRow | null> => {
+  const schedule = await database
+    .prepare(
+      `${scheduleSelect}
+       JOIN conquest_v2_reward_cycles cycle
+         ON cycle.schedule_version = schedule.version
+       JOIN conquest_v2_reward_cycle_policy_receipts receipt
+         ON receipt.cycle_id = cycle.id
+       WHERE cycle.status <> 'COMPLETED'
+       ORDER BY cycle.scheduled_at, cycle.id LIMIT 1`
+    )
+    .first<ScheduleRow>()
+  return approvedSchedule(schedule, now) ? schedule : null
 }
 
 const validatedSchedule = (schedule: ScheduleRow) => {
@@ -154,7 +195,9 @@ const validatedSchedule = (schedule: ScheduleRow) => {
     schedule.reward_card_sets_json === null ||
     schedule.weekday_utc === null ||
     schedule.hour_utc === null ||
-    schedule.minute_utc === null
+    schedule.minute_utc === null ||
+    schedule.approved_weight_per_silver_card === null ||
+    schedule.silver_counts_json === null
   ) {
     throw new Error('Conquest V2 reward schedule is malformed')
   }
@@ -177,11 +220,30 @@ const validatedSchedule = (schedule: ScheduleRow) => {
   ) {
     throw new Error('Conquest V2 reward schedule is malformed')
   }
+  const silverCounts = JSON.parse(schedule.silver_counts_json) as unknown
+  if (
+    !Array.isArray(silverCounts) ||
+    silverCounts.length !== 11 ||
+    silverCounts.some(
+      (value, level) =>
+        !Number.isInteger(value) ||
+        value !==
+          conquestV2SilverCardCount(
+            schedule.approved_weight_per_silver_card!,
+            level
+          )
+    ) ||
+    silverCounts[0] !== 0 ||
+    silverCounts.slice(1).some(value => value < 1)
+  ) {
+    throw new Error('Conquest V2 reward schedule is malformed')
+  }
   return {
     first,
     firstSeason: schedule.first_season,
     firstWeek: schedule.first_week,
     deliveryDelaySeconds: schedule.delivery_delay_seconds,
+    silverCounts,
     rewardCardSets: (() => {
       const parsed = JSON.parse(schedule.reward_card_sets_json) as unknown
       if (
@@ -268,8 +330,7 @@ export const conquestV2OffchainTreasureInfo = async (
   if (!scheduledAt) return empty
   const { season } = cycleSeasonWeek(schedule, scheduledAt)
   if (conquestV2RewardCardIds(season, rewardCardSets).length === 0) return empty
-  const config = await new ConquestV2EconomyRepository(database).config()
-  const weightPerSilverCard = config.settings.weightPerSilverCard
+  const weightPerSilverCard = schedule.approved_weight_per_silver_card!
   if (
     weightPerSilverCard <= 0 ||
     conquestV2SilverCardCount(weightPerSilverCard, 1) < 1
@@ -303,8 +364,7 @@ const ensureCycle = async (
   const { deliveryDelaySeconds, rewardCardSets } = validatedSchedule(schedule)
   const { season, week } = cycleSeasonWeek(schedule, scheduledAt)
   const economy = new ConquestV2EconomyRepository(database)
-  const config = await economy.config()
-  const weightPerSilverCard = config.settings.weightPerSilverCard
+  const weightPerSilverCard = schedule.approved_weight_per_silver_card!
   if (
     weightPerSilverCard <= 0 ||
     conquestV2SilverCardCount(weightPerSilverCard, 1) < 1
@@ -318,15 +378,14 @@ const ensureCycle = async (
     throw new Error('Conquest V2 reward card pool is empty')
   }
   const pool = await economy.poolSnapshot(now)
-  await database
-    .prepare(
+  await database.batch([
+    database.prepare(
       `INSERT OR IGNORE INTO conquest_v2_reward_cycles
          (schedule_version, scheduled_at, delivery_at, season, week,
           random_seed, reward_card_sets_json, eligible_card_ids_json, pool_amount,
           weight_per_silver_card, status, attempt_count, started_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', 0, ?)`
-    )
-    .bind(
+    ).bind(
       schedule.version,
       scheduledAt.toISOString(),
       new Date(
@@ -340,8 +399,28 @@ const ensureCycle = async (
       pool.amount,
       weightPerSilverCard,
       now.toISOString()
+    ),
+    database.prepare(
+      `INSERT OR IGNORE INTO conquest_v2_reward_cycle_policy_receipts
+         (cycle_id, schedule_version, policy_version, policy_hash,
+          settings_version, settings_mutation_id, weight_per_silver_card,
+          silver_counts_json, eligible_card_ids_json, created_at)
+       SELECT id, schedule_version, ?, ?, ?, ?, ?, ?, eligible_card_ids_json,
+              started_at
+       FROM conquest_v2_reward_cycles
+       WHERE schedule_version = ? AND scheduled_at = ?
+         AND status = 'PREPARING'`
+    ).bind(
+      CONQUEST_V2_REWARD_POLICY_VERSION,
+      CONQUEST_V2_REWARD_POLICY_HASH,
+      schedule.settings_version,
+      schedule.settings_mutation_id,
+      weightPerSilverCard,
+      schedule.silver_counts_json,
+      schedule.version,
+      scheduledAt.toISOString()
     )
-    .run()
+  ])
   const cycle = await cycleBySchedule(
     database,
     schedule.version,
@@ -731,7 +810,9 @@ export const runDueConquestV2Rewards = async (
   database: D1Database,
   now = new Date()
 ): Promise<ConquestV2RewardRun> => {
-  const schedule = await activeSchedule(database, now)
+  const schedule =
+    (await resumableSchedule(database, now)) ??
+    (await activeSchedule(database, now))
   if (!schedule) return { status: 'disabled', delivered: 0 }
   const scheduledAt = await nextDueTime(database, schedule, now)
   if (!scheduledAt) return { status: 'not_due', delivered: 0 }

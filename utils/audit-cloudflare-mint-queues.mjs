@@ -83,6 +83,8 @@ export const EXPECTED_QUEUES = {
     sourceProducer: true,
     disposition: 'offchain',
     evidence: [
+      'conquest_v2_reward_schedule_activations',
+      'conquest_v2_reward_cycle_policy_receipts',
       'player_conquest_v2_reward_inventory_grants',
       'Conquest V2 reward inventory grants are immutable',
       'Conquest V2 reward receipt completion is invalid'
@@ -331,6 +333,13 @@ const main = async () => {
         path.join(
           root,
           'cloudflare/migrations/0079_conquest_v2_reward_receipts.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0089_conquest_v2_reward_policy_activation.sql'
         ),
         'utf8'
       )

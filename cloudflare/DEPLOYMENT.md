@@ -85,6 +85,10 @@
   the exact source weekly/monthly rank rollovers run only after delivery
   completes. The source-compatible next-reward read uses that same immutable
   schedule and fails explicitly while production has no configured cadence
+- Source-faithful Conquest V2 weekly treasure rollover and delayed off-chain
+  Silver delivery, dormant until a two-actor approval binds the exact cadence,
+  settings mutation, algorithm digest, quantities, and generated-card pool;
+  started cycles remain deliverable from immutable receipts
 - Retry-safe ranked-constructed deck aggregation, including source Glicko
   transitions, Apprentice eligibility, match-status counters, current-season
   highest-player wins, a global Durable Object serializer, and D1 receipts

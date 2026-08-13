@@ -51,7 +51,7 @@ const evidence = {
   SendConquestExtraRewardQueue:
     'SendConquestExtraRewardQueue has no production producer',
   ConquestV2SendRewardQueue:
-    'player_conquest_v2_reward_inventory_grants Conquest V2 reward inventory grants are immutable Conquest V2 reward receipt completion is invalid',
+    'conquest_v2_reward_schedule_activations conquest_v2_reward_cycle_policy_receipts player_conquest_v2_reward_inventory_grants Conquest V2 reward inventory grants are immutable Conquest V2 reward receipt completion is invalid',
   MintLeaderboardRewardsQueue:
     'leaderboard_reward_schedule_activations leaderboard_reward_cycle_policy_receipts player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid',
   MintCardBackRewardsQueue:

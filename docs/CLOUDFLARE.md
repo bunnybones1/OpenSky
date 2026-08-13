@@ -496,6 +496,14 @@ and progress are not migrated.
   `CONQUEST_CONFIG_WRITE` capability and creates an immutable audit. The public
   legacy USDC pool and treasure amounts remain at zero until a separate Cloud
   Weasel settlement contract is explicitly approved.
+- Conquest V2 weekly Silver delivery additionally requires an immutable
+  cadence and a distinct reviewer to activate the exact source-algorithm
+  digest against a specific economy-settings mutation. Every cycle receipts
+  the exact season-valid ordered card pool and per-level quantities before
+  points can roll over. A pre-cycle settings edit makes approval dormant; a
+  cycle that has already rolled over points remains deliverable from its frozen
+  receipt. Production has no cadence or activation and therefore exposes no
+  weekly treasure value.
 - App Developer Key management preserves the source create/list/enable/disable
   and one-year token-generation contracts behind both `ADMIN` and a dormant
   `APP_DEV_KEY_WRITE` capability. Enabled name/email uniqueness is enforced by

@@ -175,6 +175,38 @@ const validInput = () => ({
     'active leaderboard reward policy receipt required; ' +
     'leaderboard reward cycle policy receipts are immutable; ' +
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  conquestV2RewardSource:
+    'conquest_v2_reward_schedule_activations; ' +
+    'CONQUEST_V2_REWARD_POLICY_VERSION; CONQUEST_V2_REWARD_POLICY_HASH; ' +
+    'conquest_v2_reward_cycle_policy_receipts; ' +
+    'schedule!.settings_version === schedule!.current_settings_version; ' +
+    'resumableSchedule(database, now); ' +
+    'value !==\n          conquestV2SilverCardCount(; ' +
+    "crypto.subtle.digest(\n      'SHA-256'; " +
+    'encoder.encode(`${seed}:${index}`); % pool.length; ' +
+    'INSERT INTO player_items; award_key',
+  conquestV2RewardPolicySource:
+    'cloud-weasel-offchain-conquest-v2-v1; ' +
+    'CONQUEST_V2_TREASURE_TOTAL_POINTS; ' +
+    'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS; Math.fround; ' +
+    "inventory: ['SW_SILVER_CARDS', 'card-id', 1]; " +
+    "legacyUsdc: 'audit-only; player inventory and notification value are zero'; " +
+    'calculatedConquestV2RewardPolicyHash; ' +
+    "CONQUEST_V2_REWARD_POLICY_HASH = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'",
+  conquestV2RewardPolicyMigration:
+    'conquest_v2_reward_schedule_activations; ' +
+    "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE')); " +
+    'activated_by_user_id <> created_by_user_id; ' +
+    'settings.mutation_id = NEW.settings_mutation_id; ' +
+    'NEW.silver_counts_json IS NOT OLD.silver_counts_json; ' +
+    'conquest_v2_reward_policy_cards; ' +
+    'conquest_v2_reward_cycle_policy_receipts; ' +
+    'Conquest V2 reward cycle creation is invalid; ' +
+    'Conquest V2 reward snapshot is incomplete; ' +
+    'json_array_length(NEW.silver_card_ids_json) = CAST(json_extract(; ' +
+    'active Conquest V2 reward policy receipt required; ' +
+    'Conquest V2 reward cycle policy receipts are immutable; ' +
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -317,6 +349,20 @@ test('rejects leaderboard fulfillment without an approved exact policy', () => {
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('LEADERBOARD_REWARD_POLICY_HASH')))
   assert.ok(errors.some(error => error.includes('two') || error.includes('activated_by_user_id')))
+  assert.ok(errors.some(error => error.includes('cycle policy receipts')))
+})
+
+test('rejects Conquest V2 fulfillment without approved settings and exact policy', () => {
+  const input = validInput()
+  input.conquestV2RewardSource =
+    'conquest_v2_reward_schedule_activations; INSERT INTO player_items; award_key'
+  input.conquestV2RewardPolicyMigration =
+    'conquest_v2_reward_schedule_activations'
+  const errors = offchainGateErrors(input)
+  assert.ok(
+    errors.some(error => error.includes('CONQUEST_V2_REWARD_POLICY_HASH'))
+  )
+  assert.ok(errors.some(error => error.includes('settings.mutation_id')))
   assert.ok(errors.some(error => error.includes('cycle policy receipts')))
 })
 
