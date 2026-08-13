@@ -3,7 +3,8 @@ import test from 'node:test'
 
 import {
   deploymentVerificationErrors,
-  extractEntryPath
+  extractEntryPath,
+  verifyDeploymentWithRetries
 } from './verify-cloudflare-deployment.mjs'
 
 const html = entry => `<script type="module" src="${entry}"></script>`
@@ -84,4 +85,44 @@ test('rejects stale manifests, cacheable HTML, and unhashed asset policy', () =>
       error.includes('locale is not Cloudflare edge no-store')
     )
   )
+})
+
+test('retries a transient edge propagation mismatch and then succeeds', async () => {
+  let verificationCalls = 0
+  let sleepCalls = 0
+  const stale = { errors: ['production game entry is stale'] }
+  const current = { errors: [], localWebEntry: 'web', localGameEntry: 'game' }
+
+  const verification = await verifyDeploymentWithRetries({
+    verify: async () => (++verificationCalls < 3 ? stale : current),
+    maxAttempts: 4,
+    retryDelayMs: 1,
+    sleep: async delay => {
+      assert.equal(delay, 1)
+      sleepCalls += 1
+    }
+  })
+
+  assert.equal(verification.attempts, 3)
+  assert.equal(verification.result, current)
+  assert.equal(sleepCalls, 2)
+})
+
+test('remains fail-closed when production never converges', async () => {
+  const stale = { errors: ['production game entry is stale'] }
+  let verificationCalls = 0
+
+  const verification = await verifyDeploymentWithRetries({
+    verify: async () => {
+      verificationCalls += 1
+      return stale
+    },
+    maxAttempts: 3,
+    retryDelayMs: 0,
+    sleep: async () => undefined
+  })
+
+  assert.equal(verification.attempts, 3)
+  assert.equal(verificationCalls, 3)
+  assert.equal(verification.result, stale)
 })

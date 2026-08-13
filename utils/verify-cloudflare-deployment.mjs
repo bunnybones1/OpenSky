@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url'
 const DEFAULT_BASE_URL = 'https://opensky-webapp.dysinski-tomasz.workers.dev'
 const ENTRY_PATTERN = /<script[^>]+src="([^"]*\/assets\/index-[a-f0-9]{8}\.js)"/
 const VERIFIED_LOCALES = ['en', 'es-ES', 'fr', 'pt-BR', 'zh', 'pig']
+const MAX_VERIFICATION_ATTEMPTS = 12
+const VERIFICATION_RETRY_DELAY_MS = 5_000
 
 export const extractEntryPath = html => html.match(ENTRY_PATTERN)?.[1]
 
@@ -128,6 +130,26 @@ export const deploymentVerificationErrors = ({
   return { errors, localWebEntry, localGameEntry }
 }
 
+export const verifyDeploymentWithRetries = async ({
+  verify,
+  maxAttempts = MAX_VERIFICATION_ATTEMPTS,
+  retryDelayMs = VERIFICATION_RETRY_DELAY_MS,
+  sleep = delay => new Promise(resolve => setTimeout(resolve, delay))
+}) => {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error('maxAttempts must be a positive integer')
+  }
+
+  let result
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    result = await verify(attempt)
+    if (result.errors.length === 0) return { result, attempts: attempt }
+    if (attempt < maxAttempts) await sleep(retryDelayMs)
+  }
+
+  return { result, attempts: maxAttempts }
+}
+
 const fetchSnapshot = async (url, includeBody = false) => {
   const response = await fetch(url, {
     headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }
@@ -150,7 +172,6 @@ const main = async () => {
     '..'
   )
   const baseUrl = (process.argv[2] || DEFAULT_BASE_URL).replace(/\/$/, '')
-  const releaseProbe = `verify=${Date.now()}`
   const [localWebHtml, localGameHtml, localLocaleEntries] = await Promise.all([
     readFile(path.join(root, 'webapp/dist/index.html'), 'utf8'),
     readFile(path.join(root, 'webapp/dist/game/cloudflare/index.html'), 'utf8'),
@@ -178,42 +199,47 @@ const main = async () => {
     )
   }
 
-  const [
-    remoteWeb,
-    remoteGame,
-    remoteWebAsset,
-    remoteGameAsset,
-    remoteLocaleEntries
-  ] = await Promise.all([
-    fetchSnapshot(`${baseUrl}/?${releaseProbe}`, true),
-    fetchSnapshot(
-      `${baseUrl}/game/cloudflare/?mode=LOCAL_BOT&skipAuth&${releaseProbe}`,
-      true
-    ),
-    fetchSnapshot(new URL(localWebEntry, baseUrl).href),
-    fetchSnapshot(new URL(localGameEntry, baseUrl).href),
-    Promise.all(
-      VERIFIED_LOCALES.map(async locale => [
-        locale,
-        await fetchSnapshot(
-          `${baseUrl}/locales/cloudflare/${locale}/webapp.json?${releaseProbe}`,
+  const verification = await verifyDeploymentWithRetries({
+    verify: async attempt => {
+      const releaseProbe = `verify=${Date.now()}-${attempt}`
+      const [
+        remoteWeb,
+        remoteGame,
+        remoteWebAsset,
+        remoteGameAsset,
+        remoteLocaleEntries
+      ] = await Promise.all([
+        fetchSnapshot(`${baseUrl}/?${releaseProbe}`, true),
+        fetchSnapshot(
+          `${baseUrl}/game/cloudflare/?mode=LOCAL_BOT&skipAuth&${releaseProbe}`,
           true
+        ),
+        fetchSnapshot(new URL(localWebEntry, baseUrl).href),
+        fetchSnapshot(new URL(localGameEntry, baseUrl).href),
+        Promise.all(
+          VERIFIED_LOCALES.map(async locale => [
+            locale,
+            await fetchSnapshot(
+              `${baseUrl}/locales/cloudflare/${locale}/webapp.json?${releaseProbe}`,
+              true
+            )
+          ])
         )
       ])
-    )
-  ])
-  const remoteLocales = Object.fromEntries(remoteLocaleEntries)
 
-  const result = deploymentVerificationErrors({
-    localWebHtml,
-    localGameHtml,
-    remoteWeb,
-    remoteGame,
-    remoteWebAsset,
-    remoteGameAsset,
-    localLocales,
-    remoteLocales
+      return deploymentVerificationErrors({
+        localWebHtml,
+        localGameHtml,
+        remoteWeb,
+        remoteGame,
+        remoteWebAsset,
+        remoteGameAsset,
+        localLocales,
+        remoteLocales: Object.fromEntries(remoteLocaleEntries)
+      })
+    }
   })
+  const { result } = verification
   if (result.errors.length) {
     for (const error of result.errors) {
       process.stderr.write(`Deployment verification: ${error}\n`)
@@ -225,7 +251,7 @@ const main = async () => {
   process.stdout.write(
     `Verified ${baseUrl}: web ${result.localWebEntry}, ` +
       `game ${result.localGameEntry}, ${VERIFIED_LOCALES.length} exact locales, ` +
-      `release-safe cache policy\n`
+      `release-safe cache policy after ${verification.attempts} attempt(s)\n`
   )
 }
 
