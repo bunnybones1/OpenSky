@@ -1,1 +1,100 @@
-{}
+{
+  "cardDetails": {
+    "baseExplanationOffchain": "通过 Cloud Weasel 进度解锁，并保存在你的库存中。",
+    "goldExplanationOffchain": "通过征服模式获得的装饰性金卡，将发送到你的 Cloud Weasel 库存。",
+    "inventoryBalance": "库存",
+    "offchainInventory": "Cloud Weasel 库存物品，可用于游戏和收藏。",
+    "silverExplanationOffchain": "通过征服模式或排行榜获得的装饰性银卡，将保存在你的 Cloud Weasel 库存。"
+  },
+  "deleteAccount": {
+    "googleConfirmation": "Google 会要求你确认身份。账户访问权限会立即停止；个人资料数据将在 30 天后匿名化。"
+  },
+  "generic": {
+    "Collected": "已收藏"
+  },
+  "heroFeature": {
+    "offchainExchangeDelivered": "奖励通过链下方式发放",
+    "offchainExchangeExplanation": "每款传承英雄外观可用账户拥有的 10 张金卡兑换。奖励会立即发送到你的 Cloud Weasel 库存；无需钱包或区块链交易。",
+    "offchainExchangeFinal": "库存兑换不可撤销",
+    "offchainExchangeRate": "每款英雄外观需要 10 张金卡 · 链下奖励",
+    "offchainOrderDetailsTitle": "解锁英雄外观",
+    "selectGoldCards": "选择金卡",
+    "unlockHeroSkins": "解锁英雄外观"
+  },
+  "identityAuth": {
+    "cancelled": "Google 登录已取消。",
+    "continueWithGoogle": "使用 GOOGLE 继续",
+    "description": "登录后可跨设备保存进度，也可以直接进入练习模式。",
+    "failed": "无法完成 Google 登录。请重试或继续进入练习模式。",
+    "notConfigured": "Google 登录暂时不可用。练习模式仍可使用。",
+    "playPractice": "开始练习",
+    "signOut": "退出登录",
+    "statusUnavailable": "无法加载你的登录状态。练习模式仍可使用。",
+    "walletOptional": "连接钱包是可选功能，练习模式从不要求连接钱包。"
+  },
+  "play": {
+    "completedDeliveryNumCards": "恭喜！<white>{{ count }}</white> 张卡牌已送达！",
+    "completedDeliverySpecificCard": "恭喜！<white>{{ name }}</white> 卡牌已送达！",
+    "conquestDeckPointsTooltipMessageOffchain": "在本周结束前获得足够的征服点数即可赢得宝藏。每周奖励启用时，宝藏会将银卡发送到你的 Cloud Weasel 库存。提升宝藏等级可获得更多卡牌！",
+    "conquestWeeklyGoldsOffchain": "这些金卡会在限定时间内作为链下奖励提供。",
+    "delayedDelivery_one": "这张卡牌将在 24 小时后发送到你的牌库。",
+    "delayedDelivery_other": "这些卡牌将在 24 小时后发送到你的牌库。",
+    "delayedGoldDelivery": "金卡奖励将在 24 小时后发送到你的 Cloud Weasel 库存；",
+    "deliveryIn": "将在 {{ hours }} 小时 {{ minutes }} 分钟后送达",
+    "deliveryInProgress": "正在发放",
+    "exchangeRate": "兑换比例",
+    "gameModes": {
+      "CONQUEST": {
+        "pendingGoldsOffchain": "等待发放的卡牌"
+      }
+    },
+    "noDeliveriesPending": "目前没有等待发放的卡牌。",
+    "rewards": {
+      "levelWeeklyTreasureLineTwoOffchain": "将收藏品加入你的牌组"
+    },
+    "silverExchangeFinal": "库存兑换不可撤销",
+    "silverExchangeFinalTooltip": "兑换为征服门票的银卡无法恢复。",
+    "silverExchangeRate": "1 张银卡 → 1 张门票",
+    "silverExchangeWarning": "要将所选的账户银卡兑换为征服门票吗？此操作无法撤销。门票会立即发送到你的 Cloud Weasel 库存。",
+    "silverTicketsReceived_one": "{{ count }} 张门票",
+    "silverTicketsReceived_other": "{{ count }} 张门票",
+    "ticketsReceived": "收到的门票",
+    "treasureRewardsInactive": "每周宝藏奖励当前未启用。",
+    "treasureToolTipHeaderOffchain": "每周银卡奖励保存在 CLOUD WEASEL 中"
+  },
+  "profile": {
+    "walletConnect": "连接钱包",
+    "walletConnectInactive": "配置 Cloud Weasel 公共项目 ID 和允许的来源列表后，即可使用 WalletConnect。",
+    "walletConnecting": "正在连接…",
+    "walletConnections": "已关联的钱包",
+    "walletConnectionsDescription": "可选的只读所有权连接。你的 Google 账户仍用于登录，Cloud Weasel 奖励会保留在链下库存中。",
+    "walletConnectionsEmpty": "未关联钱包。无需钱包即可使用 Cloud Weasel 的所有免钱包功能。",
+    "walletContentsEmpty": "此钱包中未找到支持的资产。",
+    "walletContentsInactive": "启用经过审核的只读索引器配置后，将显示外部内容。",
+    "walletContentsTruncated": "此钱包包含的受支持物品超出了此视图的安全加载范围。",
+    "walletRefreshContents": "刷新内容",
+    "walletUnlink": "解除关联",
+    "walletUnlinkConfirm": "要将此钱包与 Cloud Weasel 账户解除关联吗？你的 Google 登录和链下库存不会受到影响。"
+  },
+  "purchaseSkypass": {
+    "unavailable": "即将推出"
+  },
+  "skypass": {
+    "detailsDescsOffchain": {
+      "CardBack": "{{ name }} 卡背是限时专属奖励，将发送到你的 Cloud Weasel 库存。",
+      "ConquestTickets": "使用 Cloud Weasel 库存中的征服门票进入征服模式，争夺链下奖励。",
+      "NewSticker": "{{ name }} 贴纸是限时专属奖励，将发送到你的 Cloud Weasel 库存。",
+      "SilverCard": "在你的 Cloud Weasel 库存中获得最新扩展系列的一张银卡。",
+      "StickerPoints": "积累点数，在你的 Cloud Weasel 库存中获得“邀请好友”奖励路线的限时贴纸。"
+    },
+    "premiumDescOffchain": "激活高级 Skypass，即可在你的 Cloud Weasel 库存中获得所有已解锁的赛季奖励。"
+  },
+  "tooltip": {
+    "conquestRulesLineSevenOffchain": "金卡奖励会在 24 小时后进入你的库存",
+    "goldCardsExplainerLineOneOffchain": "金卡是保存在以下位置的装饰性收藏品：",
+    "goldCardsExplainerLineTwoOffchain": "Cloud Weasel 库存，可通过征服模式获得。",
+    "progressionInfoOffchain": "将<span class='whiteText'>收藏卡牌</span>加入牌组并<span class='whiteText'>装备英雄外观</span>，即可在每场比赛中获得更多征服点数。",
+    "silverCardsExplainerLineOneOffchain": "银卡是保存在以下位置的装饰性收藏品：",
+    "silverCardsExplainerLineTwoOffchain": "Cloud Weasel 库存，可通过游戏获得。"
+  }
+}

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:locales && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -30,6 +30,7 @@
     "check:cloudflare:browser-transactions": "node --test ./utils/audit-cloudflare-browser-transactions.test.mjs && node ./utils/audit-cloudflare-browser-transactions.mjs",
     "check:cloudflare:webapp-routes": "node --test ./utils/audit-cloudflare-webapp-routes.test.mjs && node ./utils/audit-cloudflare-webapp-routes.mjs",
     "check:cloudflare:auth-mode": "node --test ./utils/audit-cloudflare-auth-mode.test.mjs && node ./utils/audit-cloudflare-auth-mode.mjs",
+    "check:cloudflare:locales": "node --test ./utils/audit-cloudflare-locales.test.mjs && node ./utils/audit-cloudflare-locales.mjs",
     "check:cloudflare:typecheck": "pnpm --filter @opensky/cloudflare typecheck && pnpm --filter @opensky/cloudflare-game-server --filter @opensky/cloudflare-match-service --filter @opensky/cloudflare-matchmaker --workspace-concurrency=1 typecheck && pnpm --filter @opensky/game-analytics typecheck:cloudflare",
     "check:cloudflare:browser-code": "pnpm --filter @opensky/webapp type-check && pnpm --dir game exec tsc --noEmit --skipLibCheck && pnpm --filter @opensky/game test",
     "check:cloudflare:main-worker": "pnpm --filter @opensky/cloudflare test",

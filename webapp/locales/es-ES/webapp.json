@@ -317,7 +317,8 @@
     "areYouSure": "¿Estás seguro? Se perderá todo tu progreso.",
     "enterYourUsername": "Ingresa tu nombre de usuario para confirmar",
     "onceDeleted": "Una vez que elimines tu cuenta, no hay vuelta atrás. Por favor, tenlo por seguro.",
-    "walletAccess": "(Todavía tendrás acceso a la cartera)"
+    "walletAccess": "(Todavía tendrás acceso a la cartera)",
+    "googleConfirmation": "Google te pedirá que confirmes tu identidad. El acceso a la cuenta se detiene de inmediato; los datos personales del perfil se anonimizan después de 30 días."
   },
   "downloadAssets": {},
   "feed": {
@@ -438,7 +439,8 @@
     "UnitPrice": "Precio unitario",
     "Unlocked": "Desbloqueado",
     "Wallet": "Cartera",
-    "walletAddress": "Dirección de la cartera"
+    "walletAddress": "Dirección de la cartera",
+    "Collected": "Coleccionado"
   },
   "heroes": {
     "MySkins": "Mis apariencias"
@@ -453,7 +455,14 @@
     "orderDetailsTitle": "ACUÑAR PIELES DE HÉROE",
     "selectedCardsCount": "{{ count }} Cartas seleccionadas",
     "selectGoldCardsTitle": "SELECCIONAR CARTAS DORADAS",
-    "totalSkinsInOrder": "TOTAL ({{ total }} ARTÍCULOS)"
+    "totalSkinsInOrder": "TOTAL ({{ total }} ARTÍCULOS)",
+    "offchainExchangeDelivered": "Las recompensas se entregan fuera de la cadena",
+    "offchainExchangeExplanation": "Canjea 10 cartas Oro de tu cuenta por cada aspecto de Héroe Legado. La recompensa se entrega de inmediato en tu inventario de Cloud Weasel; no se requiere cartera ni transacción de blockchain.",
+    "offchainExchangeFinal": "Los canjes de inventario son definitivos",
+    "offchainExchangeRate": "10 cartas Oro por aspecto de Héroe · Recompensa fuera de la cadena",
+    "offchainOrderDetailsTitle": "DESBLOQUEAR ASPECTOS DE HÉROE",
+    "selectGoldCards": "Selecciona cartas Oro",
+    "unlockHeroSkins": "DESBLOQUEAR ASPECTOS DE HÉROE"
   },
   "home": {
     "mainFeatureConquest": {
@@ -588,16 +597,16 @@
     "conquestWeeklyGolds": "Estas cartas Doradas solo están disponibles para acuñar por tiempo limitado.",
     "convertSilverWarning": "¡Atención! Estás a punto de convertir tus cartas en Tickets de Conquista, esto no se puede deshacer.",
     "convertTo": "Convertir a {{ count }}",
-    "exchangeRate": "Tasa de cambio",
+    "exchangeRate": "Tasa de canje",
     "createGameCode": "CREAR CÓDIGO DE PARTIDA",
     "customizeNotifications": "¡Puedes personalizar tus notificaciones para recibir actualizaciones sobre contenido especial!",
     "delayedGoldMinting": "Las cartas doradas tardan 24 horas en ser acuñadas una vez",
     "deliveryIn": "Entrega en {{ hours }}h {{ minutes }}m",
     "deliveryInProgress": "Entrega en curso",
-    "silverExchangeFinal": "Los intercambios de inventario son definitivos",
-    "silverExchangeFinalTooltip": "Las cartas de Plata intercambiadas por Tickets de Conquista no se pueden recuperar.",
+    "silverExchangeFinal": "Los canjes de inventario son definitivos",
+    "silverExchangeFinalTooltip": "Las cartas Plata canjeadas por Tickets de Conquista no se pueden recuperar.",
     "silverExchangeRate": "1 Plata → 1 Ticket",
-    "silverExchangeWarning": "¿Intercambiar las cartas de Plata seleccionadas por Tickets de Conquista? Esto no se puede deshacer. Los Tickets se entregan inmediatamente a tu inventario de Cloud Weasel.",
+    "silverExchangeWarning": "¿Canjear las cartas Plata seleccionadas de tu cuenta por Tickets de Conquista? Esta acción no se puede deshacer. Los Tickets se entregan de inmediato a tu inventario de Cloud Weasel.",
     "silverTicketsReceived_one": "{{ count }} Ticket",
     "silverTicketsReceived_other": "{{ count }} Tickets",
     "ticketsReceived": "Tickets recibidos",
@@ -655,7 +664,8 @@
     "rewardDetails": "DETALLES DE RECOMPENSA",
     "rewards": {
       "levelWeeklyTreasureLineOne": "SUBE DE NIVEL TU TESORO SEMANAL CON PUNTOS DE CONQUISTA",
-      "levelWeeklyTreasureLineTwo": "AGREGANDO ARTÍCULOS COMERCIALIZABLES A TU MAZO"
+      "levelWeeklyTreasureLineTwo": "AGREGANDO ARTÍCULOS COMERCIALIZABLES A TU MAZO",
+      "levelWeeklyTreasureLineTwoOffchain": "AÑADIENDO OBJETOS COLECCIONABLES A TU MAZO"
     },
     "selectDeck": "SELECCIONAR MAZO",
     "silversAvailable": "PLATAS DISPONIBLES",
@@ -672,7 +682,16 @@
     "welcome": "Bienvenido a OpenSky",
     "wonInConquest": "que se ganan en Conquista.",
     "yourFriend": "tu amigo",
-    "youWon": "Ganaste"
+    "youWon": "Ganaste",
+    "completedDeliveryNumCards": "¡Felicidades! ¡Se entregaron <white>{{ count }}</white> cartas!",
+    "completedDeliverySpecificCard": "¡Felicidades! ¡Se entregó la carta <white>{{ name }}</white>!",
+    "conquestDeckPointsTooltipMessageOffchain": "Consigue suficientes puntos de Conquista antes de que termine la semana para ganar un Tesoro. Cuando las recompensas semanales están activas, los Tesoros entregan cartas Plata a tu inventario de Cloud Weasel. ¡Sube el nivel de tu Tesoro para ganar más cartas!",
+    "conquestWeeklyGoldsOffchain": "Estas cartas Oro están disponibles como recompensas fuera de la cadena por tiempo limitado.",
+    "delayedDelivery_one": "En 24 horas esta carta se entregará a tu biblioteca.",
+    "delayedDelivery_other": "En 24 horas estas cartas se entregarán a tu biblioteca.",
+    "delayedGoldDelivery": "Las recompensas de cartas Oro se entregan a tu inventario de Cloud Weasel después de 24 horas;",
+    "treasureRewardsInactive": "Las recompensas del Tesoro semanal no están activas en este momento.",
+    "treasureToolTipHeaderOffchain": "LAS RECOMPENSAS SEMANALES DE PLATA SE GUARDAN EN CLOUD WEASEL"
   },
   "playerLeaderboard": {
     "rewardExplainer": "La recompensa de carta plateada excluye la última expansión"
@@ -770,13 +789,26 @@
     "WALLET": "CARTERA",
     "winStreak": "Racha de Victorias",
     "xpRewardDesc": "Se otorga una vez alcanzado este rango.",
-    "xpRewardTitle": "Recompensa"
+    "xpRewardTitle": "Recompensa",
+    "walletConnect": "Conectar cartera",
+    "walletConnectInactive": "WalletConnect estará disponible cuando se configure un ID de proyecto público de Cloud Weasel y la lista de orígenes permitidos.",
+    "walletConnecting": "Conectando…",
+    "walletConnections": "CARTERAS VINCULADAS",
+    "walletConnectionsDescription": "Conexión de propiedad opcional y de solo lectura. Tu cuenta de Google sigue siendo tu inicio de sesión y las recompensas de Cloud Weasel permanecen en tu inventario fuera de la cadena.",
+    "walletConnectionsEmpty": "No hay ninguna cartera vinculada. Puedes usar todas las funciones de Cloud Weasel que no requieren cartera.",
+    "walletContentsEmpty": "No se encontraron activos compatibles en esta cartera.",
+    "walletContentsInactive": "El contenido externo aparecerá cuando se habilite la configuración revisada del indexador de solo lectura.",
+    "walletContentsTruncated": "Esta cartera tiene más objetos compatibles de los que esta vista puede cargar de forma segura.",
+    "walletRefreshContents": "Actualizar contenido",
+    "walletUnlink": "Desvincular",
+    "walletUnlinkConfirm": "¿Desvincular esta cartera de tu cuenta de Cloud Weasel? Tu inicio de sesión con Google y tu inventario fuera de la cadena no se verán afectados."
   },
   "prompt": {
     "dismiss": "No mostrar esto de nuevo"
   },
   "purchaseSkypass": {
-    "inAppPurchase": "Compra en la aplicación"
+    "inAppPurchase": "Compra en la aplicación",
+    "unavailable": "PRÓXIMAMENTE"
   },
   "quests": {},
   "ranks": {
@@ -941,7 +973,15 @@
       "SW_STICKERS": "Pegatina",
       "SW_TITLES": "Título"
     },
-    "tradableTooltip": "Estos objetos están acuñados en la cadena de bloques y se pueden comerciar usando tu Cartera de Secuencia."
+    "tradableTooltip": "Estos objetos están acuñados en la cadena de bloques y se pueden comerciar usando tu Cartera de Secuencia.",
+    "detailsDescsOffchain": {
+      "CardBack": "El reverso {{ name }} es una recompensa exclusiva por tiempo limitado que se entrega en tu inventario de Cloud Weasel.",
+      "ConquestTickets": "Usa Tickets de Conquista de tu inventario de Cloud Weasel para entrar en Conquista y competir por recompensas fuera de la cadena.",
+      "NewSticker": "La pegatina {{ name }} es una recompensa exclusiva por tiempo limitado que se entrega en tu inventario de Cloud Weasel.",
+      "SilverCard": "Obtén una carta Plata de la última expansión en tu inventario de Cloud Weasel.",
+      "StickerPoints": "Consigue puntos para obtener pegatinas por tiempo limitado de las recompensas de Invita a un amigo en tu inventario de Cloud Weasel."
+    },
+    "premiumDescOffchain": "Activa el Skypass Premium para obtener todas las recompensas de temporada que hayas desbloqueado en tu inventario de Cloud Weasel."
   },
   "support": {
     "accountBanned": "Lo sentimos, parece que esta cuenta ha sido bloqueada.",
@@ -1031,9 +1071,26 @@
     "silverCardsExplainerLineOne": "Las cartas plateadas son objetos cosméticos comerciables que",
     "silverCardsExplainerLineTwo": "se obtienen de la Tabla de clasificación Clasificada.",
     "silverSavingsLineTwo": "comprando y quemando las Platas más baratas automáticamente.",
-    "skytagRequirement": "Necesitas poseer una carta para usarla como fondo de tu SkyTag."
+    "skytagRequirement": "Necesitas poseer una carta para usarla como fondo de tu SkyTag.",
+    "conquestRulesLineSevenOffchain": "Las recompensas de cartas Oro llegan a tu inventario después de 24 horas",
+    "goldCardsExplainerLineOneOffchain": "Las cartas Oro son objetos cosméticos coleccionables guardados",
+    "goldCardsExplainerLineTwoOffchain": "en el inventario de Cloud Weasel y obtenidos en Conquista.",
+    "progressionInfoOffchain": "Añade <span class='whiteText'>cartas coleccionables</span> a tu mazo y <span class='whiteText'>equipa un aspecto de Héroe</span> para conseguir más puntos de Conquista por partida.",
+    "silverCardsExplainerLineOneOffchain": "Las cartas Plata son objetos cosméticos coleccionables guardados",
+    "silverCardsExplainerLineTwoOffchain": "en el inventario de Cloud Weasel y obtenidos al jugar."
   },
   "unsupportedBrowser": {
     "browserNotSupported": "OpenSky no es compatible con tu navegador."
+  },
+  "identityAuth": {
+    "cancelled": "Se canceló el inicio de sesión con Google.",
+    "continueWithGoogle": "CONTINUAR CON GOOGLE",
+    "description": "Inicia sesión para guardar tu progreso en todos tus dispositivos o continúa directamente a Práctica.",
+    "failed": "No se pudo completar el inicio de sesión con Google. Inténtalo de nuevo o continúa a Práctica.",
+    "notConfigured": "El inicio de sesión con Google no está disponible temporalmente. Práctica sigue disponible.",
+    "playPractice": "JUGAR PRÁCTICA",
+    "signOut": "CERRAR SESIÓN",
+    "statusUnavailable": "No se pudo cargar el estado de tu sesión. Práctica sigue disponible.",
+    "walletOptional": "Conectar una cartera es opcional y nunca es necesario para Práctica."
   }
 }
