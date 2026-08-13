@@ -34,3 +34,25 @@ Only the artwork badges whose literal promise is “mint reward” are absent in
 Google mode. Every underlying card back, sticker, Silver card, ticket, point,
 title, hero, and base-card claim is still represented by the versioned D1
 SkyPass policy and immutable grant receipt.
+
+## Production verification — 2026-08-13
+
+Commit `700c673` passed the complete `pnpm build:cloudflare` release gate and
+produced browser entry `index-1fa13245.js`. That exact artifact is deployed at
+`https://opensky-webapp.dysinski-tomasz.workers.dev` as Worker version
+`66a00af9-a1dd-472d-9e2f-bb2b8c750641`; a direct production HTML read returned
+the same entry hash.
+
+A fresh, already authenticated production tab verified without mutating player
+state that:
+
+- the top identity profile showed the existing 0 Silver, 0 Gold, and 0 ticket
+  balances;
+- Items navigated to `/items/decks?sort=LAST_MODIFIED_DESCENDING`, rendered the
+  original Decks tabs, Create Deck control, and five starter decks;
+- Play resolved to `/play/practice/bot` for the current level-one account, as
+  selected by the original tutorial/storage/level logic;
+- the Account page rendered 30/856 Base cards, 0 Silver, 0 Gold, and 0 Conquest
+  Tickets in the new D1 inventory panel; and
+- neither identity inventory surface contained a Sequence, wallet, mint,
+  tradability, USDC, price, or transaction control.
