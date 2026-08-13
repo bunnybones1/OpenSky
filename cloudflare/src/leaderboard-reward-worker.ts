@@ -435,6 +435,7 @@ const deliverPlayer = async (
       discovery?.rank ?? 0
     )
   }
+  const modeAwardsJson = JSON.stringify(Object.fromEntries(modeAwards))
   const awardKey = `${cycle.id}:${userId}`
   const deliveryKey = crypto.randomUUID()
   const awardedAt = now.toISOString()
@@ -443,8 +444,9 @@ const deliverPlayer = async (
       .prepare(
         `INSERT OR IGNORE INTO player_leaderboard_reward_awards
            (award_key, cycle_id, user_id, season, week, payload_json,
-            delivery_key, awarded_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+            mode_awards_json, delivery_key, awarded_at, application_status,
+            completed_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', NULL
          WHERE EXISTS (
            SELECT 1 FROM leaderboard_reward_cycles
            WHERE id = ? AND status = 'DELIVERING'
@@ -457,12 +459,38 @@ const deliverPlayer = async (
         cycle.season,
         cycle.week,
         JSON.stringify(payload),
+        modeAwardsJson,
         deliveryKey,
         awardedAt,
         cycle.id
       )
   ]
   for (const [cardId, count] of Object.entries(silverCardCounts)) {
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO player_leaderboard_reward_inventory_grants
+             (award_id, item_type, token_id, quantity, before_balance,
+              after_balance)
+           SELECT award.id, 'SW_SILVER_CARDS', ?, ?,
+                  COALESCE(item.balance, 0), COALESCE(item.balance, 0) + ?
+           FROM player_leaderboard_reward_awards award
+           LEFT JOIN player_items item
+             ON item.user_id = award.user_id
+            AND item.item_type = 'SW_SILVER_CARDS'
+            AND item.token_id = ?
+           WHERE award.award_key = ? AND award.delivery_key = ?
+             AND award.application_status = 'PREPARING'`
+        )
+        .bind(
+          Number(cardId),
+          count,
+          count,
+          Number(cardId),
+          awardKey,
+          deliveryKey
+        )
+    )
     statements.push(
       database
         .prepare(
@@ -473,6 +501,7 @@ const deliverPlayer = async (
            WHERE EXISTS (
              SELECT 1 FROM player_leaderboard_reward_awards
              WHERE award_key = ? AND delivery_key = ?
+               AND application_status = 'PREPARING'
            )
            ON CONFLICT(user_id, item_type, token_id)
            DO UPDATE SET balance = balance + excluded.balance,
@@ -494,6 +523,29 @@ const deliverPlayer = async (
     statements.push(
       database
         .prepare(
+          `INSERT INTO player_leaderboard_reward_inventory_grants
+             (award_id, item_type, token_id, quantity, before_balance,
+              after_balance)
+           SELECT award.id, 'SW_CONQUEST_TICKET', 2, ?,
+                  COALESCE(item.balance, 0), COALESCE(item.balance, 0) + ?
+           FROM player_leaderboard_reward_awards award
+           LEFT JOIN player_items item
+             ON item.user_id = award.user_id
+            AND item.item_type = 'SW_CONQUEST_TICKET'
+            AND item.token_id = 2
+           WHERE award.award_key = ? AND award.delivery_key = ?
+             AND award.application_status = 'PREPARING'`
+        )
+        .bind(
+          payload.ticketAmount,
+          payload.ticketAmount,
+          awardKey,
+          deliveryKey
+        )
+    )
+    statements.push(
+      database
+        .prepare(
           `INSERT INTO player_items
              (user_id, item_type, token_id, balance, is_new, unlock_source,
               created_at, updated_at)
@@ -501,6 +553,7 @@ const deliverPlayer = async (
            WHERE EXISTS (
              SELECT 1 FROM player_leaderboard_reward_awards
              WHERE award_key = ? AND delivery_key = ?
+               AND application_status = 'PREPARING'
            )
            ON CONFLICT(user_id, item_type, token_id)
            DO UPDATE SET balance = balance + excluded.balance,
@@ -528,7 +581,8 @@ const deliverPlayer = async (
               token_ids_json, created_at)
            SELECT id, user_id, ?, ?, ?, ?
            FROM player_leaderboard_reward_awards
-           WHERE award_key = ? AND delivery_key = ?`
+           WHERE award_key = ? AND delivery_key = ?
+             AND application_status = 'PREPARING'`
         )
         .bind(
           mode,
@@ -548,7 +602,8 @@ const deliverPlayer = async (
             leaderboard_award_id, push_enabled)
          SELECT user_id, 'LEADERBOARD_REWARD', ?, ?, id, 1
          FROM player_leaderboard_reward_awards
-         WHERE award_key = ? AND delivery_key = ?`
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'PREPARING'`
       )
       .bind(
         JSON.stringify({ leaderboardReward: payload }),
@@ -557,12 +612,23 @@ const deliverPlayer = async (
         deliveryKey
       )
   )
+  statements.push(
+    database
+      .prepare(
+        `UPDATE player_leaderboard_reward_awards
+         SET application_status = 'APPLIED', completed_at = awarded_at
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'PREPARING'`
+      )
+      .bind(awardKey, deliveryKey)
+  )
   await database.batch(statements)
   return Boolean(
     await database
       .prepare(
         `SELECT 1 FROM player_leaderboard_reward_awards
-         WHERE award_key = ? AND delivery_key = ?`
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(awardKey, deliveryKey)
       .first()
@@ -579,8 +645,9 @@ const deliverCycle = async (
       `SELECT entries.user_id, MIN(entries.rank) AS best_rank
        FROM leaderboard_reward_entries entries
        LEFT JOIN player_leaderboard_reward_awards award
-         ON award.cycle_id = entries.cycle_id
+        ON award.cycle_id = entries.cycle_id
         AND award.user_id = entries.user_id
+        AND award.application_status = 'APPLIED'
        WHERE entries.cycle_id = ? AND entries.rank <= 250
          AND award.id IS NULL
        GROUP BY entries.user_id
@@ -620,7 +687,7 @@ const cycleDeliveryComplete = async (
           FROM leaderboard_reward_entries
           WHERE cycle_id = ? AND rank <= 250) AS expected,
          (SELECT COUNT(*) FROM player_leaderboard_reward_awards
-          WHERE cycle_id = ?) AS delivered`
+          WHERE cycle_id = ? AND application_status = 'APPLIED') AS delivered`
     )
     .bind(cycleId, cycleId)
     .first<{ expected: number; delivered: number }>()

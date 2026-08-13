@@ -92,12 +92,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     count: 2,
     disposition: 'receipt-backed-leaderboard-rewards',
     evidenceFiles: [
-      'cloudflare/migrations/0049_leaderboard_reward_worker.sql'
+      'cloudflare/migrations/0049_leaderboard_reward_worker.sql',
+      'cloudflare/migrations/0080_leaderboard_reward_receipts.sql'
     ],
     evidence: [
       'player_leaderboard_reward_awards',
       'delivery_key TEXT NOT NULL UNIQUE',
+      'player_leaderboard_reward_inventory_grants',
+      "application_status = 'PREPARING'",
       'leaderboard reward awards are immutable',
+      'leaderboard reward inventory grants are immutable',
+      'leaderboard reward notifications are immutable',
+      'leaderboard reward receipt completion is invalid',
       'database.batch'
     ]
   },

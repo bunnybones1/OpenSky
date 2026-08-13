@@ -90,6 +90,9 @@ beforeEach(async () => {
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS reject_leaderboard_reward_grant'
     ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS reject_leaderboard_reward_completion'
+    ),
     env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_leaderboard_rank_reset'),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS player_leaderboard_reward_feed_events_no_delete'
@@ -321,6 +324,44 @@ describe('weekly leaderboard reward worker', () => {
       silver: 20,
       tickets: 4
     })
+    const awardEvidence = await env.AUTH_DB.prepare(
+      `SELECT id, mode_awards_json, application_status, completed_at
+       FROM player_leaderboard_reward_awards
+       WHERE user_id = 'reward-first'`
+    ).first<{
+      id: number
+      mode_awards_json: string
+      application_status: string
+      completed_at: string
+    }>()
+    expect(awardEvidence).toMatchObject({
+      application_status: 'APPLIED',
+      completed_at: NOW.toISOString()
+    })
+    expect(Object.keys(JSON.parse(awardEvidence!.mode_awards_json))).toEqual([
+      'RANKED_CONSTRUCTED',
+      'RANKED_DISCOVERY'
+    ])
+    const inventoryEvidence = await env.AUTH_DB.prepare(
+      `SELECT item_type, SUM(quantity) AS quantity,
+              SUM(after_balance - before_balance) AS balance_change
+       FROM player_leaderboard_reward_inventory_grants
+       WHERE award_id = ? GROUP BY item_type ORDER BY item_type`
+    )
+      .bind(awardEvidence!.id)
+      .all()
+    expect(inventoryEvidence.results).toEqual([
+      {
+        item_type: 'SW_CONQUEST_TICKET',
+        quantity: 4,
+        balance_change: 4
+      },
+      {
+        item_type: 'SW_SILVER_CARDS',
+        quantity: 20,
+        balance_change: 20
+      }
+    ])
     expect(await inventoryTotals('reward-second')).toEqual({
       silver: 18,
       tickets: 4
@@ -463,6 +504,88 @@ describe('weekly leaderboard reward worker', () => {
            (SELECT COUNT(*) FROM player_leaderboard_reward_feed_events) AS feed`
       ).first()
     ).toEqual({ awards: 1, notifications: 1, feed: 2 })
+  })
+
+  it('proves atomic completion and immutable leaderboard reward evidence', async () => {
+    await setupPlayer('reward-receipt-retry', 2_000, NOW.toISOString())
+    await enableSchedule()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_leaderboard_reward_completion
+       BEFORE UPDATE OF application_status
+       ON player_leaderboard_reward_awards
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected leaderboard receipt failure');
+       END`
+    ).run()
+
+    await expect(runDueLeaderboardRewards(env.AUTH_DB, NOW)).rejects.toThrow(
+      'injected leaderboard receipt failure'
+    )
+    expect(await inventoryTotals('reward-receipt-retry')).toEqual({
+      silver: 0,
+      tickets: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_leaderboard_reward_awards) AS awards,
+           (SELECT COUNT(*)
+            FROM player_leaderboard_reward_inventory_grants) AS grants,
+           (SELECT COUNT(*)
+            FROM player_leaderboard_reward_feed_events) AS feed,
+           (SELECT COUNT(*) FROM player_notifications
+            WHERE leaderboard_award_id IS NOT NULL) AS notifications`
+      ).first()
+    ).toEqual({ awards: 0, grants: 0, feed: 0, notifications: 0 })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_leaderboard_reward_completion'
+    ).run()
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed',
+      delivered: 1
+    })
+    expect(await inventoryTotals('reward-receipt-retry')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+    const evidence = await env.AUTH_DB.prepare(
+      `SELECT
+         (SELECT application_status FROM player_leaderboard_reward_awards)
+           AS status,
+         (SELECT completed_at FROM player_leaderboard_reward_awards)
+           AS completed_at,
+         (SELECT SUM(quantity)
+          FROM player_leaderboard_reward_inventory_grants
+          WHERE item_type = 'SW_SILVER_CARDS') AS silver,
+         (SELECT quantity
+          FROM player_leaderboard_reward_inventory_grants
+          WHERE item_type = 'SW_CONQUEST_TICKET') AS tickets`
+    ).first()
+    expect(evidence).toMatchObject({
+      status: 'APPLIED',
+      completed_at: NOW.toISOString(),
+      silver: 20,
+      tickets: 4
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_leaderboard_reward_awards SET week = week + 1`
+      ).run()
+    ).rejects.toThrow('reward receipt completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_leaderboard_reward_inventory_grants
+         SET after_balance = after_balance + 1`
+      ).run()
+    ).rejects.toThrow('reward inventory grants are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_notifications SET payload = '{}'
+         WHERE leaderboard_award_id IS NOT NULL`
+      ).run()
+    ).rejects.toThrow('reward notifications are immutable')
   })
 
   it('retries a failed rank reset without repeating already delivered rewards', async () => {

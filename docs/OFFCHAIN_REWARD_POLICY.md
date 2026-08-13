@@ -74,6 +74,14 @@ deployment. The release gate scans every producer module for both canonical
 `player_items` writes and an idempotent receipt/delivery key, in addition to
 excluding transaction code from the Google-identity route tree.
 
+Weekly leaderboard rewards preserve the source rank projections, deterministic
+Silver selection, Conquest-ticket counts, per-mode feed records, and rank-up
+metadata without minting either asset. Each immutable award records the exact
+per-mode source result and moves from `PREPARING` to `APPLIED` only when every
+Silver/ticket before-and-after balance, per-mode feed payload, and aggregate
+notification agree. A finalization failure rolls the whole delivery back; a
+later retry cannot grant the same cycle twice.
+
 Delayed Conquest Gold keeps the source 24-hour delivery boundary but replaces
 the mint with identity inventory. One cron claim owns a
 `READY` -> `PREPARING` -> `APPLIED` receipt, immutable per-card quantities and
