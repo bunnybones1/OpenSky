@@ -27,6 +27,7 @@ import { padLeadingZeros } from '~/utils/stringUtils'
 import { store } from '.'
 import { Frame, Record } from './StateRecorder'
 import { ReplayPlayer } from './StateSharedTypes'
+import { fetchReplayRecords } from './replayRecordParser'
 
 class StatePlayer {
   _frameIndex: number = -1
@@ -90,9 +91,9 @@ class StatePlayer {
             archiveIndexURI: ''
           }
         : await apiClient.getMatchArchiveRecordsURI({ matchID, replayID })
-      const [initLog]: [MatchLogStateInit] = await fetch(
+      const [initLog] = (await fetchReplayRecords(
         record.recordURIs[0]
-      ).then(r => r.json())
+      )) as [MatchLogStateInit]
       // set the correct island
       if (mode.isConquestGame(initLog.gameMode)) {
         if (queryParams.island !== 'Conquest1') {
@@ -108,9 +109,9 @@ class StatePlayer {
       const diffs: Array<Array<string> | EmoteMessage> = []
       const gameStartTime = Date.parse(initLog.timestamp as unknown as string)
       for (let i = 1; i < record.recordURIs.length; i++) {
-        const archiveRecords: MatchLog[] = await fetch(
+        const archiveRecords: MatchLog[] = await fetchReplayRecords(
           record.recordURIs[i]
-        ).then(r => r.json())
+        )
         for (const record of archiveRecords) {
           let time: number | undefined
           if ('timestamp' in record) {
