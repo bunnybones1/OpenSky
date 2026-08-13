@@ -21,12 +21,11 @@ import {
 } from './abandon-penalties'
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
-import type { DeckRankReceipt } from './deck-ranks'
+import type { RankedSettlementReceipt } from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
-  applyMatchStats,
   applyWarmUpProgress
 } from './progression'
 import {
@@ -1415,13 +1414,6 @@ export class GameMatch implements DurableObject {
         metadata.proposalId,
         endedAt
       )
-      const stats = await applyMatchStats(
-        this.env.AUTH_DB,
-        metadata.proposalId,
-        metadata.match.matchSettings.season,
-        metadata.result?.winner,
-        endedAt
-      )
       const deckRanksResponse = await this.env.DECK_RANK_COORDINATOR.getByName(
         'current-library'
       ).fetch(
@@ -1445,7 +1437,8 @@ export class GameMatch implements DurableObject {
           `deck-rank coordinator returned ${deckRanksResponse.status}`
         )
       }
-      await deckRanksResponse.json<DeckRankReceipt>()
+      const { stats } =
+        await deckRanksResponse.json<RankedSettlementReceipt>()
       const experience = await applyMatchExperience(
         this.env.AUTH_DB,
         metadata.proposalId,

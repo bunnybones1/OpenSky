@@ -152,6 +152,12 @@ claims or different matches ending together therefore add every earned reward
 without either overwriting the other, while a retry returns the existing
 receipt without granting again.
 
+Ranked player and deck rating transitions are stateful rather than additive.
+The game server therefore serializes both through one global Durable Object in
+the source operation order. This prevents simultaneous match completions from
+losing counters, Glicko changes, or the rank-up XP receipt passed into the
+off-chain experience settlement.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the

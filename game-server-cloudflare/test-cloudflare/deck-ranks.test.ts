@@ -341,6 +341,12 @@ describe('source ranked-constructed deck aggregates', () => {
               status, created_at, updated_at
        FROM multiplayer_matches WHERE proposal_id = 'deck-rank-concurrent-one'`
     ).run()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 600, player_rank_stage = 'STAGE_I',
+           player_rank_state = '[-1,1750,350,600]'
+       WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126`
+    ).run()
     const coordinator = env.DECK_RANK_COORDINATOR.getByName('current-library')
     const apply = (proposalId: string) =>
       coordinator.fetch('https://deck-rank-coordinator/internal/apply', {
@@ -362,6 +368,21 @@ describe('source ranked-constructed deck aggregates', () => {
       apply('deck-rank-concurrent-two')
     ])
     expect(responses.map(response => response.status)).toEqual([200, 200])
+    const stats = await env.AUTH_DB.prepare(
+      `SELECT user_id, win_count, loss_count, tie_count
+       FROM player_account_stats
+       WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126
+       ORDER BY user_id`
+    ).all<{
+      user_id: string
+      win_count: number
+      loss_count: number
+      tie_count: number
+    }>()
+    expect(stats.results).toEqual([
+      { user_id: USER_1, win_count: 2, loss_count: 0, tie_count: 0 },
+      { user_id: USER_2, win_count: 0, loss_count: 2, tie_count: 0 }
+    ])
     const result = (await ranks()).results
     expect(
       result.find(
