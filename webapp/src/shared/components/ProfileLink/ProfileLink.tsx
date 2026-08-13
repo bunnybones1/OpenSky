@@ -16,6 +16,7 @@ import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
 import { ProfileLinkFrame } from './components/ProfileLinkFrame'
 import { XPBar } from './components/XPBar'
+import { IdentityInventoryInfo } from './IdentityInventoryInfo'
 import { ProfileLinkHighlight, ProfileLinkStyle, RightFrame } from './ProfileLink.css'
 import { WalletInfo } from './WalletInfo/WalletInfo'
 
@@ -168,6 +169,7 @@ const IdentityProfileLink = memo(({ isHomePageLink }: ProfileLinkProps) => {
           levelUpXP={player.profile.nextLevelXp}
         />
       </div>
+      <IdentityInventoryInfo />
       <div
         className={Sprinkles({
           width: 'full',

@@ -11,6 +11,7 @@ import { useAccountTagArtUrl } from '~/shared/hooks/useAccountTagArtUrl'
 import { useActiveAccount } from '~/shared/hooks/useActiveAccount'
 
 import { BattleTagPlayerInfo } from './components/BattleTagPlayerInfo'
+import { IdentityInventoryInfo } from './IdentityInventoryInfo'
 import SettingsButton from './SettingsButton/SettingsButton'
 import { SpectateInfo } from './SpectateInfo/SpectateInfo'
 import WalletInfo from './WalletInfo/WalletInfo'
@@ -91,7 +92,7 @@ export const ExpandedBattleTag = memo(() => {
           </FlexBox>
         </BattleTagIdentityWrapper>
       </FlexBox>
-      {env.AUTH_MODE !== 'google' && <WalletInfo />}
+      {env.AUTH_MODE === 'google' ? <IdentityInventoryInfo /> : <WalletInfo />}
       <SpectateInfo />
     </>
   )

@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 
-import env from '~/env'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { getLocalStorage } from '~/shared/helpers/local-storage'
 import { makePlayRoute } from '~/shared/helpers/routes/general'
@@ -14,15 +13,7 @@ import {
   isRootRouteSelector
 } from '~/shared/redux/router/selectors'
 
-const useIdentityPlayLinkProps = () => {
-  const isActive = useSelector(isPlayRouteActiveSelector)
-  return {
-    to: ROUTES_CONFIG.routes.PLAY.routes.PRACTICE.routes.BOT.directPath,
-    isActive
-  }
-}
-
-const useLegacyPlayLinkProps = () => {
+export const usePlayLinkProps = () => {
   const { data: storedMatchInfo } = useStoredMatchInfo()
 
   const isPlayRouteActive = useSelector(isPlayRouteActiveSelector)
@@ -65,6 +56,3 @@ const useLegacyPlayLinkProps = () => {
 
   return { to, isActive }
 }
-
-export const usePlayLinkProps =
-  env.AUTH_MODE === 'google' ? useIdentityPlayLinkProps : useLegacyPlayLinkProps

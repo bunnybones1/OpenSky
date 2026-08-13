@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next'
 
 import { NavBarLink } from '~/AppLayout/NavBar/shared/components/NavBarLink/NavBarLink'
 import env from '~/env'
-import { ROUTES_CONFIG } from '~/shared/constants/routes'
-import { makeItemsCardsRoute } from '~/shared/helpers/routes/items-page'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
 import { ItemsLink } from './components/ItemsLink'
@@ -34,36 +32,18 @@ export const LinkSection = memo(({ isHorizontal }: LinkSectionProps) => {
         flexDirection: isHorizontal ? 'row' : 'column'
       })}
     >
+      <ItemsLink isHorizontal={isHorizontal} />
+      <RanksLink isHorizontal={isHorizontal} />
       {env.AUTH_MODE === 'google' ? (
-        <>
-          <NavBarLink
-            to={makeItemsCardsRoute()}
-            text={t('navigation.items')}
-            icon="items"
-            id="items"
-            isHorizontal={isHorizontal}
-          />
-          <NavBarLink
-            to={ROUTES_CONFIG.routes.LEADERBOARD.routes.PLAYER_LEADERBOARD.directPath}
-            text={t('navigation.ranks')}
-            icon="leaderboard"
-            id="leaderboard"
-            isHorizontal={isHorizontal}
-          />
-          <NavBarLink
-            to="/market/cards"
-            text={t('navigation.market')}
-            icon="shop"
-            id="market"
-            isHorizontal={isHorizontal}
-          />
-        </>
+        <NavBarLink
+          to="/market/cards"
+          text={t('navigation.market')}
+          icon="shop"
+          id="market"
+          isHorizontal={isHorizontal}
+        />
       ) : (
-        <>
-          <ItemsLink isHorizontal={isHorizontal} />
-          <RanksLink isHorizontal={isHorizontal} />
-          <MarketLink isHorizontal={isHorizontal} />
-        </>
+        <MarketLink isHorizontal={isHorizontal} />
       )}
       <PlayLink isHorizontal={isHorizontal} />
     </div>

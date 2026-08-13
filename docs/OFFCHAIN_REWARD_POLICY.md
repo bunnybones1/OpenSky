@@ -16,6 +16,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   off-chain item or entitlement. A reward may disappear only when its entire
   earning or purchase behavior is explicitly retired; removing only the mint
   step is not a valid disposition.
+- Minting is never a reason to remove an earning flow, reward, or reward receipt
+  from the identity product. The original outcome remains visible and useful;
+  only its fulfillment authority changes from a chain to authenticated D1.
 - This applies to all remaining source slices: legacy mint calls describe the
   reward's timing and contents, never its Cloud Weasel fulfillment mechanism.
   New ports must preserve those outcomes through authenticated D1 inventory or
