@@ -56,7 +56,7 @@ commented-out runner is accidentally counted as active.
 | `MintConquestEntriesQueue` | A verified Stripe purchase grants `SW_CONQUEST_TICKET` directly in D1; no wallet ticket is minted. |
 | `MintSilverCardRewardsQueue` | The consolidated leaderboard cycle grants `SW_SILVER_CARDS` under player award receipts. |
 | `MintTicketRewardsQueue` | The consolidated leaderboard cycle grants `SW_CONQUEST_TICKET` under the same player award receipt. |
-| `MintStickerRewardsQueue` | Referral sticker awards grant `SW_STICKERS` with immutable referral receipts. |
+| `MintStickerRewardsQueue` | Referral sticker awards grant `SW_STICKERS` with immutable per-token before/after inventory receipts. |
 | `DelayedMintingQueue` | Delayed Conquest Gold delivery grants `SW_GOLD_CARDS` with one delivery receipt per run. |
 | `SendConquestExtraRewardQueue` | Whole feature retired: this is a treasury asset transfer, not a mint, and the source has no production producer or earning flow. |
 | `ConquestV2SendRewardQueue` | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise. |

@@ -80,16 +80,35 @@ beforeEach(async () => {
       'DROP TRIGGER IF EXISTS referral_sticker_reward_awards_no_delete'
     ),
     env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_reward_grants_no_delete'
+    ),
+    env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS referral_sticker_reward_batches_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      'DELETE FROM referral_sticker_reward_inventory_grants'
+    ),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_batches'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'sticker-%'`),
     env.AUTH_DB.prepare('DELETE FROM content_stickers')
   ])
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_reward_grants_no_delete
+       BEFORE DELETE ON referral_sticker_reward_inventory_grants
+       WHEN EXISTS (
+         SELECT 1
+         FROM referral_sticker_reward_batches batch_row
+         JOIN users ON users.id = batch_row.user_id
+         WHERE batch_row.id = OLD.batch_id
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'referral sticker inventory grants are immutable');
+       END`
+    ),
     env.AUTH_DB.prepare(
       `CREATE TRIGGER referral_sticker_reward_awards_no_delete
        BEFORE DELETE ON referral_sticker_reward_awards
@@ -178,6 +197,14 @@ describe('off-chain referral sticker rewards', () => {
       prepared: 0,
       delivered: 0
     })
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_STICKERS', 101, 7, 0, 'existing', ?, ?)`
+    )
+      .bind(inviterId, NOW.toISOString(), NOW.toISOString())
+      .run()
     expect(await runReferralStickerRewards(env.AUTH_DB, DUE)).toEqual({
       status: 'processed',
       prepared: 0,
@@ -194,9 +221,22 @@ describe('off-chain referral sticker rewards', () => {
           .all()
       ).results
     ).toEqual([
-      { token_id: 101, balance: 100, unlock_source: 'referral-sticker-reward' },
+      { token_id: 101, balance: 107, unlock_source: 'existing' },
       { token_id: 102, balance: 100, unlock_source: 'referral-sticker-reward' },
       { token_id: 103, balance: 100, unlock_source: 'referral-sticker-reward' }
+    ])
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT token_id, quantity, before_balance, after_balance
+           FROM referral_sticker_reward_inventory_grants
+           ORDER BY token_id`
+        ).all()
+      ).results
+    ).toEqual([
+      { token_id: 101, quantity: 100, before_balance: 7, after_balance: 107 },
+      { token_id: 102, quantity: 100, before_balance: 0, after_balance: 100 },
+      { token_id: 103, quantity: 100, before_balance: 0, after_balance: 100 }
     ])
     expect(await runReferralStickerRewards(env.AUTH_DB, DUE)).toMatchObject({
       prepared: 0,
@@ -290,6 +330,82 @@ describe('off-chain referral sticker rewards', () => {
     expect(await runReferralStickerRewards(env.AUTH_DB, DUE)).toMatchObject({
       delivered: 1
     })
+  })
+
+  it('rolls all inventory evidence back when receipt completion fails', async () => {
+    await setupRewards()
+    await runReferralStickerRewards(env.AUTH_DB, NOW)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_referral_sticker_delivery
+       BEFORE UPDATE OF status ON referral_sticker_reward_batches
+       WHEN NEW.status = 'DELIVERED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected referral sticker receipt failure');
+       END`
+    ).run()
+
+    await expect(runReferralStickerRewards(env.AUTH_DB, DUE)).rejects.toThrow(
+      'injected referral sticker receipt failure'
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM referral_sticker_reward_inventory_grants)
+             AS grants,
+           (SELECT COUNT(*) FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_STICKERS') AS stickers`
+      )
+        .bind(inviterId)
+        .first()
+    ).toEqual({ grants: 0, stickers: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT status, delivery_token FROM referral_sticker_reward_batches'
+      ).first()
+    ).toEqual({ status: 'PENDING', delivery_token: null })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_referral_sticker_delivery'
+    ).run()
+    expect(await runReferralStickerRewards(env.AUTH_DB, DUE)).toMatchObject({
+      delivered: 1
+    })
+  })
+
+  it('requires exact inventory evidence and keeps it immutable', async () => {
+    await setupRewards()
+    await runReferralStickerRewards(env.AUTH_DB, NOW)
+    await env.AUTH_DB.prepare(
+      `UPDATE referral_sticker_reward_batches
+       SET status = 'DELIVERING', delivery_token = ?
+       WHERE status = 'PENDING'`
+    )
+      .bind(crypto.randomUUID())
+      .run()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE referral_sticker_reward_batches
+         SET status = 'DELIVERED', delivered_at = ?
+         WHERE status = 'DELIVERING'`
+      )
+        .bind(DUE.toISOString())
+        .run()
+    ).rejects.toThrow('referral sticker reward batch update is invalid')
+
+    await env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_reward_inventory_grants
+         (batch_id, item_type, token_id, quantity, before_balance,
+          after_balance)
+       SELECT id, 'SW_STICKERS', 101, 100, 0, 100
+       FROM referral_sticker_reward_batches`
+    ).run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE referral_sticker_reward_inventory_grants
+         SET after_balance = 101`
+      ).run()
+    ).rejects.toThrow('referral sticker inventory grants are immutable')
   })
 
   it('pauses prepared delivery while the account is sanctioned', async () => {

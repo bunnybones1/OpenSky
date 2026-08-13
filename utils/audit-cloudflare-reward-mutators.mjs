@@ -188,12 +188,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/referral-sticker-rewards.ts': {
     count: 5,
     disposition: 'receipt-backed-referral-rewards',
-    evidenceFiles: ['cloudflare/migrations/0058_referral_sticker_rewards.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0058_referral_sticker_rewards.sql',
+      'cloudflare/migrations/0082_referral_sticker_delivery_receipts.sql'
+    ],
     evidence: [
       'referral_sticker_reward_batches',
       'referral_sticker_reward_awards',
+      'referral_sticker_reward_inventory_grants',
       'claim_token TEXT NOT NULL UNIQUE',
       'referral sticker reward awards are immutable',
+      'referral sticker inventory grants are immutable',
+      'referral sticker reward batch update is invalid',
       'database.batch'
     ]
   },

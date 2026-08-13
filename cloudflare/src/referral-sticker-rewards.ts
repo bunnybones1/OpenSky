@@ -325,6 +325,25 @@ const deliverBatch = async (
     statements.push(
       database
         .prepare(
+          `INSERT INTO referral_sticker_reward_inventory_grants
+             (batch_id, item_type, token_id, quantity, before_balance,
+              after_balance)
+           SELECT batch_row.id, 'SW_STICKERS', award.token_id, award.amount,
+                  COALESCE(item.balance, 0),
+                  COALESCE(item.balance, 0) + award.amount
+           FROM referral_sticker_reward_batches batch_row
+           JOIN referral_sticker_reward_awards award
+             ON award.batch_id = batch_row.id AND award.token_id = ?
+           LEFT JOIN player_items item
+             ON item.user_id = batch_row.user_id
+            AND item.item_type = 'SW_STICKERS'
+            AND item.token_id = award.token_id
+           WHERE batch_row.id = ? AND batch_row.delivery_token = ?
+             AND batch_row.status = 'DELIVERING'`
+        )
+        .bind(award.token_id, batch.id, deliveryToken),
+      database
+        .prepare(
           `INSERT INTO player_items
              (user_id, item_type, token_id, balance, is_new, unlock_source,
               created_at, updated_at)

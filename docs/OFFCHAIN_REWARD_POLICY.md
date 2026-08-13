@@ -74,6 +74,14 @@ deployment. The release gate scans every producer module for both canonical
 `player_items` writes and an idempotent receipt/delivery key, in addition to
 excluding transaction code from the Google-identity route tree.
 
+Referral sticker rewards retain the source thresholds, top-five friend-point
+attribution, season carry-forward, 23-hour delay, and 100 copies of each earned
+sticker. The former batch mint is an identity-inventory delivery. A batch may
+move from `DELIVERING` to `DELIVERED` only when an immutable per-sticker receipt
+proves its exact before balance, 100-unit credit, and resulting balance in
+`player_items`. A failed finalization rolls the entire delivery back for a
+clean retry, and parallel scheduled runs cannot double-credit it.
+
 Weekly leaderboard rewards preserve the source rank projections, deterministic
 Silver selection, Conquest-ticket counts, per-mode feed records, and rank-up
 metadata without minting either asset. Each immutable award records the exact
