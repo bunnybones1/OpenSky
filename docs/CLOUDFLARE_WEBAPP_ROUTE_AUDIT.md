@@ -126,3 +126,12 @@ content-write permissions. A fresh signed-in non-admin client requested
 `/admin/users`, redirected to `/home`, rendered the player shell, and exposed no
 admin navigation, staff data, or permission error. No role or capability was
 created for verification.
+
+Reward-visibility milestone `78cfd78` was deployed on 2026-08-13 as Worker
+version `937e45ca-7cbd-43a3-ac84-bb60903a3aff`; production HTML referenced the
+tested entry asset `index-ca3261df.js`. The release gate now binds all 12 active
+former mint queues to an original player-visible claim, feed, notification,
+pending-delivery, collection, or inventory surface. A fresh signed-in Home
+client rendered the original navigation and content without a phantom reward
+dialog. Verification was read-only and did not create, claim, or mark any
+notification or reward.
