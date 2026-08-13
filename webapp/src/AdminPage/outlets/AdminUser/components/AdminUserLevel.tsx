@@ -64,10 +64,13 @@ const AdminUserLevel = memo(
             height={36}
             onClick={async () => {
               try {
-                await APIClient.opensky.gMGiveLevels({
-                  accountAddress: account.address,
-                  levels: Number.parseInt(desiredLevel) - level
-                })
+                await APIClient.opensky.gMGiveLevels(
+                  {
+                    accountAddress: account.address,
+                    levels: Number.parseInt(desiredLevel) - level
+                  },
+                  { 'x-cloud-weasel-operation-key': crypto.randomUUID() }
+                )
                 setSaved(true)
                 onLevelSet?.()
               } catch (err) {

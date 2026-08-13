@@ -22,9 +22,13 @@ const rpcAs = async (
   userId: string,
   method: string,
   body: object = {},
-  signedIn = true
+  signedIn = true,
+  extraHeaders: Record<string, string> = {}
 ) => {
-  const headers = new Headers({ 'content-type': 'application/json' })
+  const headers = new Headers({
+    'content-type': 'application/json',
+    ...extraHeaders
+  })
   if (signedIn) {
     const token = await createIdentitySession(
       userId,
@@ -41,6 +45,10 @@ const rpcAs = async (
     testEnv
   )
 }
+
+const levelGrantHeaders = (operationKey = crypto.randomUUID()) => ({
+  'x-cloud-weasel-operation-key': operationKey
+})
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
@@ -947,23 +955,44 @@ describe('fail-closed Google identity staff authorization', () => {
       ).status
     ).toBe(403)
     await grantProgressionWrite()
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMGiveLevels', {
+          accountAddress: `identity:${PLAYER}`,
+          levels: 3
+        })
+      ).status
+    ).toBe(400)
     for (const levels of [-1, 65_536, 1.5]) {
       expect(
         (
           await rpcAs(ADMIN, 'GMGiveLevels', {
             accountAddress: `identity:${PLAYER}`,
             levels
-          })
+          }, true, levelGrantHeaders())
         ).status
       ).toBe(400)
     }
 
-    const granted = await rpcAs(ADMIN, 'GMGiveLevels', {
-      accountAddress: `identity:${PLAYER}`,
-      levels: 3
-    })
+    const operationKey = crypto.randomUUID()
+    const [granted, duplicate] = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          {
+            accountAddress: `identity:${PLAYER}`,
+            levels: 3
+          },
+          true,
+          levelGrantHeaders(operationKey)
+        )
+      )
+    )
     expect(granted.status).toBe(200)
     expect(await granted.json()).toEqual({ ok: true })
+    expect(duplicate.status).toBe(200)
+    expect(await duplicate.json()).toEqual({ ok: true })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT profile.level, profile.xp,
@@ -1015,7 +1044,8 @@ describe('fail-closed Google identity staff authorization', () => {
       }
     ])
     const audit = await env.AUTH_DB.prepare(
-      `SELECT operation, actor_user_id, target_user_id, before_json, after_json
+      `SELECT operation, actor_user_id, target_user_id, before_json, after_json,
+              operation_key
        FROM staff_progression_audit WHERE target_user_id = ? ORDER BY id ASC`
     )
       .bind(PLAYER)
@@ -1025,11 +1055,13 @@ describe('fail-closed Google identity staff authorization', () => {
         target_user_id: string
         before_json: string
         after_json: string
+        operation_key: string
       }>()
     expect(audit).toMatchObject({
       operation: 'GIVE_LEVELS',
       actor_user_id: ADMIN,
-      target_user_id: PLAYER
+      target_user_id: PLAYER,
+      operation_key: operationKey
     })
     expect(JSON.parse(audit!.before_json)).toMatchObject({
       requestedLevels: 3,
@@ -1042,14 +1074,99 @@ describe('fail-closed Google identity staff authorization', () => {
       level: 4,
       skypassLevel: 4
     })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT operation, actor_user_id, target_user_id, requested_levels,
+                granted_levels, before_level, after_level,
+                inviter_levels_before, inviter_levels_after,
+                inviter_stickers_before, inviter_stickers_after, status
+         FROM staff_progression_operations WHERE operation_key = ?`
+      )
+        .bind(operationKey)
+        .first()
+    ).toEqual({
+      operation: 'GIVE_LEVELS',
+      actor_user_id: ADMIN,
+      target_user_id: PLAYER,
+      requested_levels: 3,
+      granted_levels: 3,
+      before_level: 1,
+      after_level: 4,
+      inviter_levels_before: 0,
+      inviter_levels_after: 3,
+      inviter_stickers_before: 0,
+      inviter_stickers_after: 3,
+      status: 'APPLIED'
+    })
+
+    // A key cannot be rebound to altered arguments, while a new key represents
+    // a second deliberate operator action and therefore grants again.
+    expect(
+      (
+        await rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          {
+            accountAddress: `identity:${PLAYER}`,
+            levels: 4
+          },
+          true,
+          levelGrantHeaders(operationKey)
+        )
+      ).status
+    ).toBe(400)
+    const secondOperationKey = crypto.randomUUID()
+    expect(
+      (
+        await rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          {
+            accountAddress: `identity:${PLAYER}`,
+            levels: 2
+          },
+          true,
+          levelGrantHeaders(secondOperationKey)
+        )
+      ).status
+    ).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ level: 6 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, inviter, season)
+        .first()
+    ).toEqual({ levels: 5 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviter)
+        .first()
+    ).toEqual({ balance: 5 })
 
     // The source accepts zero levels as a successful state no-op.
     expect(
       (
-        await rpcAs(ADMIN, 'GMGiveLevels', {
-          accountAddress: `identity:${PLAYER}`,
-          levels: 0
-        })
+        await rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          {
+            accountAddress: `identity:${PLAYER}`,
+            levels: 0
+          },
+          true,
+          levelGrantHeaders()
+        )
       ).status
     ).toBe(200)
     expect(
@@ -1059,7 +1176,22 @@ describe('fail-closed Google identity staff authorization', () => {
       )
         .bind(PLAYER)
         .first()
-    ).toEqual({ count: 1 })
+    ).toEqual({ count: 2 })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_progression_operations SET completed_at = ?
+         WHERE operation_key = ?`
+      )
+        .bind(new Date().toISOString(), operationKey)
+        .run()
+    ).rejects.toThrow(/completion is invalid/i)
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_progression_operations WHERE operation_key = ?`
+      )
+        .bind(operationKey)
+        .run()
+    ).rejects.toThrow(/immutable/i)
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE staff_progression_audit SET actor_user_id = ? WHERE target_user_id = ?`
@@ -1074,6 +1206,101 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(PLAYER)
         .run()
     ).rejects.toThrow(/immutable/i)
+
+    // The completing receipt is the last statement in the grant transaction.
+    // If it cannot complete, all progression, referral, and audit writes roll
+    // back together and a retry remains possible.
+    const failedOperationKey = '00000000-0000-4000-8000-000000000073'
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER staff_progression_test_abort_completion
+       BEFORE UPDATE ON staff_progression_operations
+       WHEN NEW.operation_key = '00000000-0000-4000-8000-000000000073'
+         AND NEW.status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected staff progression completion failure');
+       END`
+    )
+      .run()
+    const failed = await rpcAs(
+      ADMIN,
+      'GMGiveLevels',
+      {
+        accountAddress: `identity:${PLAYER}`,
+        levels: 7
+      },
+      true,
+      levelGrantHeaders(failedOperationKey)
+    )
+    expect(failed.status).toBe(500)
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER staff_progression_test_abort_completion'
+    ).run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ level: 6 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_progression_operations
+         WHERE operation_key = ?`
+      )
+        .bind(failedOperationKey)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_progression_audit
+         WHERE operation_key = ?`
+      )
+        .bind(failedOperationKey)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, inviter, season)
+        .first()
+    ).toEqual({ levels: 5 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviter)
+        .first()
+    ).toEqual({ balance: 5 })
+
+    const retried = await rpcAs(
+      ADMIN,
+      'GMGiveLevels',
+      {
+        accountAddress: `identity:${PLAYER}`,
+        levels: 7
+      },
+      true,
+      levelGrantHeaders(failedOperationKey)
+    )
+    expect(retried.status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ level: 13 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM staff_progression_operations
+         WHERE operation_key = ?`
+      )
+        .bind(failedOperationKey)
+        .first()
+    ).toEqual({ status: 'APPLIED' })
   })
 
   it('ports RP overrides, level-15 promotion, and grandweaver recalculation', async () => {

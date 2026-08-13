@@ -78,7 +78,10 @@ import {
   MobileStoreVerificationRepository,
   type MobileStoreFetch
 } from './mobile-store-verification'
-import { ProgressionSupportRepository } from './progression-support'
+import {
+  ProgressionSupportRepository,
+  STAFF_PROGRESSION_OPERATION_HEADER
+} from './progression-support'
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { SocialInfoRepository, type SocialInfoFetch } from './social-info'
@@ -751,7 +754,8 @@ export const handleApiRequest = async (
           ok: await progressionSupport.giveLevels(
             principal.userId,
             body.accountAddress,
-            body.levels
+            body.levels,
+            request.headers.get(STAFF_PROGRESSION_OPERATION_HEADER)
           )
         })
       }

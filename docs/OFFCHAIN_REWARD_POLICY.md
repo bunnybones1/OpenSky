@@ -41,6 +41,11 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   `GMGrantBaseCards` adapter and immutable request receipt in `player_items`; it
   never becomes a Cloudflare contract call. The source's all/prism selection is
   preserved, while its wallet address is replaced by an identity reference.
+- Additive staff level grants also require a browser-generated operation key.
+  The D1 receipt snapshots the profile, basic SkyPass, and inviter ledgers,
+  then applies every mutation and an immutable audit row before transitioning
+  to `APPLIED`. Retrying one operator click cannot grant again, while a new
+  deliberate click remains a distinct source-faithful grant.
 
 ## Required grant invariants
 

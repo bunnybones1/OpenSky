@@ -18,8 +18,14 @@ const MAX_SOURCE_LEVEL_IN_TOTAL_EXPERIENCE = 1001
 // The source account begins at level 0; Cloud Weasel's established identity
 // profile begins at level 1 for the same zero lifetime XP.
 const CLOUDFLARE_LEVEL_OFFSET = 1
+const MAX_CLOUDFLARE_LEVEL_IN_TOTAL_EXPERIENCE =
+  MAX_SOURCE_LEVEL_IN_TOTAL_EXPERIENCE + CLOUDFLARE_LEVEL_OFFSET
 const MINIMUM_CLOUDFLARE_LEVEL_FOR_RP =
   MINIMUM_SOURCE_LEVEL_FOR_RP + CLOUDFLARE_LEVEL_OFFSET
+export const STAFF_PROGRESSION_OPERATION_HEADER =
+  'x-cloud-weasel-operation-key'
+const OPERATION_KEY_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 interface ProgressTargetRow {
   user_id: string
@@ -40,6 +46,14 @@ interface StatRow {
 interface RankDefinition {
   rank: PlayerRank
   stage: PlayerRankStage
+}
+
+interface ProgressionOperationRow {
+  operation_key: string
+  actor_user_id: string
+  target_user_id: string
+  requested_levels: number
+  status: 'PREPARING' | 'APPLIED'
 }
 
 const rankForRP = (rp: number): RankDefinition => {
@@ -128,67 +142,266 @@ export class ProgressionSupportRepository {
     ])
   }
 
-  private levelStatements(
-    target: ProgressTargetRow,
-    levels: number,
+  private levelOperationStatements(
+    operationKey: string,
+    actorUserId: string,
+    targetUserId: string,
+    requestedLevels: number,
     season: number,
     now: string
   ): D1PreparedStatement[] {
-    if (levels === 0) return []
-    const statements: D1PreparedStatement[] = [
+    const availableLevels =
+      `MAX(0, ${MAX_CLOUDFLARE_LEVEL_IN_TOTAL_EXPERIENCE} - profile.level)`
+    const grantedLevels = `MIN(?, ${availableLevels})`
+    const pendingOperation =
+      `operation_key = ? AND actor_user_id = ? AND target_user_id = ? ` +
+      `AND requested_levels = ? AND status = 'PREPARING'`
+
+    return [
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO staff_progression_operations
+             (operation_key, operation, actor_user_id, target_user_id,
+              requested_levels, granted_levels, season,
+              before_level, before_xp, before_skypass_level,
+              after_level, after_skypass_level,
+              inviter_user_id, inviter_levels_before, inviter_levels_after,
+              inviter_stickers_before, inviter_stickers_after,
+              status, created_at, completed_at)
+           SELECT ?, 'GIVE_LEVELS', ?, profile.user_id, ?,
+                  ${grantedLevels}, ?, profile.level, profile.xp,
+                  progression.basic_skypass_level,
+                  profile.level + ${grantedLevels},
+                  MAX(progression.basic_skypass_level,
+                      profile.level + ${grantedLevels}),
+                  invite.inviter_user_id,
+                  CASE WHEN invite.inviter_user_id IS NULL THEN NULL
+                       ELSE COALESCE(points.levels, 0) END,
+                  CASE WHEN invite.inviter_user_id IS NULL THEN NULL
+                       ELSE COALESCE(points.levels, 0) + ${grantedLevels} END,
+                  CASE WHEN invite.inviter_user_id IS NULL THEN NULL
+                       ELSE COALESCE(stickers.balance, 0) END,
+                  CASE WHEN invite.inviter_user_id IS NULL THEN NULL
+                       ELSE COALESCE(stickers.balance, 0) + ${grantedLevels} END,
+                  'PREPARING', ?, NULL
+           FROM player_profiles profile
+           JOIN player_progression progression
+             ON progression.user_id = profile.user_id
+           LEFT JOIN player_invites invite
+             ON invite.invitee_user_id = profile.user_id
+           LEFT JOIN player_friend_points points
+             ON points.invitee_user_id = profile.user_id
+            AND points.inviter_user_id = invite.inviter_user_id
+            AND points.season = ?
+           LEFT JOIN player_items stickers
+             ON stickers.user_id = invite.inviter_user_id
+            AND stickers.item_type = 'SW_STICKER_POINTS'
+            AND stickers.token_id = 0
+           WHERE profile.user_id = ?`
+        )
+        .bind(
+          operationKey,
+          actorUserId,
+          requestedLevels,
+          requestedLevels,
+          season,
+          requestedLevels,
+          requestedLevels,
+          requestedLevels,
+          requestedLevels,
+          now,
+          season,
+          targetUserId
+        ),
       this.database
         .prepare(
           `UPDATE player_profiles
-           SET level = level + ?, next_level_xp = 200, updated_at = ?
-           WHERE user_id = ?`
+           SET level = (
+                 SELECT after_level FROM staff_progression_operations
+                 WHERE ${pendingOperation}
+               ),
+               next_level_xp = 200, updated_at = ?
+           WHERE user_id = ?
+             AND EXISTS (
+               SELECT 1 FROM staff_progression_operations
+               WHERE ${pendingOperation}
+             )`
         )
-        .bind(levels, now, target.user_id),
+        .bind(
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels,
+          now,
+          targetUserId,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
       this.database
         .prepare(
           `UPDATE player_progression
-           SET basic_skypass_level = MAX(
-                 basic_skypass_level,
-                 (SELECT level FROM player_profiles WHERE user_id = ?)
+           SET basic_skypass_level = (
+                 SELECT after_skypass_level
+                 FROM staff_progression_operations
+                 WHERE ${pendingOperation}
                ),
                basic_skypass_next_xp = 200, updated_at = ?
-           WHERE user_id = ?`
+           WHERE user_id = ?
+             AND EXISTS (
+               SELECT 1 FROM staff_progression_operations
+               WHERE ${pendingOperation}
+             )`
         )
-        .bind(target.user_id, now, target.user_id),
-      ...this.promotionStatements(target.user_id, season, now)
-    ]
-    if (target.inviter_user_id) {
-      statements.push(
+        .bind(
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels,
+          now,
+          targetUserId,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
+      ...RANKED_MODES.flatMap(mode => [
         this.database
           .prepare(
-            `INSERT INTO player_friend_points
-               (invitee_user_id, inviter_user_id, season, levels,
-                points_carried, points_spent, updated_at)
-             VALUES (?, ?, ?, ?, 0, 0, ?)
-             ON CONFLICT(invitee_user_id, inviter_user_id, season)
-             DO UPDATE SET levels = player_friend_points.levels + excluded.levels,
-                           updated_at = excluded.updated_at`
+            `INSERT OR IGNORE INTO player_account_stats
+               (user_id, game_mode, season, created_at, updated_at)
+             SELECT target_user_id, ?, season, ?, ?
+             FROM staff_progression_operations
+             WHERE ${pendingOperation}`
           )
           .bind(
-            target.user_id,
-            target.inviter_user_id,
-            season,
-            levels,
-            now
+            mode,
+            now,
+            now,
+            operationKey,
+            actorUserId,
+            targetUserId,
+            requestedLevels
           ),
         this.database
           .prepare(
-            `INSERT INTO player_items
-               (user_id, item_type, token_id, balance, is_new, unlock_source,
-                created_at, updated_at)
-             VALUES (?, 'SW_STICKER_POINTS', 0, ?, 0, 'friend-level', ?, ?)
-             ON CONFLICT(user_id, item_type, token_id)
-             DO UPDATE SET balance = player_items.balance + excluded.balance,
-                           updated_at = excluded.updated_at`
+            `UPDATE player_account_stats
+             SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+                 score = 0, player_rank_state = ?, updated_at = ?
+             WHERE user_id = ? AND game_mode = ? AND season = ?
+               AND player_rank = 'UNRANKED'
+               AND EXISTS (
+                 SELECT 1 FROM staff_progression_operations
+                 WHERE ${pendingOperation}
+               )`
           )
-          .bind(target.inviter_user_id, levels, now, now)
-      )
-    }
-    return statements
+          .bind(
+            INITIAL_RANK_STATE_JSON,
+            now,
+            targetUserId,
+            mode,
+            season,
+            operationKey,
+            actorUserId,
+            targetUserId,
+            requestedLevels
+          )
+      ]),
+      this.database
+        .prepare(
+          `INSERT INTO player_friend_points
+             (invitee_user_id, inviter_user_id, season, levels,
+              points_carried, points_spent, updated_at)
+           SELECT target_user_id, inviter_user_id, season, granted_levels,
+                  0, 0, ?
+           FROM staff_progression_operations
+           WHERE ${pendingOperation}
+             AND inviter_user_id IS NOT NULL
+             AND granted_levels > 0
+           ON CONFLICT(invitee_user_id, inviter_user_id, season)
+           DO UPDATE SET levels = player_friend_points.levels + excluded.levels,
+                         updated_at = excluded.updated_at`
+        )
+        .bind(
+          now,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           SELECT inviter_user_id, 'SW_STICKER_POINTS', 0, granted_levels,
+                  0, 'friend-level', ?, ?
+           FROM staff_progression_operations
+           WHERE ${pendingOperation}
+             AND inviter_user_id IS NOT NULL
+             AND granted_levels > 0
+           ON CONFLICT(user_id, item_type, token_id)
+           DO UPDATE SET balance = player_items.balance + excluded.balance,
+                         updated_at = excluded.updated_at`
+        )
+        .bind(
+          now,
+          now,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO staff_progression_audit
+             (operation, target_user_id, actor_user_id, before_json,
+              after_json, created_at, operation_key)
+           SELECT operation, operation_row.target_user_id,
+                  operation_row.actor_user_id,
+                  json_object(
+                    'requestedLevels', requested_levels,
+                    'grantedLevels', granted_levels,
+                    'level', before_level, 'xp', before_xp,
+                    'skypassLevel', before_skypass_level,
+                    'inviterUserId', inviter_user_id
+                  ),
+                  json_object(
+                    'requestedLevels', requested_levels,
+                    'grantedLevels', granted_levels,
+                    'level', profile.level, 'xp', profile.xp,
+                    'skypassLevel', progression.basic_skypass_level,
+                    'inviterUserId', inviter_user_id
+                  ), ?, operation_key
+           FROM staff_progression_operations operation_row
+           JOIN player_profiles profile
+             ON profile.user_id = operation_row.target_user_id
+           JOIN player_progression progression
+             ON progression.user_id = profile.user_id
+           WHERE ${pendingOperation}`
+        )
+        .bind(
+          now,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
+      this.database
+        .prepare(
+          `UPDATE staff_progression_operations
+           SET status = 'APPLIED', completed_at = ?
+           WHERE ${pendingOperation}`
+        )
+        .bind(
+          now,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        )
+    ]
   }
 
   private minimumLevelStatements(
@@ -289,8 +502,12 @@ export class ProgressionSupportRepository {
   async giveLevels(
     actorUserId: string,
     accountAddress: string | undefined,
-    value: unknown
+    value: unknown,
+    operationKey: string | null
   ): Promise<boolean> {
+    if (!operationKey || !OPERATION_KEY_PATTERN.test(operationKey)) {
+      throw invalidArgument('valid Cloud Weasel operation key missing')
+    }
     if (!Number.isSafeInteger(value) || (value as number) < 0 ||
         (value as number) > MAX_UINT16) {
       throw invalidArgument('levels must be an unsigned 16-bit integer')
@@ -313,46 +530,50 @@ export class ProgressionSupportRepository {
     )
     if (levels === 0) return true
 
-    const now = new Date().toISOString()
-    const season = seasonFromDate()
-    const before = {
-      requestedLevels,
-      grantedLevels: levels,
-      level: target.level,
-      xp: target.xp,
-      skypassLevel: target.skypass_level,
-      inviterUserId: target.inviter_user_id
+    const existing = await this.database
+      .prepare(
+        `SELECT operation_key, actor_user_id, target_user_id,
+                requested_levels, status
+         FROM staff_progression_operations WHERE operation_key = ?`
+      )
+      .bind(operationKey)
+      .first<ProgressionOperationRow>()
+    if (existing) {
+      if (existing.actor_user_id !== actorUserId ||
+          existing.target_user_id !== target.user_id ||
+          existing.requested_levels !== requestedLevels) {
+        throw invalidArgument('operation key belongs to a different level grant')
+      }
+      if (existing.status === 'APPLIED') return true
     }
-    await this.database.batch([
-      ...this.levelStatements(target, levels, season, now),
-      this.database
-        .prepare(
-          `INSERT INTO staff_progression_audit
-             (operation, target_user_id, actor_user_id, before_json,
-              after_json, created_at)
-           SELECT 'GIVE_LEVELS', ?, ?, ?,
-                  json_object(
-                    'requestedLevels', ?, 'grantedLevels', ?,
-                    'level', profile.level, 'xp', profile.xp,
-                    'skypassLevel', progression.basic_skypass_level,
-                    'inviterUserId', ?
-                  ), ?
-           FROM player_profiles profile
-           JOIN player_progression progression
-             ON progression.user_id = profile.user_id
-           WHERE profile.user_id = ?`
-        )
-        .bind(
-          target.user_id,
-          actorUserId,
-          JSON.stringify(before),
-          requestedLevels,
-          levels,
-          target.inviter_user_id,
-          now,
-          target.user_id
-        )
-    ])
+
+    const now = new Date().toISOString()
+    await this.database.batch(
+      this.levelOperationStatements(
+        operationKey,
+        actorUserId,
+        target.user_id,
+        requestedLevels,
+        seasonFromDate(),
+        now
+      )
+    )
+    const operation = await this.database
+      .prepare(
+        `SELECT operation_key, actor_user_id, target_user_id,
+                requested_levels, status
+         FROM staff_progression_operations WHERE operation_key = ?`
+      )
+      .bind(operationKey)
+      .first<ProgressionOperationRow>()
+    if (!operation || operation.status !== 'APPLIED') {
+      throw new Error('staff level grant did not complete')
+    }
+    if (operation.actor_user_id !== actorUserId ||
+        operation.target_user_id !== target.user_id ||
+        operation.requested_levels !== requestedLevels) {
+      throw invalidArgument('operation key belongs to a different level grant')
+    }
     return true
   }
 

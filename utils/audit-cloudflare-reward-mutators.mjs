@@ -140,11 +140,17 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   },
   'cloudflare/src/progression-support.ts': {
     count: 8,
-    disposition: 'audited-staff-progression',
-    evidenceFiles: ['cloudflare/migrations/0041_progression_operations.sql'],
+    disposition: 'receipt-backed-staff-progression',
+    evidenceFiles: [
+      'cloudflare/migrations/0041_progression_operations.sql',
+      'cloudflare/migrations/0073_staff_progression_operation_receipts.sql'
+    ],
     evidence: [
       'staff_progression_audit',
       'staff progression audit rows are immutable',
+      'staff_progression_operations',
+      'staff progression operation receipts are immutable',
+      'x-cloud-weasel-operation-key',
       'friend-level',
       'database.batch'
     ]

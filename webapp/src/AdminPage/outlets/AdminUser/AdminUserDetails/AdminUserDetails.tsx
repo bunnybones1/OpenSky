@@ -98,10 +98,13 @@ const AdminUserDetails = memo(
         await APIClient.opensky.gMUnlockAllBaseCards({
           accountAddress: account.account.address
         })
-        await APIClient.opensky.gMGiveLevels({
-          accountAddress: account.account.address,
-          levels: 20
-        })
+        await APIClient.opensky.gMGiveLevels(
+          {
+            accountAddress: account.account.address,
+            levels: 20
+          },
+          { 'x-cloud-weasel-operation-key': crypto.randomUUID() }
+        )
         await APIClient.opensky.gMSetWarmupGamesCompleted({
           accountAddress: account.account.address,
           numGamesCompleted: 3
