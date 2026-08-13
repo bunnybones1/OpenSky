@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`2d9abc61-1f9b-49ee-93b3-09ccca81947e`)
+- API/web Worker: `opensky-webapp` (`0caeb7a2-11b0-4146-b47d-21596795a102`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
@@ -43,8 +43,12 @@
   The API also includes `f9ec4ec`: referral-sticker metadata remains dormant
   until an immutable two-actor schedule activates exact off-chain rewards, and
   every point-deduction batch records the schedule version that authorized it.
+  It also includes `d1cd5a6`: weekly leaderboard delivery is inert until an
+  independently reviewed digest activates the exact off-chain rank curve,
+  ordered season-valid card pool, deterministic draw, modes, item IDs, and
+  quantities; every cycle freezes that policy before snapshotting ranks.
 - Deployed: 2026-08-13 PDT
-- Applied D1 migrations: `0001` through `0087`; the remote migration check
+- Applied D1 migrations: `0001` through `0088`; the remote migration check
   reports no pending migrations.
 - Scheduled trigger: every minute for due Conquest Gold delivery, SkyPass
   season close and auto-claim, account
@@ -242,7 +246,7 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 44 files, 314 tests
+- API Worker: 44 files, 318 tests
 - Match service: 27 tests
 - Game Worker: 31 unit and 80 Worker tests
 - Matchmaker: 47 unit and 31 Worker tests
@@ -254,6 +258,22 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
+- API/web Worker version `0caeb7a2-11b0-4146-b47d-21596795a102` serves commit
+  `d1cd5a6` at 100% traffic. Migration `0088` requires two actors to activate
+  the exact approved leaderboard reward digest before any enabled cadence can
+  run, derives each cycle's season/week from the source calendar, freezes the
+  exact ordered season-valid card pool, verifies authoritative top-500
+  snapshots, and rejects award quantities or card IDs outside the source
+  policy. Production has 30 immutable policy ranges expanding to 781 cards,
+  but zero schedules, activations, cycles, policy receipts, snapshots, or
+  awards. Live Version, Ping, mode-status, and app-HTML probes returned `200`;
+  both Conquest modes remained false and `GetNextRewardsTime` correctly
+  returned fail-closed `503`. The final read retained 31 inventory rows and
+  total balance 31, made zero writes, reported `changed_db: false`, and found
+  no pending migrations. The release passed all 318 API tests, 27
+  match-service tests, 31 game unit plus 80 game Worker tests, 47 matchmaker
+  unit plus 31 Worker tests, six analytics tests, every TypeScript check and
+  release gate, and the complete browser/game build.
 - API/web Worker version `2d9abc61-1f9b-49ee-93b3-09ccca81947e` serves commit
   `f9ec4ec` at 100% traffic. Migration `0087` separates raw sticker metadata
   from reward authority: a nonempty second actor must activate an exact,
