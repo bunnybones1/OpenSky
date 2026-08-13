@@ -10,6 +10,7 @@ import type {
 } from '@opensky/proto'
 
 import { invalidArgument, notFound, permissionDenied } from './errors'
+import { isConquestQueueReady } from './conquest-readiness'
 
 interface StatusCountRow {
   account_status: AccountStatus
@@ -323,17 +324,7 @@ export class StaffRepository {
       enable &&
       ['CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'].includes(gameMode)
     ) {
-      const pool = await this.database
-        .prepare(
-          `SELECT 1 FROM conquest_reward_pools pool
-           JOIN conquest_queue_readiness ready
-             ON ready.pool_version = pool.version
-           WHERE pool.status = 'ACTIVE'
-             AND pool.starts_at <= ? AND pool.ends_at > ?`
-        )
-        .bind(new Date().toISOString(), new Date().toISOString())
-        .first()
-      if (!pool) {
+      if (!(await isConquestQueueReady(this.database))) {
         throw invalidArgument('verified active Conquest reward pool required')
       }
     }

@@ -10,6 +10,10 @@ import {
   parseAcceptedMatchDispatch
 } from '../src/protocol'
 import { MatchRepository } from '../src/repository'
+import { currentEnabledGameModes } from '../src/worker'
+import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
+import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
+import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const SECOND_USER_ID = '22222222-2222-4222-8222-222222222222'
@@ -22,6 +26,8 @@ const STARTER_CARD_IDS = [
   6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
   151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
 ]
+const READINESS_USER_ID = 'system:conquest-readiness-drill:match-service-test'
+const READINESS_POOL_VERSION = 'match-service-readiness-test-v1'
 
 const privateSeed = (cards: number[] = STARTER_CARD_IDS) => ({
   player: Array(20).fill(0xff),
@@ -185,6 +191,8 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_profiles'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
     env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pool_cards'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools'),
     env.AUTH_DB.prepare(
       `UPDATE game_mode_status
        SET enabled = CASE
@@ -284,6 +292,105 @@ beforeEach(async () => {
   ])
 })
 
+const provisionReceiptBackedConquestReadiness = async () => {
+  const now = Date.now()
+  const startsAt = new Date(now - 26 * 60 * 60 * 1_000).toISOString()
+  const settledAt = new Date(now - 25 * 60 * 60 * 1_000).toISOString()
+  const deliveredAt = new Date(now - 60 * 60 * 1_000).toISOString()
+  const endsAt = new Date(now + 2 * 60 * 60 * 1_000).toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Readiness Drill', 'readiness-drill@example.com', ?, ?)`
+    ).bind(READINESS_USER_ID, startsAt, startsAt),
+    env.AUTH_DB.prepare(
+      `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
+    ).bind(READINESS_USER_ID, startsAt),
+    env.AUTH_DB.prepare(
+      `INSERT INTO conquest_reward_pools
+         (version, status, starts_at, ends_at, created_at)
+       VALUES (?, 'ACTIVE', ?, ?, ?)`
+    ).bind(READINESS_POOL_VERSION, startsAt, endsAt, startsAt),
+    env.AUTH_DB.prepare(
+      `INSERT INTO conquest_reward_pool_cards
+         (pool_version, item_type, card_id)
+       VALUES (?, 'SW_SILVER_CARDS', 6),
+              (?, 'SW_GOLD_CARDS', 136)`
+    ).bind(READINESS_POOL_VERSION, READINESS_POOL_VERSION),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at)
+       VALUES ('readiness-drill:match-service-test', ?, 'REWARDS_PENDING', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+               '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
+    ).bind(READINESS_USER_ID, settledAt, settledAt)
+  ])
+  const conquest = await env.AUTH_DB.prepare(
+    `SELECT id FROM player_conquests
+     WHERE entry_key = 'readiness-drill:match-service-test'`
+  ).first<{ id: number }>()
+  await settlePendingConquest(
+    env.AUTH_DB,
+    conquest!.id,
+    settledAt,
+    () => 0
+  )
+  const settlement = await env.AUTH_DB.prepare(
+    `SELECT settlement_key FROM player_conquest_settlements
+     WHERE conquest_id = ?`
+  )
+    .bind(conquest!.id)
+    .first<{ settlement_key: string }>()
+
+  await expect(
+    env.AUTH_DB.prepare(
+      `INSERT INTO conquest_queue_readiness
+         (pool_version, conquest_id, settlement_key, delivery_key,
+          verified_by_user_id, drill_reference, verified_at)
+       VALUES (?, ?, ?, ?, 'system:test', 'before-delivery', ?)`
+    )
+      .bind(
+        READINESS_POOL_VERSION,
+        conquest!.id,
+        settlement!.settlement_key,
+        crypto.randomUUID(),
+        deliveredAt
+      )
+      .run()
+  ).rejects.toThrow('verified off-chain Conquest drill receipts required')
+
+  expect(
+    await deliverDueConquestGold(env.AUTH_DB, new Date(deliveredAt))
+  ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+  const evidence = await env.AUTH_DB.prepare(
+    `SELECT settlement.settlement_key, delivery.delivery_key
+     FROM player_conquest_settlements settlement
+     JOIN player_conquest_gold_deliveries delivery
+       ON delivery.conquest_id = settlement.conquest_id
+     WHERE settlement.conquest_id = ?`
+  )
+    .bind(conquest!.id)
+    .first<{ settlement_key: string; delivery_key: string }>()
+  const verifiedAt = new Date(now).toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO conquest_queue_readiness
+       (pool_version, conquest_id, settlement_key, delivery_key,
+        verified_by_user_id, drill_reference, verified_at)
+     VALUES (?, ?, ?, ?, 'system:test', 'receipt-backed-e2e', ?)`
+  )
+    .bind(
+      READINESS_POOL_VERSION,
+      conquest!.id,
+      evidence!.settlement_key,
+      evidence!.delivery_key,
+      verifiedAt
+    )
+    .run()
+  return { endsAt, verifiedAt }
+}
+
 describe('Cloud Weasel accepted-match service', () => {
   it('reports the authoritative deployment mode switches only to trusted services', async () => {
     const response = await SELF.fetch(
@@ -312,6 +419,78 @@ describe('Cloud Weasel accepted-match service', () => {
       'https://match-service.example/internal/game-modes'
     )
     expect(denied.status).toBe(404)
+  })
+
+  it('requires real off-chain settlement and delayed-delivery receipts, then expires dynamically', async () => {
+    const { endsAt } = await provisionReceiptBackedConquestReadiness()
+    await env.AUTH_DB.prepare(
+      `UPDATE game_mode_status
+       SET enabled = 1, updated_by_user_id = 'system:test', updated_at = ?
+       WHERE game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')`
+    )
+      .bind(new Date().toISOString())
+      .run()
+
+    const status = await SELF.fetch(
+      'https://match-service.example/internal/game-modes',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+      }
+    )
+    expect(await status.json()).toMatchObject({
+      status: { conquestConstructed: true, conquestDiscovery: true }
+    })
+    expect(await isConquestQueueReady(env.AUTH_DB)).toBe(true)
+    expect(await isConquestQueueReady(env.AUTH_DB, new Date(endsAt))).toBe(
+      false
+    )
+    const afterExpiry = await currentEnabledGameModes(
+      env as unknown as Parameters<typeof currentEnabledGameModes>[0],
+      new Date(endsAt)
+    )
+    expect(afterExpiry.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(false)
+    expect(afterExpiry.has(GameMode.CONQUEST_DISCOVERY)).toBe(false)
+
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, balance, unlock_source
+         FROM player_items WHERE user_id = ?
+           AND item_type IN ('SW_SILVER_CARDS', 'SW_GOLD_CARDS')
+         ORDER BY item_type`
+      )
+        .bind(READINESS_USER_ID)
+        .all()
+    ).toMatchObject({
+      results: [
+        {
+          item_type: 'SW_GOLD_CARDS',
+          token_id: 136,
+          balance: 1,
+          unlock_source: expect.stringMatching(/^conquest:\d+:gold$/)
+        },
+        {
+          item_type: 'SW_SILVER_CARDS',
+          token_id: 6,
+          balance: 1,
+          unlock_source: expect.stringMatching(/^conquest:\d+$/)
+        }
+      ]
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_queue_readiness SET drill_reference = 'rewritten'
+         WHERE pool_version = ?`
+      )
+        .bind(READINESS_POOL_VERSION)
+        .run()
+    ).rejects.toThrow('Conquest queue readiness receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM conquest_queue_readiness WHERE pool_version = ?`
+      )
+        .bind(READINESS_POOL_VERSION)
+        .run()
+    ).rejects.toThrow('Conquest queue readiness receipts are immutable')
   })
 
   it('uses shared D1 queue switches for status, admission, and dispatch', async () => {

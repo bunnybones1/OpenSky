@@ -17,6 +17,10 @@ import {
   MatchRepository
 } from './repository'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
+import {
+  CONQUEST_GAME_MODES,
+  isConquestQueueReady
+} from '../../cloudflare/src/conquest-readiness'
 import { RpcError } from '../../cloudflare/src/errors'
 
 interface CreateMatchRequest {
@@ -85,7 +89,10 @@ interface GameModeStatusRow {
   enabled: number
 }
 
-const currentEnabledGameModes = async (env: MatchServiceEnv) => {
+export const currentEnabledGameModes = async (
+  env: MatchServiceEnv,
+  at = new Date()
+) => {
   const modes = enabledGameModes(env.ENABLED_GAME_MODES)
   const rows = await env.AUTH_DB.prepare(
     `SELECT game_mode, enabled FROM game_mode_status`
@@ -93,6 +100,11 @@ const currentEnabledGameModes = async (env: MatchServiceEnv) => {
   for (const row of rows.results) {
     if (row.enabled === 1) modes.add(row.game_mode)
     else modes.delete(row.game_mode)
+  }
+  // An enable-time check is insufficient: a pool can expire while the D1
+  // operator flag remains true. Clamp both queues at every admission read.
+  if (!(await isConquestQueueReady(env.AUTH_DB, at))) {
+    for (const mode of CONQUEST_GAME_MODES) modes.delete(mode as GameMode)
   }
   return modes
 }

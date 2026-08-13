@@ -16,6 +16,10 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   off-chain item or entitlement. A reward may disappear only when its entire
   earning or purchase behavior is explicitly retired; removing only the mint
   step is not a valid disposition.
+- This applies to all remaining source slices: legacy mint calls describe the
+  reward's timing and contents, never its Cloud Weasel fulfillment mechanism.
+  New ports must preserve those outcomes through authenticated D1 inventory or
+  another explicit off-chain entitlement with an immutable operation receipt.
 - Google-auth product copy describes these items as Cloud Weasel inventory,
   collectibles, exchanges, claims, or deliveries. Mint/tradable badges and
   blockchain-wallet reward copy remain confined to the legacy-wallet product.

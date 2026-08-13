@@ -69,6 +69,15 @@ run only after that task settles.
   final transition validates that grant plus the source-shaped delivered feed
   event. Retries remain idempotent; malformed or repeatedly failing deliveries
   return to `READY` and dead-letter after five attempts.
+- Queue readiness is an immutable receipt link, not an operator assertion. A
+  dedicated `system:conquest-readiness-drill:*` identity must complete one
+  isolated three-win run through the real immediate Silver and 24-hour Gold
+  paths. D1 validates both `APPLIED` keys, all three source-shaped feed events,
+  the exact Silver/Gold inventory transitions, and the pool version before it
+  accepts readiness.
+- Match-service admission re-evaluates that proof and the pool time window on
+  every read. An enabled operator flag therefore fails closed at the exact pool
+  expiry boundary without waiting for another write or deployment.
 
 ## Remaining authoritative input
 
@@ -124,16 +133,18 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Conquest mode flags remain false until all checks pass against the deployed
   Worker version and an explicit pool configuration.
 
-The implementation and tests above are deployed. Before enabling either mode,
-operations must create and review a bounded active pool, exercise one isolated
-three-win settlement through delayed delivery, verify inventory/feed/receipt
-agreement, and re-run the production mode gate. Production currently has zero
-active pool rows and zero Conquest settlement/delivery rows.
+Before enabling either mode, operations must create and review a bounded active
+pool, exercise one isolated three-win settlement through delayed delivery, and
+insert the resulting settlement/delivery keys into
+`conquest_queue_readiness`. The database now verifies inventory/feed/receipt
+agreement itself; free-form readiness rows cannot open a queue. Production
+currently has zero active pool rows and zero Conquest settlement/delivery rows.
 
-`pnpm deploy:cloudflare:match-service` runs the gate before Wrangler. The gate
-reads the actual production match-service config and fails if either Conquest
-mode is enabled. Removing it is an explicit part of the settlement rollout,
-not a configuration-only change.
+`pnpm deploy:cloudflare:match-service` runs the gate before Wrangler. It rejects
+deployment-level Conquest defaults and verifies that dynamic admission and the
+receipt-backed migration remain present. Rollout is a D1 receipt-gated
+operation, not a configuration-only change; the release gate remains in place
+after queues are deliberately enabled.
 
 WalletConnect is not part of this gate. Card contents belong to the Google
 identity inventory first; a later optional wallet link can merge or export
