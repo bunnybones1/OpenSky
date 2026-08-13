@@ -37,14 +37,14 @@ mint. WalletConnect remains an optional ownership integration only.
 | `ConquestV2RewardsRunner` | Ported | Explicit, disabled-by-default schedules snapshot weekly points, preserve rollover and delayed delivery, then grant deterministic expansion-only Silver cards to D1 inventory. Legacy USDC calculations are audit-only. |
 | `CrashedMatchCleanupRunner` | Superseded | Authoritative match Durable Objects persist deadlines and recover them with alarms. |
 | `DeckRankUpdateRunner` | Ported | Match settlement applies deck rank changes through an idempotent D1 coordinator. |
-| `FixStarterDecksRunner` | Retired | One-time legacy-account repair is unnecessary for the zero-user fork; new decks are validated at write time. |
+| `FixStarterDecksRunner` | Superseded | Clean account bootstrap grants the exact unlocked starter cards, while capability-gated `GMResetStarterDecks` repairs any later deck/card drift atomically. |
 | `GiveawayOffChainTokensRunner` | Superseded | `GMGrantItems` preserves its operator-supplied token-codec item map through capability-gated D1 grants with one immutable request and before/after receipt per item. The source has no production task producer, and production has no player-support permission grants. |
 | `GrantStickerRewardsRunner` | Ported | Referral rewards use idempotent receipts and off-chain `player_items`. |
-| `LazyMigrationRunner` | Retired | Per-account legacy migrations are unnecessary with zero imported users and versioned D1 migrations. |
+| `LazyMigrationRunner` | Superseded | With zero imported users, account bootstrap directly creates the post-migration state: Ada, exact starter decks, and their off-chain Base cards. Versioned D1 migrations handle schema evolution. |
 | `LeaderboardRewardsRunner` | Ported | Scheduled, receipt-backed off-chain inventory rewards. |
 | `MarkNotNewRunner` | Ported | Due updates are applied idempotently on inventory reads, so no cron failure can strand the state. |
-| `OnChainPaymentEventRunner` | Retired | On-chain commerce is not a Cloud Weasel reward or payment authority. |
-| `OnChainPaymentListenerRunner` | Retired | On-chain commerce is not a Cloud Weasel reward or payment authority. |
+| `OnChainPaymentEventRunner` | Superseded | The same source SkyPass and Conquest-ticket catalog is fulfilled to off-chain inventory by verified Stripe or mobile-store receipts. |
+| `OnChainPaymentListenerRunner` | Superseded | Provider-signed Stripe/mobile callbacks replace chain-log observation and grant the purchased SkyPass or ticket exactly once. |
 | `PromoteGrandmastersRunner` | Ported | Promotion is part of the receipt-backed leaderboard reset cycle. |
 | `PushNotificationsRunner` | Ported | Disabled-by-default OneSignal projection targets Google identity IDs, retries with a stable provider idempotency key, and dead-letters without affecting in-app delivery or rewards. |
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
@@ -53,11 +53,13 @@ mint. WalletConnect remains an optional ownership integration only.
 | `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward from the active exact policy off chain. |
 | `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds, read only the active exact reward policy, and complete once. |
 | `StripeEventRunner` | Ported | Verified Stripe webhooks fulfill purchases idempotently in D1. |
-| `TxnStatusRunner` | Retired | There are no reward-mint transactions whose chain status controls inventory. |
+| `TxnStatusRunner` | Superseded | Atomic D1 reward receipts and completion guards replace relayer polling and make retry status local, auditable, and exactly once. |
 
 `pnpm check:cloudflare:worker-runners` fails if the Go entrypoint adds or removes
 a runner without review, if mapped implementation evidence disappears, or if a
-commented-out runner is accidentally counted as active.
+commented-out runner is accidentally counted as active. It also rejects
+`retired` as the disposition of any active source runner: the behavior must be
+ported or tied to concrete superseding evidence.
 
 ### SendTxnsRunner reward map
 

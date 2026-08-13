@@ -47,9 +47,9 @@ export const EXPECTED_RUNNERS = {
     ]
   },
   FixStarterDecksRunner: {
-    disposition: 'retired',
-    evidenceFile: 'cloudflare/src/starter-decks.ts',
-    evidence: ['STARTER_DECKS', 'decodeDeckString']
+    disposition: 'superseded',
+    evidenceFile: 'cloudflare/src/player-support.ts',
+    evidence: ['resetStarterDecks', 'RESET_STARTER_DECKS', 'SW_BASE_CARDS']
   },
   GiveawayOffChainTokensRunner: {
     disposition: 'superseded',
@@ -66,9 +66,13 @@ export const EXPECTED_RUNNERS = {
     evidence: ['referral_sticker_reward_awards', 'player_items']
   },
   LazyMigrationRunner: {
-    disposition: 'retired',
-    evidenceFile: 'api/lib/jobqueue/lazy_migrations.go',
-    evidence: ['starterDeckV2Migration', 'addHeroAda']
+    disposition: 'superseded',
+    evidenceFile: 'cloudflare/src/player.ts',
+    evidence: [
+      "VALUES (?, 'SW_HERO', 1, 1, 1, 'account-bootstrap'",
+      'for (const deck of STARTER_DECKS)',
+      "'starter-deck'"
+    ]
   },
   LeaderboardRewardsRunner: {
     disposition: 'ported',
@@ -81,19 +85,24 @@ export const EXPECTED_RUNNERS = {
     evidence: ['applyDeferredItemUpdates', 'player_deferred_item_updates']
   },
   OnChainPaymentEventRunner: {
-    disposition: 'retired',
-    evidenceFile: 'docs/CLOUDFLARE_RPC_AUDIT.md',
+    disposition: 'superseded',
+    evidenceFile: 'cloudflare/src/stripe-checkout.ts',
     evidence: [
-      'on-chain/burner transaction-preparation RPCs',
-      'off-chain reward policy'
+      'premiumSkypassCommerceCapability',
+      'SW_CONQUEST_TICKET',
+      'stripe_checkout_events',
+      'player_items'
     ]
   },
   OnChainPaymentListenerRunner: {
-    disposition: 'retired',
-    evidenceFile: 'docs/CLOUDFLARE_RPC_AUDIT.md',
+    disposition: 'superseded',
+    evidenceFile: 'cloudflare/src/stripe-checkout.ts',
     evidence: [
-      'on-chain/burner transaction-preparation RPCs',
-      'off-chain reward policy'
+      'webhookSignature',
+      "request.headers.get('Stripe-Signature')",
+      'SUCCESS_EVENTS',
+      'stripe_checkout_events',
+      'player_items'
     ]
   },
   PromoteGrandmastersRunner: {
@@ -153,9 +162,12 @@ export const EXPECTED_RUNNERS = {
     evidence: ['Stripe-Signature', 'stripe_checkout_events']
   },
   TxnStatusRunner: {
-    disposition: 'retired',
+    disposition: 'superseded',
     evidenceFile: 'utils/audit-cloudflare-mint-queues.mjs',
-    evidence: ['transaction queues', 'offchain']
+    evidence: [
+      'All 12 player-outcome transaction queues have off-chain fulfillment',
+      'receipt'
+    ]
   }
 }
 
@@ -183,6 +195,11 @@ export const auditWorkerRunners = ({ source, evidenceSources }) => {
     if (!active.includes(runner))
       errors.push(`reviewed runner is no longer active: ${runner}`)
     const review = EXPECTED_RUNNERS[runner]
+    if (review.disposition === 'retired') {
+      errors.push(
+        `${runner} is an active source runner and cannot be retired; preserve its behavior as ported or superseded`
+      )
+    }
     const evidence = evidenceSources[runner] ?? ''
     for (const token of review.evidence) {
       if (!evidence.includes(token)) {

@@ -39,6 +39,25 @@ test('accepts the complete reviewed runner map with no actionable gaps', () => {
   assert.deepEqual(audit.byDisposition.actionable, [])
   assert.ok(audit.byDisposition.ported.includes('SkypassAutoClaimRunner'))
   assert.ok(audit.byDisposition.ported.includes('SkypassEndOfSeasonRunner'))
+  assert.deepEqual(audit.byDisposition.retired, [])
+})
+
+test('rejects retirement as a disposition for an active source runner', () => {
+  const original = EXPECTED_RUNNERS.FixStarterDecksRunner.disposition
+  EXPECTED_RUNNERS.FixStarterDecksRunner.disposition = 'retired'
+  try {
+    const audit = auditWorkerRunners({
+      source: sourceFor(Object.keys(EXPECTED_RUNNERS)),
+      evidenceSources: completeEvidence()
+    })
+    assert.ok(
+      audit.errors.includes(
+        'FixStarterDecksRunner is an active source runner and cannot be retired; preserve its behavior as ported or superseded'
+      )
+    )
+  } finally {
+    EXPECTED_RUNNERS.FixStarterDecksRunner.disposition = original
+  }
 })
 
 test('rejects unknown runners, removed reviews, and lost evidence', () => {

@@ -32,12 +32,17 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
   },
   'api/lib/jobqueue/fix_starter_decks.go': {
     count: 1,
-    disposition: 'zero-user-repair-and-support',
+    disposition: 'offchain-bootstrap-and-support-repair',
     evidenceFiles: [
-      'docs/CLOUDFLARE_WORKER_AUDIT.md',
+      'cloudflare/src/player.ts',
       'cloudflare/src/player-support.ts'
     ],
-    evidence: ['zero-user fork', 'resetStarterDecks', 'player_items']
+    evidence: [
+      "'starter-deck'",
+      'resetStarterDecks',
+      'SW_BASE_CARDS',
+      'player_items'
+    ]
   },
   'api/lib/jobqueue/giveaway_offchain_tokens_runner.go': {
     count: 1,
@@ -57,12 +62,17 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
   },
   'api/lib/jobqueue/lazy_migrations.go': {
     count: 3,
-    disposition: 'zero-user-bootstrap',
+    disposition: 'offchain-clean-account-bootstrap',
     evidenceFiles: [
       'docs/CLOUDFLARE_WORKER_AUDIT.md',
       'cloudflare/src/player.ts'
     ],
-    evidence: ['zero imported users', 'account-bootstrap', 'STARTER_DECKS']
+    evidence: [
+      'zero imported users',
+      'account-bootstrap',
+      'STARTER_DECKS',
+      'SW_BASE_CARDS'
+    ]
   },
   'api/lib/jobqueue/leaderboard_rewards_runner.go': {
     count: 1,
