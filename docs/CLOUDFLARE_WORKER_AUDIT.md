@@ -78,7 +78,7 @@ later mint happens in another worker.
 The TypeScript reward-mutator gate closes the other side of that boundary. It
 inventories all direct writes to the seven authoritative reward/progression
 ledgers across the main Worker, game server, and match service. The reviewed
-inventory currently contains 18 modules and 66 writes; any count drift or new
+inventory currently contains 18 modules and 62 writes; any count drift or new
 module requires an explicit off-chain safety disposition before release.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
