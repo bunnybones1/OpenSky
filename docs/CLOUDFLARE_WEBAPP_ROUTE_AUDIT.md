@@ -48,3 +48,13 @@ production URL confirmed that an unknown route renders the original “Edge of
 the Sky” 404 page and `/deleted-account` renders the original account-deleted
 page. The verification visited only those read-only destinations and did not
 request account deletion.
+
+## App-shell fidelity
+
+The Google-identity app mounts the original wallet-independent shell behavior:
+global error reporting, cookie settings, offline recovery, page-offset updates,
+account analytics, product-tour hooks, and route view tracking. Cloudflare's
+production configuration leaves analytics and Userpilot disabled until Cloud
+Weasel-owned integrations are configured. Sequence signature confirmation,
+burner-to-wallet conversion, and burner-account renaming remain exclusive to
+the legacy-wallet app and cannot mount in Google mode.

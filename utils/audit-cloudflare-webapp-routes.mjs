@@ -66,7 +66,11 @@ export const webappRouteAuditErrors = ({
   identitySource,
   policySource,
   authenticationClientSource,
-  identityApiSource
+  identityApiSource,
+  identityShellSource,
+  accountSettingsSource,
+  pageOffsetSource,
+  bannerQuerySource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -109,7 +113,11 @@ export const webappRouteAuditErrors = ({
   for (const token of [
     'element={<FourOhFourPage />}',
     'element={<DeletedAccountPage />}',
-    'path={ROUTES_CONFIG.routes.DELETED_ACCOUNT.path}'
+    'path={ROUTES_CONFIG.routes.DELETED_ACCOUNT.path}',
+    'useIdentityAppShell()',
+    '{ErrorDialog}',
+    '{CookieSettingsDialog}',
+    '{OfflineDialog}'
   ]) {
     if (!identitySource.includes(token)) {
       errors.push(`Google identity route fidelity is missing: ${token}`)
@@ -142,6 +150,43 @@ export const webappRouteAuditErrors = ({
       errors.push(`Google account-deletion completion is missing: ${token}`)
     }
   }
+  for (const token of [
+    'Element: ErrorDialog',
+    'Element: CookieSettingsDialog',
+    'Element: OfflineDialog',
+    'useAnalytics()',
+    'useUserPilot()',
+    'useUpdatePageOffsets({ includeBanners: false })',
+    'analytics.trackView()'
+  ]) {
+    if (!identityShellSource.includes(token)) {
+      errors.push(`Google app-shell fidelity is missing: ${token}`)
+    }
+  }
+  for (const forbidden of [
+    'SequenceConfirmSignatureDialog',
+    'ConvertToSequenceWalletDialog',
+    'RenameBurnerAccountDialog'
+  ]) {
+    if (identityShellSource.includes(forbidden)) {
+      errors.push(`Google app shell mounts wallet-only behavior: ${forbidden}`)
+    }
+  }
+  const cookieButton = accountSettingsSource.indexOf(
+    'onClick={openCookieSettingsDialog}'
+  )
+  const legacyGuard = accountSettingsSource.indexOf(
+    "env.AUTH_MODE !== 'google'"
+  )
+  if (cookieButton < 0 || (legacyGuard >= 0 && cookieButton > legacyGuard)) {
+    errors.push('Google account settings do not expose cookie controls')
+  }
+  if (!pageOffsetSource.includes('useBanners(includeBanners)')) {
+    errors.push('Google page offsets do not disable the absent banner query')
+  }
+  if (!bannerQuerySource.includes('enabled: enabled && !!userAddress')) {
+    errors.push('disabled banner queries can still reach the API')
+  }
   return errors
 }
 
@@ -155,7 +200,11 @@ const main = async () => {
     identitySource,
     policySource,
     authenticationClientSource,
-    identityApiSource
+    identityApiSource,
+    identityShellSource,
+    accountSettingsSource,
+    pageOffsetSource,
+    bannerQuerySource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -170,14 +219,31 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare/src/identity-api.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare/src/identity-api.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/IdentitySession/useIdentityAppShell.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/SettingsButton/AccountSettingsDialog/components/AccountSettingsControls.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'webapp/src/hooks/useUpdatePageOffset.ts'), 'utf8'),
+    readFile(path.join(root, 'webapp/src/shared/queries/useBanners.ts'), 'utf8')
   ])
   const errors = webappRouteAuditErrors({
     legacySource,
     identitySource,
     policySource,
     authenticationClientSource,
-    identityApiSource
+    identityApiSource,
+    identityShellSource,
+    accountSettingsSource,
+    pageOffsetSource,
+    bannerQuerySource
   })
   if (errors.length) {
     for (const error of errors)

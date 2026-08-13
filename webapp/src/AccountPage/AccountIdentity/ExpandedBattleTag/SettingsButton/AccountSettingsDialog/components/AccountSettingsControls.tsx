@@ -73,16 +73,16 @@ export const AccountSettingsControls = memo(() => {
               leftAdornment={{ icon: 'external' }}
             />
           )}
+          <Button
+            frameType="default"
+            colorType="default"
+            onClick={openCookieSettingsDialog}
+            text={t('general.cookies')}
+            leftAdornment={{ icon: 'eye' }}
+            className={Sprinkles({ marginX: '8px' })}
+          />
           {env.AUTH_MODE !== 'google' && (
             <>
-              <Button
-                frameType="default"
-                colorType="default"
-                onClick={openCookieSettingsDialog}
-                text={t('general.cookies')}
-                leftAdornment={{ icon: 'eye' }}
-                className={Sprinkles({ marginX: '8px' })}
-              />
               {(isUS || !!cat3State) && (
                 <Button
                   frameType="default"

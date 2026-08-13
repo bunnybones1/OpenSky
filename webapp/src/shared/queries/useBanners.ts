@@ -14,7 +14,7 @@ export const bannersFetcher = async () => {
   return banners
 }
 
-export const useBanners = () => {
+export const useBanners = (enabled = true) => {
   const { userAddress } = useSnapshot(authenticationState)
 
   return useQuery(
@@ -34,7 +34,7 @@ export const useBanners = () => {
         })
     },
     {
-      enabled: !!userAddress,
+      enabled: enabled && !!userAddress,
       staleTime: ONE_DAY
     }
   )
