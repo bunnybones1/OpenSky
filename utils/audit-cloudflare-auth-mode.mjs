@@ -17,7 +17,6 @@ export const EXPECTED_AUTH_MODE_FILES = {
   'AppLayout/AppLayout.tsx': [1, 'wallet-only-shell-guard'],
   'AppLayout/DeckViewer/DeckViewer.tsx': [1, 'identity-banner-query-deduplication'],
   'AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx': [1, 'wallet-market-control-guard'],
-  'AppLayout/NavBar/LinkSection/LinkSection.tsx': [1, 'wallet-market-capability-adapter'],
   'AppLayout/NavBar/LinkSection/components/MarketLink.tsx': [1, 'read-only-deck-market-navigation'],
   'AppLayout/components/CookieDisclaimer.tsx': [2, 'identity-cookie-policy'],
   'HeroFeaturePage/HeroFeatureCarousel/HeroSkinControls/components/MintHeroSkinButton.tsx': [1, 'offchain-hero-exchange'],
@@ -118,6 +117,18 @@ export const authModeAuditErrors = ({ sources, fidelity = {} }) => {
     errors.push('identity Items navigation must preserve the original Decks destination')
   }
 
+  const marketLink = fidelity.marketLink ?? ''
+  for (const token of [
+    "isIdentityMarket = env.AUTH_MODE === 'google'",
+    'makeNavigateToMarketDecksRoute()',
+    'useCart(!isIdentityMarket)'
+  ]) {
+    if (!marketLink.includes(token)) errors.push(`identity Market navigation is missing: ${token}`)
+  }
+  if (linkSection.includes('to="/market/cards"')) {
+    errors.push('identity Market navigation still advertises the wallet card market')
+  }
+
   const playLink = fidelity.playLink ?? ''
   for (const token of ['useStoredMatchInfo()', 'useIsTutorialCompleted()', 'authedAccount.level >= 15']) {
     if (!playLink.includes(token)) errors.push(`identity Play navigation lost source selection: ${token}`)
@@ -189,9 +200,10 @@ const main = async () => {
     await Promise.all(files.map(async file => [path.relative(sourceRoot, file), await readFile(file, 'utf8')]))
   )
   const read = relative => readFile(path.join(root, relative), 'utf8')
-  const [linkSection, itemsLink, playLink, profileLink, profileInventory, expandedTag, accountInventory, feed, playerRpc, policy] = await Promise.all([
+  const [linkSection, itemsLink, marketLink, playLink, profileLink, profileInventory, expandedTag, accountInventory, feed, playerRpc, policy] = await Promise.all([
     read('webapp/src/AppLayout/NavBar/LinkSection/LinkSection.tsx'),
     read('webapp/src/AppLayout/NavBar/LinkSection/components/ItemsLink.tsx'),
+    read('webapp/src/AppLayout/NavBar/LinkSection/components/MarketLink.tsx'),
     read('webapp/src/AppLayout/NavBar/LinkSection/PlayLink/hooks/usePlayLinkProps.ts'),
     read('webapp/src/shared/components/ProfileLink/ProfileLink.tsx'),
     read('webapp/src/shared/components/ProfileLink/IdentityInventoryInfo.tsx'),
@@ -203,14 +215,14 @@ const main = async () => {
   ])
   const errors = authModeAuditErrors({
     sources,
-    fidelity: { linkSection, itemsLink, playLink, profileLink, profileInventory, expandedTag, accountInventory, feed, playerRpc, policy }
+    fidelity: { linkSection, itemsLink, marketLink, playLink, profileLink, profileInventory, expandedTag, accountInventory, feed, playerRpc, policy }
   })
   if (errors.length) {
     for (const error of errors) process.stderr.write(`AUTH_MODE audit: ${error}\n`)
     process.exitCode = 1
     return
   }
-  process.stdout.write('All 68 AUTH_MODE files and 110 references have reviewed identity dispositions\n')
+  process.stdout.write('All 67 AUTH_MODE files and 109 references have reviewed identity dispositions\n')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

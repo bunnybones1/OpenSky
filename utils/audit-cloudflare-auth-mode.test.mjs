@@ -11,6 +11,7 @@ const validSources = () => Object.fromEntries(
 const validFidelity = () => ({
   linkSection: '<ItemsLink isHorizontal={isHorizontal} /> <RanksLink isHorizontal={isHorizontal} />',
   itemsLink: 'to={makeItemsDecksRoute()}',
+  marketLink: "isIdentityMarket = env.AUTH_MODE === 'google' makeNavigateToMarketDecksRoute() useCart(!isIdentityMarket)",
   playLink: 'useStoredMatchInfo() useIsTutorialCompleted() authedAccount.level >= 15',
   profileLink: 'IdentityProfileLink something <IdentityInventoryInfo />',
   profileInventory: 'identity-inventory-summary useTokenBalances useConquestAndUSDCBalances',
@@ -34,6 +35,7 @@ test('rejects a new branch, count drift, hidden navigation, wallet capability, a
   delete sources['env.ts']
   const fidelity = validFidelity()
   fidelity.linkSection = '<RanksLink isHorizontal={isHorizontal} /> makeItemsCardsRoute'
+  fidelity.marketLink = 'makeMarketCardsRoute()'
   fidelity.playLink = 'AUTH_MODE practice only'
   fidelity.profileInventory += ' AuthenticationClient sendTransaction'
   fidelity.profileLink = 'IdentityProfileLink'
@@ -45,6 +47,7 @@ test('rejects a new branch, count drift, hidden navigation, wallet capability, a
   assert.ok(errors.some(error => error.includes('reviewed count')))
   assert.ok(errors.some(error => error.includes('disappeared')))
   assert.ok(errors.some(error => error.includes('Decks destination')))
+  assert.ok(errors.some(error => error.includes('Market navigation')))
   assert.ok(errors.some(error => error.includes('source route selector')))
   assert.ok(errors.some(error => error.includes('wallet capability')))
   assert.ok(errors.some(error => error.includes('profile chrome')))
