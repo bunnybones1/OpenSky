@@ -112,8 +112,10 @@ The Legacy Hero exchange is also governed by this policy. It retains the
 source product's price of ten identity-owned Gold cards per Hero skin, but D1
 atomically debits the selected Gold inventory and credits `SW_HERO_SKINS`.
 There is no USDC fee, wallet transfer, contract call, or minted asset. An
-immutable request receipt makes retries safe, and database triggers validate
-the complete price and available inventory before any balance changes.
+immutable request receipt makes retries safe. It moves from `PREPARING` to
+`APPLIED` only after an immutable before/after snapshot proves every selected
+Gold debit and Hero-skin credit. Database triggers validate the complete price,
+available inventory, exact balance changes, and atomic completion.
 
 The Silver-to-Conquest-ticket exchange retains the source one-card/one-entry
 rate without transferring or minting an ERC-1155 asset. Its immutable receipt

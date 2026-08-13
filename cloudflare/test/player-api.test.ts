@@ -30,6 +30,9 @@ beforeEach(async () => {
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_silver_exchange_completion'
   ).run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_hero_exchange_completion'
+  ).run()
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM wallet_connections'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
@@ -47,6 +50,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_silver_exchange_completion'
+  ).run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_hero_exchange_completion'
   ).run()
 })
 
@@ -506,12 +512,179 @@ describe('Cloudflare player API', () => {
       { item_type: 'SW_HERO_SKINS', token_id: 2, balance: 1 }
     ])
     const receipt = await env.AUTH_DB.prepare(
-      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys,
+              MIN(application_status) AS application_status,
+              MIN(completed_at) AS completed_at
        FROM player_hero_skin_exchanges WHERE user_id = ?`
     )
       .bind(userId)
-      .first<{ count: number; keys: number }>()
-    expect(receipt).toEqual({ count: 1, keys: 1 })
+      .first<{
+        count: number
+        keys: number
+        application_status: string
+        completed_at: string
+      }>()
+    expect(receipt).toMatchObject({
+      count: 1,
+      keys: 1,
+      application_status: 'APPLIED',
+      completed_at: expect.any(String)
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, change_amount, before_balance,
+                after_balance
+         FROM player_hero_skin_exchange_inventory_changes
+         ORDER BY item_type, token_id`
+      ).all()
+    ).toMatchObject({
+      results: [
+        {
+          item_type: 'SW_GOLD_CARDS',
+          token_id: 42,
+          change_amount: -12,
+          before_balance: 12,
+          after_balance: 0
+        },
+        {
+          item_type: 'SW_GOLD_CARDS',
+          token_id: 43,
+          change_amount: -8,
+          before_balance: 8,
+          after_balance: 0
+        },
+        {
+          item_type: 'SW_HERO_SKINS',
+          token_id: 1,
+          change_amount: 1,
+          before_balance: 0,
+          after_balance: 1
+        },
+        {
+          item_type: 'SW_HERO_SKINS',
+          token_id: 2,
+          change_amount: 1,
+          before_balance: 0,
+          after_balance: 1
+        }
+      ]
+    })
+  })
+
+  it('rolls back and retries a Hero exchange if receipt completion fails', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_GOLD_CARDS', 77, 10, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_hero_exchange_completion
+       BEFORE UPDATE OF application_status ON player_hero_skin_exchanges
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Hero receipt failure');
+       END`
+    ).run()
+    const input = {
+      requestKey: 'hero-exchange-rollback-0001',
+      goldCards: [{ tokenId: 77, quantity: 10 }],
+      heroSkins: [{ tokenId: 1, quantity: 1 }]
+    }
+    const exchange = () =>
+      request('/api/player/exchanges/gold-hero-skins', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://opensky.example',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(input)
+      })
+
+    expect((await exchange()).status).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_hero_skin_exchanges) AS exchanges,
+           (SELECT COUNT(*)
+            FROM player_hero_skin_exchange_inventory_changes) AS changes,
+           (SELECT balance FROM player_items WHERE user_id = ?
+            AND item_type = 'SW_GOLD_CARDS' AND token_id = 77) AS gold,
+           (SELECT COUNT(*) FROM player_items WHERE user_id = ?
+            AND item_type = 'SW_HERO_SKINS') AS skins`
+      )
+        .bind(userId, userId)
+        .first()
+    ).toEqual({ exchanges: 0, changes: 0, gold: 10, skins: 0 })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_hero_exchange_completion'
+    ).run()
+    expect((await exchange()).status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, balance FROM player_items
+         WHERE user_id = ? AND (
+           (item_type = 'SW_GOLD_CARDS' AND token_id = 77)
+           OR (item_type = 'SW_HERO_SKINS' AND token_id = 1)
+         ) ORDER BY item_type`
+      )
+        .bind(userId)
+        .all()
+    ).toMatchObject({
+      results: [
+        { item_type: 'SW_GOLD_CARDS', token_id: 77, balance: 0 },
+        { item_type: 'SW_HERO_SKINS', token_id: 1, balance: 1 }
+      ]
+    })
+  })
+
+  it('rejects tampering with applied Hero exchange evidence', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_GOLD_CARDS', 88, 10, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    const response = await request('/api/player/exchanges/gold-hero-skins', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://opensky.example',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        requestKey: 'hero-exchange-tamper-0001',
+        goldCards: [{ tokenId: 88, quantity: 10 }],
+        heroSkins: [{ tokenId: 1, quantity: 1 }]
+      })
+    })
+    expect(response.status).toBe(200)
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_hero_skin_exchanges SET hero_skin_amount = 2`
+      ).run()
+    ).rejects.toThrow('Hero skin exchange receipt completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_hero_skin_exchange_inventory_changes
+         SET after_balance = after_balance + 1`
+      ).run()
+    ).rejects.toThrow('Hero skin exchange inventory receipts are immutable')
   })
 
   it('rejects invalid Hero rewards and concurrent Gold spends safely', async () => {

@@ -68,12 +68,17 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     count: 2,
     disposition: 'receipt-backed-hero-exchange',
     evidenceFiles: [
-      'cloudflare/migrations/0063_hero_skin_offchain_exchange.sql'
+      'cloudflare/migrations/0063_hero_skin_offchain_exchange.sql',
+      'cloudflare/migrations/0078_hero_skin_exchange_receipts.sql'
     ],
     evidence: [
       'player_hero_skin_exchanges',
       'delivery_key TEXT NOT NULL UNIQUE',
+      'player_hero_skin_exchange_inventory_changes',
+      "application_status = 'PREPARING'",
       'Hero skin exchange receipts are immutable',
+      'Hero skin exchange inventory receipts are immutable',
+      'Hero skin exchange receipt completion is invalid',
       'database.batch'
     ]
   },

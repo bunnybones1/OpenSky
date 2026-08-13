@@ -26,6 +26,7 @@ interface ExchangeRow {
   gold_card_amount: number
   hero_skin_amount: number
   created_at: string
+  application_status: 'PREPARING' | 'APPLIED'
 }
 
 const canonicalQuantities = (
@@ -107,9 +108,10 @@ export class HeroSkinExchangeRepository {
     const existing = await this.database
       .prepare(
         `SELECT gold_cards_json, hero_skins_json, gold_card_amount,
-                hero_skin_amount, created_at
+                hero_skin_amount, created_at, application_status
          FROM player_hero_skin_exchanges
-         WHERE request_key = ? AND user_id = ?`
+         WHERE request_key = ? AND user_id = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(input.requestKey, userId)
       .first<ExchangeRow>()
@@ -130,8 +132,9 @@ export class HeroSkinExchangeRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_hero_skin_exchanges
              (request_key, delivery_key, user_id, gold_cards_json,
-              hero_skins_json, gold_card_amount, hero_skin_amount, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+              hero_skins_json, gold_card_amount, hero_skin_amount, created_at,
+              application_status, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', NULL)`
         )
         .bind(
           input.requestKey,
@@ -148,6 +151,34 @@ export class HeroSkinExchangeRepository {
       statements.push(
         this.database
           .prepare(
+            `INSERT INTO player_hero_skin_exchange_inventory_changes
+               (exchange_id, item_type, token_id, change_amount,
+                before_balance, after_balance)
+             SELECT exchange_row.id, 'SW_GOLD_CARDS', ?, -?, item.balance,
+                    item.balance - ?
+             FROM player_hero_skin_exchanges exchange_row
+             JOIN player_items item
+               ON item.user_id = exchange_row.user_id
+              AND item.item_type = 'SW_GOLD_CARDS'
+              AND item.token_id = ?
+             WHERE exchange_row.request_key = ?
+               AND exchange_row.user_id = ?
+               AND exchange_row.delivery_key = ?
+               AND exchange_row.application_status = 'PREPARING'`
+          )
+          .bind(
+            card.tokenId,
+            card.quantity,
+            card.quantity,
+            card.tokenId,
+            input.requestKey,
+            userId,
+            deliveryKey
+          )
+      )
+      statements.push(
+        this.database
+          .prepare(
             `UPDATE player_items
              SET balance = balance - ?, updated_at = ?
              WHERE user_id = ? AND item_type = 'SW_GOLD_CARDS'
@@ -156,6 +187,7 @@ export class HeroSkinExchangeRepository {
                  SELECT 1 FROM player_hero_skin_exchanges
                  WHERE request_key = ? AND user_id = ?
                    AND delivery_key = ?
+                   AND application_status = 'PREPARING'
                )`
           )
           .bind(
@@ -173,6 +205,35 @@ export class HeroSkinExchangeRepository {
       statements.push(
         this.database
           .prepare(
+            `INSERT INTO player_hero_skin_exchange_inventory_changes
+               (exchange_id, item_type, token_id, change_amount,
+                before_balance, after_balance)
+             SELECT exchange_row.id, 'SW_HERO_SKINS', ?, ?,
+                    COALESCE(item.balance, 0),
+                    COALESCE(item.balance, 0) + ?
+             FROM player_hero_skin_exchanges exchange_row
+             LEFT JOIN player_items item
+               ON item.user_id = exchange_row.user_id
+              AND item.item_type = 'SW_HERO_SKINS'
+              AND item.token_id = ?
+             WHERE exchange_row.request_key = ?
+               AND exchange_row.user_id = ?
+               AND exchange_row.delivery_key = ?
+               AND exchange_row.application_status = 'PREPARING'`
+          )
+          .bind(
+            heroSkin.tokenId,
+            heroSkin.quantity,
+            heroSkin.quantity,
+            heroSkin.tokenId,
+            input.requestKey,
+            userId,
+            deliveryKey
+          )
+      )
+      statements.push(
+        this.database
+          .prepare(
             `INSERT INTO player_items
                (user_id, item_type, token_id, balance, is_new, unlock_source,
                 created_at, updated_at)
@@ -180,6 +241,7 @@ export class HeroSkinExchangeRepository {
              WHERE EXISTS (
                SELECT 1 FROM player_hero_skin_exchanges
                WHERE request_key = ? AND user_id = ? AND delivery_key = ?
+                 AND application_status = 'PREPARING'
              )
              ON CONFLICT(user_id, item_type, token_id)
              DO UPDATE SET balance = balance + excluded.balance,
@@ -198,6 +260,16 @@ export class HeroSkinExchangeRepository {
           )
       )
     }
+    statements.push(
+      this.database
+        .prepare(
+          `UPDATE player_hero_skin_exchanges
+           SET application_status = 'APPLIED', completed_at = created_at
+           WHERE request_key = ? AND user_id = ? AND delivery_key = ?
+             AND application_status = 'PREPARING'`
+        )
+        .bind(input.requestKey, userId, deliveryKey)
+    )
     try {
       await this.database.batch(statements)
     } catch (error) {
@@ -214,9 +286,10 @@ export class HeroSkinExchangeRepository {
     const stored = await this.database
       .prepare(
         `SELECT gold_cards_json, hero_skins_json, gold_card_amount,
-                hero_skin_amount, created_at
+                hero_skin_amount, created_at, application_status
          FROM player_hero_skin_exchanges
-         WHERE request_key = ? AND user_id = ?`
+         WHERE request_key = ? AND user_id = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(input.requestKey, userId)
       .first<ExchangeRow>()
