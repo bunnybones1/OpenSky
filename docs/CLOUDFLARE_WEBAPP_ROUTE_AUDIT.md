@@ -96,3 +96,11 @@ action. Verification returned to the deck list without changing the deck. An
 earlier upload raced the final asset build and retained the prior manifest; the
 served entry hash is therefore an explicit rollout check, not inferred from a
 successful Worker upload.
+
+Announcement-banner milestone `904cdd6` was deployed on 2026-08-13 as Worker
+version `c55b65e2-75ab-4ccf-a18b-3c6d4bfef3b5`. Production HTML referenced the
+verified entry asset `index-315615a6.js`; the public `GetBanners` contract
+returned the current empty active set, and a fresh signed-in Home client loaded
+without an error or phantom banner. No production announcement was created for
+verification; active rendering and the staff lifecycle remain covered by the
+content/staff integration suites.
