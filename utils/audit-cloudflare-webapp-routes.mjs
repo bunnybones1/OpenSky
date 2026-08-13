@@ -24,7 +24,7 @@ const REVIEWED_LEGACY_ROUTES = {
     disposition: 'preserved-identity-commerce',
     mounted: true
   },
-  CACHE_INFO: { disposition: 'legacy-diagnostic', mounted: false },
+  CACHE_INFO: { disposition: 'preserved-browser-diagnostic', mounted: true },
   SHOP: { disposition: 'unreleased-source-mock', mounted: false },
   HERO_FEATURE: {
     disposition: 'preserved-offchain-controls',
@@ -249,6 +249,15 @@ export const webappRouteAuditErrors = ({
   }
   if (!appLayoutSource.includes('<DeckViewer />')) {
     errors.push('Google app layout does not mount the original Deck Viewer')
+  }
+  for (const token of [
+    "lazy(() => import('~/CacheInfoPage/CacheInfoPage'))",
+    'path={ROUTES_CONFIG.routes.CACHE_INFO.path}',
+    '<CacheInfoPage />'
+  ]) {
+    if (!identitySource.includes(token)) {
+      errors.push(`Google cache diagnostics are missing: ${token}`)
+    }
   }
   if (!navBarSource.includes('<Banners />')) {
     errors.push('Google navigation does not mount the original banner strip')

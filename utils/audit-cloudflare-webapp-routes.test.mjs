@@ -164,6 +164,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     ),
     identitySource: identitySource
       .replace('path={ROUTES_CONFIG.routes.DELETED_ACCOUNT.path}', '')
+      .replace('path={ROUTES_CONFIG.routes.CACHE_INFO.path}', '')
       .replace('useIdentityAppShell()', 'missingIdentityAppShell()')
       .replace(
         'element={<FourOhFourPage />}',
@@ -263,6 +264,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('cookie disclaimer policy')))
   assert.ok(errors.some(error => error.includes('cookie persistence policy')))
   assert.ok(errors.some(error => error.includes('cookie schema guard')))
+  assert.ok(errors.some(error => error.includes('cache diagnostics')))
   assert.ok(errors.some(error => error.includes('suppresses')))
   assert.ok(errors.some(error => error.includes('banner strip')))
   assert.ok(errors.some(error => error.includes('absent banner query')))

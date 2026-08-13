@@ -17,7 +17,7 @@ original 404/deleted-account destinations disappear.
 | `SELECT_SILVERS`    | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
 | `SKY_PASS`          | `preserved-offchain-rewards`           | Original free and premium tracks backed by active D1 reward policy.                                                     |
 | `SKY_PASS_PURCHASE` | `preserved-identity-commerce`          | Original page/artwork with Google-only Stripe controls and exact off-chain fulfillment.                                 |
-| `CACHE_INFO`        | `legacy-diagnostic`                    | Not mounted; internal cache diagnostics are not a player surface.                                                       |
+| `CACHE_INFO`        | `preserved-browser-diagnostic`         | Original browser/game cache overview, linked from the preserved footer and backed entirely by local browser storage.    |
 | `SHOP`              | `unreleased-source-mock`               | Not mounted: its source data is explicitly `MOCK_SHOP_ITEMS`, its copy is placeholder lorem ipsum, and every offer button is wired to `noop`; there is no earning, purchase, or API behavior to retire. |
 | `HERO_FEATURE`      | `preserved-offchain-controls`          | Original Hero page with Google Gold-card exchange.                                                                      |
 | `SELECT_GOLDS`      | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
@@ -46,6 +46,14 @@ mock offers expire relative to browser load, all sections repeat placeholder
 copy, and the only action handler is `noop`. Promoting those values would invent
 an economy rather than preserve shipped work. Any real offer later introduced
 must use an approved catalog and receipt-backed off-chain fulfillment.
+
+The original Cache Info page is wallet-independent and remains useful in the
+Cloudflare build: Practice still loads the original game assets, the Home
+widget offers the source browser-cache prefetch, and the preserved footer links
+to this route. Google mode therefore mounts the unchanged cache overview and
+render diagnostics rather than leaving that source navigation item pointed at
+the 404 page. It reads browser storage and graphics capabilities only; it does
+not create player or reward state.
 
 ## Production rollout
 

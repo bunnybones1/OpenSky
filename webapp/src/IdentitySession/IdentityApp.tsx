@@ -28,6 +28,7 @@ import { IdentityCapabilityPage } from './components/IdentityCapabilityPage'
 import { useIdentityAppShell } from './useIdentityAppShell'
 
 const AdminPage = lazy(() => import('~/AdminPage/AdminPage'))
+const CacheInfoPage = lazy(() => import('~/CacheInfoPage/CacheInfoPage'))
 const AdminCommunity = lazy(
   () => import('~/AdminPage/outlets/AdminComunity/AdminComunity')
 )
@@ -132,6 +133,14 @@ export const IdentityApp = memo(() => {
           <Route
             element={<SkyPassPurchasePage />}
             path={ROUTES_CONFIG.routes.SKY_PASS_PURCHASE.path}
+          />
+          <Route
+            element={
+              <Suspense fallback={<RouteLoaderComponent />}>
+                <CacheInfoPage />
+              </Suspense>
+            }
+            path={ROUTES_CONFIG.routes.CACHE_INFO.path}
           />
           <Route element={<AccountPage />} path={ROUTES_CONFIG.routes.ACCOUNT.path} />
           <Route
