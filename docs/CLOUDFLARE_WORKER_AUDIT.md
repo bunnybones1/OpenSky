@@ -6,7 +6,7 @@ and Cloudflare disposition, enforced by
 `utils/audit-cloudflare-worker-runners.mjs` during the Cloudflare build.
 
 Production migration `0068_conquest_v2_offchain_rewards.sql` and main Worker
-version `54a2c25a-f38d-435c-b807-0d3a4c55e73a` were deployed on 2026-08-12.
+version `062efd07-b279-4707-86cb-0d2549f9fee4` were deployed on 2026-08-12.
 Post-deploy D1 verification found zero Conquest V2 schedules, cycles, awards,
 and failure incidents, as expected for the disabled-by-default rollout. Public
 webapp, Google-provider session, Ping, and the disabled public treasure-info
@@ -38,7 +38,7 @@ mint. WalletConnect remains an optional ownership integration only.
 | `PushNotificationsRunner` | Ported | Disabled-by-default OneSignal projection targets Google identity IDs, retries with a stable provider idempotency key, and dead-letters without affecting in-app delivery or rewards. |
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `RankPointsSoftResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
-| `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; live reward producers deliver off chain. |
+| `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; each source mint behavior maps to an off-chain item/entitlement or an explicit whole-feature retirement. |
 | `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward off chain. |
 | `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds and complete once. |
 | `StripeEventRunner` | Ported | Verified Stripe webhooks fulfill purchases idempotently in D1. |
@@ -47,6 +47,27 @@ mint. WalletConnect remains an optional ownership integration only.
 `pnpm check:cloudflare:worker-runners` fails if the Go entrypoint adds or removes
 a runner without review, if mapped implementation evidence disappears, or if a
 commented-out runner is accidentally counted as active.
+
+### SendTxnsRunner reward map
+
+| Source queue | Cloud Weasel disposition |
+| --- | --- |
+| `ExitConquestQueue` | Source Conquest Silver selection is granted to `player_items` under an immutable settlement receipt. |
+| `MintConquestEntriesQueue` | A verified Stripe purchase grants `SW_CONQUEST_TICKET` directly in D1; no wallet ticket is minted. |
+| `MintSilverCardRewardsQueue` | The consolidated leaderboard cycle grants `SW_SILVER_CARDS` under player award receipts. |
+| `MintTicketRewardsQueue` | The consolidated leaderboard cycle grants `SW_CONQUEST_TICKET` under the same player award receipt. |
+| `MintStickerRewardsQueue` | Referral sticker awards grant `SW_STICKERS` with immutable referral receipts. |
+| `DelayedMintingQueue` | Delayed Conquest Gold delivery grants `SW_GOLD_CARDS` with one delivery receipt per run. |
+| `SendConquestExtraRewardQueue` | Whole feature retired: this is a treasury asset transfer, not a mint, and the source has no production producer or earning flow. |
+| `ConquestV2SendRewardQueue` | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise. |
+| `MintLeaderboardRewardsQueue` | Combined leaderboard Silver and ticket rewards are granted atomically under D1 cycle/player receipts. |
+| `MintCardBackRewardsQueue` | An earned SkyPass claim grants `SW_CARD_BACKS` under `player_skypass_claims`. |
+| `MintSkypassConquestTicketsQueue` | An earned SkyPass claim grants `SW_CONQUEST_TICKET` under `player_skypass_claims`. |
+| `MintSkypassSilverCardsQueue` | An earned SkyPass claim grants `SW_SILVER_CARDS` under `player_skypass_claims`. |
+| `MintSkypassStickersQueue` | An earned SkyPass claim grants `SW_STICKERS` under `player_skypass_claims`. |
+
+The production mint-queue gate reads the implementation evidence behind every
+row. A queue is not accepted merely because its source producer is absent.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
 reward delivery paths rather than recreating the source mint queues. External

@@ -36,11 +36,20 @@ const activeTasks = [
 ]
 const evidence = {
   ExitConquestQueue: 'player_conquest_settlements player_items',
+  MintConquestEntriesQueue: 'stripe_checkout_events SW_CONQUEST_TICKET',
+  MintSilverCardRewardsQueue:
+    'player_leaderboard_reward_awards SW_SILVER_CARDS',
+  MintTicketRewardsQueue:
+    'player_leaderboard_reward_awards SW_CONQUEST_TICKET',
   MintStickerRewardsQueue: 'referral_sticker_reward_awards player_items',
   DelayedMintingQueue: 'player_conquest_gold_deliveries player_items',
+  SendConquestExtraRewardQueue:
+    'SendConquestExtraRewardQueue has no production producer',
   ConquestV2SendRewardQueue: 'player_conquest_v2_reward_awards player_items',
   MintLeaderboardRewardsQueue: 'player_leaderboard_reward_awards player_items',
   MintCardBackRewardsQueue: 'player_skypass_claims SW_CARD_BACKS',
+  MintSkypassConquestTicketsQueue:
+    'player_skypass_claims SW_CONQUEST_TICKET',
   MintSkypassSilverCardsQueue: 'player_skypass_claims SW_SILVER_CARDS',
   MintSkypassStickersQueue: 'player_skypass_claims SW_STICKERS'
 }

@@ -124,13 +124,15 @@ export const offchainGateErrors = ({
       )
     }
   }
+  const normalizedPolicySource = policySource.replace(/\s+/g, ' ')
   for (const required of [
     'D1 inventory is the canonical authority',
     'No game flow asks a player to mint a reward',
+    'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement',
     'Apply the inventory change and fulfillment receipt in one D1 transaction',
     'Google-auth product copy describes these items'
   ]) {
-    if (!policySource.includes(required)) {
+    if (!normalizedPolicySource.includes(required)) {
       errors.push(`off-chain reward policy is missing: ${required}`)
     }
   }

@@ -5,66 +5,79 @@ import { pathToFileURL } from 'node:url'
 const EXPECTED_QUEUES = {
   ExitConquestQueue: {
     task: 'ExitConquestTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_conquest_settlements', 'player_items']
   },
   MintConquestEntriesQueue: {
     task: 'MintConquestEntriesTask',
-    disposition: 'producerless',
-    evidence: []
+    sourceProducer: false,
+    disposition: 'offchain-commerce',
+    evidence: ['stripe_checkout_events', 'SW_CONQUEST_TICKET']
   },
   MintSilverCardRewardsQueue: {
     task: 'MintSilverCardRewardsTask',
-    disposition: 'producerless',
-    evidence: []
+    sourceProducer: false,
+    disposition: 'offchain-leaderboard',
+    evidence: ['player_leaderboard_reward_awards', 'SW_SILVER_CARDS']
   },
   MintTicketRewardsQueue: {
     task: 'MintTicketRewardsTask',
-    disposition: 'producerless',
-    evidence: []
+    sourceProducer: false,
+    disposition: 'offchain-leaderboard',
+    evidence: ['player_leaderboard_reward_awards', 'SW_CONQUEST_TICKET']
   },
   MintStickerRewardsQueue: {
     task: 'MintStickerRewardsTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['referral_sticker_reward_awards', 'player_items']
   },
   DelayedMintingQueue: {
     task: 'DelayedMintingTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_conquest_gold_deliveries', 'player_items']
   },
   SendConquestExtraRewardQueue: {
     task: 'SendConquestExtraRewardTask',
-    disposition: 'producerless',
-    evidence: []
+    sourceProducer: false,
+    disposition: 'retired-whole-feature',
+    evidence: ['SendConquestExtraRewardQueue', 'no production producer']
   },
   ConquestV2SendRewardQueue: {
     task: 'ConquestV2SendRewardTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_conquest_v2_reward_awards', 'player_items']
   },
   MintLeaderboardRewardsQueue: {
     task: 'MintLeaderboardRewardsTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_leaderboard_reward_awards', 'player_items']
   },
   MintCardBackRewardsQueue: {
     task: 'MintCardBackRewardsTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_skypass_claims', 'SW_CARD_BACKS']
   },
   MintSkypassConquestTicketsQueue: {
     task: 'MintSkypassConquestTicketsTask',
-    disposition: 'producerless',
-    evidence: []
+    sourceProducer: false,
+    disposition: 'offchain-skypass',
+    evidence: ['player_skypass_claims', 'SW_CONQUEST_TICKET']
   },
   MintSkypassSilverCardsQueue: {
     task: 'MintSkypassSilverCardsTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_skypass_claims', 'SW_SILVER_CARDS']
   },
   MintSkypassStickersQueue: {
     task: 'MintSkypassStickersTask',
+    sourceProducer: true,
     disposition: 'offchain',
     evidence: ['player_skypass_claims', 'SW_STICKERS']
   }
@@ -100,20 +113,18 @@ export const mintQueueAuditErrors = ({
     const producers = [
       ...goSource.matchAll(new RegExp(`\\b${review.task}\\s*\\{`, 'g'))
     ].length
-    if (review.disposition === 'producerless' && producers !== 0) {
+    if (!review.sourceProducer && producers !== 0) {
       errors.push(
         `${queue} gained ${producers} production producer(s) without review`
       )
     }
-    if (review.disposition !== 'producerless' && producers === 0) {
+    if (review.sourceProducer && producers === 0) {
       errors.push(`${queue} lost its reviewed source producer`)
     }
-    if (review.disposition !== 'producerless') {
-      const evidence = evidenceSources[queue] ?? ''
-      for (const token of review.evidence) {
-        if (!evidence.includes(token)) {
-          errors.push(`${queue} is missing Cloudflare evidence: ${token}`)
-        }
+    const evidence = evidenceSources[queue] ?? ''
+    for (const token of review.evidence) {
+      if (!evidence.includes(token)) {
+        errors.push(`${queue} is missing Cloudflare evidence: ${token}`)
       }
     }
   }
@@ -148,7 +159,9 @@ const main = async () => {
     referral,
     leaderboard,
     skypass,
-    conquestV2
+    conquestV2,
+    stripeCheckout,
+    policy
   ] = await Promise.all([
     readFile(
       path.join(root, 'game-server-cloudflare/src/conquest-settlement.ts'),
@@ -176,15 +189,22 @@ const main = async () => {
       readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
       readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
       readFile(path.join(root, 'docs/CLOUDFLARE_RPC_AUDIT.md'), 'utf8')
-    ]).then(parts => parts.join('\n'))
+    ]).then(parts => parts.join('\n')),
+    readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
+    readFile(path.join(root, 'docs/OFFCHAIN_REWARD_POLICY.md'), 'utf8')
   ])
   const evidenceSources = {
     ExitConquestQueue: conquestSettlement,
+    MintConquestEntriesQueue: stripeCheckout,
+    MintSilverCardRewardsQueue: leaderboard,
+    MintTicketRewardsQueue: leaderboard,
     MintStickerRewardsQueue: referral,
     DelayedMintingQueue: conquestDelivery,
+    SendConquestExtraRewardQueue: policy,
     ConquestV2SendRewardQueue: conquestV2,
     MintLeaderboardRewardsQueue: leaderboard,
     MintCardBackRewardsQueue: skypass,
+    MintSkypassConquestTicketsQueue: skypass,
     MintSkypassSilverCardsQueue: skypass,
     MintSkypassStickersQueue: skypass
   }
@@ -200,7 +220,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    'All 13 source transaction queues have reviewed Cloudflare dispositions\n'
+    'All 13 source transaction queues have explicit off-chain or whole-feature-retirement dispositions\n'
   )
 }
 

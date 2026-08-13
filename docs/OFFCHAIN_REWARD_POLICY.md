@@ -12,6 +12,10 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   scoped entitlement/ledger.
 - No game flow asks a player to mint a reward or prepares a transaction that
   transfers a game reward to a wallet.
+- Every preserved source behavior that required minting grants an equivalent
+  off-chain item or entitlement. A reward may disappear only when its entire
+  earning or purchase behavior is explicitly retired; removing only the mint
+  step is not a valid disposition.
 - Google-auth product copy describes these items as Cloud Weasel inventory,
   collectibles, exchanges, claims, or deliveries. Mint/tradable badges and
   blockchain-wallet reward copy remain confined to the legacy-wallet product.
@@ -92,11 +96,16 @@ receipt blob is not reward authority. Provider credentials and raw purchase
 tokens never enter reward evidence.
 
 The source transaction-queue audit also inventories all 13 queues consumed by
-`SendTxnsRunner`. Eight have an active source producer and must remain linked to
-an off-chain implementation or an explicit dormant product gate; five have no
-production producer and must stay producerless unless reviewed. A newly added
-queue, a revived producerless task, or missing Cloudflare evidence fails the
-production build.
+`SendTxnsRunner`. Eight have an active source producer and five are source-
+producerless compatibility queues. Every queue, including the producerless
+ones, is linked to an off-chain implementation or an explicit whole-feature
+retirement. A newly added queue, a revived producerless task, or missing
+Cloudflare evidence fails the production build. The producerless Conquest
+extra-reward transfer is the only whole-feature retirement: the source has no
+production producer, and Cloud Weasel has no corresponding earning or purchase
+flow. `SendConquestExtraRewardQueue` therefore has no production producer and
+must remain unavailable unless a reviewed off-chain reward design is added
+first.
 
 The browser transaction audit separately freezes every direct transaction
 callsite in the preserved webapp. Product surfaces excluded from `IdentityApp`,
