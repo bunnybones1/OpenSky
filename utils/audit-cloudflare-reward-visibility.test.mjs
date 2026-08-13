@@ -20,7 +20,7 @@ const completeEvidence = () => ({
   `
 })
 
-test('accepts a player-visible outcome for every non-retired mint queue', () => {
+test('accepts a player-visible outcome for every player-outcome queue', () => {
   assert.deepEqual(
     rewardVisibilityAuditErrors({ evidenceSources: completeEvidence() }),
     []
@@ -49,17 +49,17 @@ test('rejects invisible grants, new queues, and day-stale notifications', () => 
   assert.ok(errors.some(error => error.includes('ONE_MINUTE')))
 })
 
-test('rejects a retired flow with an active player visibility contract', () => {
+test('rejects unused infrastructure with an active player visibility contract', () => {
   const original = EXPECTED_QUEUES.MintSkypassStickersQueue.disposition
   try {
     EXPECTED_QUEUES.MintSkypassStickersQueue.disposition =
-      'retired-whole-feature'
+      'unused-infrastructure'
     const errors = rewardVisibilityAuditErrors({
       evidenceSources: completeEvidence()
     })
     assert.ok(
       errors.some(error =>
-        error.includes('retired but has an active visibility contract')
+        error.includes('unused infrastructure but has an active player visibility contract')
       )
     )
   } finally {

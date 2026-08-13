@@ -167,7 +167,8 @@ export const authModeAuditErrors = ({ sources, fidelity = {} }) => {
 
   for (const token of [
     'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement',
-    'Minting is never a reason to remove an earning flow, reward, or reward receipt from the identity product'
+    'Minting is never a reason to remove an earning flow, reward, or reward receipt from the identity product',
+    'No original earning, purchase, or reward behavior may be retired because its fulfillment used minting'
   ]) {
     if (!(fidelity.policy ?? '').replace(/\s+/g, ' ').includes(token)) {
       errors.push(`off-chain equivalence policy is missing: ${token}`)

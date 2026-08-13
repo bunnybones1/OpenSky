@@ -18,7 +18,7 @@ const validFidelity = () => ({
   accountInventory: 'CLOUD WEASEL INVENTORY useCardBalanceOverview useConquestAndUSDCBalances',
   feed: 'event.type === FeedEventType.REWARD getCardsFromTokenIds(_tokenIds)',
   playerRpc: "player_conquest_v2_reward_feed_events type: 'REWARD' tokenIds: parseJsonArray(row.token_ids_json).map(Number)",
-  policy: 'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement. Minting is never a reason to remove an earning flow, reward, or reward receipt from the identity product.'
+  policy: 'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement. Minting is never a reason to remove an earning flow, reward, or reward receipt from the identity product. No original earning, purchase, or reward behavior may be retired because its fulfillment used minting.'
 })
 
 test('accepts the current reviewed identity divergence inventory', async () => {

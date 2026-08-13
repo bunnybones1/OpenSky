@@ -75,8 +75,14 @@ export const EXPECTED_QUEUES = {
   SendConquestExtraRewardQueue: {
     task: 'SendConquestExtraRewardTask',
     sourceProducer: false,
-    disposition: 'retired-whole-feature',
-    evidence: ['SendConquestExtraRewardQueue', 'no production producer']
+    sourcePlayerOutcome: false,
+    disposition: 'unused-infrastructure',
+    evidence: [
+      'SendConquestExtraRewardQueue',
+      'no production producer',
+      'treasury asset transfer rather than a mint',
+      'no corresponding player earning, purchase, or reward flow'
+    ]
   },
   ConquestV2SendRewardQueue: {
     task: 'ConquestV2SendRewardTask',
@@ -216,13 +222,24 @@ export const mintQueueAuditErrors = ({
         `${queue} has a source reward producer and must have an offchain disposition`
       )
     }
+    if (review.disposition.startsWith('retired')) {
+      errors.push(
+        `${queue} cannot retire an original earning, purchase, or reward behavior instead of replacing its fulfillment offchain`
+      )
+    }
     if (
-      review.disposition.startsWith('retired') &&
-      (review.sourceProducer || producers > 0)
+      review.disposition === 'unused-infrastructure' &&
+      (review.sourceProducer || producers > 0 || review.sourcePlayerOutcome !== false)
     ) {
       errors.push(
-        `${queue} cannot retire a source-produced reward instead of replacing its fulfillment offchain`
+        `${queue} can be unused infrastructure only with no producer and an explicit no-player-outcome review`
       )
+    }
+    if (
+      !review.disposition.startsWith('offchain') &&
+      review.disposition !== 'unused-infrastructure'
+    ) {
+      errors.push(`${queue} has an unsupported disposition: ${review.disposition}`)
     }
     const evidence = evidenceSources[queue] ?? ''
     for (const token of review.evidence) {
@@ -407,7 +424,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    'All 13 source transaction queues have explicit off-chain or whole-feature-retirement dispositions\n'
+    'All 12 player-outcome transaction queues have off-chain fulfillment; one producerless treasury queue is unused infrastructure\n'
   )
 }
 

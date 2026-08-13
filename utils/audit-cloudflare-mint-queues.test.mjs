@@ -59,7 +59,7 @@ const evidence = {
   DelayedMintingQueue:
     'player_conquest_gold_delivery_inventory_grants Conquest Gold grant receipts are immutable Conquest Gold delivery transition is invalid',
   SendConquestExtraRewardQueue:
-    'SendConquestExtraRewardQueue has no production producer',
+    'SendConquestExtraRewardQueue has no production producer and is a treasury asset transfer rather than a mint with no corresponding player earning, purchase, or reward flow',
   ConquestV2SendRewardQueue:
     'conquest_v2_reward_schedule_activations conquest_v2_reward_cycle_policy_receipts player_conquest_v2_reward_inventory_grants Conquest V2 reward inventory grants are immutable Conquest V2 reward receipt completion is invalid',
   MintLeaderboardRewardsQueue:
@@ -127,7 +127,7 @@ test('forbids retirement as the disposition for any source-produced reward', () 
   const review = EXPECTED_QUEUES.ExitConquestQueue
   const original = review.disposition
   try {
-    review.disposition = 'retired-whole-feature'
+    review.disposition = 'retired-feature'
     const errors = mintQueueAuditErrors({
       runnerSource,
       goSource: activeTasks.map(task => `${task}{}`).join('\n'),
@@ -140,10 +140,30 @@ test('forbids retirement as the disposition for any source-produced reward', () 
     )
     assert.ok(
       errors.some(error =>
-        error.includes('cannot retire a source-produced reward')
+        error.includes('cannot retire an original earning')
       )
     )
   } finally {
     review.disposition = original
+  }
+})
+
+test('allows unused infrastructure only when it has no player outcome', () => {
+  const review = EXPECTED_QUEUES.SendConquestExtraRewardQueue
+  const original = review.sourcePlayerOutcome
+  try {
+    review.sourcePlayerOutcome = true
+    const errors = mintQueueAuditErrors({
+      runnerSource,
+      goSource: activeTasks.map(task => `${task}{}`).join('\n'),
+      evidenceSources: evidence
+    })
+    assert.ok(
+      errors.some(error =>
+        error.includes('explicit no-player-outcome review')
+      )
+    )
+  } finally {
+    review.sourcePlayerOutcome = original
   }
 })

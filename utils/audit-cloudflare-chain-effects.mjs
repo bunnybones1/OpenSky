@@ -19,7 +19,10 @@ export const EXPECTED_CHAIN_EFFECT_FILES = {
   'api/lib/jobqueue/send_txns_runner.go': {
     count: 15,
     disposition: 'offchain-reward-ledgers',
-    evidence: ['All 13 source transaction queues', 'player_items']
+    evidence: [
+      'All 12 player-outcome transaction queues have off-chain fulfillment',
+      'player_items'
+    ]
   },
   'api/lib/payments/onchain_transaction_composer.go': {
     count: 3,

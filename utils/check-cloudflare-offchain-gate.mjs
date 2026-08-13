@@ -223,6 +223,7 @@ export const offchainGateErrors = ({
     'D1 inventory is the canonical authority',
     'No game flow asks a player to mint a reward',
     'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement',
+    'No original earning, purchase, or reward behavior may be retired because its fulfillment used minting',
     'Apply the inventory change and fulfillment receipt in one D1 transaction',
     'Google-auth product copy describes these items'
   ]) {

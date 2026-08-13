@@ -86,11 +86,13 @@ export const rewardVisibilityAuditErrors = ({
 }) => {
   const errors = []
   for (const [queue, review] of Object.entries(queueReviews)) {
-    const retired = review.disposition.startsWith('retired')
+    const hasNoPlayerOutcome = review.disposition === 'unused-infrastructure'
     const visibility = EXPECTED_VISIBILITY[queue]
-    if (retired) {
+    if (hasNoPlayerOutcome) {
       if (visibility) {
-        errors.push(`${queue} is retired but has an active visibility contract`)
+        errors.push(
+          `${queue} is unused infrastructure but has an active player visibility contract`
+        )
       }
       continue
     }

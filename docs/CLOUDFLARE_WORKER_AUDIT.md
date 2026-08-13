@@ -38,7 +38,7 @@ mint. WalletConnect remains an optional ownership integration only.
 | `PushNotificationsRunner` | Ported | Disabled-by-default OneSignal projection targets Google identity IDs, retries with a stable provider idempotency key, and dead-letters without affecting in-app delivery or rewards. |
 | `RankPointsHardResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
 | `RankPointsSoftResetRunner` | Ported | Implemented in the leaderboard reset cycle. |
-| `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; each source mint behavior maps to an off-chain item/entitlement or an explicit whole-feature retirement. |
+| `SendTxnsRunner` | Superseded | Its 13 queues have a separate mechanical audit; every player reward behavior maps to an off-chain item or entitlement, while one producerless treasury-transfer queue is classified as unused infrastructure. |
 | `SkypassAutoClaimRunner` | Ported | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward from the active exact policy off chain. |
 | `SkypassEndOfSeasonRunner` | Ported | D1 season-close cycles become due at the source boundary plus ten seconds, read only the active exact reward policy, and complete once. |
 | `StripeEventRunner` | Ported | Verified Stripe webhooks fulfill purchases idempotently in D1. |
@@ -58,7 +58,7 @@ commented-out runner is accidentally counted as active.
 | `MintTicketRewardsQueue` | The consolidated leaderboard cycle grants `SW_CONQUEST_TICKET` under the same player award receipt. |
 | `MintStickerRewardsQueue` | Referral sticker awards grant `SW_STICKERS` with immutable per-token before/after inventory receipts. |
 | `DelayedMintingQueue` | Delayed Conquest Gold delivery grants `SW_GOLD_CARDS` with one delivery receipt per run. |
-| `SendConquestExtraRewardQueue` | Whole feature retired: this is a treasury asset transfer, not a mint, and the source has no production producer or earning flow. |
+| `SendConquestExtraRewardQueue` | Unused infrastructure: this is a treasury asset transfer, not a mint; the source has no production producer and no player earning, purchase, or reward flow. No product feature is retired. |
 | `ConquestV2SendRewardQueue` | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise. |
 | `MintLeaderboardRewardsQueue` | Combined leaderboard Silver and ticket rewards are granted atomically under D1 cycle/player receipts. |
 | `MintCardBackRewardsQueue` | An earned, active-policy SkyPass claim grants `SW_CARD_BACKS` through immutable per-token before/after receipts. |
@@ -68,9 +68,10 @@ commented-out runner is accidentally counted as active.
 
 The production mint-queue gate reads the implementation evidence behind every
 row. A queue is not accepted merely because its source producer is absent.
-It also rejects any retirement disposition on a queue with a real source
-producer: removing minting must preserve that reward through an exact off-chain
-fulfillment path, not remove the player outcome.
+It rejects retirement for every queue with a producer or player outcome:
+removing minting must preserve that reward through an exact off-chain
+fulfillment path, not remove the player outcome. The sole unused-infrastructure
+classification must remain explicitly producerless and player-outcome-free.
 The separate reward-producer gate also scans upstream Go inventory, XP, hero,
 and starter-deck mutations, so a grant cannot evade review merely because its
 later mint happens in another worker.

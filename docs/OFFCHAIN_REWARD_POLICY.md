@@ -13,9 +13,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
 - No game flow asks a player to mint a reward or prepares a transaction that
   transfers a game reward to a wallet.
 - Every preserved source behavior that required minting grants an equivalent
-  off-chain item or entitlement. A reward may disappear only when its entire
-  earning or purchase behavior is explicitly retired; removing only the mint
-  step is not a valid disposition.
+  off-chain item or entitlement. No original earning, purchase, or reward
+  behavior may be retired because its fulfillment used minting; the player
+  outcome must remain and only its fulfillment authority changes.
 - Minting is never a reason to remove an earning flow, reward, or reward receipt
   from the identity product. The original outcome remains visible and useful;
   only its fulfillment authority changes from a chain to authenticated D1.
@@ -212,15 +212,15 @@ The source transaction-queue audit also inventories all 13 queues consumed by
 `SendTxnsRunner`. It discovers task producers across every executable Go file
 under `api`, rather than trusting a curated package list. Eight queues have an
 active source producer and five are source-producerless compatibility queues.
-Every queue, including the producerless ones, is linked to an off-chain
-implementation or an explicit whole-feature retirement. A newly added queue, a
-producer moved into a new package, a revived producerless task, or missing
-Cloudflare evidence fails the production build. The producerless Conquest
-extra-reward transfer is the only whole-feature retirement: the source has no
-production producer, and Cloud Weasel has no corresponding earning or purchase
-flow. `SendConquestExtraRewardQueue` therefore has no production producer and
-must remain unavailable unless a reviewed off-chain reward design is added
-first.
+Every queue that represents a player outcome, including producerless
+compatibility queues, is linked to an off-chain implementation. A newly added
+queue, a producer moved into a new package, a revived producerless task, or
+missing Cloudflare evidence fails the production build. The producerless
+Conquest extra-reward transfer is classified only as unused infrastructure: it
+is a treasury asset transfer rather than a mint, has no production producer,
+and has no corresponding player earning, purchase, or reward flow. It is not a
+retired product feature. `SendConquestExtraRewardQueue` must remain unavailable
+unless a reviewed off-chain player outcome is added first.
 
 The browser transaction audit separately freezes every direct transaction
 callsite in the preserved webapp. Product surfaces excluded from `IdentityApp`,
@@ -272,8 +272,8 @@ or item rows—even if that file never calls a contract itself. Exact callsite
 counts and implementation evidence cover account bootstrap, matches, quests,
 SkyPass, commerce, leaderboard/referral rewards, and operator/repair flows. A
 new producer or an expanded producer fails the build until its complete earning
-behavior has an off-chain TypeScript destination or a reviewed whole-feature
-retirement.
+behavior has an off-chain TypeScript destination. Retirement is not a valid
+disposition for a source reward producer.
 
 The destination-side reward-mutator audit independently freezes every direct
 TypeScript write to authoritative inventory, card unlocks, XP/profile state,

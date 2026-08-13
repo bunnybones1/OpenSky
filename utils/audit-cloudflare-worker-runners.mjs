@@ -123,7 +123,10 @@ export const EXPECTED_RUNNERS = {
   SendTxnsRunner: {
     disposition: 'superseded',
     evidenceFile: 'utils/audit-cloudflare-mint-queues.mjs',
-    evidence: ['All 13 source transaction queues', 'offchain']
+    evidence: [
+      'All 12 player-outcome transaction queues have off-chain fulfillment',
+      'unused infrastructure'
+    ]
   },
   SkypassAutoClaimRunner: {
     disposition: 'ported',
