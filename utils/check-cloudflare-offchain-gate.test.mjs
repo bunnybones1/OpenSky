@@ -69,6 +69,12 @@ const validInput = () => ({
     example:
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
   },
+  questRewardSource:
+    "player_quest_claim_batches; player_quest_claim_receipts; status = 'COMPLETED'",
+  questReceiptMigration:
+    'PRIMARY KEY (user_id, quest_key); ' +
+    'quest claim receipts are immutable; ' +
+    'quest claim batch completion is invalid',
   observationalSources: { analytics: 'INSERT INTO multiplayer_match_analytics' },
   optionalWalletSource:
     "methods: ['personal_sign']; swaps: false; onramp: false; " +
@@ -135,6 +141,23 @@ test('rejects a reward producer without D1 inventory and a receipt key', () => {
   assert.ok(errors.some(error => error.includes('canonical D1 inventory')))
   assert.ok(errors.some(error => error.includes('idempotent receipt key')))
   assert.ok(errors.some(error => error.includes('legacy transaction code')))
+})
+
+test('rejects quest XP without an immutable exactly-once receipt', () => {
+  const input = validInput()
+  input.questRewardSource = 'UPDATE player_profiles SET xp = xp + 100'
+  input.questReceiptMigration = 'CREATE TABLE claims (id TEXT)'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('grant is missing')))
+  assert.ok(errors.some(error => error.includes('schema is missing')))
+})
+
+test('rejects a chain effect from the quest XP grant', () => {
+  const input = validInput()
+  input.questRewardSource += '; sendTransaction()'
+  assert.ok(
+    offchainGateErrors(input).some(error => error.includes('chain effect'))
+  )
 })
 
 test('rejects player inventory writes from an observational pipeline', () => {

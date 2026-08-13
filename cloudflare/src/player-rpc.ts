@@ -14,10 +14,7 @@ import type {
   SkypassLevel,
   SkypassReward
 } from '@opensky/proto'
-import {
-  hasUnlockedRanked,
-  INITIAL_RANK_STATE_JSON
-} from '@opensky/shared/ranked-progression'
+import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { allLibraryCards } from './card-library'
 import { pendingConquestCards } from './conquest-delivery'
@@ -284,21 +281,22 @@ interface QuestRow {
 
 type QuestClaimRow = QuestRow
 
-interface ProfileProgressRow {
-  level: number
-  xp: number
-  basic_skypass_level: number
+interface QuestClaimReceiptRow {
+  reward_xp: number
+  before_level: number
+  before_xp: number
+  after_level: number
+  after_xp: number
+}
+
+interface QuestClaimBatchRow {
+  ranked_constructed_before: string
 }
 
 interface QuestEligibility {
   level: number
   ownedHeroes: Set<string>
   ownedCards: Set<number>
-}
-
-interface RankedStatusRow {
-  game_mode: string
-  player_rank: string
 }
 
 interface ProgressionRow {
@@ -2061,6 +2059,7 @@ export class PlayerRpcRepository {
       questKey?: string
       position?: 1 | 2 | 3
       periodicity?: Quest['periodicity']
+      claimToken?: string
     } = {}
   ): { questKey: string; statement: D1PreparedStatement } {
     const questKey =
@@ -2083,7 +2082,11 @@ export class PlayerRpcRepository {
               reward_xp, status, created_at, updated_at, quest_type, epic_type,
               epic_index, epic_length, position, periodicity, is_rerollable,
               is_new, active, period, rerolls)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+           WHERE ? IS NULL OR EXISTS (
+             SELECT 1 FROM player_quest_claim_receipts
+             WHERE claim_token = ?
+           )`
         )
         .bind(
           userId,
@@ -2105,7 +2108,9 @@ export class PlayerRpcRepository {
           spec.rerollable && rerolls < 1 ? 1 : 0,
           options.isNew ?? 1,
           period,
-          rerolls
+          rerolls,
+          options.claimToken || null,
+          options.claimToken || null
         )
     }
   }
@@ -2396,39 +2401,17 @@ export class PlayerRpcRepository {
 
     const placeholders = uniqueIds.map(() => '?').join(',')
     const currentSeason = seasonFromDate()
-    const [assignmentsResult, progress, rankedStatuses] = await Promise.all([
-      this.database
-        .prepare(
-          `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
-                  epic_length, position, progress, target, reward_xp,
-                  periodicity, is_rerollable, is_new, status, active, period,
-                  rerolls
-           FROM player_quests
-           WHERE user_id = ? AND rowid IN (${placeholders})`
-        )
-        .bind(userId, ...uniqueIds)
-        .all<QuestClaimRow>(),
-      this.database
-        .prepare(
-          `SELECT profile.level, profile.xp, progression.basic_skypass_level
-           FROM player_profiles profile
-           JOIN player_progression progression
-             ON progression.user_id = profile.user_id
-           WHERE profile.user_id = ?`
-        )
-        .bind(userId)
-        .first<ProfileProgressRow>(),
-      this.database
-        .prepare(
-          `SELECT game_mode, player_rank FROM player_account_stats
-           WHERE user_id = ?
-             AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
-             AND season = ?`
-        )
-        .bind(userId, currentSeason)
-        .all<RankedStatusRow>()
-    ])
-    if (!progress) throw new Error('player progression is missing')
+    const assignmentsResult = await this.database
+      .prepare(
+        `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
+                epic_length, position, progress, target, reward_xp,
+                periodicity, is_rerollable, is_new, status, active, period,
+                rerolls
+         FROM player_quests
+         WHERE user_id = ? AND rowid IN (${placeholders})`
+      )
+      .bind(userId, ...uniqueIds)
+      .all<QuestClaimRow>()
 
     const assignmentsById = new Map(
       assignmentsResult.results.map(assignment => [
@@ -2443,36 +2426,98 @@ export class PlayerRpcRepository {
     if (assignments.some(assignment => assignment.status !== 'complete')) {
       throw new Error('quest must be completed')
     }
+    if (!assignments.length) return { quest: null, rewards: [] }
 
-    let level = progress.level
-    let xp = progress.xp
-    const rankedWasUnlocked = hasUnlockedRanked(level, xp)
     let nextQuest: Quest | null = null
     let nextQuestKey: string | null = null
     const now = new Date().toISOString()
-    const rewards: Array<Record<string, unknown>> = []
-    const statements: D1PreparedStatement[] = []
+    const claimToken = crypto.randomUUID()
+    const claimPlaceholders = assignments.map(() => '?').join(',')
+    const statements: D1PreparedStatement[] = [
+      this.database
+        .prepare(
+          `INSERT INTO player_quest_claim_batches
+             (claim_token, user_id, assignment_count, status,
+              ranked_constructed_before, claimed_at)
+           SELECT ?, ?, ?, 'PREPARING', COALESCE((
+             SELECT player_rank FROM player_account_stats
+             WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+               AND season = ?
+           ), 'UNRANKED'), ?
+           WHERE (
+             SELECT COUNT(*) FROM player_quests
+             WHERE user_id = ? AND rowid IN (${claimPlaceholders})
+               AND status = 'complete'
+           ) = ?`
+        )
+        .bind(
+          claimToken,
+          userId,
+          assignments.length,
+          userId,
+          currentSeason,
+          now,
+          userId,
+          ...assignments.map(assignment => assignment.row_id),
+          assignments.length
+        )
+    ]
 
-    for (const assignment of assignments) {
-      const beforeXP = xp
-      xp += assignment.reward_xp
-      while (xp >= 200) {
-        xp -= 200
-        level++
-      }
-
-      const reward = {
-        accountID: 0,
-        type: 'EXP',
-        exp: {
-          amount: assignment.reward_xp,
-          reason: 'RankUp',
-          currentLevel: level,
-          requiredExp: 200,
-          beforeMatchExp: beforeXP
-        }
-      }
-      rewards.push(reward)
+    for (const [claimOrder, assignment] of assignments.entries()) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO player_quest_claim_receipts
+               (user_id, quest_key, quest_row_id, claim_token, claim_order,
+                reward_item_type, reward_xp, before_level, before_xp,
+                after_level, after_xp, claimed_at)
+             SELECT quest.user_id, quest.quest_key, quest.rowid, ?, ?, 'SW_XP',
+                    quest.reward_xp,
+                    profile.level + CAST((profile.xp + COALESCE((
+                      SELECT SUM(reward_xp) FROM player_quest_claim_receipts
+                      WHERE claim_token = ? AND claim_order < ?
+                    ), 0)) / 200 AS INTEGER),
+                    (profile.xp + COALESCE((
+                      SELECT SUM(reward_xp) FROM player_quest_claim_receipts
+                      WHERE claim_token = ? AND claim_order < ?
+                    ), 0)) % 200,
+                    profile.level + CAST((profile.xp + COALESCE((
+                      SELECT SUM(reward_xp) FROM player_quest_claim_receipts
+                      WHERE claim_token = ? AND claim_order < ?
+                    ), 0) + quest.reward_xp) / 200 AS INTEGER),
+                    (profile.xp + COALESCE((
+                      SELECT SUM(reward_xp) FROM player_quest_claim_receipts
+                      WHERE claim_token = ? AND claim_order < ?
+                    ), 0) + quest.reward_xp) % 200,
+                    ?
+             FROM player_quests quest
+             JOIN player_profiles profile ON profile.user_id = quest.user_id
+             JOIN player_progression progression
+               ON progression.user_id = quest.user_id
+             WHERE quest.user_id = ? AND quest.rowid = ?
+               AND quest.status = 'complete'
+               AND EXISTS (
+                 SELECT 1 FROM player_quest_claim_batches
+                 WHERE claim_token = ? AND status = 'PREPARING'
+               )`
+          )
+          .bind(
+            claimToken,
+            claimOrder,
+            claimToken,
+            claimOrder,
+            claimToken,
+            claimOrder,
+            claimToken,
+            claimOrder,
+            claimToken,
+            claimOrder,
+            now,
+            userId,
+            assignment.row_id,
+            claimToken
+          )
+      )
 
       if (
         assignment.epic_type &&
@@ -2501,7 +2546,8 @@ export class PlayerRpcRepository {
             progress: nextProgress,
             status: nextStatus,
             position: assignment.position as 1 | 2 | 3,
-            periodicity: assignment.periodicity
+            periodicity: assignment.periodicity,
+            claimToken
           }
         )
         nextQuestKey = insertion.questKey
@@ -2535,15 +2581,14 @@ export class PlayerRpcRepository {
               `UPDATE player_quests
                SET status = 'claimed', active = 0, claimed_at = ?, rewards = ?,
                    updated_at = ?
-               WHERE user_id = ? AND rowid = ? AND status = 'complete'`
+               WHERE user_id = ? AND rowid = ? AND status = 'complete'
+                 AND EXISTS (
+                   SELECT 1 FROM player_quest_claim_receipts receipt
+                   WHERE receipt.claim_token = ?
+                     AND receipt.quest_key = player_quests.quest_key
+                 )`
             )
-            .bind(
-              now,
-              JSON.stringify([reward]),
-              now,
-              userId,
-              assignment.row_id
-            ),
+            .bind(now, '[]', now, userId, assignment.row_id, claimToken),
           insertion.statement
         )
       } else {
@@ -2553,15 +2598,21 @@ export class PlayerRpcRepository {
               `UPDATE player_quests
                SET status = 'claimed', active = ?, claimed_at = ?, rewards = ?,
                    updated_at = ?
-               WHERE user_id = ? AND rowid = ? AND status = 'complete'`
+               WHERE user_id = ? AND rowid = ? AND status = 'complete'
+                 AND EXISTS (
+                   SELECT 1 FROM player_quest_claim_receipts receipt
+                   WHERE receipt.claim_token = ?
+                     AND receipt.quest_key = player_quests.quest_key
+                 )`
             )
             .bind(
               assignment.active,
               now,
-              JSON.stringify([reward]),
+              '[]',
               now,
               userId,
-              assignment.row_id
+              assignment.row_id,
+              claimToken
             )
         )
       }
@@ -2571,80 +2622,184 @@ export class PlayerRpcRepository {
       this.database
         .prepare(
           `UPDATE player_profiles
-           SET level = ?, xp = ?, next_level_xp = 200, updated_at = ?
-           WHERE user_id = ?`
+           SET level = (
+                 SELECT after_level FROM player_quest_claim_receipts
+                 WHERE claim_token = ? ORDER BY claim_order DESC LIMIT 1
+               ),
+               xp = (
+                 SELECT after_xp FROM player_quest_claim_receipts
+                 WHERE claim_token = ? ORDER BY claim_order DESC LIMIT 1
+               ),
+               next_level_xp = 200, updated_at = ?
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM player_quest_claim_receipts
+             WHERE claim_token = ?
+           )`
         )
-        .bind(level, xp, now, userId),
+        .bind(claimToken, claimToken, now, userId, claimToken),
       this.database
         .prepare(
           `UPDATE player_progression
-           SET basic_skypass_level = MAX(basic_skypass_level, ?),
-               basic_skypass_xp = ?, basic_skypass_next_xp = 200,
+           SET basic_skypass_level = MAX(basic_skypass_level, (
+                 SELECT after_level FROM player_quest_claim_receipts
+                 WHERE claim_token = ? ORDER BY claim_order DESC LIMIT 1
+               )),
+               basic_skypass_xp = (
+                 SELECT after_xp FROM player_quest_claim_receipts
+                 WHERE claim_token = ? ORDER BY claim_order DESC LIMIT 1
+               ),
+               basic_skypass_next_xp = 200,
                updated_at = ?
-           WHERE user_id = ?`
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM player_quest_claim_receipts
+             WHERE claim_token = ?
+           )`
         )
-        .bind(level, xp, now, userId)
+        .bind(claimToken, claimToken, now, userId, claimToken)
     )
 
-    if (!rankedWasUnlocked && hasUnlockedRanked(level, xp)) {
-      const rankByMode = new Map(
-        rankedStatuses.results.map(status => [
-          status.game_mode,
-          status.player_rank
-        ])
+    for (const mode of ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const) {
+      const unlockGuard = `EXISTS (
+        SELECT 1 FROM player_quest_claim_receipts receipt
+        WHERE receipt.claim_token = ? AND receipt.claim_order = 0
+          AND receipt.before_level = 1
+      ) AND EXISTS (
+        SELECT 1 FROM player_quest_claim_receipts receipt
+        WHERE receipt.claim_token = ?
+          AND receipt.after_level >= 2
+      )`
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO player_account_stats
+               (user_id, game_mode, season, created_at, updated_at)
+             SELECT ?, ?, ?, ?, ? WHERE ${unlockGuard}`
+          )
+          .bind(userId, mode, currentSeason, now, now, claimToken, claimToken),
+        this.database
+          .prepare(
+            `UPDATE player_account_stats
+             SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+                 score = 0, player_rank_state = ?, updated_at = ?
+             WHERE user_id = ? AND game_mode = ? AND season = ?
+               AND player_rank = 'UNRANKED' AND ${unlockGuard}`
+          )
+          .bind(
+            INITIAL_RANK_STATE_JSON,
+            now,
+            userId,
+            mode,
+            currentSeason,
+            claimToken,
+            claimToken
+          )
       )
-      for (const mode of ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const) {
-        statements.push(
-          this.database
-            .prepare(
-              `INSERT OR IGNORE INTO player_account_stats
-                 (user_id, game_mode, season, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)`
-            )
-            .bind(userId, mode, currentSeason, now, now),
-          this.database
-            .prepare(
-              `UPDATE player_account_stats
-               SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
-                   score = 0, player_rank_state = ?, updated_at = ?
-               WHERE user_id = ? AND game_mode = ? AND season = ?
-                 AND player_rank = 'UNRANKED'`
-            )
-            .bind(INITIAL_RANK_STATE_JSON, now, userId, mode, currentSeason)
-        )
-      }
-      if (
-        !rankByMode.has('RANKED_CONSTRUCTED') ||
-        rankByMode.get('RANKED_CONSTRUCTED') === 'UNRANKED'
-      ) {
-        rewards.push({
-          accountID: 0,
-          type: 'RANK',
-          gameMode: 'RANKED_CONSTRUCTED',
-          rank: {
-            beforeMatch: {
-              rank: 'UNRANKED',
-              rankStage: 'STAGE_I',
-              requiredRankPoints: 0,
-              rankPosition: 0,
-              score: 0,
-              scoreAbove: 0,
-              scoreBelow: 0
-            },
-            afterMatch: {
-              rank: 'WANDERER',
-              rankStage: 'STAGE_I',
-              requiredRankPoints: 100,
-              rankPosition: 0,
-              score: 0,
-              scoreAbove: 0,
-              scoreBelow: 0
-            }
-          }
-        })
-      }
     }
+    statements.push(
+      this.database
+        .prepare(
+          `UPDATE player_quests
+           SET rewards = (
+             SELECT json_array(json_object(
+               'accountID', 0,
+               'type', 'EXP',
+               'exp', json_object(
+                 'amount', receipt.reward_xp,
+                 'reason', 'RankUp',
+                 'currentLevel', receipt.after_level,
+                 'requiredExp', 200,
+                 'beforeMatchExp', receipt.before_xp
+               )
+             ))
+             FROM player_quest_claim_receipts receipt
+             WHERE receipt.claim_token = ?
+               AND receipt.quest_key = player_quests.quest_key
+           )
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM player_quest_claim_receipts receipt
+             WHERE receipt.claim_token = ?
+               AND receipt.quest_key = player_quests.quest_key
+           )`
+        )
+        .bind(claimToken, userId, claimToken),
+      this.database
+        .prepare(
+          `UPDATE player_quest_claim_batches
+           SET status = 'COMPLETED', completed_at = ?
+           WHERE claim_token = ? AND status = 'PREPARING'`
+        )
+        .bind(now, claimToken)
+    )
     await this.database.batch(statements)
+
+    const [batch, receiptResult] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT ranked_constructed_before
+           FROM player_quest_claim_batches
+           WHERE claim_token = ? AND status = 'COMPLETED'`
+        )
+        .bind(claimToken)
+        .first<QuestClaimBatchRow>(),
+      this.database
+        .prepare(
+          `SELECT reward_xp, before_level, before_xp, after_level, after_xp
+           FROM player_quest_claim_receipts
+           WHERE claim_token = ? ORDER BY claim_order`
+        )
+        .bind(claimToken)
+        .all<QuestClaimReceiptRow>()
+    ])
+    if (!batch || receiptResult.results.length !== assignments.length) {
+      throw new Error('quest must be completed')
+    }
+
+    const rewards: Array<Record<string, unknown>> = receiptResult.results.map(
+      receipt => ({
+        accountID: 0,
+        type: 'EXP',
+        exp: {
+          amount: receipt.reward_xp,
+          reason: 'RankUp',
+          currentLevel: receipt.after_level,
+          requiredExp: 200,
+          beforeMatchExp: receipt.before_xp
+        }
+      })
+    )
+    const firstReceipt = receiptResult.results[0]
+    const lastReceipt = receiptResult.results.at(-1)!
+    if (
+      firstReceipt.before_level === 1 &&
+      lastReceipt.after_level >= 2 &&
+      batch.ranked_constructed_before === 'UNRANKED'
+    ) {
+      rewards.push({
+        accountID: 0,
+        type: 'RANK',
+        gameMode: 'RANKED_CONSTRUCTED',
+        rank: {
+          beforeMatch: {
+            rank: 'UNRANKED',
+            rankStage: 'STAGE_I',
+            requiredRankPoints: 0,
+            rankPosition: 0,
+            score: 0,
+            scoreAbove: 0,
+            scoreBelow: 0
+          },
+          afterMatch: {
+            rank: 'WANDERER',
+            rankStage: 'STAGE_I',
+            requiredRankPoints: 100,
+            rankPosition: 0,
+            score: 0,
+            scoreAbove: 0,
+            scoreBelow: 0
+          }
+        }
+      })
+    }
 
     if (nextQuest && nextQuestKey) {
       const row = await this.database

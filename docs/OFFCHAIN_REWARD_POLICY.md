@@ -57,13 +57,22 @@ Every reward producer must:
 5. Keep item IDs in the established off-chain representation. Wallet token-ID
    encoding belongs only in an optional ownership adapter.
 
-Existing SkyPass claim receipts, Conquest delivery keys, leaderboard award
-receipts, referral-sticker award batches, and Stripe webhook receipts are the
-reference implementations. New reward paths must test duplicate, concurrent,
-rollback, and retry behavior before production deployment. The release gate
-scans every producer module for both canonical `player_items` writes and an
-idempotent receipt/delivery key, in addition to excluding transaction code from
-the Google-identity route tree.
+Existing quest-XP and SkyPass claim receipts, Conquest delivery keys,
+leaderboard award receipts, referral-sticker award batches, and Stripe webhook
+receipts are the reference implementations. New reward paths must test
+duplicate, concurrent, rollback, and retry behavior before production
+deployment. The release gate scans every producer module for both canonical
+`player_items` writes and an idempotent receipt/delivery key, in addition to
+excluding transaction code from the Google-identity route tree.
+
+Quest rewards preserve the source `SW_XP` contract as identity-owned
+progression; they never mint an item. Each completed assignment owns one
+immutable receipt keyed by identity and source quest. A D1 claim batch computes
+the before/after level and SkyPass XP snapshots from database state, applies all
+progression and epic-chain mutations atomically, and completes only when every
+requested assignment has a valid receipt. Concurrent different claims
+accumulate instead of overwriting one another, while a duplicate claim cannot
+credit XP or create another epic step.
 
 Conquest V2 weekly treasure follows the same rule. Its source point thresholds,
 float32 weights, point rollover, expansion-only card selection, and delayed

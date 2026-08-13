@@ -374,6 +374,10 @@ and progress are not migrated.
   reporter/match makes reconnect retries idempotent.
 - Epic quest-chain reads combine claimed assignment history, the active step,
   and zero-ID previews derived from the exact generated source quest specs.
+- Quest claims preserve the source's XP-only reward behavior as off-chain
+  identity progression. Immutable per-assignment receipts and atomic D1 claim
+  batches prevent duplicate XP, lost concurrent XP updates, and duplicate epic
+  steps; failed receipt writes roll the entire claim back.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker

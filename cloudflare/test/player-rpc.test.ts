@@ -1639,6 +1639,174 @@ describe('legacy player RPC compatibility', () => {
     expect(response.status).toBe(500)
   })
 
+  it('credits concurrent completed quest claims exactly once each', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests
+         SET status = 'complete', progress = target, active = 0, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_quests
+           (user_id, quest_key, title, description, progress, target,
+            reward_xp, status, created_at, updated_at, quest_type, position,
+            periodicity, is_rerollable, is_new, active, period, rerolls)
+         VALUES (?, 'concurrent-quest-a', 'Concurrent A', 'Test', 1, 1, 125,
+                 'complete', ?, ?, 'WinGames', 1, 'WEEKLY', 0, 1, 1, 1, 0),
+                (?, 'concurrent-quest-b', 'Concurrent B', 'Test', 1, 1, 175,
+                 'complete', ?, ?, 'PlayGames', 2, 'WEEKLY', 0, 1, 1, 1, 0)`
+      ).bind(userId, now, now, userId, now, now)
+    ])
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_key IN ('concurrent-quest-a', 'concurrent-quest-b')
+       ORDER BY quest_key`
+    )
+      .bind(userId)
+      .all<{ id: number }>()
+
+    const responses = await Promise.all(
+      rows.results.map(row => rpc('ClaimQuestRewards', { ids: [row.id] }))
+    )
+    expect(responses.every(response => response.status === 200)).toBe(true)
+
+    const profile = await env.AUTH_DB.prepare(
+      `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ level: number; xp: number }>()
+    expect(profile).toEqual({ level: 2, xp: 100 })
+
+    const receipts = await env.AUTH_DB.prepare(
+      `SELECT reward_xp, before_level, before_xp, after_level, after_xp
+       FROM player_quest_claim_receipts WHERE user_id = ?
+       ORDER BY ((before_level - 1) * 200) + before_xp`
+    )
+      .bind(userId)
+      .all<{
+        reward_xp: number
+        before_level: number
+        before_xp: number
+        after_level: number
+        after_xp: number
+      }>()
+    expect(receipts.results).toHaveLength(2)
+    expect(
+      receipts.results.reduce((total, row) => total + row.reward_xp, 0)
+    ).toBe(300)
+    expect(receipts.results[0]).toMatchObject({
+      before_level: 1,
+      before_xp: 0
+    })
+    expect(receipts.results[1]).toMatchObject({
+      before_level: receipts.results[0].after_level,
+      before_xp: receipts.results[0].after_xp,
+      after_level: 2,
+      after_xp: 100
+    })
+  })
+
+  it('rejects a duplicate concurrent claim without a second XP receipt', async () => {
+    const list = await rpc('ListQuests', {})
+    const welcome = (
+      await list.json<{
+        quests: Array<{ id: number; questType: string }>
+      }>()
+    ).quests.find(quest => quest.questType === 'WelcomeOpenSky')
+
+    const responses = await Promise.all([
+      rpc('ClaimQuestRewards', { ids: [welcome!.id] }),
+      rpc('ClaimQuestRewards', { ids: [welcome!.id] })
+    ])
+    expect(responses.map(response => response.status).sort()).toEqual([
+      200, 500
+    ])
+
+    const [profile, receiptCount, nextQuestCount] = await Promise.all([
+      env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first<{ level: number; xp: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_quest_claim_receipts
+         WHERE user_id = ? AND quest_key = 'practice-match'`
+      )
+        .bind(userId)
+        .first<{ count: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_quests
+         WHERE user_id = ? AND quest_type = 'AnEnemyApproaches' AND active = 1`
+      )
+        .bind(userId)
+        .first<{ count: number }>()
+    ])
+    expect(profile).toEqual({ level: 2, xp: 100 })
+    expect(receiptCount?.count).toBe(1)
+    expect(nextQuestCount?.count).toBe(1)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_quest_claim_receipts SET reward_xp = 999
+         WHERE user_id = ? AND quest_key = 'practice-match'`
+      )
+        .bind(userId)
+        .run()
+    ).rejects.toThrow('quest claim receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_quest_claim_receipts
+         WHERE user_id = ? AND quest_key = 'practice-match'`
+      )
+        .bind(userId)
+        .run()
+    ).rejects.toThrow('quest claim receipts are immutable')
+  })
+
+  it('rolls the entire off-chain quest grant back on a receipt failure', async () => {
+    const list = await rpc('ListQuests', {})
+    const welcome = (
+      await list.json<{
+        quests: Array<{ id: number; questType: string }>
+      }>()
+    ).quests.find(quest => quest.questType === 'WelcomeOpenSky')
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_quest_receipt_failure
+       BEFORE INSERT ON player_quest_claim_receipts
+       BEGIN SELECT RAISE(ABORT, 'test quest receipt failure'); END`
+    ).run()
+
+    try {
+      expect(
+        (await rpc('ClaimQuestRewards', { ids: [welcome!.id] })).status
+      ).toBe(500)
+    } finally {
+      await env.AUTH_DB.prepare('DROP TRIGGER test_quest_receipt_failure').run()
+    }
+
+    const [profile, assignment, batchCount] = await Promise.all([
+      env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first<{ level: number; xp: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT status FROM player_quests WHERE user_id = ? AND rowid = ?`
+      )
+        .bind(userId, welcome!.id)
+        .first<{ status: string }>(),
+      env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_quest_claim_batches
+         WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first<{ count: number }>()
+    ])
+    expect(profile).toEqual({ level: 1, xp: 0 })
+    expect(assignment?.status).toBe('complete')
+    expect(batchCount?.count).toBe(0)
+  })
+
   it('fills eligible source quest slots and shares one manual daily reroll', async () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([

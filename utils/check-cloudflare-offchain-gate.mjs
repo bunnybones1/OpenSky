@@ -100,6 +100,8 @@ export const offchainGateErrors = ({
   googleRewardUi = {},
   googleRewardCopy = [],
   rewardSources = {},
+  questRewardSource = '',
+  questReceiptMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -246,6 +248,29 @@ export const offchainGateErrors = ({
       }
     }
   }
+  if (questRewardSource || questReceiptMigration) {
+    for (const token of [
+      'player_quest_claim_batches',
+      'player_quest_claim_receipts',
+      "status = 'COMPLETED'"
+    ]) {
+      if (!questRewardSource.includes(token)) {
+        errors.push(`quest XP grant is missing receipt safeguard: ${token}`)
+      }
+    }
+    for (const token of [
+      'PRIMARY KEY (user_id, quest_key)',
+      'quest claim receipts are immutable',
+      'quest claim batch completion is invalid'
+    ]) {
+      if (!questReceiptMigration.includes(token)) {
+        errors.push(`quest XP receipt schema is missing safeguard: ${token}`)
+      }
+    }
+    if (/\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(questRewardSource)) {
+      errors.push('quest XP grant contains a legacy chain effect')
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -318,7 +343,8 @@ const main = async () => {
     analyticsWorker,
     walletContents,
     walletConnector,
-    walletSettings
+    walletSettings,
+    questReceiptMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -483,6 +509,10 @@ const main = async () => {
         'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/SettingsButton/AccountSettingsDialog/DefaultSettingsList/WalletConnectionsSettings/WalletConnectionsSettings.tsx'
       ),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/migrations/0069_quest_claim_receipts.sql'),
+      'utf8'
     )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
@@ -542,6 +572,8 @@ const main = async () => {
       mobileStoreFulfillment,
       skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`
     },
+    questRewardSource: playerRpc,
+    questReceiptMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })
