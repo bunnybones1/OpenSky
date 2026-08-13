@@ -3,10 +3,10 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`ec76765a-2b9a-4bb2-8ba8-4ba83af1dde1`)
+- API/web Worker: `opensky-webapp` (`a73193d6-373d-45e8-a41d-cc5e8f9fcabd`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
-- Game Worker: `cloud-weasel-game-server` (`03392572-84e0-47cf-9f55-08dff28fbb41`)
+- Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
@@ -33,9 +33,12 @@
   exchange and its preserved original-product interface, and `a8b8d89` for
   Google-mode off-chain reward presentation and regression guards, plus
   `8aaac21` for build-enforced Go-worker inventory and `d50c553` for off-chain
-  SkyPass season close and auto-claim
-- Deployed: 2026-08-12 PDT
-- Applied D1 migrations: `0001` through `0064`
+  SkyPass season close and auto-claim. The current API/web artifact also
+  includes `8ec460f` for inventory-only card details and `fd60828` for safe
+  Base/Silver/Gold navigation.
+- Deployed: 2026-08-13 PDT
+- Applied D1 migrations: `0001` through `0085`; the remote migration check
+  reports no pending migrations.
 - Scheduled trigger: every minute for due Conquest Gold delivery, SkyPass
   season close and auto-claim, account
   anonymization, expired wallet-proof cleanup, and explicitly configured
@@ -212,11 +215,12 @@
 - Authoritative WASM matches with bots, timers, hibernation, quests, XP, ranks,
   match rewards, private/public spectators, and capability-protected replays
 
-R2 activation is pending an account-level Cloudflare choice; once enabled, add
-the private `cloud-weasel-client-feedback` binding and a reviewed retention
-lifecycle before accepting feedback. The WalletConnect browser UI remains an
-optional future integration pending a
-public WalletConnect/Reown project ID and origin allowlist. Contract-account
+R2 activation is pending an account-level Cloudflare choice; the live API still
+returns Cloudflare error `10042`. Once enabled, create the private feedback and
+analytics buckets, add reviewed retention lifecycles, deploy the analytics
+consumer, and verify it before enabling either producer. The WalletConnect
+browser UI and ownership-proof boundary are deployed but remain inactive
+pending a public WalletConnect/Reown project ID and origin allowlist. Contract-account
 ERC-1271 verification also remains pending an approved chain RPC; the deployed
 proof boundary currently accepts EOAs only. Captcha is deployed but remains
 disabled until Cloud Weasel hCaptcha credentials are provisioned.
@@ -229,16 +233,26 @@ settlement and delayed delivery against that pool.
 
 ## Latest verification
 
-- API Worker: 32 files, 228 tests
-- Match service: 14 Worker tests
-- Game Worker: 25 unit and 59 Worker tests
-- Matchmaker: 26 unit and 18 Worker tests
+- API Worker: 44 files, 313 tests
+- Match service: 26 tests
+- Game Worker: 31 unit and 80 Worker tests
+- Matchmaker: 47 unit and 31 Worker tests
+- Game analytics: four unit and two Worker tests; deployment remains blocked
+  by account-level R2 error `10042`
 - API, match service, and game Worker type-checks; original webapp/game
   production build
 - Card-library generator, source-RPC inventory, and production Conquest gates
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
+- API/web Worker version `a73193d6-373d-45e8-a41d-cc5e8f9fcabd` serves commit
+  `fd60828` at 100% traffic. A signed-in production browser navigated a real
+  card from Base to Silver to Gold with the original art, lore, grades, and
+  balances intact; every grade displayed off-chain inventory copy, no price,
+  stock, supply, buy, or sell controls, no error boundary, and no console
+  errors. The off-chain gate has 23 tests and rejects both wallet-market
+  regressions and expression-bodied scroll effects that can return an invalid
+  React cleanup value.
 - Remote D1 after migration `0029`: zero deck ranks, per-player deck wins, or
   completion receipts before the first new ranked match; the public list was
   empty, authenticated search rejected anonymous access, and the read-only
