@@ -128,6 +128,156 @@ describe('legacy BotMatchEnd compatibility', () => {
     expect(reports?.count).toBe(1)
   })
 
+  it('records only the quest delta actually applied by concurrent reports', async () => {
+    const quest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_type = 'OntheRoadAgain'`
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(quest).not.toBeNull()
+
+    const responses = await Promise.all([
+      rpc({
+        req: tutorialRequest({
+          playerSessionId: 'concurrent-report-one',
+          playerQuestProgressUpdates: { [quest!.id]: 1 }
+        })
+      }),
+      rpc({
+        req: tutorialRequest({
+          playerSessionId: 'concurrent-report-two',
+          playerQuestProgressUpdates: { [quest!.id]: 1 }
+        })
+      })
+    ])
+    expect(responses.map(response => response.status)).toEqual([200, 200])
+
+    const receipts = await env.AUTH_DB.prepare(
+      `SELECT applied_delta, before_progress, after_progress,
+              application_status
+       FROM player_bot_match_quest_progress
+       WHERE quest_id = ?
+       ORDER BY before_progress ASC, report_id ASC`
+    )
+      .bind(quest!.id)
+      .all<{
+        applied_delta: number
+        before_progress: number
+        after_progress: number
+        application_status: string
+      }>()
+    expect(receipts.results).toEqual([
+      {
+        applied_delta: 1,
+        before_progress: 0,
+        after_progress: 1,
+        application_status: 'APPLIED'
+      },
+      {
+        applied_delta: 0,
+        before_progress: 1,
+        after_progress: 1,
+        application_status: 'APPLIED'
+      }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT progress, status FROM player_quests WHERE rowid = ?'
+      )
+        .bind(quest!.id)
+        .first()
+    ).toEqual({ progress: 1, status: 'complete' })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_bot_match_quest_progress SET applied_delta = 99
+         WHERE quest_id = ?`
+      )
+        .bind(quest!.id)
+        .run()
+    ).rejects.toThrow(/receipt completion is invalid/)
+    await expect(
+      env.AUTH_DB.prepare(
+        'DELETE FROM player_bot_match_quest_progress WHERE quest_id = ?'
+      )
+        .bind(quest!.id)
+        .run()
+    ).rejects.toThrow(/receipts are immutable/)
+  })
+
+  it('applies one receipt for simultaneous retries of the same report', async () => {
+    const quest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_type = 'OntheRoadAgain'`
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(quest).not.toBeNull()
+    const request = {
+      req: tutorialRequest({
+        playerSessionId: 'simultaneous-retry',
+        playerQuestProgressUpdates: { [quest!.id]: 1 }
+      })
+    }
+
+    const responses = await Promise.all([rpc(request), rpc(request)])
+    expect(responses.map(response => response.status)).toEqual([200, 200])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count, SUM(applied_delta) AS applied
+         FROM player_bot_match_quest_progress WHERE quest_id = ?`
+      )
+        .bind(quest!.id)
+        .first()
+    ).toEqual({ count: 1, applied: 1 })
+  })
+
+  it('rolls back the report and quest delta when receipt completion fails', async () => {
+    const quest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_type = 'OntheRoadAgain'`
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(quest).not.toBeNull()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_bot_match_receipt_completion_failure
+       BEFORE UPDATE ON player_bot_match_quest_progress
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected receipt completion failure');
+       END`
+    ).run()
+    try {
+      const response = await rpc({
+        req: tutorialRequest({
+          playerSessionId: 'rollback-report',
+          playerQuestProgressUpdates: { [quest!.id]: 1 }
+        })
+      })
+      expect(response.status).toBe(500)
+      expect(
+        await env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_bot_match_reports
+           WHERE user_id = ?`
+        )
+          .bind(userId)
+          .first()
+      ).toEqual({ count: 0 })
+      expect(
+        await env.AUTH_DB.prepare(
+          'SELECT progress, status FROM player_quests WHERE rowid = ?'
+        )
+          .bind(quest!.id)
+          .first()
+      ).toEqual({ progress: 0, status: 'active' })
+    } finally {
+      await env.AUTH_DB.prepare(
+        'DROP TRIGGER test_bot_match_receipt_completion_failure'
+      ).run()
+    }
+  })
+
   it('does not complete a tutorial level when the bot wins', async () => {
     const response = await rpc({
       req: tutorialRequest({ winningPlayer: 2 })

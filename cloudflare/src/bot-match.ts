@@ -178,7 +178,7 @@ export class BotMatchRepository {
       .first<PlayerProgressRow>()
     if (!player) throw new Error('player progression is missing')
 
-    const quests = await this.questRows(userId, questProgress)
+    await this.questRows(userId, questProgress)
     const now = new Date().toISOString()
     const tutorialReward = [
       {
@@ -241,31 +241,61 @@ export class BotMatchRepository {
     ]
 
     for (const [questId, delta] of questProgress) {
-      const quest = quests.get(questId)!
-      const appliedDelta =
-        quest.active === 1 && quest.status === 'active'
-          ? Math.min(delta, Math.max(0, quest.target - quest.progress))
-          : 0
       statements.push(
         this.database
           .prepare(
+            `INSERT OR IGNORE INTO player_bot_match_quest_progress
+               (report_id, quest_id, applied_delta, before_progress,
+                after_progress, application_status)
+             SELECT ?, quest.rowid,
+                    CASE
+                      WHEN quest.active = 1 AND quest.status = 'active'
+                        THEN MIN(?, MAX(0, quest.target - quest.progress))
+                      ELSE 0
+                    END,
+                    quest.progress,
+                    quest.progress + CASE
+                      WHEN quest.active = 1 AND quest.status = 'active'
+                        THEN MIN(?, MAX(0, quest.target - quest.progress))
+                      ELSE 0
+                    END,
+                    'PREPARING'
+             FROM player_quests quest
+             JOIN player_bot_match_reports report
+               ON report.report_id = ? AND report.user_id = quest.user_id
+             WHERE quest.user_id = ? AND quest.rowid = ?`
+          )
+          .bind(reportId, delta, delta, reportId, userId, questId),
+        this.database
+          .prepare(
             `UPDATE player_quests
-             SET progress = MIN(target, progress + ?),
+             SET progress = (
+                   SELECT receipt.after_progress
+                   FROM player_bot_match_quest_progress receipt
+                   WHERE receipt.report_id = ? AND receipt.quest_id = ?
+                 ),
                  status = CASE
-                   WHEN progress + ? >= target THEN 'complete'
+                   WHEN (
+                     SELECT receipt.after_progress
+                     FROM player_bot_match_quest_progress receipt
+                     WHERE receipt.report_id = ? AND receipt.quest_id = ?
+                   ) >= target THEN 'complete'
                    ELSE status
                  END,
                  updated_at = ?
              WHERE user_id = ? AND rowid = ? AND active = 1
                AND status = 'active'
-               AND NOT EXISTS (
+               AND EXISTS (
                  SELECT 1 FROM player_bot_match_quest_progress
                  WHERE report_id = ? AND quest_id = ?
+                   AND application_status = 'PREPARING'
                )`
           )
           .bind(
-            appliedDelta,
-            appliedDelta,
+            reportId,
+            questId,
+            reportId,
+            questId,
             now,
             userId,
             questId,
@@ -274,11 +304,12 @@ export class BotMatchRepository {
           ),
         this.database
           .prepare(
-            `INSERT OR IGNORE INTO player_bot_match_quest_progress
-               (report_id, quest_id, applied_delta)
-             VALUES (?, ?, ?)`
+            `UPDATE player_bot_match_quest_progress
+             SET application_status = 'APPLIED'
+             WHERE report_id = ? AND quest_id = ?
+               AND application_status = 'PREPARING'`
           )
-          .bind(reportId, questId, appliedDelta)
+          .bind(reportId, questId)
       )
     }
 

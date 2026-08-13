@@ -10,11 +10,15 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/bot-match.ts': {
     count: 1,
     disposition: 'idempotent-practice-progression',
-    evidenceFiles: ['cloudflare/migrations/0012_bot_match_reports.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0012_bot_match_reports.sql',
+      'cloudflare/migrations/0072_bot_match_quest_receipts.sql'
+    ],
     evidence: [
       'player_bot_match_reports',
       'player_bot_match_quest_progress',
       'PRIMARY KEY (report_id, quest_id)',
+      'bot match quest receipt completion is invalid',
       'database.batch'
     ]
   },

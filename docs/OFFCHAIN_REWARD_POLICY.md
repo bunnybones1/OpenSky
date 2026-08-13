@@ -172,6 +172,12 @@ source 13,750-point cap and before/after treasure progress are calculated from
 the current D1 balance inside settlement, so simultaneous matches cannot award
 the same remaining cap space or report stale progress.
 
+Tutorial/local-bot quest progress uses the same serialized receipt pattern.
+Each stable match report snapshots the quest progress actually available when
+its D1 batch runs, applies only that delta, and then completes the receipt.
+Concurrent distinct reports cannot claim the same remaining progress, while
+simultaneous retries of one report cannot replay it.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
