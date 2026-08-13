@@ -148,3 +148,14 @@ pending-delivery, collection, or inventory surface. A fresh signed-in Home
 client rendered the original navigation and content without a phantom reward
 dialog. Verification was read-only and did not create, claim, or mark any
 notification or reward.
+
+Cache-diagnostics milestone `283932e` and production-host safety milestone
+`334c3bc` were deployed on 2026-08-13 as Worker version
+`ad91caef-8bd4-498a-852b-b69c35abab65`; production HTML referenced the tested
+entry asset `index-7d925c09.js`. A fresh signed-in client rendered the original
+Cache Overview and Game Cache Info at `/cache-info`, while the original Practice
+screen still rendered its VS BOT controls at `/play/practice/bot`. The cache
+chunk and `/game/cloudflare/` entry both returned HTTP 200. Neither screen
+exposed the source Secret Debug footer link, confirming that the public
+`workers.dev` suffix no longer activates development behavior. Verification was
+read-only and did not start another match or change the browser game cache.
