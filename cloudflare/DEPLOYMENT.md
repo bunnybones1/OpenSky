@@ -253,6 +253,13 @@ capabilities. No production staff identity is provisioned. Conquest queues stay 
 explicit production reward pool is approved and the enablement drill validates
 settlement and delayed delivery against that pool.
 
+The SPA shell is served through the Worker with browser and Cloudflare edge
+`no-store` directives so a successful deployment cannot leave users on an old
+HTML manifest. Fingerprinted web and game assets use a one-year immutable
+policy, while unhashed assets such as the service worker retain Cloudflare's
+revalidation behavior. The release gate verifies both the routing boundary and
+the cache-policy implementation.
+
 ## Latest verification
 
 - API Worker: 44 files, 325 tests

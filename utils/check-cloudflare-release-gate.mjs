@@ -23,7 +23,9 @@ export const releaseGateErrors = (matchmakerConfig, environment = {}) => {
     )
   }
   if (!releaseIdentifier.test(browserRelease)) {
-    errors.push('browser GITCOMMIT/RELEASE_VERSION is not a valid release identifier')
+    errors.push(
+      'browser GITCOMMIT/RELEASE_VERSION is not a valid release identifier'
+    )
   }
   if (
     releaseIdentifier.test(expectedRelease) &&
@@ -37,11 +39,56 @@ export const releaseGateErrors = (matchmakerConfig, environment = {}) => {
   return errors
 }
 
+export const assetCachePolicyErrors = (
+  workerConfig,
+  workerSource,
+  cachePolicySource
+) => {
+  const errors = []
+  if (workerConfig?.assets?.run_worker_first !== true) {
+    errors.push(
+      'static assets must run through the Worker release cache policy'
+    )
+  }
+  if (
+    !workerSource.includes(
+      'applyAssetCachePolicy(request, await env.ASSETS.fetch(request))'
+    )
+  ) {
+    errors.push('Worker asset responses bypass the release cache policy')
+  }
+  for (const token of [
+    "startsWith('text/html')",
+    "'no-store'",
+    'FINGERPRINTED_ASSET',
+    "'public, max-age=31536000, immutable'",
+    "'Cloudflare-CDN-Cache-Control'"
+  ]) {
+    if (!cachePolicySource.includes(token)) {
+      errors.push(`static asset release cache policy is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const configPath = path.join(root, 'matchmaker-ts', 'wrangler.jsonc')
   const config = JSON.parse(await readFile(configPath, 'utf8'))
-  const errors = releaseGateErrors(config, process.env)
+  const workerConfig = JSON.parse(
+    await readFile(path.join(root, 'wrangler.jsonc'), 'utf8')
+  )
+  const [workerSource, cachePolicySource] = await Promise.all([
+    readFile(path.join(root, 'cloudflare/src/index.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/asset-cache.ts'), 'utf8')
+  ])
+  const errors = [
+    ...releaseGateErrors(config, process.env),
+    ...assetCachePolicyErrors(workerConfig, workerSource, cachePolicySource)
+  ]
   if (errors.length) {
     for (const error of errors) process.stderr.write(`Release gate: ${error}\n`)
     process.exitCode = 1
@@ -52,6 +99,9 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

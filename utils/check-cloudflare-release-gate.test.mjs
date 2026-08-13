@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { releaseGateErrors } from './check-cloudflare-release-gate.mjs'
+import {
+  assetCachePolicyErrors,
+  releaseGateErrors
+} from './check-cloudflare-release-gate.mjs'
 
 test('production browser and matchmaker use the same release', async () => {
   const config = JSON.parse(
@@ -35,4 +38,40 @@ test('rejects a missing or unsafe matchmaker release', () => {
     releaseGateErrors({ vars: { EXPECTED_RELEASE_VERSION: '../unsafe' } })[0],
     /must be/
   )
+})
+
+test('accepts the release-safe static asset cache boundary', async () => {
+  const [workerConfig, workerSource, cachePolicySource] = await Promise.all([
+    readFile('wrangler.jsonc', 'utf8').then(JSON.parse),
+    readFile('cloudflare/src/index.ts', 'utf8'),
+    readFile('cloudflare/src/asset-cache.ts', 'utf8')
+  ])
+
+  assert.deepEqual(
+    assetCachePolicyErrors(workerConfig, workerSource, cachePolicySource),
+    []
+  )
+})
+
+test('rejects cache policy bypasses and cacheable HTML', async () => {
+  const [workerConfig, workerSource, cachePolicySource] = await Promise.all([
+    readFile('wrangler.jsonc', 'utf8').then(JSON.parse),
+    readFile('cloudflare/src/index.ts', 'utf8'),
+    readFile('cloudflare/src/asset-cache.ts', 'utf8')
+  ])
+  const errors = assetCachePolicyErrors(
+    {
+      ...workerConfig,
+      assets: { ...workerConfig.assets, run_worker_first: ['/api/*'] }
+    },
+    workerSource.replace(
+      'applyAssetCachePolicy(request, await env.ASSETS.fetch(request))',
+      'env.ASSETS.fetch(request)'
+    ),
+    cachePolicySource.replace("'no-store'", "'public, max-age=60'")
+  )
+
+  assert.ok(errors.some(error => error.includes('run through the Worker')))
+  assert.ok(errors.some(error => error.includes('bypass')))
+  assert.ok(errors.some(error => error.includes("'no-store'")))
 })

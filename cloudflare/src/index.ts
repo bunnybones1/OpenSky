@@ -1,5 +1,6 @@
 import { handleApiRequest } from './api'
 import { AccountDeletionRepository } from './account-deletion'
+import { applyAssetCachePolicy } from './asset-cache'
 import { deliverDueConquestGold } from './conquest-delivery'
 import { runDueConquestV2Rewards } from './conquest-v2-reward-worker'
 import type { Env } from './env'
@@ -30,7 +31,7 @@ export default {
     if (url.pathname.startsWith('/api/replays/'))
       return handleReplayRequest(request, env)
     if (url.pathname.startsWith('/api/')) return handleApiRequest(request, env)
-    return env.ASSETS.fetch(request)
+    return applyAssetCachePolicy(request, await env.ASSETS.fetch(request))
   },
   async scheduled(_controller, env, ctx): Promise<void> {
     ctx.waitUntil(
