@@ -95,6 +95,10 @@ export const webappRouteAuditErrors = ({
   marketStickerSource,
   marketStickersSearchSource,
   marketStickerFeatureSource,
+  marketCardBacksListSource,
+  marketCardBackSource,
+  marketCardBacksSearchSource,
+  marketCardBackFeatureSource,
   cartQuerySource
 }) => {
   const errors = []
@@ -335,17 +339,17 @@ export const webappRouteAuditErrors = ({
     '<MarketStickers inventoryOnly />',
     '<MarketStickerFeature inventoryOnly />',
     'ROUTES_CONFIG.routes.MARKET.routes.STICKERS.path',
-    'ROUTES_CONFIG.routes.MARKET.routes.STICKER.path'
+    'ROUTES_CONFIG.routes.MARKET.routes.STICKER.path',
+    '<MarketCardBacks inventoryOnly />',
+    '<MarketCardBackFeature inventoryOnly />',
+    'ROUTES_CONFIG.routes.MARKET.routes.CARDBACKS.path',
+    'ROUTES_CONFIG.routes.MARKET.routes.CARDBACK.path'
   ]) {
     if (!identityMarketSource.includes(token)) {
       errors.push(`Google read-only Market fidelity is missing: ${token}`)
     }
   }
-  for (const forbidden of [
-    'ViewOrderButton',
-    'MarketHeroes',
-    'MarketCardBacks'
-  ]) {
+  for (const forbidden of ['ViewOrderButton', 'MarketHeroes']) {
     if (identityMarketSource.includes(forbidden)) {
       errors.push(
         `Google read-only Market mounts legacy trading UI: ${forbidden}`
@@ -361,7 +365,8 @@ export const webappRouteAuditErrors = ({
   for (const token of [
     'makeMarketCardsRoute()',
     'makeNavigateToMarketDecksRoute()',
-    'makeMarketStickersRoute()'
+    'makeMarketStickersRoute()',
+    'makeMarketCardBacksRoute()'
   ]) {
     if (!marketSubNavSource.includes(token)) {
       errors.push(`Google read-only Market subnav is missing: ${token}`)
@@ -411,6 +416,43 @@ export const webappRouteAuditErrors = ({
   ]) {
     if (!marketStickerFeatureSource.includes(token)) {
       errors.push(`Google sticker detail substitution is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'useMarketCardBacksList(inventoryOnly)',
+    'ItemComponent={inventoryOnly ? IdentityMarketCardBack : MarketCardBack}'
+  ]) {
+    if (!marketCardBacksListSource.includes(token)) {
+      errors.push(`Google card-back catalog adapter is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'isDisabled: inventoryOnly',
+    'useCartItem(id, mode, !inventoryOnly)',
+    'if (inventoryOnly) {'
+  ]) {
+    if (!marketCardBackSource.includes(token)) {
+      errors.push(
+        `Google card-back catalog transaction guard is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    '<IdentityMarketCardBacksOwnershipFilter />',
+    '<MarketCardBacksSortSelect inventoryOnly={inventoryOnly} />'
+  ]) {
+    if (!marketCardBacksSearchSource.includes(token)) {
+      errors.push(
+        `Google card-back catalog filter substitution is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    'ShopControls={inventoryOnly ? undefined : ShopControls}',
+    'EquipControls={inventoryOnly ? InventoryEquipControls : EquipControls}'
+  ]) {
+    if (!marketCardBackFeatureSource.includes(token)) {
+      errors.push(`Google card-back detail substitution is missing: ${token}`)
     }
   }
   for (const token of [
@@ -506,6 +548,10 @@ const main = async () => {
     marketStickerSource,
     marketStickersSearchSource,
     marketStickerFeatureSource,
+    marketCardBacksListSource,
+    marketCardBackSource,
+    marketCardBacksSearchSource,
+    marketCardBackFeatureSource,
     cartQuerySource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
@@ -674,6 +720,34 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCardBacks/MarketCardBacksList/MarketCardBacksList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCardBacks/MarketCardBacksList/MarketCardBack/MarketCardBack.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCardBacks/MarketCardBacksSearchBar/MarketCardBacksSearchBar.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketCardBackFeature/MarketCardBackFeature.tsx'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'webapp/src/shared/queries/useCart.ts'), 'utf8')
   ])
   const errors = webappRouteAuditErrors({
@@ -710,6 +784,10 @@ const main = async () => {
     marketStickerSource,
     marketStickersSearchSource,
     marketStickerFeatureSource,
+    marketCardBacksListSource,
+    marketCardBackSource,
+    marketCardBacksSearchSource,
+    marketCardBackFeatureSource,
     cartQuerySource
   })
   if (errors.length) {

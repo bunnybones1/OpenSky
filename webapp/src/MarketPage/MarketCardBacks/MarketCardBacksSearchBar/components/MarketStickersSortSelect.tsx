@@ -16,21 +16,42 @@ const OPTIONS_TO_USE = [
   CARD_SORTING_OPTIONS.PRICE_DESCENDING
 ] as const
 
-export const MarketCardBacksSortSelect = memo(() => {
-  const { sort } = useSnapshot(marketCardBacksFilterState)
-  const dispatch = useDispatch()
+const IDENTITY_OPTIONS_TO_USE = [
+  CARD_SORTING_OPTIONS.QUANTITY_ASCENDING,
+  CARD_SORTING_OPTIONS.QUANTITY_DESCENDING
+] as const
 
-  const onChange = useCallback(
-    (newSort: CARD_SORTING_OPTIONS) => {
-      updateMarketCardBacksFilters('sort', newSort)
-      dispatch(push(makeMarketCardBacksRoute()))
-    },
-    [dispatch]
-  )
+interface MarketCardBacksSortSelectProps {
+  inventoryOnly?: boolean
+}
 
-  return (
-    <ItemsSortSelect optionsToUse={OPTIONS_TO_USE} sort={sort} onChange={onChange} />
-  )
-})
+export const MarketCardBacksSortSelect = memo(
+  ({ inventoryOnly }: MarketCardBacksSortSelectProps) => {
+    const { sort } = useSnapshot(marketCardBacksFilterState)
+    const selectedSort =
+      inventoryOnly &&
+      (sort === CARD_SORTING_OPTIONS.PRICE_ASCENDING ||
+        sort === CARD_SORTING_OPTIONS.PRICE_DESCENDING)
+        ? CARD_SORTING_OPTIONS.QUANTITY_DESCENDING
+        : sort
+    const dispatch = useDispatch()
+
+    const onChange = useCallback(
+      (newSort: CARD_SORTING_OPTIONS) => {
+        updateMarketCardBacksFilters('sort', newSort)
+        dispatch(push(makeMarketCardBacksRoute()))
+      },
+      [dispatch]
+    )
+
+    return (
+      <ItemsSortSelect
+        optionsToUse={inventoryOnly ? IDENTITY_OPTIONS_TO_USE : OPTIONS_TO_USE}
+        sort={selectedSort}
+        onChange={onChange}
+      />
+    )
+  }
+)
 
 MarketCardBacksSortSelect.displayName = 'MarketCardBacksSortSelect'

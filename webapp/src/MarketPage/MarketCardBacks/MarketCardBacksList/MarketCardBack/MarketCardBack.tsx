@@ -19,20 +19,22 @@ import { MarketCardBackButton } from './components/MarketStickerButton'
 
 export interface MarketCardBackProps {
   id: number
+  inventoryOnly?: boolean
 }
 
-const MarketCardBackBalance = memo(({ id }: MarketCardBackProps) => {
+const MarketCardBackBalance = memo(({ id, inventoryOnly }: MarketCardBackProps) => {
   const mode = useMarketCardBacksShopMode()
   const { data: balance } = useTokenBalance(ItemType.SW_CARD_BACKS, id)
   const { data: priceAndSupply } = useTokenPriceAndSupply({
     mode,
     id,
-    quantity: 1
+    quantity: 1,
+    isDisabled: inventoryOnly
   })
 
   const { t } = useTranslation()
 
-  const { data: cartItem } = useCartItem(id, mode)
+  const { data: cartItem } = useCartItem(id, mode, !inventoryOnly)
 
   const balances = useMemo<BalanceOrPrice[] | undefined>(() => {
     if (balance === undefined) return undefined
@@ -59,6 +61,17 @@ const MarketCardBackBalance = memo(({ id }: MarketCardBackProps) => {
 
   const cardBack = useMemo(() => AllCardBacks.get(id), [id])
 
+  if (inventoryOnly) {
+    return (
+      <CardBackBalanceAndPriceInfo
+        balances={balances}
+        id={id}
+        name={cardBack?.name}
+        areBalancesLoading={balances === undefined}
+      />
+    )
+  }
+
   return (
     <CardBackBalanceAndPriceInfo
       balances={balances}
@@ -75,19 +88,24 @@ const MarketCardBackBalance = memo(({ id }: MarketCardBackProps) => {
 
 MarketCardBackBalance.displayName = 'MarketCardBackBalance'
 
-export const MarketCardBack = memo(({ id }: MarketCardBackProps) => {
+export const MarketCardBack = memo(({ id, inventoryOnly }: MarketCardBackProps) => {
   const dispatch = useDispatch()
 
   const onClick = useCallback(() => {
     dispatch(push(makeMarketCardBackFeatureRoute(id)))
   }, [dispatch, id])
 
+  const BalanceInfo = useCallback(
+    () => <MarketCardBackBalance id={id} inventoryOnly={inventoryOnly} />,
+    [id, inventoryOnly]
+  )
+
   return (
     <CardBack
       id={id}
       onClick={onClick}
       isTiltable
-      BalanceAndPriceInfo={MarketCardBackBalance}
+      BalanceAndPriceInfo={BalanceInfo}
     />
   )
 })

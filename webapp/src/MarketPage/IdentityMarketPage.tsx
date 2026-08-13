@@ -7,6 +7,8 @@ import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { page } from '~/shared/helpers/analytics-old'
 
 import { MarketPageSubNav } from './components/MarketPageSubNav'
+import { MarketCardBackFeature } from './MarketCardBackFeature/MarketCardBackFeature'
+import { MarketCardBacks } from './MarketCardBacks/MarketCardBacks'
 import { MarketCardDetails } from './MarketCardDetails/MarketCardDetails'
 import { MarketCards } from './MarketCards/MarketCards'
 import MarketDecks from './MarketDecks/MarketDecks'
@@ -53,6 +55,14 @@ export const IdentityMarketPage = memo(() => {
         <Route
           element={<MarketStickerFeature inventoryOnly />}
           path={ROUTES_CONFIG.routes.MARKET.routes.STICKER.path}
+        />
+        <Route
+          element={<MarketCardBacks inventoryOnly />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.CARDBACKS.path}
+        />
+        <Route
+          element={<MarketCardBackFeature inventoryOnly />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.CARDBACK.path}
         />
         <Route
           path="*"

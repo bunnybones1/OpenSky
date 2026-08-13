@@ -6,7 +6,11 @@ import { MarketCardBacksEmptyList } from './components/MarketCardBacksEmptyList'
 import { MarketCardBacksList } from './MarketCardBacksList/MarketCardBacksList'
 import { MarketCardBacksSearchBar } from './MarketCardBacksSearchBar/MarketCardBacksSearchBar'
 
-export const MarketCardBacks = memo(() => {
+interface MarketCardBacksProps {
+  inventoryOnly?: boolean
+}
+
+export const MarketCardBacks = memo(({ inventoryOnly }: MarketCardBacksProps) => {
   return (
     <div
       className={Sprinkles({
@@ -17,9 +21,9 @@ export const MarketCardBacks = memo(() => {
         justifyContent: 'flex-start'
       })}
     >
-      <MarketCardBacksSearchBar />
+      <MarketCardBacksSearchBar inventoryOnly={inventoryOnly} />
       <MarketCardBacksEmptyList />
-      <MarketCardBacksList />
+      <MarketCardBacksList inventoryOnly={inventoryOnly} />
     </div>
   )
 })

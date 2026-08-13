@@ -28,44 +28,56 @@ const Loader = memo(() => {
 
 Loader.displayName = 'Loader'
 
-export const MarketCardBacksList = memo(() => {
-  const numColumns = useCardListNumColumns()
+interface MarketCardBacksListProps {
+  inventoryOnly?: boolean
+}
 
-  const { marketCardBacksList } = useMarketCardBacksList()
+const IdentityMarketCardBack = memo((props: MarketCardBackProps) => (
+  <MarketCardBack {...props} inventoryOnly />
+))
 
-  const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
-    numColumns,
-    columnGap: COLUMN_GAP,
-    paddingBottom: MARKET_CARD_PADDING_BOTTOM,
-    ratio: CARD_RATIO
-  })
+IdentityMarketCardBack.displayName = 'IdentityMarketCardBack'
 
-  return (
-    <div
-      className={Sprinkles({
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-        flexDirection: 'column',
-        display: 'flex',
-        width: 'full',
-        paddingX: ITEM_LIST_PADDING_X,
-        paddingBottom: ITEM_LIST_PADDING_BOTTOM
-      })}
-      ref={listParentRef}
-    >
-      <VirtualizedItemList<MarketCardBackProps>
-        ItemComponent={MarketCardBack}
-        getItemId={getId}
-        ListLoader={Loader}
-        items={marketCardBacksList || DEFAULT_LIST}
-        columnGap={`${COLUMN_GAP}px`}
-        rowPaddingBottom={`${MARKET_CARD_PADDING_BOTTOM}px`}
-        estimateSize={estimateSize}
-        numColumns={numColumns}
-        isLoadingList={marketCardBacksList === undefined}
-      />
-    </div>
-  )
-})
+export const MarketCardBacksList = memo(
+  ({ inventoryOnly }: MarketCardBacksListProps) => {
+    const numColumns = useCardListNumColumns()
+
+    const { marketCardBacksList } = useMarketCardBacksList(inventoryOnly)
+
+    const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
+      numColumns,
+      columnGap: COLUMN_GAP,
+      paddingBottom: MARKET_CARD_PADDING_BOTTOM,
+      ratio: CARD_RATIO
+    })
+
+    return (
+      <div
+        className={Sprinkles({
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          flexDirection: 'column',
+          display: 'flex',
+          width: 'full',
+          paddingX: ITEM_LIST_PADDING_X,
+          paddingBottom: ITEM_LIST_PADDING_BOTTOM
+        })}
+        ref={listParentRef}
+      >
+        <VirtualizedItemList<MarketCardBackProps>
+          ItemComponent={inventoryOnly ? IdentityMarketCardBack : MarketCardBack}
+          getItemId={getId}
+          ListLoader={Loader}
+          items={marketCardBacksList || DEFAULT_LIST}
+          columnGap={`${COLUMN_GAP}px`}
+          rowPaddingBottom={`${MARKET_CARD_PADDING_BOTTOM}px`}
+          estimateSize={estimateSize}
+          numColumns={numColumns}
+          isLoadingList={marketCardBacksList === undefined}
+        />
+      </div>
+    )
+  }
+)
 
 MarketCardBacksList.displayName = 'MarketCardBacksList'
