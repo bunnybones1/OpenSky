@@ -12,6 +12,7 @@ interface ExchangeRow {
   silver_cards_json: string
   ticket_amount: number
   created_at: string
+  application_status: 'PREPARING' | 'APPLIED'
 }
 
 const canonicalCards = (
@@ -72,9 +73,11 @@ export class SilverTicketExchangeRepository {
     const cardsJson = JSON.stringify(cards)
     const existing = await this.database
       .prepare(
-        `SELECT silver_cards_json, ticket_amount, created_at
+        `SELECT silver_cards_json, ticket_amount, created_at,
+                application_status
          FROM player_silver_ticket_exchanges
-         WHERE request_key = ? AND user_id = ?`
+         WHERE request_key = ? AND user_id = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(input.requestKey, userId)
       .first<ExchangeRow>()
@@ -93,8 +96,8 @@ export class SilverTicketExchangeRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_silver_ticket_exchanges
              (request_key, delivery_key, user_id, silver_cards_json,
-              ticket_amount, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+              ticket_amount, created_at, application_status, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'PREPARING', NULL)`
         )
         .bind(
           input.requestKey,
@@ -106,6 +109,34 @@ export class SilverTicketExchangeRepository {
         )
     ]
     for (const card of cards) {
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO player_silver_ticket_exchange_inventory_changes
+               (exchange_id, item_type, token_id, change_amount,
+                before_balance, after_balance)
+             SELECT exchange_row.id, 'SW_SILVER_CARDS', ?, -?, item.balance,
+                    item.balance - ?
+             FROM player_silver_ticket_exchanges exchange_row
+             JOIN player_items item
+               ON item.user_id = exchange_row.user_id
+              AND item.item_type = 'SW_SILVER_CARDS'
+              AND item.token_id = ?
+             WHERE exchange_row.request_key = ?
+               AND exchange_row.user_id = ?
+               AND exchange_row.delivery_key = ?
+               AND exchange_row.application_status = 'PREPARING'`
+          )
+          .bind(
+            card.tokenId,
+            card.quantity,
+            card.quantity,
+            card.tokenId,
+            input.requestKey,
+            userId,
+            deliveryKey
+          )
+      )
       statements.push(
         this.database
           .prepare(
@@ -133,6 +164,30 @@ export class SilverTicketExchangeRepository {
     statements.push(
       this.database
         .prepare(
+          `INSERT INTO player_silver_ticket_exchange_inventory_changes
+             (exchange_id, item_type, token_id, change_amount,
+              before_balance, after_balance)
+           SELECT exchange_row.id, 'SW_CONQUEST_TICKET', 2, ?,
+                  COALESCE(item.balance, 0),
+                  COALESCE(item.balance, 0) + ?
+           FROM player_silver_ticket_exchanges exchange_row
+           LEFT JOIN player_items item
+             ON item.user_id = exchange_row.user_id
+            AND item.item_type = 'SW_CONQUEST_TICKET' AND item.token_id = 2
+           WHERE exchange_row.request_key = ?
+             AND exchange_row.user_id = ?
+             AND exchange_row.delivery_key = ?
+             AND exchange_row.application_status = 'PREPARING'`
+        )
+        .bind(
+          ticketAmount,
+          ticketAmount,
+          input.requestKey,
+          userId,
+          deliveryKey
+        ),
+      this.database
+        .prepare(
           `INSERT INTO player_items
              (user_id, item_type, token_id, balance, is_new, unlock_source,
               created_at, updated_at)
@@ -140,6 +195,7 @@ export class SilverTicketExchangeRepository {
            WHERE EXISTS (
              SELECT 1 FROM player_silver_ticket_exchanges
              WHERE request_key = ? AND user_id = ? AND delivery_key = ?
+               AND application_status = 'PREPARING'
            )
            ON CONFLICT(user_id, item_type, token_id)
            DO UPDATE SET balance = balance + excluded.balance,
@@ -156,6 +212,16 @@ export class SilverTicketExchangeRepository {
           deliveryKey
         )
     )
+    statements.push(
+      this.database
+        .prepare(
+          `UPDATE player_silver_ticket_exchanges
+           SET application_status = 'APPLIED', completed_at = created_at
+           WHERE request_key = ? AND user_id = ? AND delivery_key = ?
+             AND application_status = 'PREPARING'`
+        )
+        .bind(input.requestKey, userId, deliveryKey)
+    )
     try {
       await this.database.batch(statements)
     } catch (error) {
@@ -171,9 +237,11 @@ export class SilverTicketExchangeRepository {
 
     const stored = await this.database
       .prepare(
-        `SELECT silver_cards_json, ticket_amount, created_at
+        `SELECT silver_cards_json, ticket_amount, created_at,
+                application_status
          FROM player_silver_ticket_exchanges
-         WHERE request_key = ? AND user_id = ?`
+         WHERE request_key = ? AND user_id = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(input.requestKey, userId)
       .first<ExchangeRow>()

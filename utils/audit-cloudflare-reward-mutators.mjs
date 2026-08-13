@@ -178,11 +178,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/silver-ticket-exchange.ts': {
     count: 2,
     disposition: 'receipt-backed-silver-exchange',
-    evidenceFiles: ['cloudflare/migrations/0060_silver_ticket_exchange.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0060_silver_ticket_exchange.sql',
+      'cloudflare/migrations/0077_silver_ticket_exchange_receipts.sql'
+    ],
     evidence: [
       'player_silver_ticket_exchanges',
       'delivery_key TEXT NOT NULL UNIQUE',
+      'player_silver_ticket_exchange_inventory_changes',
+      "application_status = 'PREPARING'",
       'Silver exchange receipts are immutable',
+      'Silver exchange inventory receipts are immutable',
+      'Silver exchange receipt completion is invalid',
       'database.batch'
     ]
   },

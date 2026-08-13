@@ -115,6 +115,13 @@ There is no USDC fee, wallet transfer, contract call, or minted asset. An
 immutable request receipt makes retries safe, and database triggers validate
 the complete price and available inventory before any balance changes.
 
+The Silver-to-Conquest-ticket exchange retains the source one-card/one-entry
+rate without transferring or minting an ERC-1155 asset. Its immutable receipt
+moves from `PREPARING` to `APPLIED` only after per-card Silver debit snapshots
+and the ticket credit snapshot match canonical identity inventory. Concurrent
+requests serialize in D1; retries return the first applied result, and an
+injected finalization failure rolls back the receipt and every balance change.
+
 The mobile-store fulfillment ledger is also part of this boundary. It accepts
 only server-verified provider facts, binds the provider transaction to one
 Google identity with a database uniqueness constraint, stores only receipt

@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { Env } from '../src/env'
 import {
@@ -27,6 +27,9 @@ const request = async (path: string, init?: RequestInit, signedIn = true) => {
 }
 
 beforeEach(async () => {
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_silver_exchange_completion'
+  ).run()
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM wallet_connections'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
@@ -39,6 +42,12 @@ beforeEach(async () => {
   )
     .bind(userId, now, now)
     .run()
+})
+
+afterEach(async () => {
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_silver_exchange_completion'
+  ).run()
 })
 
 describe('Cloudflare player API', () => {
@@ -199,12 +208,170 @@ describe('Cloudflare player API', () => {
       { item_type: 'SW_SILVER_CARDS', token_id: 43, balance: 0 }
     ])
     const receipt = await env.AUTH_DB.prepare(
-      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys
+      `SELECT COUNT(*) AS count, COUNT(DISTINCT delivery_key) AS keys,
+              MIN(application_status) AS application_status,
+              MIN(completed_at) AS completed_at
        FROM player_silver_ticket_exchanges WHERE user_id = ?`
     )
       .bind(userId)
-      .first<{ count: number; keys: number }>()
-    expect(receipt).toEqual({ count: 1, keys: 1 })
+      .first<{
+        count: number
+        keys: number
+        application_status: string
+        completed_at: string
+      }>()
+    expect(receipt).toMatchObject({
+      count: 1,
+      keys: 1,
+      application_status: 'APPLIED',
+      completed_at: expect.any(String)
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, change_amount, before_balance,
+                after_balance
+         FROM player_silver_ticket_exchange_inventory_changes
+         ORDER BY item_type, token_id`
+      ).all()
+    ).toMatchObject({
+      results: [
+        {
+          item_type: 'SW_CONQUEST_TICKET',
+          token_id: 2,
+          change_amount: 3,
+          before_balance: 0,
+          after_balance: 3
+        },
+        {
+          item_type: 'SW_SILVER_CARDS',
+          token_id: 42,
+          change_amount: -2,
+          before_balance: 2,
+          after_balance: 0
+        },
+        {
+          item_type: 'SW_SILVER_CARDS',
+          token_id: 43,
+          change_amount: -1,
+          before_balance: 1,
+          after_balance: 0
+        }
+      ]
+    })
+  })
+
+  it('rolls back and retries a Silver exchange if receipt completion fails', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', 77, 2, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_silver_exchange_completion
+       BEFORE UPDATE OF application_status ON player_silver_ticket_exchanges
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Silver receipt failure');
+       END`
+    ).run()
+    const input = {
+      requestKey: 'silver-exchange-rollback-0001',
+      cards: [{ tokenId: 77, quantity: 2 }]
+    }
+    const exchange = () =>
+      request('/api/player/exchanges/silver-tickets', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://opensky.example',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(input)
+      })
+
+    expect((await exchange()).status).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_silver_ticket_exchanges) AS exchanges,
+           (SELECT COUNT(*)
+            FROM player_silver_ticket_exchange_inventory_changes) AS changes,
+           (SELECT balance FROM player_items WHERE user_id = ?
+            AND item_type = 'SW_SILVER_CARDS' AND token_id = 77) AS silver,
+           (SELECT COUNT(*) FROM player_items WHERE user_id = ?
+            AND item_type = 'SW_CONQUEST_TICKET') AS tickets`
+      )
+        .bind(userId, userId)
+        .first()
+    ).toEqual({ exchanges: 0, changes: 0, silver: 2, tickets: 0 })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_silver_exchange_completion'
+    ).run()
+    expect((await exchange()).status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, token_id, balance FROM player_items
+         WHERE user_id = ? AND (
+           (item_type = 'SW_SILVER_CARDS' AND token_id = 77)
+           OR item_type = 'SW_CONQUEST_TICKET'
+         ) ORDER BY item_type`
+      )
+        .bind(userId)
+        .all()
+    ).toMatchObject({
+      results: [
+        { item_type: 'SW_CONQUEST_TICKET', token_id: 2, balance: 2 },
+        { item_type: 'SW_SILVER_CARDS', token_id: 77, balance: 0 }
+      ]
+    })
+  })
+
+  it('rejects tampering with applied Silver exchange evidence', async () => {
+    await request('/api/player/bootstrap', {
+      method: 'POST',
+      headers: { Origin: 'https://opensky.example' }
+    })
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', 88, 1, 1, 'test', ?, ?)`
+    )
+      .bind(userId, now, now)
+      .run()
+    const response = await request('/api/player/exchanges/silver-tickets', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://opensky.example',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        requestKey: 'silver-exchange-tamper-0001',
+        cards: [{ tokenId: 88, quantity: 1 }]
+      })
+    })
+    expect(response.status).toBe(200)
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_silver_ticket_exchanges SET ticket_amount = 2`
+      ).run()
+    ).rejects.toThrow('Silver exchange receipt completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_silver_ticket_exchange_inventory_changes
+         SET after_balance = after_balance + 1`
+      ).run()
+    ).rejects.toThrow('Silver exchange inventory receipts are immutable')
   })
 
   it('rejects insufficient, reused, cross-origin, and concurrent exchanges safely', async () => {
