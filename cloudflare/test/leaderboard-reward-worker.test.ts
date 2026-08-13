@@ -10,6 +10,11 @@ import {
   nextLeaderboardRewardTime,
   runDueLeaderboardRewards
 } from '../src/leaderboard-reward-worker'
+import {
+  calculatedLeaderboardRewardPolicyHash,
+  LEADERBOARD_REWARD_POLICY_HASH,
+  LEADERBOARD_REWARD_POLICY_VERSION
+} from '../src/leaderboard-reward-policy'
 import { seasonStart } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
 import { PlayerRpcRepository } from '../src/player-rpc'
@@ -71,6 +76,27 @@ const enableSchedule = async () => {
       createdAt
     )
     .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO leaderboard_reward_schedule_activations
+       (schedule_version, status, policy_version, policy_hash,
+        created_by_user_id, activated_by_user_id, reason, review_reference,
+        created_at, activated_at)
+     VALUES (1, 'DRAFT', ?, ?, 'system:test-author', NULL,
+             'test policy', 'test:review', ?, NULL)`
+  )
+    .bind(
+      LEADERBOARD_REWARD_POLICY_VERSION,
+      LEADERBOARD_REWARD_POLICY_HASH,
+      createdAt
+    )
+    .run()
+  await env.AUTH_DB.prepare(
+    `UPDATE leaderboard_reward_schedule_activations
+     SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+         activated_at = ? WHERE schedule_version = 1`
+  )
+    .bind(createdAt)
+    .run()
 }
 
 const inventoryTotals = async (userId: string) =>
@@ -111,6 +137,12 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS leaderboard_reward_schedule_versions_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS leaderboard_reward_schedule_activations_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS leaderboard_reward_cycle_policy_receipts_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
@@ -121,7 +153,9 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_leaderboard_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_entries'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_rank_reset_receipts'),
+    env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycle_policy_receipts'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycles'),
+    env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_schedule_activations'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_schedule_versions'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'reward-%'`)
   ])
@@ -167,11 +201,267 @@ beforeEach(async () => {
        BEGIN
          SELECT RAISE(ABORT, 'leaderboard reward schedule versions are immutable');
        END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER leaderboard_reward_schedule_activations_no_delete
+       BEFORE DELETE ON leaderboard_reward_schedule_activations
+       BEGIN
+         SELECT RAISE(ABORT, 'leaderboard reward policy activations are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER leaderboard_reward_cycle_policy_receipts_no_delete
+       BEFORE DELETE ON leaderboard_reward_cycle_policy_receipts
+       BEGIN
+         SELECT RAISE(ABORT, 'leaderboard reward cycle policy receipts are immutable');
+       END`
     )
   ])
 })
 
 describe('weekly leaderboard reward worker', () => {
+  it('keeps an enabled cadence dormant until its exact policy has two-actor approval', async () => {
+    const createdAt = new Date(FIRST_RUN.getTime() - DAY_MS).toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_schedule_versions
+         (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
+          starts_at, reason, created_at)
+       VALUES (1, 1, ?, ?, ?, ?, ?, 'test schedule', ?)`
+    )
+      .bind(
+        FIRST_RUN.getUTCDay(),
+        FIRST_RUN.getUTCHours(),
+        FIRST_RUN.getUTCMinutes(),
+        FIRST_RUN.toISOString(),
+        createdAt,
+        createdAt
+      )
+      .run()
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toEqual({
+      status: 'disabled',
+      delivered: 0
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_schedule_activations
+           (schedule_version, status, policy_version, policy_hash,
+            created_by_user_id, activated_by_user_id, reason,
+            review_reference, created_at, activated_at)
+         VALUES (1, 'DRAFT', 1, ?, 'system:test-author', NULL,
+                 'bad policy', 'test:bad-review', ?, NULL)`
+      )
+        .bind('0'.repeat(64), createdAt)
+        .run()
+    ).rejects.toThrow(
+      'leaderboard reward policy activation must start as a draft'
+    )
+    await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_schedule_activations
+         (schedule_version, status, policy_version, policy_hash,
+          created_by_user_id, activated_by_user_id, reason, review_reference,
+          created_at, activated_at)
+       VALUES (1, 'DRAFT', ?, ?, 'system:test-author', NULL,
+               'test policy', 'test:review', ?, NULL)`
+    )
+      .bind(
+        LEADERBOARD_REWARD_POLICY_VERSION,
+        LEADERBOARD_REWARD_POLICY_HASH,
+        createdAt
+      )
+      .run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_schedule_activations
+         SET status = 'ACTIVE', activated_by_user_id = 'system:test-author',
+             activated_at = ? WHERE schedule_version = 1`
+      )
+        .bind(createdAt)
+        .run()
+    ).rejects.toThrow('leaderboard reward policy activation is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_schedule_activations
+         SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+             activated_at = ? WHERE schedule_version = 1`
+      )
+        .bind(NOW.toISOString())
+        .run()
+    ).rejects.toThrow('leaderboard reward policy activation is invalid')
+    await env.AUTH_DB.prepare(
+      `UPDATE leaderboard_reward_schedule_activations
+       SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+           activated_at = ? WHERE schedule_version = 1`
+    )
+      .bind(createdAt)
+      .run()
+
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT policy_version, policy_hash
+         FROM leaderboard_reward_cycle_policy_receipts`
+      ).first()
+    ).toEqual({
+      policy_version: LEADERBOARD_REWARD_POLICY_VERSION,
+      policy_hash: LEADERBOARD_REWARD_POLICY_HASH
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_cycle_policy_receipts
+         SET policy_hash = ?`
+      )
+        .bind('0'.repeat(64))
+        .run()
+    ).rejects.toThrow(
+      'leaderboard reward cycle policy receipts are immutable'
+    )
+  })
+
+  it('pins the approved policy to the source curve and generated card pool', async () => {
+    expect(await calculatedLeaderboardRewardPolicyHash()).toBe(
+      LEADERBOARD_REWARD_POLICY_HASH
+    )
+  })
+
+  it('rejects caller-selected cycle season, week, and unreceipted delivery', async () => {
+    await enableSchedule()
+    const scheduledAt = FIRST_RUN.toISOString()
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_cycles
+           (schedule_version, scheduled_at, season, week, random_seed, status,
+            attempt_count, started_at)
+         VALUES (1, ?, ?, 4, ?, 'PREPARING', 0, ?)`
+      )
+        .bind(scheduledAt, SEASON + 1, crypto.randomUUID(), NOW.toISOString())
+        .run()
+    ).rejects.toThrow('leaderboard reward cycle creation is invalid')
+    const cycle = await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_cycles
+         (schedule_version, scheduled_at, season, week, random_seed, status,
+          attempt_count, started_at)
+       VALUES (1, ?, ?, 2, ?, 'PREPARING', 0, ?)`
+    )
+      .bind(scheduledAt, SEASON, crypto.randomUUID(), NOW.toISOString())
+      .run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_cycles SET status = 'DELIVERING'
+         WHERE id = ?`
+      )
+        .bind(cycle.meta.last_row_id)
+        .run()
+    ).rejects.toThrow('active leaderboard reward policy receipt required')
+  })
+
+  it('rejects tampered ranks and incomplete authoritative snapshots', async () => {
+    await enableSchedule()
+    const older = new Date(FIRST_RUN.getTime() - DAY_MS).toISOString()
+    const newer = new Date(FIRST_RUN.getTime() - DAY_MS / 2).toISOString()
+    await setupPlayer('reward-snapshot-first', 2_000, older)
+    await setupPlayer('reward-snapshot-second', 1_000, newer)
+    const cycle = await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_cycles
+         (schedule_version, scheduled_at, season, week, random_seed, status,
+          attempt_count, started_at)
+       VALUES (1, ?, ?, 2, ?, 'PREPARING', 0, ?)`
+    )
+      .bind(
+        FIRST_RUN.toISOString(),
+        SEASON,
+        crypto.randomUUID(),
+        NOW.toISOString()
+      )
+      .run()
+    const cycleId = Number(cycle.meta.last_row_id)
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_entries
+           (cycle_id, user_id, game_mode, rank, snapshotted_at)
+         VALUES (?, 'reward-snapshot-first', 'RANKED_CONSTRUCTED', 2, ?)`
+      )
+        .bind(cycleId, NOW.toISOString())
+        .run()
+    ).rejects.toThrow('leaderboard reward snapshot entry is invalid')
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_cycle_policy_receipts
+           (cycle_id, schedule_version, policy_version, policy_hash,
+            eligible_card_ids_json, created_at)
+         VALUES (?, 1, ?, ?, ?, ?)`
+      ).bind(
+        cycleId,
+        LEADERBOARD_REWARD_POLICY_VERSION,
+        LEADERBOARD_REWARD_POLICY_HASH,
+        JSON.stringify(leaderboardRewardCardIds(SEASON)),
+        NOW.toISOString()
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_entries
+           (cycle_id, user_id, game_mode, rank, snapshotted_at)
+         VALUES (?, 'reward-snapshot-first', 'RANKED_CONSTRUCTED', 1, ?),
+                (?, 'reward-snapshot-second', 'RANKED_CONSTRUCTED', 2, ?)`
+      ).bind(cycleId, NOW.toISOString(), cycleId, NOW.toISOString())
+    ])
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_cycles SET status = 'DELIVERING'
+         WHERE id = ?`
+      )
+        .bind(cycleId)
+        .run()
+    ).rejects.toThrow('leaderboard reward snapshot is incomplete')
+
+    await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_entries
+         (cycle_id, user_id, game_mode, rank, snapshotted_at)
+       VALUES (?, 'reward-snapshot-first', 'RANKED_DISCOVERY', 1, ?),
+              (?, 'reward-snapshot-second', 'RANKED_DISCOVERY', 2, ?)`
+    )
+      .bind(cycleId, NOW.toISOString(), cycleId, NOW.toISOString())
+      .run()
+    await env.AUTH_DB.prepare(
+      `UPDATE leaderboard_reward_cycles SET status = 'DELIVERING'
+       WHERE id = ?`
+    )
+      .bind(cycleId)
+      .run()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_leaderboard_reward_awards
+           (award_key, cycle_id, user_id, season, week, payload_json,
+            mode_awards_json, delivery_key, awarded_at, application_status,
+            completed_at)
+         VALUES (?, ?, 'reward-snapshot-first', ?, 2, ?, ?, ?, ?,
+                 'PREPARING', NULL)`
+      )
+        .bind(
+          `${cycleId}:under-award-test`,
+          cycleId,
+          SEASON,
+          JSON.stringify({
+            silverCardAmounts: { '65537': 1 },
+            ticketAmount: 2,
+            rankedConstructedRank: 1,
+            rankedDiscoveryRank: 0
+          }),
+          JSON.stringify({
+            RANKED_CONSTRUCTED: {
+              rank: 1,
+              silverCardIds: [1],
+              tickets: 2
+            }
+          }),
+          crypto.randomUUID(),
+          NOW.toISOString()
+        )
+        .run()
+    ).rejects.toThrow('active leaderboard reward policy receipt required')
+  })
+
   it('is a read-only no-op without an explicitly enabled schedule', async () => {
     expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toEqual({
       status: 'disabled',
@@ -260,6 +550,23 @@ describe('weekly leaderboard reward worker', () => {
         )
         .map(card => card.id)
     )
+    for (const season of [1, SEASON, 62]) {
+      const policyRows = await env.AUTH_DB.prepare(
+        `SELECT card_id FROM leaderboard_reward_policy_cards
+         WHERE policy_version = ? AND policy_hash = ?
+           AND valid_from_season <= ?
+         ORDER BY card_id`
+      )
+        .bind(
+          LEADERBOARD_REWARD_POLICY_VERSION,
+          LEADERBOARD_REWARD_POLICY_HASH,
+          season
+        )
+        .all<{ card_id: number }>()
+      expect(policyRows.results.map(row => row.card_id)).toEqual(
+        leaderboardRewardCardIds(season)
+      )
+    }
   })
 
   it('catches up missed cycles in order instead of skipping reward weeks', async () => {

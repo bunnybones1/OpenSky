@@ -108,7 +108,12 @@ metadata without minting either asset. Each immutable award records the exact
 per-mode source result and moves from `PREPARING` to `APPLIED` only when every
 Silver/ticket before-and-after balance, per-mode feed payload, and aggregate
 notification agree. A finalization failure rolls the whole delivery back; a
-later retry cannot grant the same cycle twice.
+later retry cannot grant the same cycle twice. An enabled cadence is not reward
+authority by itself: a second actor must activate a digest covering the exact
+rank curve, card-pool order and season validity, deterministic draw rule,
+ranked modes, item types, token IDs, and quantities before the first weekly
+boundary. Every cycle records that immutable policy version and digest before
+snapshotting ranks, and its season/week are derived from the source calendar.
 
 Delayed Conquest Gold keeps the source 24-hour delivery boundary but replaces
 the mint with identity inventory. One cron claim owns a

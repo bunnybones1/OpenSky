@@ -111,6 +111,9 @@ export const offchainGateErrors = ({
   referralStickerSource = '',
   referralStickerContentSource = '',
   referralStickerScheduleMigration = '',
+  leaderboardRewardSource = '',
+  leaderboardRewardPolicySource = '',
+  leaderboardRewardPolicyMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -544,6 +547,65 @@ export const offchainGateErrors = ({
       }
     }
   }
+  if (leaderboardRewardSource || leaderboardRewardPolicyMigration) {
+    for (const token of [
+      'leaderboard_reward_schedule_activations',
+      'LEADERBOARD_REWARD_POLICY_VERSION',
+      'LEADERBOARD_REWARD_POLICY_HASH',
+      'leaderboard_reward_cycle_policy_receipts',
+      'policy_activated_at <= now.toISOString()',
+      "crypto.subtle.digest(\n      'SHA-256'",
+      'encoder.encode(`${seed}:${index}`)',
+      '% pool.length'
+    ]) {
+      if (!leaderboardRewardSource.includes(token)) {
+        errors.push(
+          `leaderboard reward is missing policy safeguard: ${token}`
+        )
+      }
+    }
+    for (const token of [
+      'cloud-weasel-offchain-leaderboard-v1',
+      'leaderboardRewardsForRank(index + 1)',
+      "card.set !== 'HEXBOUND_INVASION'",
+      "ticket: ['SW_CONQUEST_TICKET', 2, 1]",
+      'calculatedLeaderboardRewardPolicyHash'
+    ]) {
+      if (!leaderboardRewardPolicySource.includes(token)) {
+        errors.push(`leaderboard policy hash is missing source input: ${token}`)
+      }
+    }
+    for (const token of [
+      'leaderboard_reward_schedule_activations',
+      "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE'))",
+      'activated_by_user_id <> created_by_user_id',
+      'leaderboard reward policy activation is invalid',
+      'leaderboard_reward_policy_card_ranges',
+      'leaderboard_reward_policy_cards',
+      'json_array_length(NEW.eligible_card_ids_json)',
+      "WHEN json_extract(mode.value, '$.rank') = 1 THEN 10",
+      "WHEN json_extract(mode.value, '$.rank') BETWEEN 101 AND 250 THEN 1",
+      'leaderboard reward cycle creation is invalid',
+      'leaderboard reward snapshot is incomplete',
+      'active leaderboard reward policy receipt required',
+      'leaderboard reward cycle policy receipts are immutable'
+    ]) {
+      if (!leaderboardRewardPolicyMigration.includes(token)) {
+        errors.push(`leaderboard policy schema is missing safeguard: ${token}`)
+      }
+    }
+    const configuredHash = leaderboardRewardPolicySource.match(
+      /LEADERBOARD_REWARD_POLICY_HASH\s*=\s*\n?\s*['"]([0-9a-f]{64})['"]/
+    )?.[1]
+    if (
+      !configuredHash ||
+      !leaderboardRewardPolicyMigration.includes(configuredHash)
+    ) {
+      errors.push(
+        'leaderboard policy runtime hash is not pinned by the D1 activation schema'
+      )
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -637,7 +699,9 @@ const main = async () => {
     matchReceiptMigration,
     conquestPointSource,
     conquestPointMigration,
-    referralStickerScheduleMigration
+    referralStickerScheduleMigration,
+    leaderboardRewardPolicySource,
+    leaderboardRewardPolicyMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -917,6 +981,17 @@ const main = async () => {
         'cloudflare/migrations/0087_referral_sticker_schedule_activation.sql'
       ),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-policy.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
+      ),
+      'utf8'
     )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
@@ -1033,6 +1108,9 @@ const main = async () => {
     referralStickerSource: referralStickerRewards,
     referralStickerContentSource: contentSource,
     referralStickerScheduleMigration,
+    leaderboardRewardSource: leaderboardRewards,
+    leaderboardRewardPolicySource,
+    leaderboardRewardPolicyMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })

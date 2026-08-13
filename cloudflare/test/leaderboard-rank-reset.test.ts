@@ -2,9 +2,16 @@ import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 
 import { applyLeaderboardRankReset } from '../src/leaderboard-rank-reset'
+import {
+  LEADERBOARD_REWARD_POLICY_HASH,
+  LEADERBOARD_REWARD_POLICY_VERSION,
+  leaderboardRewardCardIds
+} from '../src/leaderboard-reward-policy'
+import { seasonStart } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
 
 const SEASON = 20
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 let scheduleVersion = 500
 
 const setupPlayer = async (userId: string, status = 'ACTIVE') => {
@@ -68,23 +75,114 @@ const addStat = async (
 
 const makeCycle = async (week: number) => {
   scheduleVersion += 1
-  const now = new Date(Date.UTC(2026, 0, scheduleVersion - 500)).toISOString()
+  const scheduledAt = new Date(
+    seasonStart(SEASON).getTime() + week * WEEK_MS
+  ).toISOString()
+  const now = new Date(
+    Date.parse(scheduledAt) + (scheduleVersion - 500) * 1000
+  ).toISOString()
   await env.AUTH_DB.prepare(
-    `INSERT INTO leaderboard_reward_schedule_versions
-       (version, enabled, starts_at, reason, created_at)
-     VALUES (?, 0, ?, 'rank reset test', ?)`
+     `INSERT INTO leaderboard_reward_schedule_versions
+       (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
+        starts_at, reason, created_at)
+     VALUES (?, 1, ?, ?, ?, ?, ?, 'rank reset test', ?)`
   )
-    .bind(scheduleVersion, now, now)
+    .bind(
+      scheduleVersion,
+      new Date(scheduledAt).getUTCDay(),
+      new Date(scheduledAt).getUTCHours(),
+      new Date(scheduledAt).getUTCMinutes(),
+      scheduledAt,
+      scheduledAt,
+      scheduledAt
+    )
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO leaderboard_reward_schedule_activations
+       (schedule_version, status, policy_version, policy_hash,
+        created_by_user_id, activated_by_user_id, reason, review_reference,
+        created_at, activated_at)
+     VALUES (?, 'DRAFT', ?, ?, 'system:test-author', NULL,
+             'rank reset policy', 'test:review', ?, NULL)`
+  )
+    .bind(
+      scheduleVersion,
+      LEADERBOARD_REWARD_POLICY_VERSION,
+      LEADERBOARD_REWARD_POLICY_HASH,
+      scheduledAt
+    )
+    .run()
+  await env.AUTH_DB.prepare(
+    `UPDATE leaderboard_reward_schedule_activations
+     SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+         activated_at = ? WHERE schedule_version = ?`
+  )
+    .bind(scheduledAt, scheduleVersion)
     .run()
   const result = await env.AUTH_DB.prepare(
     `INSERT INTO leaderboard_reward_cycles
        (schedule_version, scheduled_at, season, week, random_seed, status,
         attempt_count, started_at)
-     VALUES (?, ?, ?, ?, ?, 'DELIVERING', 0, ?)`
+     VALUES (?, ?, ?, ?, ?, 'PREPARING', 0, ?)`
   )
-    .bind(scheduleVersion, now, SEASON, week, crypto.randomUUID(), now)
+    .bind(
+      scheduleVersion,
+      scheduledAt,
+      SEASON,
+      week,
+      crypto.randomUUID(),
+      now
+    )
     .run()
-  return Number(result.meta.last_row_id)
+  const cycleId = Number(result.meta.last_row_id)
+  const statements = [
+    env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_cycle_policy_receipts
+         (cycle_id, schedule_version, policy_version, policy_hash,
+          eligible_card_ids_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(
+      cycleId,
+      scheduleVersion,
+      LEADERBOARD_REWARD_POLICY_VERSION,
+      LEADERBOARD_REWARD_POLICY_HASH,
+      JSON.stringify(leaderboardRewardCardIds(SEASON)),
+      now
+    )
+  ]
+  for (const mode of ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY']) {
+    statements.push(
+      env.AUTH_DB.prepare(
+        `INSERT INTO leaderboard_reward_entries
+           (cycle_id, user_id, game_mode, rank, snapshotted_at)
+         SELECT ?, ranked.user_id, ?, ranked.rank, ?
+         FROM (
+           SELECT stats.user_id,
+                  ROW_NUMBER() OVER (
+                    ORDER BY stats.score DESC, stats.created_at DESC
+                  ) AS rank
+           FROM player_account_stats stats
+           JOIN player_account_settings settings
+             ON settings.user_id = stats.user_id
+           WHERE stats.game_mode = ? AND stats.season = ?
+             AND settings.leaderboard_eligible = 1
+             AND settings.account_status NOT IN (
+               'BANNED', 'SUSPENDED', 'DELETED'
+             )
+           ORDER BY stats.score DESC, stats.created_at DESC
+           LIMIT 500
+         ) ranked`
+      ).bind(cycleId, mode, now, mode, SEASON)
+    )
+  }
+  statements.push(
+    env.AUTH_DB.prepare(
+      `UPDATE leaderboard_reward_cycles SET status = 'DELIVERING'
+       WHERE id = ? AND status = 'PREPARING'`
+    ).bind(cycleId)
+  )
+  await env.AUTH_DB.batch(statements)
+  return cycleId
 }
 
 describe('source leaderboard rank resets', () => {

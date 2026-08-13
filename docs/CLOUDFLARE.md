@@ -250,10 +250,13 @@ and progress are not migrated.
 - Ranked player leaderboard rows project the source Silver-card curve and
   Conquest-ticket boundaries for ranks 1 through 500. These values are
   display-only in production. The source-compatible reward snapshot and
-  delivery worker is deployed behind an immutable schedule table, but that
-  table deliberately has no configured schedule. Cloud Weasel therefore issues
-  no weekly rewards yet and does not advertise a next-reward countdown. Once an
-  explicit schedule is enabled, completed reward delivery atomically triggers
+  delivery worker requires both an immutable cadence and independently
+  activated policy digest covering the exact rank curve, ordered card pool,
+  deterministic draw, modes, item IDs, and quantities. Neither is configured
+  in production. Cloud Weasel therefore issues no weekly rewards yet and does
+  not advertise a next-reward countdown. Once both are approved, every cycle
+  records the policy digest before snapshotting ranks; completed delivery then
+  atomically triggers
   the source weekly snapshots/floors/RD inflation or the week-four next-season
   carry, score averaging, and Grandweaver recalculation. Immutable reset receipts
   make retries and concurrent cron ticks idempotent.

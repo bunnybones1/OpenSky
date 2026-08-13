@@ -145,6 +145,36 @@ const validInput = () => ({
     'referral sticker schedule activation is invalid; ' +
     'active referral sticker schedule entries are immutable; ' +
     'active referral sticker schedule receipt required',
+  leaderboardRewardSource:
+    'leaderboard_reward_schedule_activations; ' +
+    'LEADERBOARD_REWARD_POLICY_VERSION; LEADERBOARD_REWARD_POLICY_HASH; ' +
+    'leaderboard_reward_cycle_policy_receipts; ' +
+    'policy_activated_at <= now.toISOString(); ' +
+    "crypto.subtle.digest(\n      'SHA-256'; " +
+    'encoder.encode(`${seed}:${index}`); % pool.length; ' +
+    'INSERT INTO player_items; award_key',
+  leaderboardRewardPolicySource:
+    'cloud-weasel-offchain-leaderboard-v1; ' +
+    'leaderboardRewardsForRank(index + 1); ' +
+    "card.set !== 'HEXBOUND_INVASION'; " +
+    "ticket: ['SW_CONQUEST_TICKET', 2, 1]; " +
+    'calculatedLeaderboardRewardPolicyHash; ' +
+    "LEADERBOARD_REWARD_POLICY_HASH = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+  leaderboardRewardPolicyMigration:
+    'leaderboard_reward_schedule_activations; ' +
+    "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE')); " +
+    'activated_by_user_id <> created_by_user_id; ' +
+    'leaderboard reward policy activation is invalid; ' +
+    'leaderboard_reward_policy_card_ranges; ' +
+    'leaderboard_reward_policy_cards; ' +
+    'json_array_length(NEW.eligible_card_ids_json); ' +
+    "WHEN json_extract(mode.value, '$.rank') = 1 THEN 10; " +
+    "WHEN json_extract(mode.value, '$.rank') BETWEEN 101 AND 250 THEN 1; " +
+    'leaderboard reward cycle creation is invalid; ' +
+    'leaderboard reward snapshot is incomplete; ' +
+    'active leaderboard reward policy receipt required; ' +
+    'leaderboard reward cycle policy receipts are immutable; ' +
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -276,6 +306,18 @@ test('rejects referral sticker fulfillment without reviewed schedule activation'
     errors.some(error => error.includes('active referral sticker schedule'))
   )
   assert.ok(errors.some(error => error.includes('unactivated reward metadata')))
+})
+
+test('rejects leaderboard fulfillment without an approved exact policy', () => {
+  const input = validInput()
+  input.leaderboardRewardSource =
+    'leaderboard_reward_schedule_activations; INSERT INTO player_items; award_key'
+  input.leaderboardRewardPolicyMigration =
+    'leaderboard_reward_schedule_activations'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('LEADERBOARD_REWARD_POLICY_HASH')))
+  assert.ok(errors.some(error => error.includes('two') || error.includes('activated_by_user_id')))
+  assert.ok(errors.some(error => error.includes('cycle policy receipts')))
 })
 
 test('rejects player inventory writes from an observational pipeline', () => {

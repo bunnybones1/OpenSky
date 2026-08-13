@@ -1,6 +1,9 @@
-import cardLibrary from './generated/card-library.json'
-
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
+import {
+  LEADERBOARD_REWARD_POLICY_HASH,
+  LEADERBOARD_REWARD_POLICY_VERSION,
+  leaderboardRewardCardIds
+} from './leaderboard-reward-policy'
 import { applyLeaderboardRankReset } from './leaderboard-rank-reset'
 import { seasonStart, seasonWeekFromDate } from './legacy-seasons'
 
@@ -21,6 +24,10 @@ interface ScheduleRow {
   minute_utc: number | null
   first_run_at: string | null
   starts_at: string
+  activation_status: 'DRAFT' | 'ACTIVE' | null
+  policy_activated_at: string | null
+  policy_version: number | null
+  policy_hash: string | null
 }
 
 interface CycleRow {
@@ -80,14 +87,7 @@ export interface LeaderboardRewardRun {
   delivered: number
 }
 
-const rewardCards = cardLibrary.cards.filter(
-  card => card.set !== 'HEXBOUND_INVASION'
-)
-
-export const leaderboardRewardCardIds = (season: number): number[] =>
-  rewardCards
-    .filter(card => card.validFromSeason <= season)
-    .map(card => card.id)
+export { leaderboardRewardCardIds } from './leaderboard-reward-policy'
 
 export const mostRecentLeaderboardRewardTime = (
   firstRunAt: Date,
@@ -110,15 +110,27 @@ const activeSchedule = async (
 ): Promise<ScheduleRow | null> => {
   const schedule = await database
     .prepare(
-      `SELECT version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
-              starts_at
-       FROM leaderboard_reward_schedule_versions
-       WHERE starts_at <= ?
-       ORDER BY version DESC LIMIT 1`
+      `SELECT schedule.version, schedule.enabled, schedule.weekday_utc,
+              schedule.hour_utc, schedule.minute_utc, schedule.first_run_at,
+              schedule.starts_at, activation.status AS activation_status,
+              activation.activated_at AS policy_activated_at,
+              activation.policy_version, activation.policy_hash
+       FROM leaderboard_reward_schedule_versions schedule
+       LEFT JOIN leaderboard_reward_schedule_activations activation
+         ON activation.schedule_version = schedule.version
+       WHERE schedule.starts_at <= ?
+       ORDER BY schedule.version DESC LIMIT 1`
     )
     .bind(now.toISOString())
     .first<ScheduleRow>()
-  return schedule?.enabled === 1 ? schedule : null
+  return schedule?.enabled === 1 &&
+    schedule.activation_status === 'ACTIVE' &&
+    schedule.policy_activated_at !== null &&
+    schedule.policy_activated_at <= now.toISOString() &&
+    schedule.policy_version === LEADERBOARD_REWARD_POLICY_VERSION &&
+    schedule.policy_hash === LEADERBOARD_REWARD_POLICY_HASH
+    ? schedule
+    : null
 }
 
 const validatedFirstRun = (schedule: ScheduleRow): Date => {
@@ -243,7 +255,23 @@ const snapshotCycle = async (
   cycle: CycleRow,
   now: Date
 ): Promise<void> => {
-  const statements: D1PreparedStatement[] = []
+  const statements: D1PreparedStatement[] = [
+    database
+      .prepare(
+        `INSERT INTO leaderboard_reward_cycle_policy_receipts
+           (cycle_id, schedule_version, policy_version, policy_hash,
+            eligible_card_ids_json, created_at)
+         SELECT id, schedule_version, ?, ?, ?, started_at
+         FROM leaderboard_reward_cycles
+         WHERE id = ? AND status = 'PREPARING'`
+      )
+      .bind(
+        LEADERBOARD_REWARD_POLICY_VERSION,
+        LEADERBOARD_REWARD_POLICY_HASH,
+        JSON.stringify(leaderboardRewardCardIds(cycle.season)),
+        cycle.id
+      )
+  ]
   for (const mode of RANKED_MODES) {
     statements.push(
       database

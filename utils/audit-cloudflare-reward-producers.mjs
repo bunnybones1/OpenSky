@@ -64,8 +64,18 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
   'api/lib/jobqueue/leaderboard_rewards_runner.go': {
     count: 1,
     disposition: 'offchain-leaderboard',
-    evidenceFiles: ['cloudflare/src/leaderboard-reward-worker.ts'],
-    evidence: ['player_leaderboard_reward_awards', 'SW_CONQUEST_TICKET']
+    evidenceFiles: [
+      'cloudflare/src/leaderboard-reward-worker.ts',
+      'cloudflare/src/leaderboard-reward-policy.ts',
+      'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
+    ],
+    evidence: [
+      'player_leaderboard_reward_awards',
+      'SW_CONQUEST_TICKET',
+      'LEADERBOARD_REWARD_POLICY_HASH',
+      'leaderboard_reward_cycle_policy_receipts',
+      'active leaderboard reward policy receipt required'
+    ]
   },
   'api/lib/levels/xp/leveller.go': {
     count: 1,

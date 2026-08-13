@@ -76,7 +76,8 @@
 - Source-ranked player leaderboard reward projections, including the exact
   Silver curve and Conquest-ticket rank boundaries
 - A retry-safe, immutable weekly leaderboard reward snapshot and delivery
-  worker, deployed dormant until an explicit Cloud Weasel schedule is reviewed;
+  worker, deployed dormant until an explicit Cloud Weasel cadence and exact
+  off-chain reward-policy digest receive independent two-actor review;
   the exact source weekly/monthly rank rollovers run only after delivery
   completes. The source-compatible next-reward read uses that same immutable
   schedule and fails explicitly while production has no configured cadence

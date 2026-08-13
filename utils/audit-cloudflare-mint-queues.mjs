@@ -29,6 +29,8 @@ export const EXPECTED_QUEUES = {
     sourceProducer: false,
     disposition: 'offchain-leaderboard',
     evidence: [
+      'leaderboard_reward_schedule_activations',
+      'leaderboard_reward_cycle_policy_receipts',
       'player_leaderboard_reward_inventory_grants',
       'leaderboard reward inventory grants are immutable',
       'leaderboard reward receipt completion is invalid',
@@ -40,6 +42,8 @@ export const EXPECTED_QUEUES = {
     sourceProducer: false,
     disposition: 'offchain-leaderboard',
     evidence: [
+      'leaderboard_reward_schedule_activations',
+      'leaderboard_reward_cycle_policy_receipts',
       'player_leaderboard_reward_inventory_grants',
       'leaderboard reward inventory grants are immutable',
       'leaderboard reward receipt completion is invalid',
@@ -89,6 +93,8 @@ export const EXPECTED_QUEUES = {
     sourceProducer: true,
     disposition: 'offchain',
     evidence: [
+      'leaderboard_reward_schedule_activations',
+      'leaderboard_reward_cycle_policy_receipts',
       'player_leaderboard_reward_inventory_grants',
       'leaderboard reward inventory grants are immutable',
       'leaderboard reward receipt completion is invalid'
@@ -288,6 +294,13 @@ const main = async () => {
         path.join(
           root,
           'cloudflare/migrations/0080_leaderboard_reward_receipts.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
         ),
         'utf8'
       )

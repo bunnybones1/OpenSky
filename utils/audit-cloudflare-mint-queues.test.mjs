@@ -41,9 +41,9 @@ const evidence = {
   MintConquestEntriesQueue:
     'stripe_checkout_fulfillment_receipts Stripe fulfillment receipts are immutable Stripe payment fulfillment is invalid SW_CONQUEST_TICKET',
   MintSilverCardRewardsQueue:
-    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_SILVER_CARDS',
+    'leaderboard_reward_schedule_activations leaderboard_reward_cycle_policy_receipts player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_SILVER_CARDS',
   MintTicketRewardsQueue:
-    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_CONQUEST_TICKET',
+    'leaderboard_reward_schedule_activations leaderboard_reward_cycle_policy_receipts player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_CONQUEST_TICKET',
   MintStickerRewardsQueue:
     'referral_sticker_active_schedule_entries referral_sticker_reward_batch_schedule_receipts referral_sticker_reward_inventory_grants referral sticker inventory grants are immutable referral sticker reward batch update is invalid',
   DelayedMintingQueue:
@@ -53,7 +53,7 @@ const evidence = {
   ConquestV2SendRewardQueue:
     'player_conquest_v2_reward_inventory_grants Conquest V2 reward inventory grants are immutable Conquest V2 reward receipt completion is invalid',
   MintLeaderboardRewardsQueue:
-    'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid',
+    'leaderboard_reward_schedule_activations leaderboard_reward_cycle_policy_receipts player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid',
   MintCardBackRewardsQueue:
     'player_skypass_claim_inventory_grants SkyPass claim inventory grants are immutable SkyPass claim receipt completion is invalid SW_CARD_BACKS',
   MintSkypassConquestTicketsQueue:
