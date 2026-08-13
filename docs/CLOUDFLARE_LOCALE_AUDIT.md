@@ -25,3 +25,9 @@ cannot expose untranslated authentication or reward semantics.
 These translations change only the adapted copy in the preserved OpenSky
 interface. They do not alter routes, component hierarchy, visual design,
 reward quantities, or fulfillment behavior.
+
+Locale JSON is loaded at runtime and is not content-fingerprinted. The Worker
+therefore marks `/locales/*` responses browser and edge `no-store`, and the
+deployment verifier compares all six production `webapp.json` bodies byte for
+byte with the fully tested local artifact. A stale translation or cache policy
+now fails deployment verification just like a stale JavaScript entry.

@@ -53,7 +53,7 @@ test('accepts the release-safe static asset cache boundary', async () => {
   )
 })
 
-test('rejects cache policy bypasses and cacheable HTML', async () => {
+test('rejects cache policy bypasses and cacheable HTML or locales', async () => {
   const [workerConfig, workerSource, cachePolicySource] = await Promise.all([
     readFile('wrangler.jsonc', 'utf8').then(JSON.parse),
     readFile('cloudflare/src/index.ts', 'utf8'),
@@ -68,10 +68,13 @@ test('rejects cache policy bypasses and cacheable HTML', async () => {
       'applyAssetCachePolicy(request, await env.ASSETS.fetch(request))',
       'env.ASSETS.fetch(request)'
     ),
-    cachePolicySource.replace("'no-store'", "'public, max-age=60'")
+    cachePolicySource
+      .replaceAll("'no-store'", "'public, max-age=60'")
+      .replace("startsWith('/locales/')", "startsWith('/translations/')")
   )
 
   assert.ok(errors.some(error => error.includes('run through the Worker')))
   assert.ok(errors.some(error => error.includes('bypass')))
   assert.ok(errors.some(error => error.includes("'no-store'")))
+  assert.ok(errors.some(error => error.includes("startsWith('/locales/')")))
 })

@@ -51,7 +51,24 @@ describe('static asset release cache policy', () => {
     expect(guarded.headers.get('Cache-Control')).toContain('immutable')
   })
 
-  it('leaves unhashed assets on the platform revalidation policy', () => {
+  it('prevents runtime locale resources from surviving a Worker release', async () => {
+    const original = response(
+      'application/json',
+      'public, max-age=0, must-revalidate'
+    )
+    const guarded = applyAssetCachePolicy(
+      new Request(
+        'https://cloud-weasel.example/locales/cloudflare/pt-BR/webapp.json'
+      ),
+      original
+    )
+
+    expect(guarded.headers.get('Cache-Control')).toBe('no-store')
+    expect(guarded.headers.get('Cloudflare-CDN-Cache-Control')).toBe('no-store')
+    expect(await guarded.text()).toBe('asset')
+  })
+
+  it('leaves other unhashed assets on the platform revalidation policy', () => {
     const original = response(
       'application/javascript',
       'public, max-age=0, must-revalidate'

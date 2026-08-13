@@ -17,6 +17,9 @@ export const applyAssetCachePolicy = (
   }
 
   const path = new URL(request.url).pathname
+  if (path.startsWith('/locales/')) {
+    return withCacheControl(response, 'no-store')
+  }
   if (path.includes('/assets/') && FINGERPRINTED_ASSET.test(path)) {
     return withCacheControl(response, 'public, max-age=31536000, immutable')
   }

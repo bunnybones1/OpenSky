@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 const DEFAULT_BASE_URL = 'https://opensky-webapp.dysinski-tomasz.workers.dev'
 const ENTRY_PATTERN = /<script[^>]+src="([^"]*\/assets\/index-[a-f0-9]{8}\.js)"/
+const VERIFIED_LOCALES = ['en', 'es-ES', 'fr', 'pt-BR', 'zh', 'pig']
 
 export const extractEntryPath = html => html.match(ENTRY_PATTERN)?.[1]
 
@@ -16,7 +17,9 @@ export const deploymentVerificationErrors = ({
   remoteWeb,
   remoteGame,
   remoteWebAsset,
-  remoteGameAsset
+  remoteGameAsset,
+  localLocales = {},
+  remoteLocales = {}
 }) => {
   const errors = []
   const localWebEntry = extractEntryPath(localWebHtml)
@@ -62,6 +65,34 @@ export const deploymentVerificationErrors = ({
       )
     ) {
       errors.push(`${name} is not Cloudflare edge no-store`)
+    }
+  }
+
+  for (const locale of Object.keys(localLocales)) {
+    const response = remoteLocales[locale]
+    if (!response) {
+      errors.push(`production ${locale} locale was not fetched`)
+      continue
+    }
+    if (response.status !== 200) {
+      errors.push(
+        `production ${locale} locale returned HTTP ${response.status}`
+      )
+    }
+    if (response.body !== localLocales[locale]) {
+      errors.push(`production ${locale} locale does not match tested artifact`)
+    }
+    if (!hasDirective(response.headers, 'cache-control', 'no-store')) {
+      errors.push(`production ${locale} locale is not browser no-store`)
+    }
+    if (
+      !hasDirective(
+        response.headers,
+        'cloudflare-cdn-cache-control',
+        'no-store'
+      )
+    ) {
+      errors.push(`production ${locale} locale is not Cloudflare edge no-store`)
     }
   }
 
@@ -120,10 +151,25 @@ const main = async () => {
   )
   const baseUrl = (process.argv[2] || DEFAULT_BASE_URL).replace(/\/$/, '')
   const releaseProbe = `verify=${Date.now()}`
-  const [localWebHtml, localGameHtml] = await Promise.all([
+  const [localWebHtml, localGameHtml, localLocaleEntries] = await Promise.all([
     readFile(path.join(root, 'webapp/dist/index.html'), 'utf8'),
-    readFile(path.join(root, 'webapp/dist/game/cloudflare/index.html'), 'utf8')
+    readFile(path.join(root, 'webapp/dist/game/cloudflare/index.html'), 'utf8'),
+    Promise.all(
+      VERIFIED_LOCALES.map(async locale => [
+        locale,
+        await readFile(
+          path.join(
+            root,
+            'webapp/dist/locales/cloudflare',
+            locale,
+            'webapp.json'
+          ),
+          'utf8'
+        )
+      ])
+    )
   ])
+  const localLocales = Object.fromEntries(localLocaleEntries)
   const localWebEntry = extractEntryPath(localWebHtml)
   const localGameEntry = extractEntryPath(localGameHtml)
   if (!localWebEntry || !localGameEntry) {
@@ -132,16 +178,31 @@ const main = async () => {
     )
   }
 
-  const [remoteWeb, remoteGame, remoteWebAsset, remoteGameAsset] =
-    await Promise.all([
-      fetchSnapshot(`${baseUrl}/?${releaseProbe}`, true),
-      fetchSnapshot(
-        `${baseUrl}/game/cloudflare/?mode=LOCAL_BOT&skipAuth&${releaseProbe}`,
-        true
-      ),
-      fetchSnapshot(new URL(localWebEntry, baseUrl).href),
-      fetchSnapshot(new URL(localGameEntry, baseUrl).href)
-    ])
+  const [
+    remoteWeb,
+    remoteGame,
+    remoteWebAsset,
+    remoteGameAsset,
+    remoteLocaleEntries
+  ] = await Promise.all([
+    fetchSnapshot(`${baseUrl}/?${releaseProbe}`, true),
+    fetchSnapshot(
+      `${baseUrl}/game/cloudflare/?mode=LOCAL_BOT&skipAuth&${releaseProbe}`,
+      true
+    ),
+    fetchSnapshot(new URL(localWebEntry, baseUrl).href),
+    fetchSnapshot(new URL(localGameEntry, baseUrl).href),
+    Promise.all(
+      VERIFIED_LOCALES.map(async locale => [
+        locale,
+        await fetchSnapshot(
+          `${baseUrl}/locales/cloudflare/${locale}/webapp.json?${releaseProbe}`,
+          true
+        )
+      ])
+    )
+  ])
+  const remoteLocales = Object.fromEntries(remoteLocaleEntries)
 
   const result = deploymentVerificationErrors({
     localWebHtml,
@@ -149,7 +210,9 @@ const main = async () => {
     remoteWeb,
     remoteGame,
     remoteWebAsset,
-    remoteGameAsset
+    remoteGameAsset,
+    localLocales,
+    remoteLocales
   })
   if (result.errors.length) {
     for (const error of result.errors) {
@@ -161,7 +224,8 @@ const main = async () => {
 
   process.stdout.write(
     `Verified ${baseUrl}: web ${result.localWebEntry}, ` +
-      `game ${result.localGameEntry}, release-safe cache policy\n`
+      `game ${result.localGameEntry}, ${VERIFIED_LOCALES.length} exact locales, ` +
+      `release-safe cache policy\n`
   )
 }
 

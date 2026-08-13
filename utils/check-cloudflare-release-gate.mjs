@@ -59,6 +59,7 @@ export const assetCachePolicyErrors = (
   }
   for (const token of [
     "startsWith('text/html')",
+    "startsWith('/locales/')",
     "'no-store'",
     'FINGERPRINTED_ASSET',
     "'public, max-age=31536000, immutable'",

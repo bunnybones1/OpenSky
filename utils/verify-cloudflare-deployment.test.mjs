@@ -15,6 +15,7 @@ const immutableHeaders = {
   'cache-control': 'public, max-age=31536000, immutable',
   'cloudflare-cdn-cache-control': 'public, max-age=31536000, immutable'
 }
+const localeBody = '{"identityAuth":{"continueWithGoogle":"Continue"}}\n'
 
 const valid = () => ({
   localWebHtml: html('/assets/index-11111111.js'),
@@ -30,7 +31,11 @@ const valid = () => ({
     body: html('/game/cloudflare/assets/index-22222222.js')
   },
   remoteWebAsset: { status: 200, headers: immutableHeaders },
-  remoteGameAsset: { status: 200, headers: immutableHeaders }
+  remoteGameAsset: { status: 200, headers: immutableHeaders },
+  localLocales: { en: localeBody },
+  remoteLocales: {
+    en: { status: 200, headers: noStoreHeaders, body: localeBody }
+  }
 })
 
 test('extracts web and nested game entry assets', () => {
@@ -55,6 +60,11 @@ test('rejects stale manifests, cacheable HTML, and unhashed asset policy', () =>
   input.remoteGame.headers = { 'cache-control': 'max-age=60' }
   input.remoteWebAsset.headers = { 'cache-control': 'max-age=0' }
   input.remoteGameAsset.status = 500
+  input.remoteLocales.en = {
+    status: 200,
+    headers: { 'cache-control': 'max-age=60' },
+    body: `${localeBody}stale`
+  }
 
   const errors = deploymentVerificationErrors(input).errors
   assert.ok(errors.some(error => error.includes('does not match tested')))
@@ -65,4 +75,13 @@ test('rejects stale manifests, cacheable HTML, and unhashed asset policy', () =>
   )
   assert.ok(errors.some(error => error.includes('not browser immutable')))
   assert.ok(errors.some(error => error.includes('returned HTTP 500')))
+  assert.ok(errors.some(error => error.includes('locale does not match')))
+  assert.ok(
+    errors.some(error => error.includes('locale is not browser no-store'))
+  )
+  assert.ok(
+    errors.some(error =>
+      error.includes('locale is not Cloudflare edge no-store')
+    )
+  )
 })
