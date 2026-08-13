@@ -111,3 +111,11 @@ returned the current empty active set, and a fresh signed-in Home client loaded
 without an error or phantom banner. No production announcement was created for
 verification; active rendering and the staff lifecycle remain covered by the
 content/staff integration suites.
+
+Admin-route milestone `6dba58a` was deployed on 2026-08-13 as Worker version
+`1a8f1555-701b-47e9-8e3f-0d9dbdad6769`; production HTML referenced the tested
+entry asset `index-511731f6.js`. Production had zero `ADMIN` roles and zero
+content-write permissions. A fresh signed-in non-admin client requested
+`/admin/users`, redirected to `/home`, rendered the player shell, and exposed no
+admin navigation, staff data, or permission error. No role or capability was
+created for verification.
