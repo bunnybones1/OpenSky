@@ -151,12 +151,13 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/player-support.ts': {
-    count: 6,
+    count: 7,
     disposition: 'audited-player-support',
     evidenceFiles: [
       'cloudflare/migrations/0039_player_support_operations.sql',
       'cloudflare/migrations/0066_offchain_operator_card_grants.sql',
-      'cloudflare/migrations/0084_operator_card_grant_fulfillment_receipts.sql'
+      'cloudflare/migrations/0084_operator_card_grant_fulfillment_receipts.sql',
+      'cloudflare/migrations/0093_operator_item_grant_receipts.sql'
     ],
     evidence: [
       'staff_player_support_audit',
@@ -167,6 +168,11 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       'Operator card grant receipts are immutable',
       'Operator card inventory grants are immutable',
       'Operator card grant receipt completion is invalid',
+      'player_operator_item_grants',
+      'player_operator_item_grant_inventory_grants',
+      'Operator item grant receipts are immutable',
+      'Operator item inventory grants are immutable',
+      'Operator item grant receipt completion is invalid',
       'database.batch'
     ]
   },

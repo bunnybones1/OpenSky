@@ -41,15 +41,18 @@ export const EXPECTED_REWARD_PRODUCER_FILES = {
   },
   'api/lib/jobqueue/giveaway_offchain_tokens_runner.go': {
     count: 1,
-    disposition: 'producerless-giveaway-and-support',
+    disposition: 'offchain-operator-item-grants',
     evidenceFiles: [
       'docs/CLOUDFLARE_WORKER_AUDIT.md',
-      'cloudflare/src/player-support.ts'
+      'cloudflare/src/player-support.ts',
+      'cloudflare/migrations/0093_operator_item_grant_receipts.sql'
     ],
     evidence: [
-      'Historical mass giveaways have no production producer',
-      'player_operator_card_grants',
-      'grantBaseCards'
+      'source has no production task producer',
+      'grantItems',
+      'player_operator_item_grants',
+      'player_operator_item_grant_inventory_grants',
+      'Operator item grant receipt completion is invalid'
     ]
   },
   'api/lib/jobqueue/lazy_migrations.go': {

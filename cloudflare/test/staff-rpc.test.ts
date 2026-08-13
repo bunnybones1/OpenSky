@@ -868,6 +868,238 @@ describe('fail-closed Google identity staff authorization', () => {
     )
   })
 
+  it('ports mass off-chain item giveaways with atomic immutable receipts', async () => {
+    await grantAdmin()
+    const request = {
+      accountAddress: `identity:${PLAYER}`,
+      requestKey: 'operator-items-mixed-1',
+      tokens: {
+        SW_TITLES: { 2: 3 },
+        SW_CONQUEST_TICKET: { 2: 2 },
+        SW_BASE_CARDS: { 65000: 1 },
+        SW_STICKER_POINTS: { 1: 25 }
+      }
+    }
+    expect((await rpcAs(ADMIN, 'GMGrantItems', request)).status).toBe(403)
+    await grantPlayerSupportWrite()
+
+    const first = await rpcAs(ADMIN, 'GMGrantItems', request)
+    expect(first.status).toBe(200)
+    const result = await first.json<{
+      ok: boolean
+      itemCount: number
+      items: Array<{ itemType: string; tokenId: number; quantity: number }>
+    }>()
+    expect(result).toEqual({
+      ok: true,
+      itemCount: 4,
+      items: [
+        { itemType: 'SW_BASE_CARDS', tokenId: 65000, quantity: 1 },
+        { itemType: 'SW_CONQUEST_TICKET', tokenId: 2, quantity: 2 },
+        { itemType: 'SW_STICKER_POINTS', tokenId: 1, quantity: 25 },
+        { itemType: 'SW_TITLES', tokenId: 2, quantity: 3 }
+      ]
+    })
+    const inventory = await env.AUTH_DB.prepare(
+      `SELECT item_type, token_id, balance, unlock_source
+       FROM player_items
+       WHERE user_id = ? AND (
+         (item_type = 'SW_BASE_CARDS' AND token_id = 65000) OR
+         (item_type = 'SW_CONQUEST_TICKET' AND token_id = 2) OR
+         (item_type = 'SW_STICKER_POINTS' AND token_id = 1) OR
+         (item_type = 'SW_TITLES' AND token_id = 2)
+       ) ORDER BY item_type, token_id`
+    )
+      .bind(PLAYER)
+      .all<{
+        item_type: string
+        token_id: number
+        balance: number
+        unlock_source: string
+      }>()
+    expect(inventory.results.map(item => ({
+      itemType: item.item_type,
+      tokenId: item.token_id,
+      balance: item.balance
+    }))).toEqual([
+      { itemType: 'SW_BASE_CARDS', tokenId: 65000, balance: 1 },
+      { itemType: 'SW_CONQUEST_TICKET', tokenId: 2, balance: 2 },
+      { itemType: 'SW_STICKER_POINTS', tokenId: 1, balance: 25 },
+      { itemType: 'SW_TITLES', tokenId: 2, balance: 3 }
+    ])
+    expect(
+      inventory.results.every(item =>
+        item.unlock_source.startsWith('operator-item-grant:')
+      )
+    ).toBe(true)
+    const evidence = await env.AUTH_DB.prepare(
+      `SELECT inventory_grant.item_type, inventory_grant.token_id,
+              inventory_grant.quantity, inventory_grant.before_balance,
+              inventory_grant.after_balance
+       FROM player_operator_item_grant_inventory_grants inventory_grant
+       JOIN player_operator_item_grants grant_receipt
+         ON grant_receipt.id = inventory_grant.operator_grant_id
+       WHERE grant_receipt.actor_user_id = ?
+         AND grant_receipt.request_key = ?
+       ORDER BY inventory_grant.item_type, inventory_grant.token_id`
+    )
+      .bind(ADMIN, request.requestKey)
+      .all<{
+        item_type: string
+        token_id: number
+        quantity: number
+        before_balance: number
+        after_balance: number
+      }>()
+    expect(evidence.results).toHaveLength(4)
+    expect(
+      evidence.results.every(
+        item =>
+          item.before_balance === 0 &&
+          item.after_balance === item.quantity
+      )
+    ).toBe(true)
+
+    const retry = await rpcAs(ADMIN, 'GMGrantItems', {
+      ...request,
+      tokens: {
+        SW_STICKER_POINTS: { 1: 25 },
+        SW_BASE_CARDS: { 65000: 1 },
+        SW_TITLES: { 2: 3 },
+        SW_CONQUEST_TICKET: { 2: 2 }
+      }
+    })
+    expect(await retry.json()).toEqual(result)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS receipts,
+                (SELECT COUNT(*)
+                 FROM player_operator_item_grant_inventory_grants grant_row
+                 JOIN player_operator_item_grants receipt
+                   ON receipt.id = grant_row.operator_grant_id
+                 WHERE receipt.actor_user_id = ?
+                   AND receipt.request_key = ?) AS grants
+         FROM player_operator_item_grants
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+        .bind(ADMIN, request.requestKey, ADMIN, request.requestKey)
+        .first()
+    ).toEqual({ receipts: 1, grants: 4 })
+
+    expect(
+      (await rpcAs(ADMIN, 'GMGrantItems', {
+        ...request,
+        tokens: { SW_TITLES: { 2: 4 } }
+      })).status
+    ).toBe(409)
+    expect(
+      (await rpcAs(ADMIN, 'GMGrantItems', {
+        ...request,
+        requestKey: 'operator-items-usdc-1',
+        tokens: { USDC: { 0: 1 } }
+      })).status
+    ).toBe(400)
+    expect(
+      (await rpcAs(ADMIN, 'GMGrantItems', {
+        ...request,
+        requestKey: 'operator-items-string-qty',
+        tokens: { SW_TITLES: { 3: '2' } }
+      })).status
+    ).toBe(400)
+
+    const concurrentRequest = {
+      accountAddress: `identity:${PLAYER}`,
+      requestKey: 'operator-items-concurrent',
+      tokens: { SW_TITLES: { 3: 2 } }
+    }
+    const concurrent = await Promise.all([
+      rpcAs(ADMIN, 'GMGrantItems', concurrentRequest),
+      rpcAs(ADMIN, 'GMGrantItems', concurrentRequest)
+    ])
+    expect(concurrent.map(response => response.status)).toEqual([200, 200])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_TITLES' AND token_id = 3`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ balance: 2 })
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_operator_item_grants SET item_count = item_count + 1
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+        .bind(ADMIN, request.requestKey)
+        .run()
+    ).rejects.toThrow('Operator item grant receipt completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_operator_item_grant_inventory_grants
+         SET after_balance = after_balance + 1
+         WHERE operator_grant_id = (
+           SELECT id FROM player_operator_item_grants
+           WHERE actor_user_id = ? AND request_key = ?
+         )`
+      )
+        .bind(ADMIN, request.requestKey)
+        .run()
+    ).rejects.toThrow('Operator item inventory grants are immutable')
+
+    const failedRequest = {
+      accountAddress: `identity:${PLAYER}`,
+      requestKey: 'operator-items-failure',
+      tokens: { SW_CARD_BACKS: { 99: 2 } }
+    }
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_operator_item_grant_completion
+       BEFORE UPDATE OF application_status ON player_operator_item_grants
+       WHEN NEW.request_key = 'operator-items-failure'
+         AND NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected operator item grant failure');
+       END`
+    ).run()
+    expect((await rpcAs(ADMIN, 'GMGrantItems', failedRequest)).status).toBe(500)
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_operator_item_grant_completion'
+    ).run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_operator_item_grants
+            WHERE actor_user_id = ? AND request_key = ?) AS receipts,
+           (SELECT COUNT(*)
+            FROM player_operator_item_grant_inventory_grants grant_row
+            JOIN player_operator_item_grants receipt
+              ON receipt.id = grant_row.operator_grant_id
+            WHERE receipt.actor_user_id = ?
+              AND receipt.request_key = ?) AS grants,
+           (SELECT COUNT(*) FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CARD_BACKS'
+              AND token_id = 99) AS items`
+      )
+        .bind(
+          ADMIN,
+          failedRequest.requestKey,
+          ADMIN,
+          failedRequest.requestKey,
+          PLAYER
+        )
+        .first()
+    ).toEqual({ receipts: 0, grants: 0, items: 0 })
+    expect((await rpcAs(ADMIN, 'GMGrantItems', failedRequest)).status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_CARD_BACKS' AND token_id = 99`
+      )
+        .bind(PLAYER)
+        .first()
+    ).toEqual({ balance: 2 })
+  })
+
   it('gates, scopes, and immutably audits quest support repairs', async () => {
     await grantAdmin()
     const playerQuest = await env.AUTH_DB.prepare(

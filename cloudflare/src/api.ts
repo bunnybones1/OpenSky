@@ -718,6 +718,21 @@ export const handleApiRequest = async (
         )
       }
 
+      case 'GMGrantItems': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requirePlayerSupportWrite(principal.userId)
+        const body = await requestBody<{
+          accountAddress?: string
+          requestKey?: unknown
+          tokens?: unknown
+        }>(request)
+        return json(
+          request,
+          env,
+          await playerSupport.grantItems(principal.userId, body)
+        )
+      }
+
       case 'GMSetWarmupGamesCompleted': {
         const principal = await identityPrincipal(request, env)
         await staff.requirePlayerSupportWrite(principal.userId)

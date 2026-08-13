@@ -27,7 +27,7 @@ mint. WalletConnect remains an optional ownership integration only.
 | `CrashedMatchCleanupRunner` | Superseded | Authoritative match Durable Objects persist deadlines and recover them with alarms. |
 | `DeckRankUpdateRunner` | Ported | Match settlement applies deck rank changes through an idempotent D1 coordinator. |
 | `FixStarterDecksRunner` | Retired | One-time legacy-account repair is unnecessary for the zero-user fork; new decks are validated at write time. |
-| `GiveawayOffChainTokensRunner` | Retired | Historical mass giveaways have no production producer; deliberate support grants use audited D1 operations. |
+| `GiveawayOffChainTokensRunner` | Superseded | `GMGrantItems` preserves its operator-supplied token-codec item map through capability-gated D1 grants with one immutable request and before/after receipt per item. The source has no production task producer, and production has no player-support permission grants. |
 | `GrantStickerRewardsRunner` | Ported | Referral rewards use idempotent receipts and off-chain `player_items`. |
 | `LazyMigrationRunner` | Retired | Per-account legacy migrations are unnecessary with zero imported users and versioned D1 migrations. |
 | `LeaderboardRewardsRunner` | Ported | Scheduled, receipt-backed off-chain inventory rewards. |

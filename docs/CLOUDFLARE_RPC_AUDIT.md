@@ -22,7 +22,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs   |      15 |
 | Deliberately retired RPCs    |       2 |
 | Actionable source RPC gaps   |       0 |
-| Cloudflare-only RPC adapters |       1 |
+| Cloudflare-only RPC adapters |       3 |
 
 Together, 172/172 source contracts (100%) are implemented, replaced by a
 reviewed Cloud Weasel contract, or intentionally retired. This is a product-
@@ -47,10 +47,15 @@ version for exact draft review. The Cloudflare-only
 `GMActivateSkypassRewards` adapter requires a different authorized actor and
 activates only the reviewed version and exact off-chain fulfillment digest.
 
-`GMGrantBaseCards` is the single Cloudflare-only adapter. It replaces the
-source `grant-cards` command's direct contract mint with a capability-gated,
-idempotent identity-inventory grant. It preserves all/prism selection and
-records an immutable receipt; it never prepares or sends a chain transaction.
+`GMGrantBaseCards` replaces the source `grant-cards` command's direct contract
+mint with a capability-gated, idempotent identity-inventory grant. It preserves
+all/prism selection and records an immutable receipt; it never prepares or
+sends a chain transaction. `GMGrantItems` preserves the source
+`GiveawayOffChainTokensRunner` item-type, item-ID, and quantity map behind the
+same dormant capability, with an immutable request and before/after receipt per
+item. `GMActivateSkypassRewards` is the third Cloudflare-only adapter because
+draft import and independent reward-policy activation are deliberately
+separate authorities.
 
 ## Reviewed non-ports
 

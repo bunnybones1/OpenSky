@@ -52,6 +52,13 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   `GMGrantBaseCards` adapter and immutable request receipt in `player_items`; it
   never becomes a Cloudflare contract call. The source's all/prism selection is
   preserved, while its wallet address is replaced by an identity reference.
+- The source mass-giveaway runner is also preserved rather than retired.
+  `GMGrantItems` accepts the same token-codec item-type, item-ID, and positive-
+  quantity map, but binds it to a Google identity and the dormant
+  `PLAYER_SUPPORT_WRITE` capability. An immutable request receipt plus one
+  before/after row per item makes retries and concurrent delivery exactly-once.
+  Unsupported non-codec values such as USDC are rejected, and no grant creates
+  a wallet asset or transaction.
 - Additive staff level grants also require a browser-generated operation key.
   The D1 receipt snapshots the profile, basic SkyPass, and inviter ledgers,
   then applies every mutation and an immutable audit row before transitioning

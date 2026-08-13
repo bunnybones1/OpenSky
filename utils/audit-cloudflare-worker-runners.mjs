@@ -52,11 +52,12 @@ export const EXPECTED_RUNNERS = {
     evidence: ['STARTER_DECKS', 'decodeDeckString']
   },
   GiveawayOffChainTokensRunner: {
-    disposition: 'retired',
-    evidenceFile: 'api/lib/jobqueue/giveaway_offchain_tokens_runner.go',
+    disposition: 'superseded',
+    evidenceFile: 'cloudflare/migrations/0093_operator_item_grant_receipts.sql',
     evidence: [
-      'GiveawayOffChainTokensTask',
-      'used to give away off-chain tokens in mass'
+      'player_operator_item_grants',
+      'player_operator_item_grant_inventory_grants',
+      'Operator item grant receipt completion is invalid'
     ]
   },
   GrantStickerRewardsRunner: {

@@ -44,6 +44,35 @@ interface OperatorGrantReceiptRow {
   granted_card_count: number
 }
 
+const OPERATOR_ITEM_TYPES = [
+  'SW_BASE_CARDS',
+  'SW_SILVER_CARDS',
+  'SW_GOLD_CARDS',
+  'SW_HERO_SKINS',
+  'SW_CRYSTALS',
+  'SW_STICKERS',
+  'SW_CARD_BACKS',
+  'SW_SKYPASS',
+  'SW_TITLES',
+  'SW_STICKER_POINTS',
+  'SW_XP',
+  'SW_CONQUEST_TICKET'
+] as const
+
+type OperatorItemType = (typeof OPERATOR_ITEM_TYPES)[number]
+
+interface OperatorItemGrant {
+  itemType: OperatorItemType
+  tokenId: number
+  quantity: number
+}
+
+interface OperatorItemGrantReceiptRow {
+  user_id: string
+  items_json: string
+  item_count: number
+}
+
 const OPERATOR_GRANT_CLASSES: Record<OperatorGrantPrism, string | undefined> = {
   all: undefined,
   strength: 'STR',
@@ -139,6 +168,52 @@ const operatorGrantRequestKey = (value: unknown): string => {
     throw invalidArgument('requestKey is invalid')
   }
   return key
+}
+
+const operatorItemGrants = (value: unknown): OperatorItemGrant[] => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidArgument('tokens must be an item-type map')
+  }
+  const allowed = new Set<string>(OPERATOR_ITEM_TYPES)
+  const items: OperatorItemGrant[] = []
+  for (const [itemType, rawItems] of Object.entries(value)) {
+    if (!allowed.has(itemType)) {
+      throw invalidArgument(`unsupported giveaway item type: ${itemType}`)
+    }
+    if (!rawItems || typeof rawItems !== 'object' || Array.isArray(rawItems)) {
+      throw invalidArgument(`${itemType} tokens must be an item map`)
+    }
+    for (const [rawTokenId, rawQuantity] of Object.entries(rawItems)) {
+      if (!/^(?:0|[1-9]\d*)$/.test(rawTokenId)) {
+        throw invalidArgument(`invalid token ID for ${itemType}`)
+      }
+      const tokenId = Number(rawTokenId)
+      if (!Number.isSafeInteger(tokenId) || tokenId < 0 || tokenId > 65_535) {
+        throw invalidArgument(`invalid token ID for ${itemType}`)
+      }
+      if (
+        typeof rawQuantity !== 'number' ||
+        !Number.isSafeInteger(rawQuantity) ||
+        rawQuantity <= 0 ||
+        rawQuantity > 1_000_000_000
+      ) {
+        throw invalidArgument(`invalid quantity for ${itemType}:${tokenId}`)
+      }
+      items.push({
+        itemType: itemType as OperatorItemType,
+        tokenId,
+        quantity: rawQuantity
+      })
+      if (items.length > 100) {
+        throw invalidArgument('at most 100 giveaway items are allowed')
+      }
+    }
+  }
+  if (items.length === 0) throw invalidArgument('tokens must not be empty')
+  return items.sort(
+    (left, right) =>
+      left.itemType.localeCompare(right.itemType) || left.tokenId - right.tokenId
+  )
 }
 
 export class PlayerSupportRepository {
@@ -516,6 +591,152 @@ export class PlayerSupportRepository {
       }
     }
     return { ok: true, prism, grantedCardCount: cardIds.length, cardIds }
+  }
+
+  async grantItems(
+    actorUserId: string,
+    input: {
+      accountAddress?: string
+      requestKey?: unknown
+      tokens?: unknown
+    }
+  ): Promise<{
+    ok: true
+    itemCount: number
+    items: OperatorItemGrant[]
+  }> {
+    const [target, requestKey, items] = await Promise.all([
+      this.target(undefined, input.accountAddress),
+      Promise.resolve(operatorGrantRequestKey(input.requestKey)),
+      Promise.resolve(operatorItemGrants(input.tokens))
+    ])
+    const itemsJson = JSON.stringify(items)
+    const previous = await this.database
+      .prepare(
+        `SELECT user_id, items_json, item_count
+         FROM player_operator_item_grants
+         WHERE actor_user_id = ? AND request_key = ?`
+      )
+      .bind(actorUserId, requestKey)
+      .first<OperatorItemGrantReceiptRow>()
+    if (previous) {
+      if (previous.user_id !== target.user_id || previous.items_json !== itemsJson) {
+        throw alreadyExists('requestKey was already used for another item grant')
+      }
+      return {
+        ok: true,
+        itemCount: previous.item_count,
+        items: JSON.parse(previous.items_json) as OperatorItemGrant[]
+      }
+    }
+
+    const deliveryKey = crypto.randomUUID()
+    const now = new Date().toISOString()
+    try {
+      await this.database.batch([
+        this.database
+          .prepare(
+            `INSERT INTO player_operator_item_grants
+               (request_key, delivery_key, user_id, actor_user_id, items_json,
+                item_count, application_status, created_at, completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'PREPARING', ?, NULL)`
+          )
+          .bind(
+            requestKey,
+            deliveryKey,
+            target.user_id,
+            actorUserId,
+            itemsJson,
+            items.length,
+            now
+          ),
+        this.database
+          .prepare(
+            `INSERT INTO player_operator_item_grant_inventory_grants
+               (operator_grant_id, user_id, item_type, token_id, quantity,
+                before_balance, after_balance)
+             SELECT grant_receipt.id, grant_receipt.user_id,
+                    json_extract(expected.value, '$.itemType'),
+                    json_extract(expected.value, '$.tokenId'),
+                    json_extract(expected.value, '$.quantity'),
+                    COALESCE(item.balance, 0),
+                    COALESCE(item.balance, 0) +
+                      json_extract(expected.value, '$.quantity')
+             FROM player_operator_item_grants grant_receipt
+             JOIN json_each(grant_receipt.items_json) expected
+             LEFT JOIN player_items item
+               ON item.user_id = grant_receipt.user_id
+              AND item.item_type = json_extract(expected.value, '$.itemType')
+              AND item.token_id = json_extract(expected.value, '$.tokenId')
+             WHERE grant_receipt.actor_user_id = ?
+               AND grant_receipt.request_key = ?
+               AND grant_receipt.delivery_key = ?
+               AND grant_receipt.application_status = 'PREPARING'`
+          )
+          .bind(actorUserId, requestKey, deliveryKey),
+        this.database
+          .prepare(
+            `INSERT INTO player_items
+               (user_id, item_type, token_id, balance, is_new, unlock_source,
+                created_at, updated_at)
+             SELECT ?, json_extract(expected.value, '$.itemType'),
+                    json_extract(expected.value, '$.tokenId'),
+                    json_extract(expected.value, '$.quantity'), 1, ?, ?, ?
+             FROM json_each(?) expected
+             WHERE EXISTS (
+               SELECT 1 FROM player_operator_item_grants
+               WHERE actor_user_id = ? AND request_key = ?
+                 AND delivery_key = ? AND application_status = 'PREPARING'
+             )
+             ON CONFLICT(user_id, item_type, token_id)
+             DO UPDATE SET
+               balance = player_items.balance + excluded.balance,
+               is_new = 1, unlock_source = excluded.unlock_source,
+               updated_at = excluded.updated_at`
+          )
+          .bind(
+            target.user_id,
+            `operator-item-grant:${deliveryKey}`,
+            now,
+            now,
+            itemsJson,
+            actorUserId,
+            requestKey,
+            deliveryKey
+          ),
+        this.database
+          .prepare(
+            `UPDATE player_operator_item_grants
+             SET application_status = 'APPLIED', completed_at = created_at
+             WHERE actor_user_id = ? AND request_key = ?
+               AND delivery_key = ? AND application_status = 'PREPARING'`
+          )
+          .bind(actorUserId, requestKey, deliveryKey)
+      ])
+    } catch (error) {
+      if (!String(error).toLowerCase().includes('unique')) throw error
+      const concurrent = await this.database
+        .prepare(
+          `SELECT user_id, items_json, item_count
+           FROM player_operator_item_grants
+           WHERE actor_user_id = ? AND request_key = ?`
+        )
+        .bind(actorUserId, requestKey)
+        .first<OperatorItemGrantReceiptRow>()
+      if (
+        !concurrent ||
+        concurrent.user_id !== target.user_id ||
+        concurrent.items_json !== itemsJson
+      ) {
+        throw alreadyExists('requestKey was already used for another item grant')
+      }
+      return {
+        ok: true,
+        itemCount: concurrent.item_count,
+        items: JSON.parse(concurrent.items_json) as OperatorItemGrant[]
+      }
+    }
+    return { ok: true, itemCount: items.length, items }
   }
 
   async resetStarterDecks(
