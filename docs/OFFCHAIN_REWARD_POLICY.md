@@ -72,7 +72,9 @@ the before/after level and SkyPass XP snapshots from database state, applies all
 progression and epic-chain mutations atomically, and completes only when every
 requested assignment has a valid receipt. Concurrent different claims
 accumulate instead of overwriting one another, while a duplicate claim cannot
-credit XP or create another epic step.
+credit XP or create another epic step. As in the source leveller, each level
+crossed also credits one off-chain sticker point to the player's inviter in the
+same batch; no wallet or sticker mint is involved.
 
 Conquest V2 weekly treasure follows the same rule. Its source point thresholds,
 float32 weights, point rollover, expansion-only card selection, and delayed

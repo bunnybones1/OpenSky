@@ -16,6 +16,7 @@ import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
 
 const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
+const inviterUserId = 'rpc-player-inviter-id'
 const identityReference = `identity:${userId}`
 
 const rpcAs = async (
@@ -44,6 +45,24 @@ const rpcAs = async (
 
 const rpc = (method: string, body: object, signedIn = true) =>
   rpcAs(userId, method, body, signedIn)
+
+const addInviter = async () => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+     VALUES (?, 'Cloud Weasel Inviter', 'rpc-inviter@example.com', ?, ?)`
+  )
+    .bind(inviterUserId, now, now)
+    .run()
+  await new PlayerRepository(env.AUTH_DB).bootstrap(inviterUserId)
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_invites
+       (invitee_user_id, inviter_user_id, created_at)
+     VALUES (?, ?, ?)`
+  )
+    .bind(userId, inviterUserId, now)
+    .run()
+}
 
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DELETE FROM users').run()
@@ -682,9 +701,7 @@ describe('legacy player RPC compatibility', () => {
       ).json()
     ).toMatchObject({ match: { id: rankedRow!.id, replayID: '' } })
     expect(
-      (
-        await rpcAs(outsiderId, 'GetMatch', { matchID: practiceRow!.id })
-      ).status
+      (await rpcAs(outsiderId, 'GetMatch', { matchID: practiceRow!.id })).status
     ).toBe(404)
     expect((await rpc('GetMatch', { matchID: 0 })).status).toBe(400)
     expect((await rpc('GetMatch', { matchID: 999999 })).status).toBe(404)
@@ -743,7 +760,11 @@ describe('legacy player RPC compatibility', () => {
          (user_id, conquest_id, event_type, token_ids_json, created_at)
        VALUES (?, ?, 'DELAYED_REWARD', '[131208]', ?)`
     )
-      .bind(userId, conquest!.id, new Date(Date.parse(newer) + 1_000).toISOString())
+      .bind(
+        userId,
+        conquest!.id,
+        new Date(Date.parse(newer) + 1_000).toISOString()
+      )
       .run()
 
     const first = await rpc('GetFeed', {
@@ -778,12 +799,14 @@ describe('legacy player RPC compatibility', () => {
     })
     expect(await third.json()).toMatchObject({
       page: { hasAfter: true, hasBefore: false },
-      res: [{
-        type: 'RANKUP',
-        playerRank: 'APPRENTICE',
-        playerRankStage: 'STAGE_II',
-        gameMode: 'RANKED_CONSTRUCTED'
-      }]
+      res: [
+        {
+          type: 'RANKUP',
+          playerRank: 'APPRENTICE',
+          playerRankStage: 'STAGE_II',
+          gameMode: 'RANKED_CONSTRUCTED'
+        }
+      ]
     })
 
     const filtered = await rpc('GetFeed', {
@@ -1059,9 +1082,7 @@ describe('legacy player RPC compatibility', () => {
     const favorited = await rpc('ToggleDeckFavorite', { uuid: created.uuid })
     expect(await favorited.json()).toEqual({ isFavorite: true })
     expect(
-      await (
-        await rpc('GetDeck', { req: { uuid: created.uuid } })
-      ).json()
+      await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
     ).toMatchObject({
       res: {
         uuid: created.uuid,
@@ -1072,9 +1093,7 @@ describe('legacy player RPC compatibility', () => {
     const unfavorited = await rpc('ToggleDeckFavorite', { uuid: created.uuid })
     expect(await unfavorited.json()).toEqual({ isFavorite: false })
     expect(
-      await (
-        await rpc('GetDeck', { req: { uuid: created.uuid } })
-      ).json()
+      await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
     ).toMatchObject({
       res: { uuid: created.uuid, isFavorite: false, favoritedAt: '' }
     })
@@ -1095,9 +1114,7 @@ describe('legacy player RPC compatibility', () => {
         .sort()
     ).toEqual([false, true])
     expect(
-      await (
-        await rpc('GetDeck', { req: { uuid: created.uuid } })
-      ).json()
+      await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
     ).toMatchObject({ res: { isFavorite: false } })
     expect(
       (
@@ -1259,11 +1276,7 @@ describe('legacy player RPC compatibility', () => {
 
     expect(
       await (
-        await rpc(
-          'GetBatchItemSupply',
-          { tokenIDs: [42, 999, 42] },
-          false
-        )
+        await rpc('GetBatchItemSupply', { tokenIDs: [42, 999, 42] }, false)
       ).json()
     ).toMatchObject({
       summary: {
@@ -1310,9 +1323,7 @@ describe('legacy player RPC compatibility', () => {
       }
     })
     expect(
-      (
-        await rpc('GetItemSuppliesByType', { itemTypes: [] }, false)
-      ).status
+      (await rpc('GetItemSuppliesByType', { itemTypes: [] }, false)).status
     ).toBe(400)
 
     expect(
@@ -1640,6 +1651,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('credits concurrent completed quest claims exactly once each', async () => {
+    await addInviter()
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
@@ -1671,12 +1683,28 @@ describe('legacy player RPC compatibility', () => {
     )
     expect(responses.every(response => response.status === 200)).toBe(true)
 
-    const profile = await env.AUTH_DB.prepare(
-      `SELECT level, xp FROM player_profiles WHERE user_id = ?`
-    )
-      .bind(userId)
-      .first<{ level: number; xp: number }>()
+    const [profile, inviterPoints, friendLevels] = await Promise.all([
+      env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first<{ level: number; xp: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviterUserId)
+        .first<{ balance: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ?`
+      )
+        .bind(userId, inviterUserId)
+        .first<{ levels: number }>()
+    ])
     expect(profile).toEqual({ level: 2, xp: 100 })
+    expect(inviterPoints?.balance).toBe(1)
+    expect(friendLevels?.levels).toBe(1)
 
     const receipts = await env.AUTH_DB.prepare(
       `SELECT reward_xp, before_level, before_xp, after_level, after_xp
@@ -1708,6 +1736,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('rejects a duplicate concurrent claim without a second XP receipt', async () => {
+    await addInviter()
     const list = await rpc('ListQuests', {})
     const welcome = (
       await list.json<{
@@ -1723,28 +1752,36 @@ describe('legacy player RPC compatibility', () => {
       200, 500
     ])
 
-    const [profile, receiptCount, nextQuestCount] = await Promise.all([
-      env.AUTH_DB.prepare(
-        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
-      )
-        .bind(userId)
-        .first<{ level: number; xp: number }>(),
-      env.AUTH_DB.prepare(
-        `SELECT COUNT(*) AS count FROM player_quest_claim_receipts
+    const [profile, receiptCount, nextQuestCount, inviterPoints] =
+      await Promise.all([
+        env.AUTH_DB.prepare(
+          `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+        )
+          .bind(userId)
+          .first<{ level: number; xp: number }>(),
+        env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_quest_claim_receipts
          WHERE user_id = ? AND quest_key = 'practice-match'`
-      )
-        .bind(userId)
-        .first<{ count: number }>(),
-      env.AUTH_DB.prepare(
-        `SELECT COUNT(*) AS count FROM player_quests
+        )
+          .bind(userId)
+          .first<{ count: number }>(),
+        env.AUTH_DB.prepare(
+          `SELECT COUNT(*) AS count FROM player_quests
          WHERE user_id = ? AND quest_type = 'AnEnemyApproaches' AND active = 1`
-      )
-        .bind(userId)
-        .first<{ count: number }>()
-    ])
+        )
+          .bind(userId)
+          .first<{ count: number }>(),
+        env.AUTH_DB.prepare(
+          `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+        )
+          .bind(inviterUserId)
+          .first<{ balance: number }>()
+      ])
     expect(profile).toEqual({ level: 2, xp: 100 })
     expect(receiptCount?.count).toBe(1)
     expect(nextQuestCount?.count).toBe(1)
+    expect(inviterPoints?.balance).toBe(1)
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE player_quest_claim_receipts SET reward_xp = 999
@@ -1764,6 +1801,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('rolls the entire off-chain quest grant back on a receipt failure', async () => {
+    await addInviter()
     const list = await rpc('ListQuests', {})
     const welcome = (
       await list.json<{
@@ -1784,7 +1822,7 @@ describe('legacy player RPC compatibility', () => {
       await env.AUTH_DB.prepare('DROP TRIGGER test_quest_receipt_failure').run()
     }
 
-    const [profile, assignment, batchCount] = await Promise.all([
+    const [profile, assignment, batchCount, inviterPoints] = await Promise.all([
       env.AUTH_DB.prepare(
         `SELECT level, xp FROM player_profiles WHERE user_id = ?`
       )
@@ -1800,11 +1838,18 @@ describe('legacy player RPC compatibility', () => {
          WHERE user_id = ?`
       )
         .bind(userId)
-        .first<{ count: number }>()
+        .first<{ count: number }>(),
+      env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(inviterUserId)
+        .first<{ balance: number }>()
     ])
     expect(profile).toEqual({ level: 1, xp: 0 })
     expect(assignment?.status).toBe('complete')
     expect(batchCount?.count).toBe(0)
+    expect(inviterPoints).toBeNull()
   })
 
   it('fills eligible source quest slots and shares one manual daily reroll', async () => {
@@ -2283,7 +2328,11 @@ describe('legacy player RPC compatibility', () => {
     })
     const feedEvents = (
       await feed.json<{
-        res: Array<{ type: string; tokenIds?: number[]; stickerPoints?: number }>
+        res: Array<{
+          type: string
+          tokenIds?: number[]
+          stickerPoints?: number
+        }>
       }>()
     ).res
     expect(feedEvents).toEqual(
@@ -2373,13 +2422,8 @@ describe('legacy player RPC compatibility', () => {
     expect((await rpc('ListDecks', {}, false)).status).toBe(401)
     expect((await rpc('ListQuests', {}, false)).status).toBe(401)
     expect(
-      (
-        await rpc(
-          'GetEpicQuestChain',
-          { epicType: 'starter2_test' },
-          false
-        )
-      ).status
+      (await rpc('GetEpicQuestChain', { epicType: 'starter2_test' }, false))
+        .status
     ).toBe(401)
     expect((await rpc('ListSkypassRewards', {}, false)).status).toBe(401)
   })

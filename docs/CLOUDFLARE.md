@@ -377,7 +377,9 @@ and progress are not migrated.
 - Quest claims preserve the source's XP-only reward behavior as off-chain
   identity progression. Immutable per-assignment receipts and atomic D1 claim
   batches prevent duplicate XP, lost concurrent XP updates, and duplicate epic
-  steps; failed receipt writes roll the entire claim back.
+  steps; failed receipt writes roll the entire claim back. Source referral
+  points are preserved in that batch: each level crossed grants the inviter one
+  off-chain sticker point.
 - The original Invite Friends screens are mounted for Google identities. New
   accounts preserve the source invite-link attribution behavior, while existing
   accounts retain the source confirmation flow. No current-season sticker

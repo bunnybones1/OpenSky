@@ -70,12 +70,15 @@ const validInput = () => ({
       'INSERT INTO player_items; const delivery_token = crypto.randomUUID()'
   },
   questRewardSource:
-    "player_quest_claim_batches; player_quest_claim_receipts; status = 'COMPLETED'",
+    'player_quest_claim_batches; player_quest_claim_receipts; ' +
+    "player_friend_points; 'SW_STICKER_POINTS'; status = 'COMPLETED'",
   questReceiptMigration:
     'PRIMARY KEY (user_id, quest_key); ' +
     'quest claim receipts are immutable; ' +
     'quest claim batch completion is invalid',
-  observationalSources: { analytics: 'INSERT INTO multiplayer_match_analytics' },
+  observationalSources: {
+    analytics: 'INSERT INTO multiplayer_match_analytics'
+  },
   optionalWalletSource:
     "methods: ['personal_sign']; swaps: false; onramp: false; " +
     'receive: false; send: false; analytics: false'

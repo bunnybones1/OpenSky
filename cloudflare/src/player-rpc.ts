@@ -2658,6 +2658,59 @@ export class PlayerRpcRepository {
         .bind(claimToken, claimToken, now, userId, claimToken)
     )
 
+    const receiptSpan = `
+      FROM player_invites invite
+      JOIN player_quest_claim_receipts first_receipt
+        ON first_receipt.claim_token = ? AND first_receipt.claim_order = 0
+      JOIN player_quest_claim_receipts last_receipt
+        ON last_receipt.claim_token = ?
+       AND last_receipt.claim_order = (
+         SELECT MAX(claim_order) FROM player_quest_claim_receipts
+         WHERE claim_token = ?
+       )
+      WHERE invite.invitee_user_id = ?
+        AND last_receipt.after_level > first_receipt.before_level`
+    statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO player_friend_points
+             (invitee_user_id, inviter_user_id, season, levels,
+              points_carried, points_spent, updated_at)
+           SELECT ?, invite.inviter_user_id, ?,
+                  last_receipt.after_level - first_receipt.before_level,
+                  0, 0, ?
+           ${receiptSpan}
+           ON CONFLICT(invitee_user_id, inviter_user_id, season)
+           DO UPDATE SET
+             levels = player_friend_points.levels + excluded.levels,
+             updated_at = excluded.updated_at`
+        )
+        .bind(
+          userId,
+          currentSeason,
+          now,
+          claimToken,
+          claimToken,
+          claimToken,
+          userId
+        ),
+      this.database
+        .prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           SELECT invite.inviter_user_id, 'SW_STICKER_POINTS', 0,
+                  last_receipt.after_level - first_receipt.before_level,
+                  0, 'friend-level', ?, ?
+           ${receiptSpan}
+           ON CONFLICT(user_id, item_type, token_id)
+           DO UPDATE SET
+             balance = player_items.balance + excluded.balance,
+             updated_at = excluded.updated_at`
+        )
+        .bind(now, now, claimToken, claimToken, claimToken, userId)
+    )
+
     for (const mode of ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const) {
       const unlockGuard = `EXISTS (
         SELECT 1 FROM player_quest_claim_receipts receipt

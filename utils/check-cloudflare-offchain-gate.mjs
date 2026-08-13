@@ -252,6 +252,8 @@ export const offchainGateErrors = ({
     for (const token of [
       'player_quest_claim_batches',
       'player_quest_claim_receipts',
+      'player_friend_points',
+      "'SW_STICKER_POINTS'",
       "status = 'COMPLETED'"
     ]) {
       if (!questRewardSource.includes(token)) {
@@ -267,7 +269,9 @@ export const offchainGateErrors = ({
         errors.push(`quest XP receipt schema is missing safeguard: ${token}`)
       }
     }
-    if (/\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(questRewardSource)) {
+    if (
+      /\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(questRewardSource)
+    ) {
       errors.push('quest XP grant contains a legacy chain effect')
     }
   }
@@ -286,7 +290,9 @@ export const offchainGateErrors = ({
   if (optionalWalletSource) {
     for (const token of OPTIONAL_WALLET_REQUIREMENTS) {
       if (!optionalWalletSource.includes(token)) {
-        errors.push(`optional wallet integration is missing safeguard: ${token}`)
+        errors.push(
+          `optional wallet integration is missing safeguard: ${token}`
+        )
       }
     }
     for (const pattern of OPTIONAL_WALLET_FORBIDDEN_PATTERNS) {
