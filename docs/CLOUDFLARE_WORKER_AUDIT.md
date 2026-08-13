@@ -72,6 +72,12 @@ The separate reward-producer gate also scans upstream Go inventory, XP, hero,
 and starter-deck mutations, so a grant cannot evade review merely because its
 later mint happens in another worker.
 
+The TypeScript reward-mutator gate closes the other side of that boundary. It
+inventories all direct writes to the seven authoritative reward/progression
+ledgers across the main Worker, game server, and match service. The reviewed
+inventory currently contains 18 modules and 66 writes; any count drift or new
+module requires an explicit off-chain safety disposition before release.
+
 SkyPass season close reuses the existing immutable claim receipts and off-chain
 reward delivery paths rather than recreating the source mint queues. External
 device push is strictly optional: without complete OneSignal configuration the

@@ -145,6 +145,15 @@ new producer or an expanded producer fails the build until its complete earning
 behavior has an off-chain TypeScript destination or a reviewed whole-feature
 retirement.
 
+The destination-side reward-mutator audit independently freezes every direct
+TypeScript write to authoritative inventory, card unlocks, XP/profile state,
+basic SkyPass state, Conquest points, and referral points. Each writer has an
+exact callsite count plus a reviewed receipt, support audit, entry-spend, or
+deterministic-bootstrap disposition. A new writer, a changed writer, missing
+receipt evidence, or any chain-effect call beside a reward write fails the
+Cloudflare build. This ensures that Cloud Weasel-only features are held to the
+same no-mint rule as behavior ported from Go.
+
 Match and quest XP use immutable per-award D1 receipts. Their before/after
 level state is calculated inside the same serialized batch that updates the
 profile, basic SkyPass, ranked unlock, and referral sticker points. Concurrent
