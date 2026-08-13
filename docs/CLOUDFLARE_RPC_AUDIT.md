@@ -113,7 +113,11 @@ hidden while that optional integration is unavailable.
    audit. The deny-by-default Google-identity `ADMIN` role, source `GMStats`, and
    the original UI's read-only authorization probe and account discovery are
    deployed. Report details and summaries are also connected to the D1 audit
-   rows, with neutral scores until the separate fraud model is ported.
+   rows. Their required numeric score remains explicitly neutral because the
+   source classifier's population-normalized user-agent and bot-endpoint-abuse
+   inputs do not have equivalent Cloudflare contracts; the release gate and
+   [moderation-score boundary](./CLOUDFLARE_MODERATION_SCORE.md) prevent a
+   partial model from being presented as a fraud probability.
    Production has no staff grants.
 
 Role-gated reads now also cover every configured banner and reusable one-time
