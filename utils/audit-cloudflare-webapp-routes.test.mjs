@@ -14,7 +14,11 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     identityShellSource,
     accountSettingsSource,
     pageOffsetSource,
-    bannerQuerySource
+    bannerQuerySource,
+    cookieDialogSource,
+    cookieDisclaimerSource,
+    cookieRepositorySource,
+    cookieMigrationSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -30,7 +34,14 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       'utf8'
     ),
     readFile('webapp/src/hooks/useUpdatePageOffset.ts', 'utf8'),
-    readFile('webapp/src/shared/queries/useBanners.ts', 'utf8')
+    readFile('webapp/src/shared/queries/useBanners.ts', 'utf8'),
+    readFile(
+      'webapp/src/hooks/useAppDialogs/components/CookieSettingsDialog.tsx',
+      'utf8'
+    ),
+    readFile('webapp/src/AppLayout/components/CookieDisclaimer.tsx', 'utf8'),
+    readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
+    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8')
   ])
   assert.deepEqual(
     webappRouteAuditErrors({
@@ -42,7 +53,11 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       identityShellSource,
       accountSettingsSource,
       pageOffsetSource,
-      bannerQuerySource
+      bannerQuerySource,
+      cookieDialogSource,
+      cookieDisclaimerSource,
+      cookieRepositorySource,
+      cookieMigrationSource
     }),
     []
   )
@@ -58,7 +73,11 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     identityShellSource,
     accountSettingsSource,
     pageOffsetSource,
-    bannerQuerySource
+    bannerQuerySource,
+    cookieDialogSource,
+    cookieDisclaimerSource,
+    cookieRepositorySource,
+    cookieMigrationSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -74,7 +93,14 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
       'utf8'
     ),
     readFile('webapp/src/hooks/useUpdatePageOffset.ts', 'utf8'),
-    readFile('webapp/src/shared/queries/useBanners.ts', 'utf8')
+    readFile('webapp/src/shared/queries/useBanners.ts', 'utf8'),
+    readFile(
+      'webapp/src/hooks/useAppDialogs/components/CookieSettingsDialog.tsx',
+      'utf8'
+    ),
+    readFile('webapp/src/AppLayout/components/CookieDisclaimer.tsx', 'utf8'),
+    readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
+    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8')
   ])
   const errors = webappRouteAuditErrors({
     legacySource: legacySource.replace(
@@ -115,6 +141,22 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     bannerQuerySource: bannerQuerySource.replace(
       'enabled: enabled && !!userAddress',
       'enabled: !!userAddress'
+    ),
+    cookieDialogSource: cookieDialogSource.replace(
+      "cookie.id === 'AUTHENTICATION' || cookie.id === 'PRODUCT_ANALYTICS'",
+      "cookie.id === 'AUTHENTICATION' || cookie.id === 'MARKETPLACE'"
+    ),
+    cookieDisclaimerSource: cookieDisclaimerSource.replace(
+      "env.AUTH_MODE === 'google' ? IDENTITY_COOKIE_POLICY_ALL : COOKIE_POLICY_ALL",
+      'COOKIE_POLICY_ALL'
+    ),
+    cookieRepositorySource: cookieRepositorySource.replace(
+      "principalKind === 'identity'",
+      "principalKind === 'wallet'"
+    ),
+    cookieMigrationSource: cookieMigrationSource.replace(
+      'CREATE TRIGGER users_cookie_policy_delete',
+      'CREATE TRIGGER missing_users_cookie_policy_delete'
     )
   })
   assert.ok(errors.some(error => error.includes('unreviewed legacy')))
@@ -133,4 +175,8 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('cookie controls')))
   assert.ok(errors.some(error => error.includes('absent banner query')))
   assert.ok(errors.some(error => error.includes('reach the API')))
+  assert.ok(errors.some(error => error.includes('cookie dialog policy')))
+  assert.ok(errors.some(error => error.includes('cookie disclaimer policy')))
+  assert.ok(errors.some(error => error.includes('cookie persistence policy')))
+  assert.ok(errors.some(error => error.includes('cookie schema guard')))
 })

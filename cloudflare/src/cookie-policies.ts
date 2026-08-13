@@ -1,9 +1,14 @@
-const DEFAULT_POLICY: Record<string, boolean> = {
+const LEGACY_DEFAULT_POLICY: Record<string, boolean> = {
   AUTHENTICATION: true,
   GEO_BLOCKING: true,
   MARKETPLACE: true,
   PRODUCT_ANALYTICS: false
 }
+
+const identityPolicy = (options: Record<string, boolean>) => ({
+  AUTHENTICATION: true,
+  PRODUCT_ANALYTICS: options.PRODUCT_ANALYTICS === true
+})
 
 interface CookiePolicyRow {
   policy: string
@@ -27,11 +32,18 @@ export class CookiePoliciesRepository {
     }
   }
 
-  async save(address: string, options: Record<string, boolean>): Promise<void> {
-    const policy = {
-      ...DEFAULT_POLICY,
-      PRODUCT_ANALYTICS: options.PRODUCT_ANALYTICS === true
-    }
+  async save(
+    address: string,
+    options: Record<string, boolean>,
+    principalKind: 'identity' | 'wallet'
+  ): Promise<void> {
+    const policy =
+      principalKind === 'identity'
+        ? identityPolicy(options)
+        : {
+            ...LEGACY_DEFAULT_POLICY,
+            PRODUCT_ANALYTICS: options.PRODUCT_ANALYTICS === true
+          }
     const updatedAt = new Date().toISOString()
 
     await this.database

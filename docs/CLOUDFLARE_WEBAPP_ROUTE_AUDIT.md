@@ -58,3 +58,11 @@ production configuration leaves analytics and Userpilot disabled until Cloud
 Weasel-owned integrations are configured. Sequence signature confirmation,
 burner-to-wallet conversion, and burner-account renaming remain exclusive to
 the legacy-wallet app and cannot mount in Google mode.
+
+Google-mode cookie controls preserve the source dialog and consent mechanics,
+but expose only essential authentication/session storage and optional Cloud
+Weasel product analytics. Geo-blocking, Marketplace, and Sequence cookie-policy
+claims are legacy-wallet content and cannot be stored for an identity principal.
+The D1 schema accepts policies owned by either an identity user or a legacy
+wallet account, validates the smaller identity policy, and removes each policy
+when its owning principal is deleted.

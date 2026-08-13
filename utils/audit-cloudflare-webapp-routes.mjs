@@ -70,7 +70,11 @@ export const webappRouteAuditErrors = ({
   identityShellSource,
   accountSettingsSource,
   pageOffsetSource,
-  bannerQuerySource
+  bannerQuerySource,
+  cookieDialogSource,
+  cookieDisclaimerSource,
+  cookieRepositorySource,
+  cookieMigrationSource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -187,6 +191,43 @@ export const webappRouteAuditErrors = ({
   if (!bannerQuerySource.includes('enabled: enabled && !!userAddress')) {
     errors.push('disabled banner queries can still reach the API')
   }
+  for (const token of [
+    'const COOKIE_OPTIONS =',
+    "cookie.id === 'AUTHENTICATION' || cookie.id === 'PRODUCT_ANALYTICS'",
+    'No analytics provider is configured in the current',
+    'Keeps your Google sign-in and essential Cloud Weasel app preferences working.'
+  ]) {
+    if (!cookieDialogSource.includes(token)) {
+      errors.push(`Google cookie dialog policy is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "env.AUTH_MODE === 'google' ? IDENTITY_COOKIE_POLICY_ALL : COOKIE_POLICY_ALL",
+    'Cloud Weasel uses essential session storage'
+  ]) {
+    if (!cookieDisclaimerSource.includes(token)) {
+      errors.push(`Google cookie disclaimer policy is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "principalKind === 'identity'",
+    '? identityPolicy(options)',
+    'PRODUCT_ANALYTICS: options.PRODUCT_ANALYTICS === true'
+  ]) {
+    if (!cookieRepositorySource.includes(token)) {
+      errors.push(`Google cookie persistence policy is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'CREATE TABLE cookie_policies_next',
+    'CREATE TRIGGER identity_cookie_policy_insert_guard',
+    'CREATE TRIGGER accounts_cookie_policy_delete',
+    'CREATE TRIGGER users_cookie_policy_delete'
+  ]) {
+    if (!cookieMigrationSource.includes(token)) {
+      errors.push(`Google cookie schema guard is missing: ${token}`)
+    }
+  }
   return errors
 }
 
@@ -204,7 +245,11 @@ const main = async () => {
     identityShellSource,
     accountSettingsSource,
     pageOffsetSource,
-    bannerQuerySource
+    bannerQuerySource,
+    cookieDialogSource,
+    cookieDisclaimerSource,
+    cookieRepositorySource,
+    cookieMigrationSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -232,7 +277,23 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'webapp/src/hooks/useUpdatePageOffset.ts'), 'utf8'),
-    readFile(path.join(root, 'webapp/src/shared/queries/useBanners.ts'), 'utf8')
+    readFile(path.join(root, 'webapp/src/shared/queries/useBanners.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/hooks/useAppDialogs/components/CookieSettingsDialog.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'webapp/src/AppLayout/components/CookieDisclaimer.tsx'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/cookie-policies.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/migrations/0092_identity_cookie_policy.sql'),
+      'utf8'
+    )
   ])
   const errors = webappRouteAuditErrors({
     legacySource,
@@ -243,7 +304,11 @@ const main = async () => {
     identityShellSource,
     accountSettingsSource,
     pageOffsetSource,
-    bannerQuerySource
+    bannerQuerySource,
+    cookieDialogSource,
+    cookieDisclaimerSource,
+    cookieRepositorySource,
+    cookieMigrationSource
   })
   if (errors.length) {
     for (const error of errors)

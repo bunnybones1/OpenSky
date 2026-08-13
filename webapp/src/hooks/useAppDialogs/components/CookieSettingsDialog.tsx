@@ -5,6 +5,7 @@ import { memo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMount } from 'react-use'
 
+import env from '~/env'
 import { Button } from '~/shared/components/Button'
 import { Checkbox } from '~/shared/components/Checkbox'
 import { Text } from '~/shared/components/Text'
@@ -28,13 +29,19 @@ import {
 } from './CookieSettingsDialog.css'
 
 const { closeDialog } = controlDialog(COOKIE_SETTINGS_DIALOG_ID)
+const COOKIE_OPTIONS =
+  env.AUTH_MODE === 'google'
+    ? COOKIES.filter(
+        (cookie) =>
+          cookie.id === 'AUTHENTICATION' || cookie.id === 'PRODUCT_ANALYTICS'
+      )
+    : COOKIES
 
 export const CookieSettingsDialog = memo(() => {
   const { t } = useTranslation()
   const { data: cookiePolicy } = useCookiePolicy()
   const saveCookiePolicy = useSaveCookiePolicy()
   const [cookieConsentTemporary, setCookieConsentTemporary] = useState({})
-
   useMount(async () => {
     // Fetched cookie policy from API
     if (cookiePolicy) {
@@ -46,7 +53,7 @@ export const CookieSettingsDialog = memo(() => {
       if (storedCookieConsent) {
         const parsedStoredCookieConsent = JSON.parse(storedCookieConsent)['policy']
         const mappedCookieConsent = {}
-        COOKIES.forEach((cookie) => {
+        COOKIE_OPTIONS.forEach((cookie) => {
           const id = cookie.id
 
           mappedCookieConsent[id] = parsedStoredCookieConsent[cookie.id]
@@ -59,7 +66,7 @@ export const CookieSettingsDialog = memo(() => {
 
   const onConfirmSelected = useCallback(() => {
     const selectedCookies = {}
-    COOKIES.forEach((cookie) => {
+    COOKIE_OPTIONS.forEach((cookie) => {
       if (cookieConsentTemporary[cookie.id] || cookie.essential) {
         selectedCookies[cookie.id] = true
       }
@@ -129,20 +136,30 @@ export const CookieSettingsDialog = memo(() => {
             justifyContent: 'flex-start'
           })}
         >
-          {t('support.forMoreInfoAboutOur')}
-          <a
-            href="https://sequence.xyz/cookies.html"
-            target="_blank"
-            rel="noreferrer"
-            className={Sprinkles({ color: 'white', marginX: '4px' })}
-          >
-            {t('cookies.cookiePolicy')}
-          </a>
-          {t('support.pleaseFollowLink')}
+          {env.AUTH_MODE === 'google' ? (
+            <>
+              Cloud Weasel stores only essential sign-in data and your optional
+              analytics preference. No analytics provider is configured in the current
+              deployment.
+            </>
+          ) : (
+            <>
+              {t('support.forMoreInfoAboutOur')}
+              <a
+                href="https://sequence.xyz/cookies.html"
+                target="_blank"
+                rel="noreferrer"
+                className={Sprinkles({ color: 'white', marginX: '4px' })}
+              >
+                {t('cookies.cookiePolicy')}
+              </a>
+              {t('support.pleaseFollowLink')}
+            </>
+          )}
         </div>
-        {COOKIES &&
+        {COOKIE_OPTIONS &&
           cookieConsentTemporary &&
-          COOKIES.map((cookie) => (
+          COOKIE_OPTIONS.map((cookie) => (
             <div
               className={clsx(
                 Sprinkles({
@@ -156,7 +173,11 @@ export const CookieSettingsDialog = memo(() => {
               key={cookie.id}
             >
               <Text color="white" fontSize="16px" fontWeight="500">
-                {t(cookie.reason as TFuncKey<'webapp'>)}
+                {env.AUTH_MODE === 'google'
+                  ? cookie.id === 'AUTHENTICATION'
+                    ? 'Authentication & Session'
+                    : 'Product Analytics'
+                  : t(cookie.reason as TFuncKey<'webapp'>)}
               </Text>
               <div
                 className={Sprinkles({
@@ -210,7 +231,11 @@ export const CookieSettingsDialog = memo(() => {
                   >
                     {t('cookies.description')}:
                   </span>
-                  {t(cookie.description as unknown as any)}
+                  {env.AUTH_MODE === 'google'
+                    ? cookie.id === 'AUTHENTICATION'
+                      ? 'Keeps your Google sign-in and essential Cloud Weasel app preferences working.'
+                      : 'Stores whether you allow a future Cloud Weasel-owned product analytics integration.'
+                    : t(cookie.description as unknown as any)}
                 </div>
               </div>
             </div>

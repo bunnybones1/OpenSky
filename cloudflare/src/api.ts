@@ -1526,7 +1526,11 @@ export const handleApiRequest = async (
         if (!body.cookieOptions || typeof body.cookieOptions !== 'object') {
           throw invalidArgument('cookieOptions is required')
         }
-        await cookiePolicies.save(principal.reference, body.cookieOptions)
+        await cookiePolicies.save(
+          principal.reference,
+          body.cookieOptions,
+          principal.kind
+        )
         return json(request, env, { status: true })
       }
 
