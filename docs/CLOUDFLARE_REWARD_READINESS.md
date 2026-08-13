@@ -38,6 +38,16 @@ result therefore does not mean that more Go code or minting infrastructure is
 required; it means Cloud Weasel has deliberately not invented reward contents
 or timing that the fork owner has not approved.
 
+The core-live Quest path also has a production earning proof. On 2026-08-13,
+the signed-in Google test account completed the source Practice flow and used
+the original Daily Quest UI to claim only the 100-XP `On the Road Again`
+assignment. The claim advanced that quest chain to `On the Road Again II`
+without opening a wallet or mint prompt. A subsequent read-only D1 query found
+one immutable Quest receipt totaling exactly 100 `SW_XP`, profile XP of 100,
+and basic SkyPass XP of 100; both next-level thresholds were 200. That query
+reported `changed_db: false`. This intentionally changed only the test
+account's earned progression through the player-facing claim action.
+
 ## Activation boundary
 
 - SkyPass is safe to use now. Its source season-62 import was validated against
