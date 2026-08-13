@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import AccountPage from '~/AccountPage/AccountPage'
 import AppLayout from '~/AppLayout/AppLayout'
+import DeletedAccountPage from '~/components/DeletedAccountPage'
+import FourOhFourPage from '~/components/FourOhFourPage'
 import { CreateDeckPage } from '~/CreateDeckPage/CreateDeckPage'
 import { DeckBuilder } from '~/DeckBuilder/DeckBuilder'
 import HeroFeaturePage from '~/HeroFeaturePage/HeroFeaturePage'
@@ -113,9 +115,10 @@ export const IdentityApp = memo(() => (
         }
       />
       <Route
-        path="*"
-        element={<Navigate to={ROUTES_CONFIG.routes.HOME.directPath} replace />}
+        path={ROUTES_CONFIG.routes.DELETED_ACCOUNT.path}
+        element={<DeletedAccountPage />}
       />
+      <Route path="*" element={<FourOhFourPage />} />
     </Route>
   </Routes>
 ))
