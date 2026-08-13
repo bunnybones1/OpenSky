@@ -1,8 +1,5 @@
 import { memo } from 'react'
-import { useTranslation } from 'react-i18next'
 
-import { NavBarLink } from '~/AppLayout/NavBar/shared/components/NavBarLink/NavBarLink'
-import env from '~/env'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
 import { ItemsLink } from './components/ItemsLink'
@@ -15,8 +12,6 @@ interface LinkSectionProps {
 }
 
 export const LinkSection = memo(({ isHorizontal }: LinkSectionProps) => {
-  const { t } = useTranslation()
-
   return (
     <div
       className={Sprinkles({
@@ -34,17 +29,7 @@ export const LinkSection = memo(({ isHorizontal }: LinkSectionProps) => {
     >
       <ItemsLink isHorizontal={isHorizontal} />
       <RanksLink isHorizontal={isHorizontal} />
-      {env.AUTH_MODE === 'google' ? (
-        <NavBarLink
-          to="/market/cards"
-          text={t('navigation.market')}
-          icon="shop"
-          id="market"
-          isHorizontal={isHorizontal}
-        />
-      ) : (
-        <MarketLink isHorizontal={isHorizontal} />
-      )}
+      <MarketLink isHorizontal={isHorizontal} />
       <PlayLink isHorizontal={isHorizontal} />
     </div>
   )
