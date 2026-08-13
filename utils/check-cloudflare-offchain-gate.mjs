@@ -149,10 +149,23 @@ export const offchainGateErrors = ({
   }
   if (
     pendingGoldSources &&
-    (!pendingGoldSources.includes("env.AUTH_MODE === 'google'") ||
-      !pendingGoldSources.includes('Delivery in'))
+    [
+      'play.gameModes.CONQUEST.pendingGoldsOffchain',
+      'play.noDeliveriesPending',
+      'play.deliveryIn',
+      'play.deliveryInProgress'
+    ].some(token => !pendingGoldSources.includes(token))
   ) {
-    errors.push('Google Pending Gold UI contains player-facing mint language')
+    errors.push('Google Pending Gold UI is missing off-chain delivery copy')
+  }
+  for (const pattern of [
+    /t\(['"]play\.gameModes\.CONQUEST\.pendingGolds['"]\)/,
+    /t\(['"]play\.noMintsPending['"]\)/,
+    /t\(['"]shop\.MintingIn(?:Prog)?['"]/
+  ]) {
+    if (pattern.test(pendingGoldSources)) {
+      errors.push('Google Pending Gold UI contains player-facing mint language')
+    }
   }
   if (silverExchangeUi) {
     const googleGuard = silverExchangeUi.indexOf("env.AUTH_MODE === 'google'")
@@ -380,6 +393,7 @@ const main = async () => {
     skypassAutoClaim,
     pendingGoldPage,
     pendingGoldCard,
+    pendingGoldHeader,
     silverExchangeUi,
     heroExchangeUi,
     conquestInfo,
@@ -448,6 +462,13 @@ const main = async () => {
       path.join(
         root,
         'webapp/src/PendingGoldsPage/components/PendingGoldCard.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/PendingGoldsPage/components/PendingGoldsHeader.tsx'
       ),
       'utf8'
     ),
@@ -598,7 +619,7 @@ const main = async () => {
     identityRoutes,
     appSource,
     policySource,
-    pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}`,
+    pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}\n${pendingGoldHeader}`,
     silverExchangeUi,
     heroExchangeUi,
     googleRewardUi: {
@@ -623,8 +644,12 @@ const main = async () => {
       englishLocale.play.completedDeliveryNumCards,
       englishLocale.play.conquestWeeklyGoldsOffchain,
       englishLocale.play.delayedGoldDelivery,
+      englishLocale.play.deliveryIn,
+      englishLocale.play.deliveryInProgress,
       englishLocale.play.delayedDelivery_one,
       englishLocale.play.delayedDelivery_other,
+      englishLocale.play.gameModes.CONQUEST.pendingGoldsOffchain,
+      englishLocale.play.noDeliveriesPending,
       englishLocale.play.rewards.levelWeeklyTreasureLineTwoOffchain,
       englishLocale.play.conquestDeckPointsTooltipMessageOffchain,
       englishLocale.play.treasureRewardsInactive,

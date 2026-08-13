@@ -2,7 +2,6 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Text } from '~/__deprecated__/Text'
-import env from '~/env'
 import { FlexBox } from '~/shared/components/Base/FlexBox'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { StandardGrid } from '~/shared/components/StandardGrid'
@@ -57,9 +56,7 @@ const PendingGoldCardsPage = memo(() => {
               textAlign="center"
               fontWeight="500"
             >
-              {env.AUTH_MODE === 'google'
-                ? 'There are currently no cards waiting to be delivered.'
-                : t('play.noMintsPending')}
+              {t('play.noDeliveriesPending')}
             </Text>
           </FlexBox>
         )}
@@ -72,7 +69,7 @@ const PendingGoldCardsPage = memo(() => {
                   <PendingGoldCard
                     id={tokenId}
                     key={`${groupIndex}-${tokenId}`}
-                    mintAt={pendingGroup.mintAt}
+                    deliverAt={pendingGroup.mintAt}
                   />
                 )
               })

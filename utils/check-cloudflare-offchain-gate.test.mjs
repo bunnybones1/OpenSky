@@ -14,7 +14,9 @@ const validInput = () => ({
     'Every preserved source behavior that required minting grants an equivalent off-chain item or entitlement. ' +
     'Apply the inventory change and fulfillment receipt in one D1 transaction. ' +
     'Google-auth product copy describes these items.',
-  pendingGoldSources: "env.AUTH_MODE === 'google'; Delivery in progress",
+  pendingGoldSources:
+    'play.gameModes.CONQUEST.pendingGoldsOffchain; ' +
+    'play.noDeliveriesPending; play.deliveryIn; play.deliveryInProgress',
   silverExchangeUi:
     "env.AUTH_MODE !== 'google'; if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeSilverCardsForTickets(); return } ' +
@@ -234,9 +236,19 @@ test('rejects transaction capabilities from the optional wallet integration', ()
 
 test('rejects player-facing mint language from Google Pending Gold UI', () => {
   const input = validInput()
-  input.pendingGoldSources = "t('shop.Minting In')"
+  input.pendingGoldSources += "; t('shop.MintingIn')"
   assert.ok(
     offchainGateErrors(input).some(error => error.includes('Pending Gold'))
+  )
+})
+
+test('requires all Pending Gold delivery copy to stay off-chain', () => {
+  const input = validInput()
+  input.pendingGoldSources = 'play.deliveryInProgress'
+  assert.ok(
+    offchainGateErrors(input).some(error =>
+      error.includes('missing off-chain delivery copy')
+    )
   )
 })
 
