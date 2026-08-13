@@ -41,7 +41,9 @@ const validInput = () => ({
     'getHeroMintTxns()',
   identityCardDetails: {
     routes: {
-      items: "inventoryOnly={env.AUTH_MODE === 'google'}",
+      items:
+        "inventoryOnly={env.AUTH_MODE === 'google'}; " +
+        'useEffect(() => { window.scrollTo({ top: 0 }) }, [id])',
       silverExchange: "inventoryOnly={env.AUTH_MODE === 'google'}",
       goldExchange: "inventoryOnly={env.AUTH_MODE === 'google'}"
     },
@@ -341,6 +343,15 @@ test('rejects market queries from Google inventory card details', () => {
   assert.ok(errors.some(error => error.includes('route items')))
   assert.ok(errors.some(error => error.includes('market control')))
   assert.ok(errors.some(error => error.includes('price or supply queries')))
+})
+
+test('rejects an Items card scroll effect that returns the browser result', () => {
+  const input = validInput()
+  input.identityCardDetails.routes.items =
+    "inventoryOnly={env.AUTH_MODE === 'google'}; " +
+    'useEffect(() => window.scrollTo({ top: 0 }), [id])'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('non-cleanup value')))
 })
 
 test('requires off-chain card-detail tooltips and copy', () => {

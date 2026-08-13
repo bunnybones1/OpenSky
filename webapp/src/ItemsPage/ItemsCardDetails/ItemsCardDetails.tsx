@@ -14,7 +14,9 @@ export const ItemsCardDetails = memo(() => {
 
   const dispatch = useDispatch()
 
-  useEffect(() => window.scrollTo({ top: 0 }), [id])
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [id])
 
   const switchCard = useCallback(
     (id: number) => {

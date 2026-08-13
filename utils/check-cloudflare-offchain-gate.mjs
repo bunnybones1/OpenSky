@@ -275,6 +275,16 @@ export const offchainGateErrors = ({
       }
     }
 
+    if (
+      /useEffect\(\s*\(\)\s*=>\s*window\.scrollTo\s*\(/.test(
+        identityCardDetails.routes?.items ?? ''
+      )
+    ) {
+      errors.push(
+        'Google Items card details scroll effect can return a non-cleanup value'
+      )
+    }
+
     const controls = identityCardDetails.controls ?? ''
     const identityControls = controls.match(
       /const IdentityItemsCardDetailsControls[\s\S]*?IdentityItemsCardDetailsControls\.displayName/
