@@ -35,6 +35,13 @@ export const EXPECTED_AUTH_MODE_FILES = {
   'ItemsPage/ItemsCardDetails/components/ItemsCardDetailsControls.tsx': [1, 'offchain-inventory-projection'],
   'ItemsPage/ItemsDecks/ItemsDecksList/hooks/useItemsDecksList.tsx': [1, 'wallet-market-control-guard'],
   'MarketPage/MarketDecks/MarketDecksList/MarketDeck/MarketDeck.tsx': [1, 'wallet-market-price-guard'],
+  'MarketPage/MarketCardDetails/MarketCardDetails.tsx': [2, 'offchain-card-catalog-details'],
+  'MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCard.tsx': [1, 'wallet-market-cart-guard'],
+  'MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCardBalance/MarketCardBalance.tsx': [1, 'offchain-card-catalog-balance'],
+  'MarketPage/MarketCards/MarketCardsList/MarketCardsList.tsx': [1, 'offchain-card-catalog-sorting'],
+  'MarketPage/MarketCards/MarketCardsSearchBar/MarketCardsFilterPanel/MarketCardsFilterPanel.tsx': [1, 'offchain-card-catalog-filter'],
+  'MarketPage/MarketCards/MarketCardsSearchBar/MarketCardsSearchBar.tsx': [1, 'offchain-card-catalog-filter'],
+  'MarketPage/MarketCards/MarketCardsSearchBar/components/MarketCardsSortSelect.tsx': [1, 'offchain-card-catalog-sorting'],
   'MarketPage/components/MarketPageSubNav.tsx': [1, 'read-only-deck-market-navigation'],
   'PlayPage/Conquest/ConquestInfo/ConquestInfo.tsx': [3, 'offchain-conquest-reward'],
   'PlayPage/Conquest/ConquestInfo/components/WeeklyGoldCard.tsx': [1, 'offchain-conquest-reward'],
@@ -222,7 +229,7 @@ const main = async () => {
     process.exitCode = 1
     return
   }
-  process.stdout.write('All 67 AUTH_MODE files and 109 references have reviewed identity dispositions\n')
+  process.stdout.write('All 74 AUTH_MODE files and 117 references have reviewed identity dispositions\n')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

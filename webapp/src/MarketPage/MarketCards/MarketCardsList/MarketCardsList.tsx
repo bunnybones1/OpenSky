@@ -2,6 +2,7 @@ import { SwapType } from '@0xsequence/metadata'
 import { memo, useCallback } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { CardListLoader } from '~/shared/components/CardListLoader/CardListLoader'
 import { VirtualizedItemList } from '~/shared/components/VirtualizedItemList'
 import { CARD_RATIO } from '~/shared/constants/ui'
@@ -19,7 +20,7 @@ import { useEstimateVirtualizedItemSize } from '~/shared/hooks/useEstimateVirtua
 import { marketCardsFilterState } from '~/shared/state/market-cards/market-cards-filter-state'
 import { updateMarketCardsState } from '~/shared/state/market-cards/market-cards-state'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
-import { OwnershipFilter } from '~/shared/types/cards'
+import { CARD_SORTING_OPTIONS, OwnershipFilter } from '~/shared/types/cards'
 
 import { MarketCard, MarketCardProps } from './MarketCard/MarketCard'
 
@@ -44,15 +45,26 @@ export const MarketCardsList = memo(() => {
     updateMarketCardsState('numSearchResults', numResults)
   }, [])
 
-  const cards = useFilteredCardsList(filters)
+  const isIdentityMarket = env.AUTH_MODE === 'google'
+  const identitySort =
+    filters.sort === CARD_SORTING_OPTIONS.PRICE_ASCENDING ||
+    filters.sort === CARD_SORTING_OPTIONS.PRICE_DESCENDING
+      ? CARD_SORTING_OPTIONS.QUANTITY_DESCENDING
+      : filters.sort
+  const cards = useFilteredCardsList(
+    isIdentityMarket ? { ...filters, sort: identitySort } : filters,
+    isIdentityMarket ? onUpdate : undefined
+  )
 
-  const { sortedCards } = usePriceSortedCards({
+  const { sortedCards: priceSortedCards } = usePriceSortedCards({
     cards,
     sort: filters.sort,
     grade: filters.grade,
     mode,
-    onUpdate
+    disabled: isIdentityMarket,
+    onUpdate: isIdentityMarket ? undefined : onUpdate
   })
+  const sortedCards = isIdentityMarket ? cards : priceSortedCards
 
   const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
     numColumns,

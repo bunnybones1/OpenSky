@@ -4,6 +4,50 @@ import test from 'node:test'
 
 import { webappRouteAuditErrors } from './audit-cloudflare-webapp-routes.mjs'
 
+const readMarketFidelitySources = async () => {
+  const [
+    marketSubNavSource,
+    marketCardsListSource,
+    marketCardSource,
+    marketCardBalanceSource,
+    marketCardsSearchSource,
+    marketCardDetailsSource,
+    cartQuerySource
+  ] = await Promise.all([
+    readFile('webapp/src/MarketPage/components/MarketPageSubNav.tsx', 'utf8'),
+    readFile(
+      'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCardsList.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCard.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketCards/MarketCardsList/MarketCard/MarketCardBalance/MarketCardBalance.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketCards/MarketCardsSearchBar/MarketCardsSearchBar.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketCardDetails/MarketCardDetails.tsx',
+      'utf8'
+    ),
+    readFile('webapp/src/shared/queries/useCart.ts', 'utf8')
+  ])
+  return {
+    marketSubNavSource,
+    marketCardsListSource,
+    marketCardSource,
+    marketCardBalanceSource,
+    marketCardsSearchSource,
+    marketCardDetailsSource,
+    cartQuerySource
+  }
+}
+
 test('accepts the current reviewed legacy-to-identity route map', async () => {
   const [
     legacySource,
@@ -79,6 +123,7 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       'utf8'
     )
   ])
+  const marketFidelitySources = await readMarketFidelitySources()
   assert.deepEqual(
     webappRouteAuditErrors({
       legacySource,
@@ -103,7 +148,8 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       shopPrototypeSource,
       identityMarketSource,
       marketDeckSource,
-      marketNavSource
+      marketNavSource,
+      ...marketFidelitySources
     }),
     []
   )
@@ -184,6 +230,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
       'utf8'
     )
   ])
+  const marketFidelitySources = await readMarketFidelitySources()
   const errors = webappRouteAuditErrors({
     legacySource: legacySource.replace(
       'path={ROUTES_CONFIG.routes.HOME.path}',
@@ -272,7 +319,12 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     ),
     identityMarketSource: identityMarketSource.concat('\n<ViewOrderButton />'),
     marketDeckSource,
-    marketNavSource
+    marketNavSource,
+    ...marketFidelitySources,
+    marketCardSource: marketFidelitySources.marketCardSource.replace(
+      'useCartItem(id, mode, !isIdentityMarket)',
+      'useCartItem(id, mode)'
+    )
   })
   assert.ok(errors.some(error => error.includes('unreviewed legacy')))
   assert.ok(
@@ -303,4 +355,5 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('server authorization')))
   assert.ok(errors.some(error => error.includes('Shop prototype changed')))
   assert.ok(errors.some(error => error.includes('legacy trading UI')))
+  assert.ok(errors.some(error => error.includes('cart guard')))
 })

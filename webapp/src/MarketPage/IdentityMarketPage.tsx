@@ -7,6 +7,8 @@ import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { page } from '~/shared/helpers/analytics-old'
 
 import { MarketPageSubNav } from './components/MarketPageSubNav'
+import { MarketCardDetails } from './MarketCardDetails/MarketCardDetails'
+import { MarketCards } from './MarketCards/MarketCards'
 import MarketDecks from './MarketDecks/MarketDecks'
 
 export const IdentityMarketPage = memo(() => {
@@ -30,6 +32,14 @@ export const IdentityMarketPage = memo(() => {
     >
       <MarketPageSubNav />
       <Routes>
+        <Route
+          element={<MarketCards />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.CARDS.path}
+        />
+        <Route
+          element={<MarketCardDetails />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.CARD.path}
+        />
         <Route
           element={<MarketDecks />}
           path={ROUTES_CONFIG.routes.MARKET.routes.DECKS.path}

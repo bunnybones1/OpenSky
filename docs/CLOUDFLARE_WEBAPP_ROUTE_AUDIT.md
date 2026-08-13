@@ -22,7 +22,7 @@ original 404/deleted-account destinations disappear.
 | `HERO_FEATURE`      | `preserved-offchain-controls`          | Original Hero page with Google Gold-card exchange.                                                                      |
 | `SELECT_GOLDS`      | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
 | `LEADERBOARD`       | `preserved-original-page`              | Original player and deck leaderboards.                                                                                  |
-| `MARKET`            | `preserved-read-only-deck-market`      | Original Market shell, top/most-played deck filters, ownership counts, and deck viewer backed by D1; wallet prices, cart, buy, and sell controls remain excluded. |
+| `MARKET`            | `preserved-read-only-market`           | Original card catalog and deck browser backed by local metadata and D1 ownership; wallet prices, cart, buy, and sell controls remain excluded. |
 | `ITEMS`             | `preserved-identity-inventory`         | Original collection pages backed by D1; linked wallet contents are optional/read-only.                                  |
 | `DECK_BUILDER`      | `preserved-original-page`              | Original deck editor.                                                                                                   |
 | `QUESTS`            | `preserved-offchain-rewards`           | Original quest UI with D1 progress and claims.                                                                          |
@@ -64,10 +64,13 @@ The Google-identity Market is restored incrementally from the source rather
 than replaced with a capability placeholder. Its first wallet-free slice is the
 original deck browser: the same Market navigation, ranking filters, prism
 filters, deck cards, ownership progress, and global Deck Viewer now consume the
-ported `SearchDeckRanks` and inventory contracts. Legacy Sequence price
-overlays, card/sticker/card-back listings, order cart, and buy/sell controls do
-not mount in identity mode. Optional WalletConnect remains an ownership-read
-integration and does not make off-chain rewards tradable by implication.
+ported `SearchDeckRanks` and inventory contracts. The second slice restores the
+original Cards catalog, search/filter panel, card art, grade and ownership
+filters, D1 balance badges, and card-details viewer. Price sorting is replaced
+by local card or D1 quantity sorting. Legacy Sequence price overlays, hero,
+sticker, and card-back listings, order cart, and buy/sell controls do not mount
+in identity mode. Optional WalletConnect remains an ownership-read integration
+and does not make off-chain rewards tradable by implication.
 
 ## Production rollout
 

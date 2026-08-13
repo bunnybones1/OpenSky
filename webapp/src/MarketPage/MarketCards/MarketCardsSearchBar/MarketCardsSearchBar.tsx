@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Button } from '~/shared/components/Button'
 import { SearchBar } from '~/shared/components/SearchBar'
 import { Text } from '~/shared/components/Text'
@@ -19,6 +20,7 @@ import {
 } from '~/shared/style/SearchbarStyle.css'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
+import { IdentityMarketCardsOwnershipFilter } from './components/IdentityMarketCardsOwnershipFilter'
 import { MarketCardsGradeFilter } from './components/MarketCardsGradeFilter'
 import { MarketCardsPrismFilter } from './components/MarketCardsPrismFilter'
 import { MarketCardsSideSwitcher } from './components/MarketCardsSideSwitcher'
@@ -59,7 +61,11 @@ export const MarketCardsSearchBar = memo(() => {
       {(toggleFilterPanel) => (
         <>
           <div className={SearchBarSideStyle}>
-            <MarketCardsSideSwitcher />
+            {env.AUTH_MODE === 'google' ? (
+              <IdentityMarketCardsOwnershipFilter />
+            ) : (
+              <MarketCardsSideSwitcher />
+            )}
             <MarketCardsSortSelect />
             {numSearchResults !== undefined && (
               <div

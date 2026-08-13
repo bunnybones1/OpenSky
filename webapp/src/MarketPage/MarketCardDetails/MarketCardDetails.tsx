@@ -2,6 +2,8 @@ import { memo, useCallback, useMemo } from 'react'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
+import { IdentityItemsCardDetailsControls } from '~/ItemsPage/ItemsCardDetails/components/IdentityItemsCardDetailsControls'
 import { CardDetailsPage } from '~/shared/components/CardDetailsPage/CardDetailsPage'
 import { makeMarketCardDetailsRoute } from '~/shared/helpers/routes/market-page'
 import { useDispatch, useSelector } from '~/shared/redux/index'
@@ -31,10 +33,15 @@ export const MarketCardDetails = memo(() => {
 
   return (
     <CardDetailsPage
-      Controls={MarketCardDetailsControls}
+      Controls={
+        env.AUTH_MODE === 'google'
+          ? IdentityItemsCardDetailsControls
+          : MarketCardDetailsControls
+      }
       id={id}
       allowedGrades={allowedGrades}
       switchCard={switchCard}
+      inventoryOnly={env.AUTH_MODE === 'google'}
     />
   )
 })

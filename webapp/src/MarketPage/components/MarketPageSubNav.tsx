@@ -23,10 +23,19 @@ export const MarketPageSubNav = memo(() => {
   const stickerDetailsId = useSelector(marketStickerFeatureIdSelector)
   const cardBackDetailsId = useSelector(marketCardBackFeatureIdSelector)
 
+  if (!!cardDetailsId || !!stickerDetailsId || !!cardBackDetailsId) return null
+
   if (env.AUTH_MODE === 'google') {
     return (
       <SubNav>
         {[
+          <SubNavButton
+            key="cards"
+            to={makeMarketCardsRoute()}
+            text={t('shop.subNavCards')}
+            icon="cards"
+            id="cards"
+          />,
           <SubNavButton
             key="decks"
             to={makeNavigateToMarketDecksRoute()}
@@ -38,8 +47,6 @@ export const MarketPageSubNav = memo(() => {
       </SubNav>
     )
   }
-
-  if (!!cardDetailsId || !!stickerDetailsId || !!cardBackDetailsId) return null
 
   return (
     <SubNav>

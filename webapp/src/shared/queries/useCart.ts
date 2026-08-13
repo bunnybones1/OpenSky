@@ -51,11 +51,11 @@ export const useCart = (enabled = true) => {
   })
 }
 
-export const useCartItem = (id: number, side?: MarketMode) => {
+export const useCartItem = (id: number, side?: MarketMode, enabled = true) => {
   const { userAddress } = useSnapshot(authenticationState)
 
   return useQuery(getCartKey(userAddress), fetchCart, {
-    enabled: !!userAddress,
+    enabled: enabled && !!userAddress,
     staleTime: ONE_DAY,
     select: (data) => {
       if (!data) return data
