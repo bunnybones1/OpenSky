@@ -3,7 +3,7 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`0caeb7a2-11b0-4146-b47d-21596795a102`)
+- API/web Worker: `opensky-webapp` (`66f26408-e3ac-4045-a63b-a0bcdd1fec08`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
@@ -37,6 +37,9 @@
   includes `8ec460f` for inventory-only card details and `fd60828` for safe
   Base/Silver/Gold navigation, plus `cdba69e` for isolated identity and legacy
   card-control component boundaries.
+  It additionally includes the source-faithful read-only Market restoration
+  through Heroes milestone `8d8895e` and the release-safe static-asset cache
+  boundary `e0f3aee`; deployment verification is automated by `4308a5d`.
   The API and match service also include `90dbfe7`: Conquest readiness is now
   backed by the real off-chain Silver settlement and delayed-Gold delivery
   receipts, and admission closes dynamically when that verified pool expires.
