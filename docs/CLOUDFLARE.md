@@ -185,6 +185,20 @@ pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --remote --
 pnpm deploy:cloudflare
 ```
 
+Component deploys also fail closed on their relevant typechecks and complete
+unit/Workers integration suites:
+
+```bash
+pnpm deploy:cloudflare:game-server
+pnpm deploy:cloudflare:match-service
+pnpm deploy:cloudflare:matchmaker
+pnpm deploy:cloudflare:analytics
+```
+
+Apply shared D1 migrations before deploying code that depends on a new schema.
+The main `deploy:cloudflare` command runs the complete cross-service release
+build; component commands are for an already-migrated, isolated rollout.
+
 Static requests use Cloudflare Assets with SPA fallback. Only `/api/*` is routed through Worker
 compute first.
 
