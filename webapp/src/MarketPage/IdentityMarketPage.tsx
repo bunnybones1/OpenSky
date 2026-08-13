@@ -1,0 +1,51 @@
+import { memo } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { useMount, useUnmount } from 'react-use'
+
+import { FlexBox } from '~/shared/components/Base'
+import { ROUTES_CONFIG } from '~/shared/constants/routes'
+import { page } from '~/shared/helpers/analytics-old'
+
+import { MarketPageSubNav } from './components/MarketPageSubNav'
+import MarketDecks from './MarketDecks/MarketDecks'
+
+export const IdentityMarketPage = memo(() => {
+  useMount(() => {
+    page('Shop')
+    document.body.classList.add('scrollBody')
+  })
+
+  useUnmount(() => {
+    document.body.classList.remove('scrollBody')
+  })
+
+  return (
+    <FlexBox
+      width="100%"
+      height="auto"
+      minHeight="100%"
+      type="start-column"
+      position="relative"
+      overflow="scrollY"
+    >
+      <MarketPageSubNav />
+      <Routes>
+        <Route
+          element={<MarketDecks />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.DECKS.path}
+        />
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={ROUTES_CONFIG.routes.MARKET.routes.DECKS.directPath}
+              replace
+            />
+          }
+        />
+      </Routes>
+    </FlexBox>
+  )
+})
+
+IdentityMarketPage.displayName = 'IdentityMarketPage'

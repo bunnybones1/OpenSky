@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { SubNavButton } from '~/shared/components/SubNav/exported/SubNavButton'
 import { SubNav } from '~/shared/components/SubNav/SubNav'
 import { makeMarketHeroSkinsRoute } from '~/shared/helpers/routes/market-page'
@@ -21,6 +22,22 @@ export const MarketPageSubNav = memo(() => {
   const cardDetailsId = useSelector(marketCardDetailsIdSelector)
   const stickerDetailsId = useSelector(marketStickerFeatureIdSelector)
   const cardBackDetailsId = useSelector(marketCardBackFeatureIdSelector)
+
+  if (env.AUTH_MODE === 'google') {
+    return (
+      <SubNav>
+        {[
+          <SubNavButton
+            key="decks"
+            to={makeNavigateToMarketDecksRoute()}
+            text={t('shop.subNavDecks')}
+            icon="deck"
+            id="decks"
+          />
+        ]}
+      </SubNav>
+    )
+  }
 
   if (!!cardDetailsId || !!stickerDetailsId || !!cardBackDetailsId) return null
 

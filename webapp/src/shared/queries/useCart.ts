@@ -42,11 +42,11 @@ const fetchCart = async () => {
   return cart
 }
 
-export const useCart = () => {
+export const useCart = (enabled = true) => {
   const { userAddress } = useSnapshot(authenticationState)
 
   return useQuery(getCartKey(userAddress), fetchCart, {
-    enabled: !!userAddress,
+    enabled: enabled && !!userAddress,
     staleTime: ONE_DAY
   })
 }

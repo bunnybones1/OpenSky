@@ -96,7 +96,9 @@ export const browserTransactionAuditErrors = ({
     }
     if (
       review.disposition === 'excluded-product-surface' &&
-      identityRoutes.includes(review.routeToken)
+      new RegExp(
+        `(?:<${review.routeToken}\\b|/${review.routeToken}['\"])`
+      ).test(identityRoutes)
     ) {
       errors.push(
         `Google IdentityApp exposes transaction surface: ${review.routeToken}`

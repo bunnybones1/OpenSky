@@ -18,6 +18,7 @@ export const EXPECTED_AUTH_MODE_FILES = {
   'AppLayout/DeckViewer/DeckViewer.tsx': [1, 'identity-banner-query-deduplication'],
   'AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx': [1, 'wallet-market-control-guard'],
   'AppLayout/NavBar/LinkSection/LinkSection.tsx': [1, 'wallet-market-capability-adapter'],
+  'AppLayout/NavBar/LinkSection/components/MarketLink.tsx': [1, 'read-only-deck-market-navigation'],
   'AppLayout/components/CookieDisclaimer.tsx': [2, 'identity-cookie-policy'],
   'HeroFeaturePage/HeroFeatureCarousel/HeroSkinControls/components/MintHeroSkinButton.tsx': [1, 'offchain-hero-exchange'],
   'HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/HeroesToMintList/components/HeroToMintRow.tsx': [2, 'offchain-hero-exchange'],
@@ -34,6 +35,8 @@ export const EXPECTED_AUTH_MODE_FILES = {
   'ItemsPage/ItemsCardDetails/ItemsCardDetails.tsx': [1, 'offchain-inventory-projection'],
   'ItemsPage/ItemsCardDetails/components/ItemsCardDetailsControls.tsx': [1, 'offchain-inventory-projection'],
   'ItemsPage/ItemsDecks/ItemsDecksList/hooks/useItemsDecksList.tsx': [1, 'wallet-market-control-guard'],
+  'MarketPage/MarketDecks/MarketDecksList/MarketDeck/MarketDeck.tsx': [1, 'wallet-market-price-guard'],
+  'MarketPage/components/MarketPageSubNav.tsx': [1, 'read-only-deck-market-navigation'],
   'PlayPage/Conquest/ConquestInfo/ConquestInfo.tsx': [3, 'offchain-conquest-reward'],
   'PlayPage/Conquest/ConquestInfo/components/WeeklyGoldCard.tsx': [1, 'offchain-conquest-reward'],
   'PlayPage/Conquest/ConquestProgressBar/ConquestTreasureImage/ConquestTreasureImage.tsx': [1, 'offchain-conquest-reward'],
@@ -207,7 +210,7 @@ const main = async () => {
     process.exitCode = 1
     return
   }
-  process.stdout.write('All 65 AUTH_MODE files and 107 references have reviewed identity dispositions\n')
+  process.stdout.write('All 68 AUTH_MODE files and 110 references have reviewed identity dispositions\n')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

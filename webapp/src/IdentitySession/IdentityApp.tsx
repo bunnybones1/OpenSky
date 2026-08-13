@@ -15,6 +15,7 @@ import InviteAFriendRewards from '~/InviteFriendsPage/outlets/InviteAFriendRewar
 import InvitedFriends from '~/InviteFriendsPage/outlets/InvitedFriends/InvitedFriends'
 import ItemsPage from '~/ItemsPage/ItemsPage'
 import { LeaderboardPage } from '~/LeaderboardPage/LeaderboardPage'
+import { IdentityMarketPage } from '~/MarketPage/IdentityMarketPage'
 import PendingGoldsPage from '~/PendingGoldsPage/PendingGoldsPage'
 import { PlayPage } from '~/PlayPage/PlayPage'
 import { QuestsPage } from '~/QuestsPage/QuestsPage'
@@ -24,7 +25,6 @@ import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import SkyPassPage from '~/SkyPassPage/SkyPassPage'
 import { SkyPassPurchasePage } from '~/SkyPassPurchasePage/SkyPassPurchasePage'
 
-import { IdentityCapabilityPage } from './components/IdentityCapabilityPage'
 import { useIdentityAppShell } from './useIdentityAppShell'
 
 const AdminPage = lazy(() => import('~/AdminPage/AdminPage'))
@@ -244,13 +244,7 @@ export const IdentityApp = memo(() => {
           />
           <Route
             path={ROUTES_CONFIG.routes.MARKET.path}
-            element={
-              <IdentityCapabilityPage
-                title="Market"
-                description="The original market remains part of the product. Trading will return with optional WalletConnect support."
-                icon="shop"
-              />
-            }
+            element={<IdentityMarketPage />}
           />
           <Route
             path={ROUTES_CONFIG.routes.DELETED_ACCOUNT.path}

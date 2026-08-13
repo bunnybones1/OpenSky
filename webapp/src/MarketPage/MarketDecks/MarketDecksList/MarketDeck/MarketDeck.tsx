@@ -3,6 +3,7 @@ import { memo, useCallback, useMemo } from 'react'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Deck } from '~/shared/components/Deck/Deck'
 import { DeckOwnershipStats } from '~/shared/components/DeckOwnershipStats/DeckOwnershipStats'
 import { makeDeckViewerRoute } from '~/shared/helpers/routes/items-decks'
@@ -42,7 +43,9 @@ export const MarketDeck = memo(({ deckString, score, gamesPlayed }: DeckRank) =>
         position: 'relative'
       })}
     >
-      <MarketDeckBalanceAndPriceInfo deckString={deckString} />
+      {env.AUTH_MODE !== 'google' && (
+        <MarketDeckBalanceAndPriceInfo deckString={deckString} />
+      )}
       <Deck
         deckClass={deckClass}
         // isSelected={!!deckId && deckId === deck.uuid}

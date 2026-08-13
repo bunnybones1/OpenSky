@@ -36,7 +36,7 @@ const REVIEWED_LEGACY_ROUTES = {
   },
   LEADERBOARD: { disposition: 'preserved-original-page', mounted: true },
   MARKET: {
-    disposition: 'walletconnect-capability-placeholder',
+    disposition: 'preserved-read-only-deck-market',
     mounted: true
   },
   ITEMS: { disposition: 'preserved-identity-inventory', mounted: true },
@@ -81,7 +81,10 @@ export const webappRouteAuditErrors = ({
   deckViewerFooterSource,
   adminPageSource,
   staffRepositorySource,
-  shopPrototypeSource
+  shopPrototypeSource,
+  identityMarketSource,
+  marketDeckSource,
+  marketNavSource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -310,6 +313,43 @@ export const webappRouteAuditErrors = ({
       errors.push(`Google admin server authorization is missing: ${token}`)
     }
   }
+  for (const token of [
+    '<MarketPageSubNav />',
+    '<MarketDecks />',
+    'ROUTES_CONFIG.routes.MARKET.routes.DECKS.path'
+  ]) {
+    if (!identityMarketSource.includes(token)) {
+      errors.push(`Google read-only Market fidelity is missing: ${token}`)
+    }
+  }
+  for (const forbidden of [
+    'ViewOrderButton',
+    'MarketCardDetails',
+    'MarketCards',
+    'MarketHeroes',
+    'MarketStickers',
+    'MarketCardBacks'
+  ]) {
+    if (identityMarketSource.includes(forbidden)) {
+      errors.push(`Google read-only Market mounts legacy trading UI: ${forbidden}`)
+    }
+  }
+  if (
+    !marketDeckSource.includes("env.AUTH_MODE !== 'google' && (") ||
+    !marketDeckSource.includes('<MarketDeckBalanceAndPriceInfo')
+  ) {
+    errors.push('Google read-only Market does not suppress legacy deck prices')
+  }
+  for (const token of [
+    "const isIdentityMarket = env.AUTH_MODE === 'google'",
+    'useCart(!isIdentityMarket)',
+    'makeNavigateToMarketDecksRoute()',
+    'isIdentityMarket || isSecretShopVisible ? undefined : cartCount'
+  ]) {
+    if (!marketNavSource.includes(token)) {
+      errors.push(`Google read-only Market navigation is missing: ${token}`)
+    }
+  }
   return errors
 }
 
@@ -338,7 +378,10 @@ const main = async () => {
     deckViewerFooterSource,
     adminPageSource,
     staffRepositorySource,
-    shopPrototypeSource
+    shopPrototypeSource,
+    identityMarketSource,
+    marketDeckSource,
+    marketNavSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -417,7 +460,25 @@ const main = async () => {
         ),
         'utf8'
       )
-    ]).then(parts => parts.join('\n'))
+    ]).then(parts => parts.join('\n')),
+    readFile(
+      path.join(root, 'webapp/src/MarketPage/IdentityMarketPage.tsx'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketDecks/MarketDecksList/MarketDeck/MarketDeck.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AppLayout/NavBar/LinkSection/components/MarketLink.tsx'
+      ),
+      'utf8'
+    )
   ])
   const errors = webappRouteAuditErrors({
     legacySource,
@@ -439,7 +500,10 @@ const main = async () => {
     deckViewerFooterSource,
     adminPageSource,
     staffRepositorySource,
-    shopPrototypeSource
+    shopPrototypeSource,
+    identityMarketSource,
+    marketDeckSource,
+    marketNavSource
   })
   if (errors.length) {
     for (const error of errors)
