@@ -262,6 +262,18 @@ the cache-policy implementation.
 
 ## Latest verification
 
+- Client release cache-safety milestone `e0f3aee` was deployed on 2026-08-13
+  as API/web Worker version `66f26408-e3ac-4045-a63b-a0bcdd1fec08`. Two
+  independent production SPA responses carried both browser and edge
+  `Cache-Control: no-store`, and the served manifest referenced the exact
+  tested `index-1be0133a.js` entry. The fingerprinted web entry and
+  `game/cloudflare` entry both returned the one-year immutable policy. A
+  signed-in production client retained its Google session and rendered the
+  original five-section Market navigation plus all 15 Heroes results. The
+  release passed 338 main Worker tests, 216 multiplayer tests, 24 browser/game
+  tests, six analytics tests, every TypeScript check, and every release and
+  off-chain safety gate.
+
 - API Worker: 44 files, 325 tests
 - Match service: 27 tests
 - Game Worker: 31 unit and 80 Worker tests
