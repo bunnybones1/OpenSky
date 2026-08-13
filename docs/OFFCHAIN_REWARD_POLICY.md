@@ -140,8 +140,13 @@ The mobile-store fulfillment ledger is also part of this boundary. It accepts
 only server-verified provider facts, binds the provider transaction to one
 Google identity with a database uniqueness constraint, stores only receipt
 digests, and grants tickets or the current season's premium SkyPass directly in
-D1. Google Play, Samsung, and Apple provider facts all converge on that same
-ledger. Apple uses the production App Store Server API plus a verified signed
+D1. Its serialized receipt snapshots ticket/SkyPass balances and, for premium
+SkyPass, the season entitlement flag; it cannot move from `PENDING` to
+`SUCCEEDED` unless the exact resulting state exists. Concurrent distinct
+purchases form a complete balance history, while a failed finalization rolls
+back both payment evidence and entitlement. Google Play, Samsung, and Apple
+provider facts all converge on that same ledger. Apple uses the production App
+Store Server API plus a verified signed
 transaction chain rooted in pinned Apple PKI certificates; the deprecated
 receipt blob is not reward authority. Provider credentials and raw purchase
 tokens never enter reward evidence.

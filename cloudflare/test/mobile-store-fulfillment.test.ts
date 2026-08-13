@@ -104,6 +104,38 @@ describe('mobile store off-chain fulfillment authority', () => {
     ).toBe(1)
   })
 
+  it('serializes distinct purchases into a complete balance history', async () => {
+    const userId = await createPlayer('mobile-distinct-race')
+    const repository = new MobileStoreFulfillmentRepository(env.AUTH_DB)
+    await Promise.all([
+      repository.fulfill(
+        userId,
+        tickets(`GPA.${crypto.randomUUID()}`),
+        NOW
+      ),
+      repository.fulfill(
+        userId,
+        tickets(`GPA.${crypto.randomUUID()}`),
+        NOW
+      )
+    ])
+
+    expect(await ticketBalance(userId)).toBe(10)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT before_balance, after_balance FROM mobile_store_payments
+         WHERE user_id = ? ORDER BY before_balance`
+      )
+        .bind(userId)
+        .all()
+    ).toMatchObject({
+      results: [
+        { before_balance: 0, after_balance: 5 },
+        { before_balance: 5, after_balance: 10 }
+      ]
+    })
+  })
+
   it('rejects cross-account and changed-product replay without another grant', async () => {
     const ownerId = await createPlayer('mobile-owner')
     const attackerId = await createPlayer('mobile-attacker')
@@ -155,6 +187,61 @@ describe('mobile store off-chain fulfillment authority', () => {
         .bind(userId, season)
         .first<number>('has_premium')
     ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT before_balance, after_balance, before_has_premium,
+                after_has_premium
+         FROM mobile_store_payments WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({
+      before_balance: 0,
+      after_balance: 1,
+      before_has_premium: 0,
+      after_has_premium: 1
+    })
+  })
+
+  it('rolls back a failed receipt completion and retries safely', async () => {
+    const userId = await createPlayer('mobile-receipt-retry')
+    const transactionId = `GPA.${crypto.randomUUID()}`
+    const repository = new MobileStoreFulfillmentRepository(env.AUTH_DB)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_mobile_store_completion
+       BEFORE UPDATE OF status ON mobile_store_payments
+       WHEN NEW.status = 'SUCCEEDED'
+       BEGIN SELECT RAISE(ABORT, 'test receipt failure'); END`
+    ).run()
+    try {
+      await expect(
+        repository.fulfill(userId, tickets(transactionId), NOW)
+      ).rejects.toThrow('fulfill mobile store payment')
+    } finally {
+      await env.AUTH_DB.prepare(
+        'DROP TRIGGER reject_mobile_store_completion'
+      ).run()
+    }
+    expect(await ticketBalance(userId)).toBeNull()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM mobile_store_payments
+         WHERE external_transaction_id = ?`
+      )
+        .bind(transactionId)
+        .first('count')
+    ).toBe(0)
+
+    await repository.fulfill(userId, tickets(transactionId), NOW)
+    expect(await ticketBalance(userId)).toBe(5)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE mobile_store_payments SET after_balance = after_balance + 1
+         WHERE external_transaction_id = ?`
+      )
+        .bind(transactionId)
+        .run()
+    ).rejects.toThrow('Mobile store payment update is invalid')
   })
 
   it('rolls back the receipt if the inventory grant fails', async () => {

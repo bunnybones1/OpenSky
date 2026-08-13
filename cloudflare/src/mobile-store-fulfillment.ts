@@ -111,8 +111,28 @@ export class MobileStoreFulfillmentRepository {
           `INSERT OR IGNORE INTO mobile_store_payments
              (id, provider, external_transaction_id, user_id, product_code,
               item_type, quantity, fulfilled_season, verification_sha256,
-              currency, total_price, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`
+              currency, total_price, status, created_at, updated_at,
+              before_balance, after_balance, before_has_premium,
+              after_has_premium)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?,
+                  snapshot.before_balance,
+                  CASE WHEN ? = 'SW_SKYPASS'
+                       THEN MAX(snapshot.before_balance, 1)
+                       ELSE snapshot.before_balance + ? END,
+                  CASE WHEN ? = 'SW_SKYPASS'
+                       THEN snapshot.before_has_premium END,
+                  CASE WHEN ? = 'SW_SKYPASS' THEN 1 END
+           FROM (
+             SELECT
+               COALESCE((
+                 SELECT balance FROM player_items
+                 WHERE user_id = ? AND item_type = ? AND token_id = ?
+               ), 0) AS before_balance,
+               COALESCE((
+                 SELECT has_premium FROM player_skypass_season_stats
+                 WHERE user_id = ? AND season = ?
+               ), 0) AS before_has_premium
+           ) snapshot`
         )
         .bind(
           paymentId,
@@ -127,7 +147,18 @@ export class MobileStoreFulfillmentRepository {
           currency,
           totalPrice,
           createdAt,
-          createdAt
+          createdAt,
+          product.itemType,
+          product.quantity,
+          product.itemType,
+          product.itemType,
+          userId,
+          product.itemType,
+          product.itemType === ('SW_SKYPASS' as ItemType)
+            ? fulfilledSeason
+            : 2,
+          userId,
+          fulfilledSeason
         )
     ]
 

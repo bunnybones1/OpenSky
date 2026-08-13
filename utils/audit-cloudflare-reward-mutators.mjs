@@ -111,11 +111,16 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     count: 3,
     disposition: 'receipt-backed-mobile-commerce',
     evidenceFiles: [
-      'cloudflare/migrations/0062_mobile_store_offchain_fulfillment.sql'
+      'cloudflare/migrations/0062_mobile_store_offchain_fulfillment.sql',
+      'cloudflare/migrations/0081_mobile_store_fulfillment_receipts.sql'
     ],
     evidence: [
       'mobile_store_payments',
       'UNIQUE (provider, external_transaction_id)',
+      'before_balance',
+      'after_has_premium',
+      'Mobile store payment preparation is invalid',
+      'Mobile store payment update is invalid',
       'Mobile store payments are immutable',
       'database.batch'
     ]
