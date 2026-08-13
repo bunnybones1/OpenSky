@@ -136,6 +136,15 @@ wrappers are excluded because they do not execute a product action themselves;
 any new use of one from product code is discovered and fails the build until it
 has an explicit Cloud Weasel replacement.
 
+The source reward-producer audit starts one layer earlier. It inventories every
+Go file that directly grants XP, tickets, sticker points, heroes, starter decks,
+or item rows—even if that file never calls a contract itself. Exact callsite
+counts and implementation evidence cover account bootstrap, matches, quests,
+SkyPass, commerce, leaderboard/referral rewards, and operator/repair flows. A
+new producer or an expanded producer fails the build until its complete earning
+behavior has an off-chain TypeScript destination or a reviewed whole-feature
+retirement.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the

@@ -68,6 +68,9 @@ commented-out runner is accidentally counted as active.
 
 The production mint-queue gate reads the implementation evidence behind every
 row. A queue is not accepted merely because its source producer is absent.
+The separate reward-producer gate also scans upstream Go inventory, XP, hero,
+and starter-deck mutations, so a grant cannot evade review merely because its
+later mint happens in another worker.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
 reward delivery paths rather than recreating the source mint queues. External
