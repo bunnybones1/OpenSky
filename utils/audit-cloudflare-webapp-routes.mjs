@@ -74,7 +74,10 @@ export const webappRouteAuditErrors = ({
   cookieDialogSource,
   cookieDisclaimerSource,
   cookieRepositorySource,
-  cookieMigrationSource
+  cookieMigrationSource,
+  appLayoutSource,
+  deckViewerSource,
+  deckViewerFooterSource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -228,6 +231,22 @@ export const webappRouteAuditErrors = ({
       errors.push(`Google cookie schema guard is missing: ${token}`)
     }
   }
+  if (!appLayoutSource.includes('<DeckViewer />')) {
+    errors.push('Google app layout does not mount the original Deck Viewer')
+  }
+  if (appLayoutSource.includes('!isIdentityMode && <DeckViewer />')) {
+    errors.push('Google app layout still suppresses the original Deck Viewer')
+  }
+  if (!deckViewerSource.includes("useBanners(env.AUTH_MODE !== 'google')")) {
+    errors.push('Google Deck Viewer can still issue the absent banner query')
+  }
+  if (
+    !deckViewerFooterSource.includes(
+      "env.AUTH_MODE !== 'google' && !isFullyUnlocked && !isDeckClassLocked"
+    )
+  ) {
+    errors.push('Google Deck Viewer exposes the legacy market-cart control')
+  }
   return errors
 }
 
@@ -249,7 +268,10 @@ const main = async () => {
     cookieDialogSource,
     cookieDisclaimerSource,
     cookieRepositorySource,
-    cookieMigrationSource
+    cookieMigrationSource,
+    appLayoutSource,
+    deckViewerSource,
+    deckViewerFooterSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -293,6 +315,18 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare/migrations/0092_identity_cookie_policy.sql'),
       'utf8'
+    ),
+    readFile(path.join(root, 'webapp/src/AppLayout/AppLayout.tsx'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp/src/AppLayout/DeckViewer/DeckViewer.tsx'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx'
+      ),
+      'utf8'
     )
   ])
   const errors = webappRouteAuditErrors({
@@ -308,7 +342,10 @@ const main = async () => {
     cookieDialogSource,
     cookieDisclaimerSource,
     cookieRepositorySource,
-    cookieMigrationSource
+    cookieMigrationSource,
+    appLayoutSource,
+    deckViewerSource,
+    deckViewerFooterSource
   })
   if (errors.length) {
     for (const error of errors)

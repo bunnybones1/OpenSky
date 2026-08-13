@@ -2,6 +2,7 @@ import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { Button } from '~/shared/components/Button'
 import { makeNavigateToDeckBuilderRoute } from '~/shared/helpers/routes/deck-builder'
 import { makeCloseDeckViewerRoute } from '~/shared/helpers/routes/general'
@@ -149,7 +150,7 @@ export const DeckViewerFooter = memo(() => {
             buttonClassName={FullWidthButtonStyle}
           />
         )}
-        {!isFullyUnlocked && !isDeckClassLocked && (
+        {env.AUTH_MODE !== 'google' && !isFullyUnlocked && !isDeckClassLocked && (
           <AddMissingToCartButton deckString={deckString} />
         )}
       </div>

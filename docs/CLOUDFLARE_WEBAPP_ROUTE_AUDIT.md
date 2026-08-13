@@ -67,6 +67,12 @@ The D1 schema accepts policies owned by either an identity user or a legacy
 wallet account, validates the smaller identity policy, and removes each policy
 when its owning principal is deleted.
 
+The original global Deck Viewer is also mounted for Google identities. Deck
+inspection, stats, ownership counts, favorite/edit/import controls, and the
+SkyPass prism-unlock link use the identity-backed deck and inventory APIs. Its
+legacy “Add missing to cart” action remains wallet-mode only, and Google mode
+does not issue the absent banner query merely to calculate viewer spacing.
+
 App-shell milestone `3dd82f6` restored the original wallet-independent dialogs
 in production. Follow-up milestone `f988b30` fixed the identity-policy owner
 model discovered during live QA, and D1 migration `0092` plus Worker version

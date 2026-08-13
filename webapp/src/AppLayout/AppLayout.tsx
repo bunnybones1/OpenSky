@@ -38,7 +38,7 @@ const AppLayout = memo(() => {
           <LandscapeWarning />
           {!isIdentityMode && <MobileAppPrompt />}
           {!isIdentityMode && <NetworkWarning />}
-          {!isIdentityMode && <DeckViewer />}
+          <DeckViewer />
           <NavBar />
           <Widgets showWallet={!isIdentityMode} />
           {!isIdentityMode && <UseStateDisclaimerTrigger />}

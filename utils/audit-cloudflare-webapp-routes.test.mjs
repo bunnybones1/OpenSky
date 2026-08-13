@@ -18,7 +18,10 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     cookieDialogSource,
     cookieDisclaimerSource,
     cookieRepositorySource,
-    cookieMigrationSource
+    cookieMigrationSource,
+    appLayoutSource,
+    deckViewerSource,
+    deckViewerFooterSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -41,7 +44,13 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     ),
     readFile('webapp/src/AppLayout/components/CookieDisclaimer.tsx', 'utf8'),
     readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
-    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8')
+    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8'),
+    readFile('webapp/src/AppLayout/AppLayout.tsx', 'utf8'),
+    readFile('webapp/src/AppLayout/DeckViewer/DeckViewer.tsx', 'utf8'),
+    readFile(
+      'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
+      'utf8'
+    )
   ])
   assert.deepEqual(
     webappRouteAuditErrors({
@@ -57,7 +66,10 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       cookieDialogSource,
       cookieDisclaimerSource,
       cookieRepositorySource,
-      cookieMigrationSource
+      cookieMigrationSource,
+      appLayoutSource,
+      deckViewerSource,
+      deckViewerFooterSource
     }),
     []
   )
@@ -77,7 +89,10 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     cookieDialogSource,
     cookieDisclaimerSource,
     cookieRepositorySource,
-    cookieMigrationSource
+    cookieMigrationSource,
+    appLayoutSource,
+    deckViewerSource,
+    deckViewerFooterSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -100,7 +115,13 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     ),
     readFile('webapp/src/AppLayout/components/CookieDisclaimer.tsx', 'utf8'),
     readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
-    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8')
+    readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8'),
+    readFile('webapp/src/AppLayout/AppLayout.tsx', 'utf8'),
+    readFile('webapp/src/AppLayout/DeckViewer/DeckViewer.tsx', 'utf8'),
+    readFile(
+      'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
+      'utf8'
+    )
   ])
   const errors = webappRouteAuditErrors({
     legacySource: legacySource.replace(
@@ -157,6 +178,18 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     cookieMigrationSource: cookieMigrationSource.replace(
       'CREATE TRIGGER users_cookie_policy_delete',
       'CREATE TRIGGER missing_users_cookie_policy_delete'
+    ),
+    appLayoutSource: appLayoutSource.replace(
+      '<DeckViewer />',
+      '{!isIdentityMode && <DeckViewer />}'
+    ),
+    deckViewerSource: deckViewerSource.replace(
+      "useBanners(env.AUTH_MODE !== 'google')",
+      'useBanners()'
+    ),
+    deckViewerFooterSource: deckViewerFooterSource.replace(
+      "env.AUTH_MODE !== 'google' && !isFullyUnlocked && !isDeckClassLocked",
+      '!isFullyUnlocked && !isDeckClassLocked'
     )
   })
   assert.ok(errors.some(error => error.includes('unreviewed legacy')))
@@ -179,4 +212,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('cookie disclaimer policy')))
   assert.ok(errors.some(error => error.includes('cookie persistence policy')))
   assert.ok(errors.some(error => error.includes('cookie schema guard')))
+  assert.ok(errors.some(error => error.includes('suppresses')))
+  assert.ok(errors.some(error => error.includes('absent banner query')))
+  assert.ok(errors.some(error => error.includes('market-cart control')))
 })
