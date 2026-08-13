@@ -3,9 +3,9 @@
 ## Production
 
 - URL: https://opensky-webapp.dysinski-tomasz.workers.dev
-- API/web Worker: `opensky-webapp` (`577d8280-80de-42de-a33d-9f1815b83cb6`)
+- API/web Worker: `opensky-webapp` (`b17d2cee-ee47-490f-86d9-a05ac4b95aa9`)
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
-- Match service Worker: `cloud-weasel-match-service` (`d4245da4-c8f2-4c1c-bea9-3496ea5de292`)
+- Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
@@ -37,8 +37,11 @@
   includes `8ec460f` for inventory-only card details and `fd60828` for safe
   Base/Silver/Gold navigation, plus `cdba69e` for isolated identity and legacy
   card-control component boundaries.
+  The API and match service also include `90dbfe7`: Conquest readiness is now
+  backed by the real off-chain Silver settlement and delayed-Gold delivery
+  receipts, and admission closes dynamically when that verified pool expires.
 - Deployed: 2026-08-13 PDT
-- Applied D1 migrations: `0001` through `0085`; the remote migration check
+- Applied D1 migrations: `0001` through `0086`; the remote migration check
   reports no pending migrations.
 - Scheduled trigger: every minute for due Conquest Gold delivery, SkyPass
   season close and auto-claim, account
@@ -235,7 +238,7 @@ settlement and delayed delivery against that pool.
 ## Latest verification
 
 - API Worker: 44 files, 313 tests
-- Match service: 26 tests
+- Match service: 27 tests
 - Game Worker: 31 unit and 80 Worker tests
 - Matchmaker: 47 unit and 31 Worker tests
 - Game analytics: four unit and two Worker tests; deployment remains blocked
@@ -246,8 +249,19 @@ settlement and delayed delivery against that pool.
 - Live Worker version, original interface, Cloud Weasel metadata, mode status,
   matchmaker/game protocol-v3 health, authentication boundaries, and the
   source-compatible disabled-live-record response
-- API/web Worker version `577d8280-80de-42de-a33d-9f1815b83cb6` serves commit
-  `cdba69e` at 100% traffic. A signed-in production browser navigated a real
+- API/web Worker version `b17d2cee-ee47-490f-86d9-a05ac4b95aa9` and match
+  service version `700ffbb4-f8ce-401f-afeb-ba856be1a5e9` serve commit
+  `90dbfe7` at 100% traffic. Migration `0086` installed receipt-backed
+  readiness views plus immutable insert/update/delete and queue-enable guards.
+  Read-only production probes found zero active or verified pools, readiness
+  rows, settlement/delivery rows, and enabled Conquest modes. The live API
+  Version, Ping, HTML, and API-to-match-service mode-status probes passed; both
+  Conquest queues remain false and the remote migration list is empty.
+  The same release passed 313 API tests, 27 match-service tests, 31 game unit
+  tests, 80 game Worker tests, all three TypeScript checks, and every off-chain,
+  source-mint, reward-producer/mutator, chain-effect, and browser-transaction
+  audit.
+- The preceding signed-in production browser QA navigated a real
   card from Base to Silver to Gold with the original art, lore, grades, and
   balances intact; every grade displayed off-chain inventory copy, no price,
   stock, supply, buy, or sell controls, no error boundary, and no console
