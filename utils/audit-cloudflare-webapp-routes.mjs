@@ -401,7 +401,7 @@ export const webappRouteAuditErrors = ({
   for (const token of [
     "const isIdentityMarket = env.AUTH_MODE === 'google'",
     'useCart(!isIdentityMarket)',
-    'makeNavigateToMarketDecksRoute()',
+    'makeMarketCardsRoute()',
     'isIdentityMarket || isSecretShopVisible ? undefined : cartCount'
   ]) {
     if (!marketNavSource.includes(token)) {

@@ -11,7 +11,7 @@ const validSources = () => Object.fromEntries(
 const validFidelity = () => ({
   linkSection: '<ItemsLink isHorizontal={isHorizontal} /> <RanksLink isHorizontal={isHorizontal} />',
   itemsLink: 'to={makeItemsDecksRoute()}',
-  marketLink: "isIdentityMarket = env.AUTH_MODE === 'google' makeNavigateToMarketDecksRoute() useCart(!isIdentityMarket)",
+  marketLink: "isIdentityMarket = env.AUTH_MODE === 'google' makeMarketCardsRoute() useCart(!isIdentityMarket)",
   playLink: 'useStoredMatchInfo() useIsTutorialCompleted() authedAccount.level >= 15',
   profileLink: 'IdentityProfileLink something <IdentityInventoryInfo />',
   profileInventory: 'identity-inventory-summary useTokenBalances useConquestAndUSDCBalances',

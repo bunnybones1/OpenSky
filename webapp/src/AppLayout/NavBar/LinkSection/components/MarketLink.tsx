@@ -5,10 +5,7 @@ import { useMatch } from 'react-router-dom'
 import env from '~/env'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { isSecretShopVisibleForMe } from '~/shared/helpers/handle-secret-features'
-import {
-  makeMarketCardsRoute,
-  makeNavigateToMarketDecksRoute
-} from '~/shared/helpers/routes/market-page'
+import { makeMarketCardsRoute } from '~/shared/helpers/routes/market-page'
 import { useIsMarketEnabled } from '~/shared/hooks/useIsMarketEnabled'
 import { useCart } from '~/shared/queries/useCart'
 import { useSelector } from '~/shared/redux/index'
@@ -51,7 +48,7 @@ export const MarketLink = memo(({ isHorizontal }: MarketLinkProps) => {
     <NavBarLink
       to={
         isIdentityMarket
-          ? makeNavigateToMarketDecksRoute()
+          ? makeMarketCardsRoute()
           : isSecretShopVisible
             ? ROUTES_CONFIG.routes.SHOP.directPath
             : makeMarketCardsRoute()

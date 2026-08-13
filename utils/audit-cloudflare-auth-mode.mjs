@@ -127,7 +127,7 @@ export const authModeAuditErrors = ({ sources, fidelity = {} }) => {
   const marketLink = fidelity.marketLink ?? ''
   for (const token of [
     "isIdentityMarket = env.AUTH_MODE === 'google'",
-    'makeNavigateToMarketDecksRoute()',
+    'makeMarketCardsRoute()',
     'useCart(!isIdentityMarket)'
   ]) {
     if (!marketLink.includes(token)) errors.push(`identity Market navigation is missing: ${token}`)
