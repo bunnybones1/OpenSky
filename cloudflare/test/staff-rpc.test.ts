@@ -50,6 +50,8 @@ const levelGrantHeaders = (operationKey = crypto.randomUUID()) => ({
   'x-cloud-weasel-operation-key': operationKey
 })
 
+const skypassToggleHeaders = levelGrantHeaders
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM skypass_giveaway_limits'),
@@ -2335,18 +2337,33 @@ describe('fail-closed Google identity staff authorization', () => {
       ).status
     ).toBe(403)
     await grantEntitlementWrite()
-    const missingCap = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-      address: `identity:${PLAYER}`
-    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
+          address: `identity:${PLAYER}`
+        })
+      ).status
+    ).toBe(400)
+    const missingCap = await rpcAs(
+      ADMIN,
+      'GMToggleSkypassPremium',
+      { address: `identity:${PLAYER}` },
+      true,
+      skypassToggleHeaders()
+    )
     expect(missingCap.status).toBe(500)
     expect(await missingCap.json()).toMatchObject({
       msg: 'skypass giveaway limit is not configured'
     })
     expect(
       (
-        await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-          address: 'identity:missing'
-        })
+        await rpcAs(
+          ADMIN,
+          'GMToggleSkypassPremium',
+          { address: 'identity:missing' },
+          true,
+          skypassToggleHeaders()
+        )
       ).status
     ).toBe(404)
 
@@ -2358,11 +2375,22 @@ describe('fail-closed Google identity staff authorization', () => {
     )
       .bind(season, ADMIN, now, now)
       .run()
-    const granted = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-      address: `identity:${PLAYER}`
-    })
+    const grantKey = crypto.randomUUID()
+    const [granted, duplicateGrant] = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        rpcAs(
+          ADMIN,
+          'GMToggleSkypassPremium',
+          { address: `identity:${PLAYER}` },
+          true,
+          skypassToggleHeaders(grantKey)
+        )
+      )
+    )
     expect(granted.status).toBe(200)
     expect(await granted.json()).toEqual({ has: true })
+    expect(duplicateGrant.status).toBe(200)
+    expect(await duplicateGrant.json()).toEqual({ has: true })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT has_premium FROM player_skypass_season_stats
@@ -2387,9 +2415,74 @@ describe('fail-closed Google identity staff authorization', () => {
       ).json()
     ).toEqual({ has: true })
 
-    const removed = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-      address: `identity:${PLAYER}`
-    })
+    expect(
+      (
+        await rpcAs(
+          ADMIN,
+          'GMToggleSkypassPremium',
+          { address: `identity:${ADMIN}` },
+          true,
+          skypassToggleHeaders(grantKey)
+        )
+      ).status
+    ).toBe(400)
+
+    const removeKey = '00000000-0000-4000-8000-000000000074'
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER staff_skypass_test_abort_completion
+       BEFORE UPDATE ON staff_skypass_entitlement_operations
+       WHEN NEW.operation_key = '00000000-0000-4000-8000-000000000074'
+         AND NEW.status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected staff skypass completion failure');
+       END`
+    ).run()
+    const failedRemoval = await rpcAs(
+      ADMIN,
+      'GMToggleSkypassPremium',
+      { address: `identity:${PLAYER}` },
+      true,
+      skypassToggleHeaders(removeKey)
+    )
+    expect(failedRemoval.status).toBe(500)
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER staff_skypass_test_abort_completion'
+    ).run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT stats.has_premium, item.balance
+         FROM player_skypass_season_stats stats
+         JOIN player_items item ON item.user_id = stats.user_id
+          AND item.item_type = 'SW_SKYPASS' AND item.token_id = stats.season
+         WHERE stats.user_id = ? AND stats.season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ has_premium: 1, balance: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_skypass_entitlement_operations
+         WHERE operation_key = ?`
+      )
+        .bind(removeKey)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_skypass_entitlement_audit
+         WHERE operation_key = ?`
+      )
+        .bind(removeKey)
+        .first()
+    ).toEqual({ count: 0 })
+
+    const removed = await rpcAs(
+      ADMIN,
+      'GMToggleSkypassPremium',
+      { address: `identity:${PLAYER}` },
+      true,
+      skypassToggleHeaders(removeKey)
+    )
     expect(removed.status).toBe(200)
     expect(await removed.json()).toEqual({ has: false })
     expect(
@@ -2404,14 +2497,23 @@ describe('fail-closed Google identity staff authorization', () => {
         .first()
     ).toEqual({ has_premium: 0, balance: 0 })
 
-    const regranted = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-      address: `identity:${PLAYER}`
-    })
+    const regrantKey = crypto.randomUUID()
+    const regranted = await rpcAs(
+      ADMIN,
+      'GMToggleSkypassPremium',
+      { address: `identity:${PLAYER}` },
+      true,
+      skypassToggleHeaders(regrantKey)
+    )
     expect(regranted.status).toBe(200)
     expect(await regranted.json()).toEqual({ has: true })
-    const capped = await rpcAs(ADMIN, 'GMToggleSkypassPremium', {
-      address: `identity:${PLAYER}`
-    })
+    const capped = await rpcAs(
+      ADMIN,
+      'GMToggleSkypassPremium',
+      { address: `identity:${PLAYER}` },
+      true,
+      skypassToggleHeaders()
+    )
     expect(capped.status).toBe(500)
     expect(await capped.json()).toMatchObject({
       msg: 'too many skypasses given away'
@@ -2428,7 +2530,8 @@ describe('fail-closed Google identity staff authorization', () => {
     ).toEqual({ has_premium: 1 })
 
     const audits = await env.AUTH_DB.prepare(
-      `SELECT id, actor_user_id, target_user_id, season, before_json, after_json
+      `SELECT id, actor_user_id, target_user_id, season, before_json, after_json,
+              operation_key
        FROM staff_skypass_entitlement_audit ORDER BY id ASC`
     ).all<{
       id: number
@@ -2437,12 +2540,14 @@ describe('fail-closed Google identity staff authorization', () => {
       season: number
       before_json: string
       after_json: string
+      operation_key: string
     }>()
     expect(audits.results).toHaveLength(3)
     expect(audits.results[0]).toMatchObject({
       actor_user_id: ADMIN,
       target_user_id: PLAYER,
-      season
+      season,
+      operation_key: grantKey
     })
     expect(JSON.parse(audits.results[0].before_json)).toEqual({
       hasPremium: false,
@@ -2452,6 +2557,43 @@ describe('fail-closed Google identity staff authorization', () => {
       hasPremium: true,
       balance: 1
     })
+    expect(audits.results.map(row => row.operation_key)).toEqual([
+      grantKey,
+      removeKey,
+      regrantKey
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT before_has_premium, after_has_premium,
+                before_balance, after_balance, status
+         FROM staff_skypass_entitlement_operations
+         WHERE operation_key = ?`
+      )
+        .bind(grantKey)
+        .first()
+    ).toEqual({
+      before_has_premium: 0,
+      after_has_premium: 1,
+      before_balance: 0,
+      after_balance: 1,
+      status: 'APPLIED'
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_skypass_entitlement_operations SET completed_at = ?
+         WHERE operation_key = ?`
+      )
+        .bind(new Date().toISOString(), grantKey)
+        .run()
+    ).rejects.toThrow(/completion is invalid/i)
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM staff_skypass_entitlement_operations
+         WHERE operation_key = ?`
+      )
+        .bind(grantKey)
+        .run()
+    ).rejects.toThrow(/immutable/i)
     await expect(
       env.AUTH_DB.prepare(
         `INSERT INTO staff_skypass_entitlement_audit

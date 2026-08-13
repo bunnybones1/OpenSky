@@ -85,7 +85,10 @@ import {
 import { replayArchive } from './replays'
 import { SocialRepository } from './social'
 import { SocialInfoRepository, type SocialInfoFetch } from './social-info'
-import { SkypassSupportRepository } from './skypass-support'
+import {
+  SkypassSupportRepository,
+  STAFF_SKYPASS_OPERATION_HEADER
+} from './skypass-support'
 import {
   SkypassRewardUpdateRepository,
   type SkypassRewardFetch
@@ -1162,7 +1165,8 @@ export const handleApiRequest = async (
         return json(request, env, {
           has: await skypassSupport.togglePremium(
             principal.userId,
-            body.address
+            body.address,
+            request.headers.get(STAFF_SKYPASS_OPERATION_HEADER)
           )
         })
       }

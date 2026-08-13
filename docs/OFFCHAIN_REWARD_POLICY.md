@@ -46,6 +46,10 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   then applies every mutation and an immutable audit row before transitioning
   to `APPLIED`. Retrying one operator click cannot grant again, while a new
   deliberate click remains a distinct source-faithful grant.
+- The staff premium SkyPass toggle uses the same per-click receipt boundary.
+  One key owns its grant or removal direction, inventory balance, season state,
+  cap accounting, and immutable audit row. A retry therefore returns the first
+  result instead of toggling the entitlement a second time.
 
 ## Required grant invariants
 

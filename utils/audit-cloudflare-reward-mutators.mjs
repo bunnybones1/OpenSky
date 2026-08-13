@@ -179,14 +179,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/skypass-support.ts': {
-    count: 4,
-    disposition: 'audited-skypass-support',
+    count: 3,
+    disposition: 'receipt-backed-skypass-support',
     evidenceFiles: [
-      'cloudflare/migrations/0042_skypass_entitlement_operations.sql'
+      'cloudflare/migrations/0042_skypass_entitlement_operations.sql',
+      'cloudflare/migrations/0074_staff_skypass_operation_receipts.sql'
     ],
     evidence: [
       'staff_skypass_entitlement_audit',
       'staff skypass entitlement audit rows are immutable',
+      'staff_skypass_entitlement_operations',
+      'staff skypass operation receipts are immutable',
+      'x-cloud-weasel-operation-key',
       'database.batch'
     ]
   },
