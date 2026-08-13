@@ -39,3 +39,12 @@ Home. Google account deletion retains the source destination without reviving
 the wallet transaction: the browser starts a same-origin Google re-verification
 flow, the Worker records the deletion request in D1, clears the identity
 session, and redirects to `/deleted-account`.
+
+## Production rollout
+
+Milestone `4866602` was deployed on 2026-08-13 as Worker version
+`510a07db-8c30-4a60-9fd2-b7258a7ed935`. Signed-in browser verification at the
+production URL confirmed that an unknown route renders the original “Edge of
+the Sky” 404 page and `/deleted-account` renders the original account-deleted
+page. The verification visited only those read-only destinations and did not
+request account deletion.
