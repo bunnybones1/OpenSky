@@ -202,3 +202,15 @@ buy, sell, or WalletConnect transaction control rendered. The release passed
 334 main Worker tests, 216 multiplayer tests, 24 browser/game tests, analytics
 tests, and every off-chain reward, mint-queue, route, auth-mode, and transaction
 safety gate.
+
+Off-chain sticker-catalog milestone `91b214a` was deployed on 2026-08-13 as
+Worker version `e31db00d-1153-4009-900a-9db07cb3f67c`. Production HTML
+referenced the exact tested entry asset `index-395a0a43.js`, and the local-bot
+game entry returned HTTP 200. A signed-in client rendered the original Cards,
+Decks, and Stickers Market subnav, all 77 source stickers, source search,
+ownership filtering, D1 quantity sorting and balances, and the original Star
+Praise feature viewer. The zero-balance feature view exposed no equip mutation;
+no price, cart, order, buy, sell, or WalletConnect transaction control rendered
+on either page. The release passed 334 main Worker tests, 216 multiplayer tests,
+24 browser/game tests, six analytics tests, and every off-chain reward,
+mint-queue, route, auth-mode, and transaction safety gate.
