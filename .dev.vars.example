@@ -8,6 +8,11 @@ SESSION_SIGNING_KEY=replace-with-at-least-32-random-characters
 GOOGLE_CLIENT_ID=replace-with-google-web-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
 
+# Optional EIP-1271 verification for Polygon smart-contract wallets linked via
+# WalletConnect. Keep this server-side; the browser project ID is configured in
+# webapp/config/webapp.cloudflare.json and is not a secret.
+WALLET_RPC_URL_137=https://replace-with-your-polygon-rpc.example
+
 # Optional OneSignal device push. Keep the REST API key in a Wrangler secret.
 # The public app ID must also be placed in webapp/config/webapp.cloudflare.json
 # so the browser can opt a device into the same OneSignal application.

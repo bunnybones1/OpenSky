@@ -1,4 +1,5 @@
 import { getAddress } from '@ethersproject/address'
+import { hashMessage } from '@ethersproject/hash'
 import { verifyMessage } from '@ethersproject/wallet'
 
 import type { WalletConnection } from './identities'
@@ -9,6 +10,17 @@ const CHALLENGE_RETENTION_SECONDS = 24 * 60 * 60
 const MAX_ACTIVE_CHALLENGES = 5
 const MAX_CHAIN_ID = Number.MAX_SAFE_INTEGER
 const MAX_LABEL_LENGTH = 64
+const MAX_SIGNATURE_BYTES = 4096
+const RPC_TIMEOUT_MS = 5_000
+const ERC1271_MAGIC_VALUE = '0x1626ba7e'
+const ERC1271_SELECTOR = '1626ba7e'
+
+type WalletProofSource = 'eip4361' | 'eip4361-erc1271'
+
+interface WalletLinksOptions {
+  rpcUrls?: ReadonlyMap<number, string>
+  fetcher?: typeof fetch
+}
 
 interface ChallengeRow {
   id: string
@@ -23,6 +35,11 @@ interface ChallengeRow {
 
 interface WalletOwnerRow {
   user_id: string
+}
+
+interface JsonRpcResponse {
+  result?: unknown
+  error?: unknown
 }
 
 export interface WalletLinkChallenge {
@@ -96,6 +113,121 @@ const normalizeLabel = (label: unknown): string | null => {
   return normalized ? normalized.slice(0, MAX_LABEL_LENGTH) : null
 }
 
+const normalizeSignature = (signature: unknown): string => {
+  if (
+    typeof signature !== 'string' ||
+    !/^0x(?:[0-9a-fA-F]{2})+$/.test(signature) ||
+    (signature.length - 2) / 2 > MAX_SIGNATURE_BYTES
+  ) {
+    return walletError(
+      400,
+      'wallet.invalid_signature',
+      'Wallet signature is invalid.'
+    )
+  }
+  return signature
+}
+
+const word = (hex: string) => hex.padStart(64, '0')
+
+const erc1271CallData = (message: string, signature: string): string => {
+  const signatureHex = signature.slice(2)
+  const paddedSignature = signatureHex.padEnd(
+    Math.ceil(signatureHex.length / 64) * 64,
+    '0'
+  )
+  return `0x${ERC1271_SELECTOR}${hashMessage(message).slice(2)}${word(
+    '40'
+  )}${word((signatureHex.length / 2).toString(16))}${paddedSignature}`
+}
+
+const rpcRequest = async (
+  fetcher: typeof fetch,
+  rpcUrl: string,
+  method: string,
+  params: unknown[]
+): Promise<JsonRpcResponse> => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS)
+  try {
+    const response = await fetcher(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: controller.signal
+    })
+    if (!response.ok) throw new Error(`wallet RPC returned ${response.status}`)
+    const body = (await response.json()) as JsonRpcResponse
+    if (!body || typeof body !== 'object') {
+      throw new Error('wallet RPC returned an invalid response')
+    }
+    return body
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+const verifyWalletProof = async (
+  address: string,
+  chainId: number,
+  message: string,
+  signature: string,
+  options: WalletLinksOptions
+): Promise<WalletProofSource | undefined> => {
+  try {
+    if (getAddress(verifyMessage(message, signature)) === getAddress(address)) {
+      return 'eip4361'
+    }
+  } catch {
+    // Contract-wallet signatures need not have an ECDSA-recoverable shape.
+  }
+
+  const rpcUrl = options.rpcUrls?.get(chainId)
+  if (!rpcUrl) return
+  const fetcher = options.fetcher ?? fetch
+
+  let code: JsonRpcResponse
+  try {
+    code = await rpcRequest(fetcher, rpcUrl, 'eth_getCode', [address, 'latest'])
+  } catch {
+    return walletError(
+      503,
+      'wallet.verification_unavailable',
+      'Wallet verification is temporarily unavailable.'
+    )
+  }
+  if (
+    code.error ||
+    typeof code.result !== 'string' ||
+    !/^0x[0-9a-fA-F]*$/.test(code.result)
+  ) {
+    return walletError(
+      503,
+      'wallet.verification_unavailable',
+      'Wallet verification is temporarily unavailable.'
+    )
+  }
+  if (code.result === '0x' || /^0x0*$/.test(code.result)) return
+
+  let verification: JsonRpcResponse
+  try {
+    verification = await rpcRequest(fetcher, rpcUrl, 'eth_call', [
+      { to: address, data: erc1271CallData(message, signature) },
+      'latest'
+    ])
+  } catch {
+    return walletError(
+      503,
+      'wallet.verification_unavailable',
+      'Wallet verification is temporarily unavailable.'
+    )
+  }
+  if (verification.error || typeof verification.result !== 'string') return
+  return verification.result.toLowerCase().startsWith(ERC1271_MAGIC_VALUE)
+    ? 'eip4361-erc1271'
+    : undefined
+}
+
 const nonce = (): string => {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('')
@@ -128,7 +260,10 @@ const challengeMessage = (input: {
 }
 
 export class WalletLinksRepository {
-  constructor(private readonly database: D1Database) {}
+  constructor(
+    private readonly database: D1Database,
+    private readonly options: WalletLinksOptions = {}
+  ) {}
 
   async createChallenge(
     userId: string,
@@ -217,16 +352,7 @@ export class WalletLinksRepository {
         'Wallet link challenge is invalid.'
       )
     }
-    if (
-      typeof input.signature !== 'string' ||
-      !/^0x(?:[0-9a-fA-F]{128}|[0-9a-fA-F]{130})$/.test(input.signature)
-    ) {
-      walletError(
-        400,
-        'wallet.invalid_signature',
-        'Wallet signature is invalid.'
-      )
-    }
+    const signature = normalizeSignature(input.signature)
     const label = normalizeLabel(input.label)
     const challengeRow = await this.database
       .prepare(
@@ -249,19 +375,14 @@ export class WalletLinksRepository {
       )
     }
     const challenge = challengeRow as ChallengeRow
-    const signature = input.signature as string
-
-    let recoveredAddress: string
-    try {
-      recoveredAddress = getAddress(verifyMessage(challenge.message, signature))
-    } catch {
-      return walletError(
-        400,
-        'wallet.invalid_signature',
-        'Wallet signature is invalid.'
-      )
-    }
-    if (recoveredAddress !== getAddress(challenge.address)) {
+    const proofSource = await verifyWalletProof(
+      challenge.address,
+      challenge.chain_id,
+      challenge.message,
+      signature,
+      this.options
+    )
+    if (!proofSource) {
       walletError(
         403,
         'wallet.signature_mismatch',
@@ -300,7 +421,7 @@ export class WalletLinksRepository {
           .prepare(
             `INSERT INTO wallet_connections
                (user_id, namespace, address, source, label, verified_at, last_seen_at)
-             SELECT ?, 'eip155', address, 'eip4361', ?, ?, ?
+             SELECT ?, 'eip155', address, ?, ?, ?, ?
              FROM wallet_link_challenges
              WHERE id = ? AND user_id = ? AND status = 'CONSUMED'
                AND consumption_token = ?
@@ -309,7 +430,16 @@ export class WalletLinksRepository {
                label = COALESCE(excluded.label, wallet_connections.label),
                last_seen_at = excluded.last_seen_at`
           )
-          .bind(userId, label, now, now, challenge.id, userId, consumptionToken)
+          .bind(
+            userId,
+            proofSource,
+            label,
+            now,
+            now,
+            challenge.id,
+            userId,
+            consumptionToken
+          )
       ])
     } catch (error) {
       const concurrentOwner = await this.database

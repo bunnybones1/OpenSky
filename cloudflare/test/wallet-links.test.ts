@@ -8,6 +8,7 @@ import {
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
 import { handleIdentityRequest } from '../src/identity-api'
+import { WalletLinksRepository } from '../src/wallet-links'
 
 const testEnv = env as unknown as Env
 const userId = 'wallet-link-user'
@@ -205,7 +206,7 @@ describe('optional wallet links', () => {
       headers: {
         Origin: 'https://opensky.example',
         'Content-Type': 'application/json',
-        'Content-Length': '4097'
+        'Content-Length': '12289'
       },
       body: '{}'
     })
@@ -242,6 +243,84 @@ describe('optional wallet links', () => {
         }
       ]
     })
+  })
+
+  it('links a smart-contract wallet only after chain-bound ERC-1271 proof', async () => {
+    const contractAddress = '0x0000000000000000000000000000000000000127'
+    const calls: Array<{ method: string; params: unknown[] }> = []
+    const fetcher: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        method: string
+        params: unknown[]
+      }
+      calls.push(body)
+      if (body.method === 'eth_getCode') {
+        return Response.json({ jsonrpc: '2.0', id: 1, result: '0x6001' })
+      }
+      return Response.json({
+        jsonrpc: '2.0',
+        id: 1,
+        result: `0x1626ba7e${'0'.repeat(56)}`
+      })
+    }
+    const repository = new WalletLinksRepository(testEnv.AUTH_DB, {
+      rpcUrls: new Map([[137, 'https://polygon-rpc.example']]),
+      fetcher
+    })
+    const challenge = await repository.createChallenge(
+      userId,
+      'https://opensky.example',
+      { address: contractAddress, chainId: 137 }
+    )
+    const wallets = await repository.verifyChallenge(
+      userId,
+      'https://opensky.example',
+      { challengeId: challenge.challengeId, signature: '0x1234' }
+    )
+
+    expect(wallets).toEqual([
+      expect.objectContaining({
+        address: contractAddress,
+        source: 'eip4361-erc1271'
+      })
+    ])
+    expect(calls.map(call => call.method)).toEqual(['eth_getCode', 'eth_call'])
+    expect(calls[0].params).toEqual([contractAddress, 'latest'])
+    expect(calls[1].params).toEqual([
+      {
+        to: contractAddress,
+        data: expect.stringMatching(/^0x1626ba7e[0-9a-f]+$/)
+      },
+      'latest'
+    ])
+  })
+
+  it('fails closed when contract-wallet verification is unavailable', async () => {
+    const contractAddress = '0x0000000000000000000000000000000000000127'
+    const repository = new WalletLinksRepository(testEnv.AUTH_DB, {
+      rpcUrls: new Map([[137, 'https://polygon-rpc.example']]),
+      fetcher: async () => new Response('unavailable', { status: 503 })
+    })
+    const challenge = await repository.createChallenge(
+      userId,
+      'https://opensky.example',
+      { address: contractAddress, chainId: 137 }
+    )
+
+    await expect(
+      repository.verifyChallenge(userId, 'https://opensky.example', {
+        challengeId: challenge.challengeId,
+        signature: '0x1234'
+      })
+    ).rejects.toMatchObject({
+      status: 503,
+      code: 'wallet.verification_unavailable'
+    })
+    expect(
+      await testEnv.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM wallet_connections'
+      ).first<{ count: number }>()
+    ).toEqual({ count: 0 })
   })
 
   it('rejects a valid signature made by the wrong wallet', async () => {

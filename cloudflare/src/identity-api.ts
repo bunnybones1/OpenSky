@@ -29,6 +29,7 @@ const OAUTH_PURPOSE_COOKIE = 'opensky_google_purpose'
 const OAUTH_COOKIE_PATH = '/api/auth/google/callback'
 const OAUTH_COOKIE_SECONDS = 10 * 60
 const ACCOUNT_DELETION_PURPOSE = 'account-deletion'
+const MAX_WALLET_REQUEST_BYTES = 12 * 1024
 
 const json = (body: unknown, status = 200, extraHeaders?: HeadersInit) => {
   const headers = new Headers(extraHeaders)
@@ -151,7 +152,7 @@ const walletRequestBody = async (
   request: Request
 ): Promise<Record<string, unknown>> => {
   const contentLength = Number(request.headers.get('Content-Length') || '0')
-  if (contentLength > 4096) {
+  if (contentLength > MAX_WALLET_REQUEST_BYTES) {
     throw new WalletLinkError(
       413,
       'wallet.request_too_large',
@@ -168,7 +169,7 @@ const walletRequestBody = async (
       'A JSON body is required.'
     )
   }
-  if (text.length > 4096) {
+  if (text.length > MAX_WALLET_REQUEST_BYTES) {
     throw new WalletLinkError(
       413,
       'wallet.request_too_large',
@@ -213,7 +214,11 @@ const walletLinkRequest = async (
   try {
     await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
     const body = await walletRequestBody(request)
-    const wallets = new WalletLinksRepository(env.AUTH_DB)
+    const wallets = new WalletLinksRepository(env.AUTH_DB, {
+      rpcUrls: env.WALLET_RPC_URL_137
+        ? new Map([[137, env.WALLET_RPC_URL_137]])
+        : undefined
+    })
     if (action === 'challenge') {
       return json({
         challenge: await wallets.createChallenge(

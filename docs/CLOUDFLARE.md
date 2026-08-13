@@ -499,11 +499,14 @@ and progress are not migrated.
   release-scoped policy in D1 and are combined with matchmaker refusal and
   acceptance penalties. The production penalty map remains the source default
   of all zeroes until product policy explicitly enables it.
-- Optional EVM ownership proofs are deployed independently of Google login;
-  the WalletConnect browser adapter and merged wallet-content reads remain
-  pending a public project ID, origin allowlist, and product mapping. Wallet
-  ownership is read-only: Cloud Weasel rewards use canonical off-chain D1
-  inventory and never require a mint or reward-transfer transaction.
+- Optional EVM ownership proofs are deployed independently of Google login.
+  EOA signatures are verified locally; Polygon smart-contract wallets use the
+  chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.
+  RPC failure fails closed and never creates a wallet link. The WalletConnect
+  browser adapter and merged wallet-content reads remain pending a public
+  project ID, origin allowlist, and product mapping. Wallet ownership is
+  read-only: Cloud Weasel rewards use canonical off-chain D1 inventory and
+  never require a mint or reward-transfer transaction.
 - Optional OneSignal device push is ported as a projection of reward inbox
   notifications. Browser subscriptions are associated with the Google identity
   ID rather than a wallet address; the scheduled sender uses stable provider
