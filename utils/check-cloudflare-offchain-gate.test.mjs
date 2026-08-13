@@ -76,6 +76,13 @@ const validInput = () => ({
     'PRIMARY KEY (user_id, quest_key); ' +
     'quest claim receipts are immutable; ' +
     'quest claim batch completion is invalid',
+  matchRewardSource:
+    'multiplayer_match_experience_players; settlement_token; ' +
+    "player_friend_points; 'SW_STICKER_POINTS'",
+  matchReceiptMigration:
+    'match experience player receipts are immutable; ' +
+    'match experience completion is invalid; ' +
+    'match experience receipts are immutable',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -160,6 +167,25 @@ test('rejects a chain effect from the quest XP grant', () => {
   input.questRewardSource += '; sendTransaction()'
   assert.ok(
     offchainGateErrors(input).some(error => error.includes('chain effect'))
+  )
+})
+
+test('rejects match XP without atomic immutable player receipts', () => {
+  const input = validInput()
+  input.matchRewardSource = 'UPDATE player_profiles SET xp = xp + 50'
+  input.matchReceiptMigration = 'CREATE TABLE match_rewards (id TEXT)'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('match XP grant is missing')))
+  assert.ok(errors.some(error => error.includes('match XP receipt schema')))
+})
+
+test('rejects a chain effect from the match XP grant', () => {
+  const input = validInput()
+  input.matchRewardSource += '; sendTransaction()'
+  assert.ok(
+    offchainGateErrors(input).some(error =>
+      error.includes('match XP grant contains a legacy chain effect')
+    )
   )
 })
 

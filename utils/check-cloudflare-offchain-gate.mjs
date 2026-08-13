@@ -102,6 +102,8 @@ export const offchainGateErrors = ({
   rewardSources = {},
   questRewardSource = '',
   questReceiptMigration = '',
+  matchRewardSource = '',
+  matchReceiptMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -275,6 +277,30 @@ export const offchainGateErrors = ({
       errors.push('quest XP grant contains a legacy chain effect')
     }
   }
+  if (matchRewardSource || matchReceiptMigration) {
+    for (const token of [
+      'multiplayer_match_experience_players',
+      'settlement_token',
+      'player_friend_points',
+      "'SW_STICKER_POINTS'"
+    ]) {
+      if (!matchRewardSource.includes(token)) {
+        errors.push(`match XP grant is missing receipt safeguard: ${token}`)
+      }
+    }
+    for (const token of [
+      'match experience player receipts are immutable',
+      'match experience completion is invalid',
+      'match experience receipts are immutable'
+    ]) {
+      if (!matchReceiptMigration.includes(token)) {
+        errors.push(`match XP receipt schema is missing safeguard: ${token}`)
+      }
+    }
+    if (/\b(?:mint|sendTransaction|prepareOnChain)\b/i.test(matchRewardSource)) {
+      errors.push('match XP grant contains a legacy chain effect')
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -350,7 +376,9 @@ const main = async () => {
     walletContents,
     walletConnector,
     walletSettings,
-    questReceiptMigration
+    questReceiptMigration,
+    matchExperienceSource,
+    matchReceiptMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -519,6 +547,14 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare/migrations/0069_quest_claim_receipts.sql'),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare/src/progression.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/migrations/0070_match_experience_receipts.sql'),
+      'utf8'
     )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
@@ -580,6 +616,8 @@ const main = async () => {
     },
     questRewardSource: playerRpc,
     questReceiptMigration,
+    matchRewardSource: matchExperienceSource,
+    matchReceiptMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })

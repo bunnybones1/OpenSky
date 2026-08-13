@@ -335,7 +335,6 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_progression'),
-    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_experience'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_warmups_applied'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_rank_up_rewards'),
@@ -690,6 +689,166 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         .bind(proposalId)
         .first('count')
     ).toBe(1)
+  })
+
+  it('serializes XP from distinct matches ending for the same players', async () => {
+    await insertExperiencePlayers()
+    const secondProposalId = `${proposalId}-simultaneous`
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await insertActiveLedgerRow(secondProposalId, [USER_ID_1, USER_ID_2])
+    const processedAt = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_invites
+         (invitee_user_id, inviter_user_id, created_at)
+       VALUES (?, ?, ?)`
+    )
+      .bind(USER_ID_1, USER_ID_2, processedAt)
+      .run()
+
+    const settlements = await Promise.all(
+      [proposalId, secondProposalId].map(id =>
+        applyMatchExperience(
+          env.AUTH_DB,
+          id,
+          126,
+          [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+          0,
+          MatchStatus.COMPLETED,
+          10,
+          processedAt
+        )
+      )
+    )
+
+    expect(settlements.every(settlement => settlement.applied)).toBe(true)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first()
+    ).toEqual({ level: 2, xp: 70 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(USER_ID_2)
+        .first()
+    ).toEqual({ level: 1, xp: 60 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT levels FROM player_friend_points
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = 126`
+      )
+        .bind(USER_ID_1, USER_ID_2)
+        .first('levels')
+    ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+      )
+        .bind(USER_ID_2)
+        .first('balance')
+    ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_experience_players
+         WHERE proposal_id IN (?, ?)`
+      )
+        .bind(proposalId, secondProposalId)
+        .first('count')
+    ).toBe(4)
+  })
+
+  it('coalesces simultaneous retries of one match into one XP grant', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const input = () =>
+      applyMatchExperience(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+        0,
+        MatchStatus.COMPLETED,
+        10,
+        new Date().toISOString()
+      )
+
+    const settlements = await Promise.all([input(), input()])
+    expect(settlements.map(settlement => settlement.applied).sort()).toEqual([
+      false,
+      true
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first()
+    ).toEqual({ level: 2, xp: 20 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_experience_players WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(2)
+  })
+
+  it('rolls back match XP when durable receipt completion fails', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_match_experience_failure
+       BEFORE INSERT ON multiplayer_match_experience
+       BEGIN
+         SELECT RAISE(ABORT, 'injected match experience failure');
+       END`
+    ).run()
+
+    await expect(
+      applyMatchExperience(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        [GameMode.RANKED_CONSTRUCTED, GameMode.RANKED_CONSTRUCTED],
+        0,
+        MatchStatus.COMPLETED,
+        10,
+        new Date().toISOString()
+      )
+    ).rejects.toThrow('injected match experience failure')
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER test_match_experience_failure'
+    ).run()
+
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level, xp FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first()
+    ).toEqual({ level: 1, xp: 170 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_experience_players WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(0)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_experience WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(0)
   })
 
   it('adds a source rank-up bonus to match XP once per season and stage', async () => {

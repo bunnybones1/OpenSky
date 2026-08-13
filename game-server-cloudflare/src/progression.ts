@@ -16,15 +16,12 @@ import {
   storedMatchModes
 } from '@opensky/shared/match-modes'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
-import {
-  hasUnlockedRanked,
-  INITIAL_RANK_STATE_JSON
-} from '@opensky/shared/ranked-progression'
+import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import {
-  addExperience,
   awardMatchExperience,
   experienceReward,
+  practiceExperienceCutoffLevel,
   type MatchExperiencePlayer
 } from './experience'
 import {
@@ -88,7 +85,9 @@ interface MatchStatsReceiptRow {
   processed_at: string
 }
 
-interface MatchExperienceReceiptRow extends MatchStatsReceiptRow {}
+interface MatchExperienceReceiptRow extends MatchStatsReceiptRow {
+  settlement_token: string
+}
 
 interface PlayerExperienceRow {
   account_id: number | null
@@ -96,8 +95,6 @@ interface PlayerExperienceRow {
   xp: number
   basic_skypass_level: number
   hero_count: number
-  ranked_constructed_rank: PlayerRank
-  inviter_user_id: string | null
 }
 
 interface QuestProgressRow {
@@ -497,18 +494,20 @@ const statsReceipt = async (
 const experienceReceipt = async (
   database: D1Database,
   proposalId: string,
-  applied: boolean
+  settlementToken?: string
 ): Promise<MatchExperienceReceipt | undefined> => {
   const row = await database
     .prepare(
-      `SELECT player1_rewards_json, player2_rewards_json, processed_at
+      `SELECT player1_rewards_json, player2_rewards_json, processed_at,
+              settlement_token
        FROM multiplayer_match_experience WHERE proposal_id = ?`
     )
     .bind(proposalId)
     .first<MatchExperienceReceiptRow>()
   if (!row) return undefined
   return {
-    applied,
+    applied:
+      settlementToken !== undefined && row.settlement_token === settlementToken,
     rewards: [
       parseRewardList(row.player1_rewards_json),
       parseRewardList(row.player2_rewards_json)
@@ -667,7 +666,7 @@ export const applyMatchExperience = async (
   processedAt: string,
   priorRewards: [Reward[], Reward[]] = [[], []]
 ): Promise<MatchExperienceReceipt> => {
-  const existing = await experienceReceipt(database, proposalId, false)
+  const existing = await experienceReceipt(database, proposalId)
   if (existing) return existing
   if (!Number.isSafeInteger(season) || season < 1 || season > 10_000) {
     throw new Error('match season is invalid')
@@ -702,24 +701,14 @@ export const applyMatchExperience = async (
                       (SELECT COUNT(*) FROM player_items item
                        WHERE item.user_id = profile.user_id
                          AND item.item_type = 'SW_HERO' AND item.balance > 0)
-                        AS hero_count,
-                      COALESCE(
-                        (SELECT stats.player_rank FROM player_account_stats stats
-                         WHERE stats.user_id = profile.user_id
-                           AND stats.game_mode = 'RANKED_CONSTRUCTED'
-                           AND stats.season = ?),
-                        'UNRANKED'
-                      ) AS ranked_constructed_rank,
-                      (SELECT invite.inviter_user_id FROM player_invites invite
-                       WHERE invite.invitee_user_id = profile.user_id)
-                        AS inviter_user_id
+                        AS hero_count
                FROM player_profiles profile
                JOIN player_progression progression
                  ON progression.user_id = profile.user_id
                LEFT JOIN game_accounts account ON account.user_id = profile.user_id
                WHERE profile.user_id = ?`
             )
-            .bind(season, userId)
+            .bind(userId)
             .first<PlayerExperienceRow>()
         : Promise.resolve(null)
     )
@@ -737,138 +726,326 @@ export const applyMatchExperience = async (
         } satisfies MatchExperiencePlayer)
       : undefined
   ) as [MatchExperiencePlayer | undefined, MatchExperiencePlayer | undefined]
+  // The eligibility inputs other than level are stable for a completed match.
+  // Level is deliberately forced below the source cutoff here; the serialized
+  // receipt INSERT evaluates the real current level after earlier D1 batches.
+  const candidatePlayers = players.map(player =>
+    player ? { ...player, level: 1 } : undefined
+  ) as [MatchExperiencePlayer | undefined, MatchExperiencePlayer | undefined]
   const rewards = awardMatchExperience({
-    players,
+    players: candidatePlayers,
     winner,
     status,
     turnCount
   })
   const statements: D1PreparedStatement[] = []
+  const settlementToken = crypto.randomUUID()
+  const practiceModes = new Set<GameMode>([
+    GameMode.PRACTICE_PVP,
+    GameMode.PRACTICE_BOT,
+    GameMode.WARM_UP
+  ])
+  const challengeModes = new Set<GameMode>([
+    GameMode.CHALLENGE_CONSTRUCTED,
+    GameMode.CHALLENGE_DISCOVERY
+  ])
+  const matchIsPractice = players.some(
+    player => player && practiceModes.has(player.gameMode)
+  )
+  const matchIsChallenge = players.every(
+    player => !player || challengeModes.has(player.gameMode)
+  )
 
   for (const player of [0, 1] as const) {
     const userId = userIds[player]
     const row = rows[player]
     if (!userId || !row) continue
-    const experienceGain = [...priorRewards[player], ...rewards[player]].reduce(
+    const priorExperienceGain = priorRewards[player].reduce(
       (total, reward) => total + (reward.exp?.amount ?? 0),
       0
     )
-    if (experienceGain <= 0) continue
-
-    const rankedWasUnlocked = hasUnlockedRanked(row.level, row.xp)
-    const next = addExperience(row.level, row.xp, experienceGain)
+    const matchExperienceGain = rewards[player].reduce(
+      (total, reward) => total + (reward.exp?.amount ?? 0),
+      0
+    )
+    const cutoffApplies =
+      (matchIsPractice && practiceModes.has(gameModes[player])) ||
+      matchIsChallenge
+    const suppressedAtLevel = cutoffApplies
+      ? practiceExperienceCutoffLevel(principals[player])
+      : null
+    const rankRewardJson = JSON.stringify(
+      rankedUnlockReward(row.account_id ?? 0)
+    )
     statements.push(
       database
         .prepare(
+          `WITH input(
+             prior_gain, match_gain, suppressed_at_level, match_rewards_json
+           ) AS (VALUES (?, ?, ?, ?)),
+           state AS (
+             SELECT profile.level AS before_level,
+                    profile.xp AS before_xp,
+                    progression.basic_skypass_level AS before_skypass_level,
+                    input.prior_gain + CASE
+                      WHEN input.suppressed_at_level IS NOT NULL
+                       AND profile.level >= input.suppressed_at_level THEN 0
+                      ELSE input.match_gain
+                    END AS experience_gain,
+                    CASE
+                      WHEN input.suppressed_at_level IS NOT NULL
+                       AND profile.level >= input.suppressed_at_level THEN '[]'
+                      ELSE COALESCE((
+                        SELECT json_group_array(json_set(
+                          reward.value,
+                          '$.exp.currentLevel',
+                            progression.basic_skypass_level,
+                          '$.exp.beforeMatchExp', profile.xp
+                        ))
+                        FROM json_each(input.match_rewards_json) reward
+                      ), '[]')
+                    END AS rewards_json,
+                    COALESCE((
+                      SELECT stats.player_rank FROM player_account_stats stats
+                      WHERE stats.user_id = profile.user_id
+                        AND stats.game_mode = 'RANKED_CONSTRUCTED'
+                        AND stats.season = ?
+                    ), 'UNRANKED') AS ranked_constructed_before,
+                    invite.inviter_user_id,
+                    COALESCE((
+                      SELECT points.levels FROM player_friend_points points
+                      WHERE points.invitee_user_id = profile.user_id
+                        AND points.inviter_user_id = invite.inviter_user_id
+                        AND points.season = ?
+                    ), 0) AS inviter_levels_before,
+                    COALESCE((
+                      SELECT item.balance FROM player_items item
+                      WHERE item.user_id = invite.inviter_user_id
+                        AND item.item_type = 'SW_STICKER_POINTS'
+                        AND item.token_id = 0
+                    ), 0) AS inviter_sticker_points_before
+             FROM player_profiles profile
+             JOIN player_progression progression
+               ON progression.user_id = profile.user_id
+             CROSS JOIN input
+             LEFT JOIN player_invites invite
+               ON invite.invitee_user_id = profile.user_id
+             WHERE profile.user_id = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM multiplayer_match_experience
+                 WHERE proposal_id = ?
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM multiplayer_match_experience_players
+                 WHERE proposal_id = ? AND player_index = ?
+               )
+           ),
+           calculated AS (
+             SELECT *,
+                    before_level + CAST(
+                      (before_xp + experience_gain) / 200 AS INTEGER
+                    ) AS after_level,
+                    (before_xp + experience_gain) % 200 AS after_xp
+             FROM state
+           )
+           INSERT INTO multiplayer_match_experience_players
+             (proposal_id, player_index, user_id, season, settlement_token,
+              experience_gain, before_level, before_xp, before_skypass_level,
+              after_level, after_xp, ranked_constructed_before,
+              inviter_user_id, inviter_levels_before,
+              inviter_sticker_points_before, rewards_json, processed_at)
+           SELECT ?, ?, ?, ?, ?, experience_gain, before_level, before_xp,
+                  before_skypass_level, after_level, after_xp,
+                  ranked_constructed_before, inviter_user_id,
+                  inviter_levels_before, inviter_sticker_points_before,
+                  CASE
+                    WHEN ((before_level - 1) * 200 + before_xp) < 200
+                     AND ((after_level - 1) * 200 + after_xp) >= 200
+                     AND ranked_constructed_before = 'UNRANKED'
+                    THEN json_insert(json(rewards_json), '$[#]', json(?))
+                    ELSE rewards_json
+                  END,
+                  ?
+           FROM calculated`
+        )
+        .bind(
+          priorExperienceGain,
+          matchExperienceGain,
+          suppressedAtLevel,
+          JSON.stringify(rewards[player]),
+          season,
+          season,
+          userId,
+          proposalId,
+          proposalId,
+          player,
+          proposalId,
+          player,
+          userId,
+          season,
+          settlementToken,
+          rankRewardJson,
+          processedAt
+        ),
+      database
+        .prepare(
           `UPDATE player_profiles
-           SET level = ?, xp = ?, next_level_xp = 200, updated_at = ?
-           WHERE user_id = ? AND NOT EXISTS (
-             SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
+           SET level = (
+                 SELECT after_level
+                 FROM multiplayer_match_experience_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               ),
+               xp = (
+                 SELECT after_xp
+                 FROM multiplayer_match_experience_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               ),
+               next_level_xp = 200, updated_at = ?
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM multiplayer_match_experience_players receipt
+             WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+               AND receipt.settlement_token = ?
            )`
         )
-        .bind(next.level, next.experience, processedAt, userId, proposalId),
+        .bind(
+          proposalId,
+          player,
+          settlementToken,
+          proposalId,
+          player,
+          settlementToken,
+          processedAt,
+          userId,
+          proposalId,
+          player,
+          settlementToken
+        ),
       database
         .prepare(
           `UPDATE player_progression
-           SET basic_skypass_level = MAX(basic_skypass_level, ?),
-               basic_skypass_xp = ?, basic_skypass_next_xp = 200,
-               updated_at = ?
-           WHERE user_id = ? AND NOT EXISTS (
-             SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
+           SET basic_skypass_level = MAX(basic_skypass_level, (
+                 SELECT after_level
+                 FROM multiplayer_match_experience_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               )),
+               basic_skypass_xp = (
+                 SELECT after_xp
+                 FROM multiplayer_match_experience_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               ),
+               basic_skypass_next_xp = 200, updated_at = ?
+           WHERE user_id = ? AND EXISTS (
+             SELECT 1 FROM multiplayer_match_experience_players receipt
+             WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+               AND receipt.settlement_token = ?
            )`
         )
-        .bind(next.level, next.experience, processedAt, userId, proposalId)
+        .bind(
+          proposalId,
+          player,
+          settlementToken,
+          proposalId,
+          player,
+          settlementToken,
+          processedAt,
+          userId,
+          proposalId,
+          player,
+          settlementToken
+        )
     )
 
-    const levelsGained = next.level - row.level
-    if (levelsGained > 0 && row.inviter_user_id) {
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO player_friend_points
+             (invitee_user_id, inviter_user_id, season, levels,
+              points_carried, points_spent, updated_at)
+           SELECT receipt.user_id, receipt.inviter_user_id, receipt.season,
+                  receipt.inviter_levels_before
+                    + receipt.after_level - receipt.before_level,
+                  0, 0, ?
+           FROM multiplayer_match_experience_players receipt
+           WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+             AND receipt.settlement_token = ?
+             AND receipt.inviter_user_id IS NOT NULL
+             AND receipt.after_level > receipt.before_level
+           ON CONFLICT(invitee_user_id, inviter_user_id, season)
+           DO UPDATE SET levels = excluded.levels, updated_at = excluded.updated_at`
+        )
+        .bind(processedAt, proposalId, player, settlementToken),
+      database
+        .prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           SELECT receipt.inviter_user_id, 'SW_STICKER_POINTS', 0,
+                  receipt.inviter_sticker_points_before
+                    + receipt.after_level - receipt.before_level,
+                  0, 'friend-level', ?, ?
+           FROM multiplayer_match_experience_players receipt
+           WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+             AND receipt.settlement_token = ?
+             AND receipt.inviter_user_id IS NOT NULL
+             AND receipt.after_level > receipt.before_level
+           ON CONFLICT(user_id, item_type, token_id)
+           DO UPDATE SET balance = excluded.balance, updated_at = excluded.updated_at`
+        )
+        .bind(processedAt, processedAt, proposalId, player, settlementToken)
+    )
+
+    for (const mode of [
+      GameMode.RANKED_CONSTRUCTED,
+      GameMode.RANKED_DISCOVERY
+    ]) {
+      const unlockGuard = `EXISTS (
+        SELECT 1 FROM multiplayer_match_experience_players receipt
+        WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+          AND receipt.settlement_token = ?
+          AND ((receipt.before_level - 1) * 200 + receipt.before_xp) < 200
+          AND ((receipt.after_level - 1) * 200 + receipt.after_xp) >= 200
+          AND receipt.ranked_constructed_before = 'UNRANKED'
+      )`
       statements.push(
         database
           .prepare(
-            `INSERT INTO player_friend_points
-               (invitee_user_id, inviter_user_id, season, levels,
-                points_carried, points_spent, updated_at)
-             SELECT ?, ?, ?, ?, 0, 0, ?
-             WHERE NOT EXISTS (
-               SELECT 1 FROM multiplayer_match_experience
-               WHERE proposal_id = ?
-             )
-             ON CONFLICT(invitee_user_id, inviter_user_id, season)
-             DO UPDATE SET
-               levels = player_friend_points.levels + excluded.levels,
-               updated_at = excluded.updated_at`
+            `INSERT OR IGNORE INTO player_account_stats
+               (user_id, game_mode, season, created_at, updated_at)
+             SELECT ?, ?, ?, ?, ? WHERE ${unlockGuard}`
           )
           .bind(
             userId,
-            row.inviter_user_id,
+            mode,
             season,
-            levelsGained,
             processedAt,
-            proposalId
+            processedAt,
+            proposalId,
+            player,
+            settlementToken
           ),
         database
           .prepare(
-            `INSERT INTO player_items
-               (user_id, item_type, token_id, balance, is_new, unlock_source,
-                created_at, updated_at)
-             SELECT ?, 'SW_STICKER_POINTS', 0, ?, 0, 'friend-level', ?, ?
-             WHERE NOT EXISTS (
-               SELECT 1 FROM multiplayer_match_experience
-               WHERE proposal_id = ?
-             )
-             ON CONFLICT(user_id, item_type, token_id)
-             DO UPDATE SET
-               balance = player_items.balance + excluded.balance,
-               updated_at = excluded.updated_at`
+            `UPDATE player_account_stats
+             SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+                 score = 0, player_rank_state = ?, updated_at = ?
+             WHERE user_id = ? AND game_mode = ? AND season = ?
+               AND player_rank = 'UNRANKED' AND ${unlockGuard}`
           )
           .bind(
-            row.inviter_user_id,
-            levelsGained,
+            INITIAL_RANK_STATE_JSON,
             processedAt,
-            processedAt,
-            proposalId
+            userId,
+            mode,
+            season,
+            proposalId,
+            player,
+            settlementToken
           )
       )
-    }
-
-    if (!rankedWasUnlocked && hasUnlockedRanked(next.level, next.experience)) {
-      for (const mode of [
-        GameMode.RANKED_CONSTRUCTED,
-        GameMode.RANKED_DISCOVERY
-      ]) {
-        statements.push(
-          database
-            .prepare(
-              `INSERT OR IGNORE INTO player_account_stats
-                 (user_id, game_mode, season, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)`
-            )
-            .bind(userId, mode, season, processedAt, processedAt),
-          database
-            .prepare(
-              `UPDATE player_account_stats
-               SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
-                   score = 0, player_rank_state = ?, updated_at = ?
-               WHERE user_id = ? AND game_mode = ? AND season = ?
-                 AND player_rank = 'UNRANKED'
-                 AND NOT EXISTS (
-                   SELECT 1 FROM multiplayer_match_experience
-                   WHERE proposal_id = ?
-                 )`
-            )
-            .bind(
-              INITIAL_RANK_STATE_JSON,
-              processedAt,
-              userId,
-              mode,
-              season,
-              proposalId
-            )
-        )
-      }
-      if (row.ranked_constructed_rank === PlayerRank.UNRANKED) {
-        rewards[player].push(rankedUnlockReward(row.account_id ?? 0))
-      }
     }
   }
 
@@ -876,22 +1053,46 @@ export const applyMatchExperience = async (
     database
       .prepare(
         `INSERT INTO multiplayer_match_experience
-           (proposal_id, player1_rewards_json, player2_rewards_json, processed_at)
-         SELECT ?, ?, ?, ?
+           (proposal_id, player1_rewards_json, player2_rewards_json,
+            processed_at, player_count, settlement_token)
+         SELECT ?,
+                COALESCE((
+                  SELECT rewards_json
+                  FROM multiplayer_match_experience_players receipt
+                  WHERE receipt.proposal_id = ? AND receipt.player_index = 0
+                    AND receipt.settlement_token = ?
+                ), '[]'),
+                COALESCE((
+                  SELECT rewards_json
+                  FROM multiplayer_match_experience_players receipt
+                  WHERE receipt.proposal_id = ? AND receipt.player_index = 1
+                    AND receipt.settlement_token = ?
+                ), '[]'),
+                ?, (
+                  SELECT COUNT(*)
+                  FROM multiplayer_match_experience_players receipt
+                  WHERE receipt.proposal_id = ?
+                    AND receipt.settlement_token = ?
+                ), ?
          WHERE NOT EXISTS (
            SELECT 1 FROM multiplayer_match_experience WHERE proposal_id = ?
          )`
       )
       .bind(
         proposalId,
-        JSON.stringify(rewards[0]),
-        JSON.stringify(rewards[1]),
+        proposalId,
+        settlementToken,
+        proposalId,
+        settlementToken,
         processedAt,
+        proposalId,
+        settlementToken,
+        settlementToken,
         proposalId
       )
   )
   await database.batch(statements)
-  const stored = await experienceReceipt(database, proposalId, true)
+  const stored = await experienceReceipt(database, proposalId, settlementToken)
   if (!stored) throw new Error('match experience receipt was not persisted')
   return stored
 }

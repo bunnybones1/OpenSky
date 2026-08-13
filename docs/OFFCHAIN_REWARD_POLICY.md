@@ -145,6 +145,13 @@ new producer or an expanded producer fails the build until its complete earning
 behavior has an off-chain TypeScript destination or a reviewed whole-feature
 retirement.
 
+Match and quest XP use immutable per-award D1 receipts. Their before/after
+level state is calculated inside the same serialized batch that updates the
+profile, basic SkyPass, ranked unlock, and referral sticker points. Concurrent
+claims or different matches ending together therefore add every earned reward
+without either overwriting the other, while a retry returns the existing
+receipt without granting again.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the
