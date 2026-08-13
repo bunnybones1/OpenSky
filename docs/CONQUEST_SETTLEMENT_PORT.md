@@ -45,6 +45,18 @@ run only after that task settles.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
+- The source Silver mint is represented as an immediate identity-inventory
+  balance transition under a `PREPARING` -> `APPLIED` receipt. Each distinct
+  card records its quantity and serialized before/after balance; database
+  guards validate the selected pool IDs, source token-ID mapping, feed events,
+  delayed Gold entitlement, and completed run before the receipt can apply.
+- Applied selection, grant, and feed receipts reject direct update/delete.
+  Retrying or racing the operation returns the stored receipt without another
+  draw, while normal account deletion still cascades the full player history.
+- Once a pool produces a receipt, its candidate cards and time window are
+  frozen; it may only move from `ACTIVE` to `RETIRED`. Applied Conquest run
+  state and pending Gold entitlements are likewise protected from direct
+  mutation/deletion without preventing whole-account cleanup.
 - If settlement succeeds before a later match-finalization step fails, the
   retry recovers the completed run's immutable receipt by authoritative match
   ID. This preserves the match result/reward payload without redrawing or
@@ -73,15 +85,18 @@ WalletConnect remains optional.
 ## Cloudflare transaction boundary
 
 The settlement receipt is keyed by the Conquest run ID and contains the source
-bundle counts, selected base card IDs, configured pool version, and timestamps.
+bundle counts, selected base card IDs, configured pool version, frozen terminal
+match progress, application status, and timestamps. Immediate Silver grant rows
+also preserve the exact additive before/after inventory transition.
 The settlement operation must atomically:
 
 1. require a terminal `REWARDS_PENDING` run with no receipt;
 2. validate that every selected ID belongs to the versioned eligible pool;
 3. insert/increment Silver inventory and create a pending Gold delivery;
 4. append source-shaped immediate/delayed feed receipts;
-5. insert the immutable settlement receipt; and
-6. move the run to `COMPLETED`.
+5. move the run to `COMPLETED`; and
+6. transition the immutable settlement receipt from `PREPARING` to `APPLIED`
+   only after database guards prove every preceding effect.
 
 Retries must return the stored receipt without drawing again. A pool-version
 change must not alter a receipt already chosen. No HTTP request or Durable

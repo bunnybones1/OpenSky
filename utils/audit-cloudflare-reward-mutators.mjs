@@ -219,10 +219,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'game-server-cloudflare/src/conquest-settlement.ts': {
     count: 1,
     disposition: 'receipt-backed-conquest-settlement',
-    evidenceFiles: ['cloudflare/migrations/0027_conquest_reward_settlement.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0027_conquest_reward_settlement.sql',
+      'cloudflare/migrations/0075_conquest_settlement_receipts.sql'
+    ],
     evidence: [
       'player_conquest_settlements',
       'settlement_key TEXT NOT NULL UNIQUE',
+      'player_conquest_settlement_inventory_grants',
+      "application_status = 'PREPARING'",
+      'Conquest settlement receipts are immutable',
+      'Used Conquest reward pool cards are immutable',
+      'Conquest Gold delivery entitlements are immutable',
       'database.batch'
     ]
   },

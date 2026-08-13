@@ -125,19 +125,19 @@ beforeEach(async () => {
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_conquest_inventory'
   ).run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_conquest_receipt_completion'
+  ).run()
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM users'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
-    env.AUTH_DB.prepare('DELETE FROM player_conquest_gold_deliveries'),
-    env.AUTH_DB.prepare('DELETE FROM player_conquest_feed_events'),
-    env.AUTH_DB.prepare('DELETE FROM player_conquest_settlements'),
     env.AUTH_DB.prepare('DELETE FROM conquest_reward_pool_cards'),
-    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools'),
     env.AUTH_DB.prepare('DELETE FROM player_items'),
     env.AUTH_DB.prepare('DELETE FROM player_conquests'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_reward_pools'),
     env.AUTH_DB.prepare('DELETE FROM game_accounts'),
-    env.AUTH_DB.prepare('DELETE FROM users')
   ])
 })
 
@@ -189,11 +189,52 @@ describe('source Conquest reward settlement', () => {
     ])
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status FROM player_conquests WHERE id = ?`
+        `SELECT conquest.status, settlement.application_status,
+                settlement.match_progress_json,
+                settlement.completed_at
+         FROM player_conquests conquest
+         JOIN player_conquest_settlements settlement
+           ON settlement.conquest_id = conquest.id
+         WHERE conquest.id = ?`
       )
         .bind(conquest!.id)
         .first()
-    ).toEqual({ status: ConquestStatus.COMPLETED })
+    ).toEqual({
+      status: ConquestStatus.COMPLETED,
+      application_status: 'APPLIED',
+      match_progress_json: JSON.stringify({
+        1: ConquestMatchResult.WIN,
+        2: ConquestMatchResult.WIN,
+        3: ConquestMatchResult.LOSS
+      }),
+      completed_at: SETTLED_AT
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT item_type, card_id, quantity, before_balance, after_balance
+         FROM player_conquest_settlement_inventory_grants
+         WHERE conquest_id = ? ORDER BY card_id`
+      )
+        .bind(conquest!.id)
+        .all()
+    ).toMatchObject({
+      results: [
+        {
+          item_type: ItemType.SW_SILVER_CARDS,
+          card_id: 6,
+          quantity: 1,
+          before_balance: 0,
+          after_balance: 1
+        },
+        {
+          item_type: ItemType.SW_SILVER_CARDS,
+          card_id: 68,
+          quantity: 1,
+          before_balance: 0,
+          after_balance: 1
+        }
+      ]
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT event_type, token_ids_json FROM player_conquest_feed_events`
@@ -220,6 +261,47 @@ describe('source Conquest reward settlement', () => {
     expect((await inventory()).results).toMatchObject([
       { item_type: ItemType.SW_SILVER_CARDS, token_id: 68, balance: 2 }
     ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT quantity, before_balance, after_balance
+         FROM player_conquest_settlement_inventory_grants
+         WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({ quantity: 2, before_balance: 0, after_balance: 2 })
+  })
+
+  it('records the serialized balance transition over existing inventory', async () => {
+    const conquest = await setup(1)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', 6, 4, 0, 'prior-reward', ?, ?)`
+    )
+      .bind(USER_ID, SETTLED_AT, SETTLED_AT)
+      .run()
+
+    await settlePendingConquest(
+      env.AUTH_DB,
+      conquest!.id,
+      SETTLED_AT,
+      sequenceDraw(0)
+    )
+
+    expect((await inventory()).results).toMatchObject([
+      { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 5 }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT quantity, before_balance, after_balance
+         FROM player_conquest_settlement_inventory_grants
+         WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({ quantity: 1, before_balance: 4, after_balance: 5 })
   })
 
   it('uses only the versioned Gold pool and emits delayed Gold feed data', async () => {
@@ -264,6 +346,13 @@ describe('source Conquest reward settlement', () => {
       { event_type: 'REWARD', token_ids_json: '[65542]' },
       { event_type: 'DELAYED_REWARD', token_ids_json: '[131208]' }
     ])
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest Gold delivery entitlements are immutable')
   })
 
   it('settles only terminal runs and recovers their receipt on match retry', async () => {
@@ -426,6 +515,175 @@ describe('source Conquest reward settlement', () => {
     expect(attempts.filter(attempt => attempt.applied)).toHaveLength(1)
     expect(attempts[0].silverCardIds).toEqual(attempts[1].silverCardIds)
     expect((await inventory()).results).toMatchObject([{ balance: 1 }])
+  })
+
+  it('refuses to apply a prepared receipt before every off-chain effect exists', async () => {
+    const conquest = await setup(1)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquest_settlements
+         (conquest_id, settlement_key, user_id, pool_version, wins,
+          silver_card_ids_json, gold_card_ids_json, silver_token_ids_json,
+          gold_token_ids_json, settled_at, match_progress_json,
+          application_status, completed_at)
+       SELECT id, '00000000-0000-4000-8000-000000000075', user_id, ?, 1,
+              '[6]', '[]', '[65542]', '[]', ?, match_progress,
+              'PREPARING', NULL
+       FROM player_conquests WHERE id = ?`
+    )
+      .bind(POOL_VERSION, SETTLED_AT, conquest!.id)
+      .run()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_settlements
+         SET application_status = 'APPLIED', completed_at = ?
+         WHERE conquest_id = ?`
+      )
+        .bind(SETTLED_AT, conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest settlement completion is invalid')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT application_status, completed_at
+         FROM player_conquest_settlements WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({ application_status: 'PREPARING', completed_at: null })
+    expect((await inventory()).results).toEqual([])
+  })
+
+  it('rejects direct receipt tampering and deletion while preserving account cleanup', async () => {
+    const conquest = await setup(1)
+    await settlePendingConquest(
+      env.AUTH_DB,
+      conquest!.id,
+      SETTLED_AT,
+      sequenceDraw(0)
+    )
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_settlements SET wins = 2 WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest settlement completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_settlement_inventory_grants
+         SET after_balance = after_balance + 1 WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest inventory grant receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_feed_events SET token_ids_json = '[65543]'
+         WHERE conquest_id = ? AND event_type = 'REWARD'`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest settlement feed receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_conquest_settlements WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest settlement receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(`DELETE FROM player_conquests WHERE id = ?`)
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest runs with settlement receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquests SET status = 'REWARDS_PENDING' WHERE id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest runs with settlement receipts are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM conquest_reward_pool_cards
+         WHERE pool_version = ? AND card_id = 6`
+      )
+        .bind(POOL_VERSION)
+        .run()
+    ).rejects.toThrow('Used Conquest reward pool cards are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_reward_pools SET ends_at = ? WHERE version = ?`
+      )
+        .bind('2026-08-14T00:00:00.000Z', POOL_VERSION)
+        .run()
+    ).rejects.toThrow('Used Conquest reward pools are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_reward_pools SET status = 'RETIRED'
+         WHERE version = ?`
+      )
+        .bind(POOL_VERSION)
+        .run()
+    ).resolves.toMatchObject({ success: true })
+
+    await expect(
+      env.AUTH_DB.prepare(`DELETE FROM users WHERE id = ?`).bind(USER_ID).run()
+    ).resolves.toMatchObject({ success: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_conquest_settlements) AS settlements,
+           (SELECT COUNT(*) FROM player_conquest_settlement_inventory_grants)
+             AS grants,
+           (SELECT COUNT(*) FROM player_conquest_feed_events) AS events`
+      ).first()
+    ).toEqual({ settlements: 0, grants: 0, events: 0 })
+  })
+
+  it('rolls back every off-chain reward when receipt completion validation fails', async () => {
+    const conquest = await setup(3)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_conquest_receipt_completion
+       BEFORE UPDATE OF application_status ON player_conquest_settlements
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Conquest receipt failure');
+       END`
+    ).run()
+
+    await expect(
+      settlePendingConquest(
+        env.AUTH_DB,
+        conquest!.id,
+        SETTLED_AT,
+        sequenceDraw(0, 0)
+      )
+    ).rejects.toThrow('injected Conquest receipt failure')
+    expect((await inventory()).results).toEqual([])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_conquest_settlements) AS settlements,
+           (SELECT COUNT(*) FROM player_conquest_settlement_inventory_grants)
+             AS grants,
+           (SELECT COUNT(*) FROM player_conquest_gold_deliveries) AS deliveries,
+           (SELECT COUNT(*) FROM player_conquest_feed_events) AS events,
+           (SELECT status FROM player_conquests WHERE id = ?) AS status`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({
+      settlements: 0,
+      grants: 0,
+      deliveries: 0,
+      events: 0,
+      status: ConquestStatus.REWARDS_PENDING
+    })
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_conquest_receipt_completion'
+    ).run()
   })
 
   it('fails closed with no active or usable reward pool', async () => {

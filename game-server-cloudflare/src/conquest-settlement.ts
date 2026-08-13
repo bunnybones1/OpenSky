@@ -61,6 +61,7 @@ interface SettlementRow {
   silver_token_ids_json: string
   gold_token_ids_json: string
   settled_at: string
+  application_status: 'PREPARING' | 'APPLIED'
 }
 
 export interface ConquestRewardBundle {
@@ -202,10 +203,12 @@ const existingReceipt = async (
               settlement.gold_card_ids_json,
               settlement.silver_token_ids_json,
               settlement.gold_token_ids_json, settlement.settled_at,
+              settlement.application_status,
               account.id AS account_id
        FROM player_conquest_settlements settlement
        LEFT JOIN game_accounts account ON account.user_id = settlement.user_id
-       WHERE settlement.conquest_id = ?`
+       WHERE settlement.conquest_id = ?
+         AND settlement.application_status = 'APPLIED'`
     )
     .bind(conquestId)
     .first<SettlementRow & { account_id: number | null }>()
@@ -332,14 +335,29 @@ export const settlePendingConquest = async (
     Date.parse(settledAt) + 24 * 60 * 60 * 1_000
   ).toISOString()
   const settlementKey = crypto.randomUUID()
+  const grants = new Map<
+    string,
+    { itemType: ItemType; cardId: number; count: number }
+  >()
+  for (const [itemType, ids] of [
+    [ItemType.SW_SILVER_CARDS, silverCardIds]
+  ] as const) {
+    for (const cardId of ids) {
+      const key = `${itemType}:${cardId}`
+      const current = grants.get(key)
+      grants.set(key, { itemType, cardId, count: (current?.count ?? 0) + 1 })
+    }
+  }
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
         `INSERT OR IGNORE INTO player_conquest_settlements
            (conquest_id, settlement_key, user_id, pool_version, wins,
             silver_card_ids_json, gold_card_ids_json, silver_token_ids_json,
-            gold_token_ids_json, settled_at)
-         SELECT ?, ?, user_id, ?, ?, ?, ?, ?, ?, ?
+            gold_token_ids_json, settled_at, match_progress_json,
+            application_status, completed_at)
+         SELECT ?, ?, user_id, ?, ?, ?, ?, ?, ?, ?, match_progress,
+                'PREPARING', NULL
          FROM player_conquests
          WHERE id = ? AND status = 'REWARDS_PENDING'
            AND NOT EXISTS (
@@ -368,18 +386,34 @@ export const settlePendingConquest = async (
         settledAt
       )
   ]
-  const grants = new Map<
-    string,
-    { itemType: ItemType; cardId: number; count: number }
-  >()
-  for (const [itemType, ids] of [
-    [ItemType.SW_SILVER_CARDS, silverCardIds]
-  ] as const) {
-    for (const cardId of ids) {
-      const key = `${itemType}:${cardId}`
-      const current = grants.get(key)
-      grants.set(key, { itemType, cardId, count: (current?.count ?? 0) + 1 })
-    }
+  for (const grant of grants.values()) {
+    statements.push(
+      database
+        .prepare(
+          `INSERT INTO player_conquest_settlement_inventory_grants
+             (conquest_id, item_type, card_id, quantity, before_balance,
+              after_balance)
+           SELECT settlement.conquest_id, ?, ?, ?, COALESCE(item.balance, 0),
+                  COALESCE(item.balance, 0) + ?
+           FROM player_conquest_settlements settlement
+           LEFT JOIN player_items item
+             ON item.user_id = settlement.user_id
+            AND item.item_type = ? AND item.token_id = ?
+           WHERE settlement.conquest_id = ?
+             AND settlement.settlement_key = ?
+             AND settlement.application_status = 'PREPARING'`
+        )
+        .bind(
+          grant.itemType,
+          grant.cardId,
+          grant.count,
+          grant.count,
+          grant.itemType,
+          grant.cardId,
+          conquestId,
+          settlementKey
+        )
+    )
   }
   if (goldCardIds.length > 0) {
     statements.push(
@@ -391,7 +425,8 @@ export const settlePendingConquest = async (
            SELECT conquest_id, user_id, gold_card_ids_json,
                   gold_token_ids_json, ?, 'PENDING', 0, settled_at
            FROM player_conquest_settlements
-           WHERE conquest_id = ? AND settlement_key = ?`
+           WHERE conquest_id = ? AND settlement_key = ?
+             AND application_status = 'PREPARING'`
         )
         .bind(goldDeliverAt, conquestId, settlementKey)
     )
@@ -407,6 +442,7 @@ export const settlePendingConquest = async (
            WHERE EXISTS (
              SELECT 1 FROM player_conquest_settlements
              WHERE conquest_id = ? AND settlement_key = ?
+               AND application_status = 'PREPARING'
            )
            ON CONFLICT(user_id, item_type, token_id)
            DO UPDATE SET balance = balance + excluded.balance,
@@ -439,6 +475,7 @@ export const settlePendingConquest = async (
            WHERE EXISTS (
              SELECT 1 FROM player_conquest_settlements
              WHERE conquest_id = ? AND settlement_key = ?
+               AND application_status = 'PREPARING'
            )`
         )
         .bind(
@@ -461,9 +498,20 @@ export const settlePendingConquest = async (
            AND EXISTS (
              SELECT 1 FROM player_conquest_settlements
              WHERE conquest_id = ? AND settlement_key = ?
+               AND application_status = 'PREPARING'
            )`
       )
       .bind(conquestId, conquestId, settlementKey)
+  )
+  statements.push(
+    database
+      .prepare(
+        `UPDATE player_conquest_settlements
+         SET application_status = 'APPLIED', completed_at = ?
+         WHERE conquest_id = ? AND settlement_key = ?
+           AND application_status = 'PREPARING'`
+      )
+      .bind(settledAt, conquestId, settlementKey)
   )
   await database.batch(statements)
   const stored = await existingReceipt(database, conquestId, settlementKey)
