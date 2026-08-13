@@ -48,6 +48,17 @@ and basic SkyPass XP of 100; both next-level thresholds were 200. That query
 reported `changed_db: false`. This intentionally changed only the test
 account's earned progression through the player-facing claim action.
 
+The active SkyPass policy has a matching production claim proof. On
+2026-08-13, after the Quest claim made level 1 earnable, the same Google test
+account used the original SkyPass UI to claim only its free level-1 Base Card.
+The page changed the control to `Reward Claimed` and never rendered a wallet or
+mint prompt. Read-only D1 verification resolved the browser's awarded card ID
+to season-62 reward definition `4`: its application is `APPLIED` under an
+immutable delivery key, with one `SW_BASE_CARDS` grant for card `140`, balance
+`0 -> 1`, current balance `1`, and unlock source `skypass:4`. The verification
+reported `changed_db: false`; the only state change was the player-facing claim
+itself.
+
 ## Activation boundary
 
 - SkyPass is safe to use now. Its source season-62 import was validated against
