@@ -44,12 +44,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     count: 2,
     disposition: 'receipt-backed-conquest-v2-rewards',
     evidenceFiles: [
-      'cloudflare/migrations/0068_conquest_v2_offchain_rewards.sql'
+      'cloudflare/migrations/0068_conquest_v2_offchain_rewards.sql',
+      'cloudflare/migrations/0079_conquest_v2_reward_receipts.sql'
     ],
     evidence: [
       'player_conquest_v2_reward_awards',
       'delivery_key TEXT NOT NULL UNIQUE',
+      'player_conquest_v2_reward_inventory_grants',
+      "application_status = 'PREPARING'",
       'Conquest V2 reward awards are immutable',
+      'Conquest V2 reward inventory grants are immutable',
+      'Conquest V2 reward notifications are immutable',
+      'Conquest V2 reward receipt completion is invalid',
       'database.batch'
     ]
   },

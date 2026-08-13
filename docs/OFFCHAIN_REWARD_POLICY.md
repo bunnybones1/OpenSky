@@ -95,8 +95,12 @@ same batch; no wallet or sticker mint is involved.
 Conquest V2 weekly treasure follows the same rule. Its source point thresholds,
 float32 weights, point rollover, expansion-only card selection, and delayed
 delivery are preserved. Minted Silver is replaced by `SW_SILVER_CARDS` in D1,
-protected by an immutable cycle entry and award receipt. Activation is rejected
-unless every qualifying treasure level receives at least one off-chain item.
+protected by an immutable cycle entry and award receipt. Each award moves from
+`PREPARING` to `APPLIED` only after per-card before/after inventory snapshots,
+the exact feed payload, and the zero-USDC notification all agree. A failed
+completion rolls back all four effects, and a retry cannot double-credit them.
+Activation is rejected unless every qualifying treasure level receives at
+least one off-chain item.
 The former USDC amount is reconciliation metadata only: it must never become
 inventory, a claim, a notification value, or player-facing promise without a
 separately reviewed noncash reward design.

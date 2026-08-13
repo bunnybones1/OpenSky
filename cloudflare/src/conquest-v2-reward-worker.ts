@@ -516,8 +516,8 @@ const deliverPlayer = async (
         `INSERT OR IGNORE INTO player_conquest_v2_reward_awards
            (award_key, cycle_id, user_id, treasure_level,
             silver_card_ids_json, legacy_usdc_micros_audit_only,
-            delivery_key, awarded_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+            delivery_key, awarded_at, application_status, completed_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', NULL
          WHERE EXISTS (
            SELECT 1 FROM conquest_v2_reward_cycles
            WHERE id = ? AND status = 'DELIVERING'
@@ -539,6 +539,24 @@ const deliverPlayer = async (
     statements.push(
       database
         .prepare(
+          `INSERT INTO player_conquest_v2_reward_inventory_grants
+             (award_id, item_type, token_id, quantity, before_balance,
+              after_balance)
+           SELECT award.id, 'SW_SILVER_CARDS', ?, ?,
+                  COALESCE(item.balance, 0), COALESCE(item.balance, 0) + ?
+           FROM player_conquest_v2_reward_awards award
+           LEFT JOIN player_items item
+             ON item.user_id = award.user_id
+            AND item.item_type = 'SW_SILVER_CARDS'
+            AND item.token_id = ?
+           WHERE award.award_key = ? AND award.delivery_key = ?
+             AND award.application_status = 'PREPARING'`
+        )
+        .bind(cardId, count, count, cardId, awardKey, deliveryKey)
+    )
+    statements.push(
+      database
+        .prepare(
           `INSERT INTO player_items
              (user_id, item_type, token_id, balance, is_new, unlock_source,
               created_at, updated_at)
@@ -546,6 +564,7 @@ const deliverPlayer = async (
            WHERE EXISTS (
              SELECT 1 FROM player_conquest_v2_reward_awards
              WHERE award_key = ? AND delivery_key = ?
+               AND application_status = 'PREPARING'
            )
            ON CONFLICT(user_id, item_type, token_id)
            DO UPDATE SET balance = balance + excluded.balance,
@@ -570,7 +589,8 @@ const deliverPlayer = async (
            (award_id, user_id, treasure_level, token_ids_json, created_at)
          SELECT id, user_id, treasure_level, ?, ?
          FROM player_conquest_v2_reward_awards
-         WHERE award_key = ? AND delivery_key = ?`
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'PREPARING'`
       )
       .bind(
         JSON.stringify(
@@ -587,7 +607,8 @@ const deliverPlayer = async (
             conquest_v2_award_id, push_enabled)
          SELECT user_id, 'CONQUEST_V2_REWARD', ?, ?, id, 1
          FROM player_conquest_v2_reward_awards
-         WHERE award_key = ? AND delivery_key = ?`
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'PREPARING'`
       )
       .bind(
         JSON.stringify({
@@ -604,12 +625,23 @@ const deliverPlayer = async (
         deliveryKey
       )
   )
+  statements.push(
+    database
+      .prepare(
+        `UPDATE player_conquest_v2_reward_awards
+         SET application_status = 'APPLIED', completed_at = awarded_at
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'PREPARING'`
+      )
+      .bind(awardKey, deliveryKey)
+  )
   await database.batch(statements)
   return Boolean(
     await database
       .prepare(
         `SELECT 1 FROM player_conquest_v2_reward_awards
-         WHERE award_key = ? AND delivery_key = ?`
+         WHERE award_key = ? AND delivery_key = ?
+           AND application_status = 'APPLIED'`
       )
       .bind(awardKey, deliveryKey)
       .first()
@@ -627,6 +659,7 @@ const deliverCycle = async (
        FROM conquest_v2_reward_entries entry
        LEFT JOIN player_conquest_v2_reward_awards award
          ON award.cycle_id = entry.cycle_id AND award.user_id = entry.user_id
+        AND award.application_status = 'APPLIED'
        WHERE entry.cycle_id = ? AND award.id IS NULL
        ORDER BY entry.treasure_level DESC, entry.user_id
        LIMIT ?`
@@ -650,7 +683,7 @@ const cycleDeliveryComplete = async (
          (SELECT COUNT(*) FROM conquest_v2_reward_entries
           WHERE cycle_id = ?) AS expected,
          (SELECT COUNT(*) FROM player_conquest_v2_reward_awards
-          WHERE cycle_id = ?) AS delivered`
+          WHERE cycle_id = ? AND application_status = 'APPLIED') AS delivered`
     )
     .bind(cycleId, cycleId)
     .first<{ expected: number; delivered: number }>()

@@ -87,6 +87,9 @@ beforeEach(async () => {
       'DROP TRIGGER IF EXISTS reject_conquest_v2_reward_grant'
     ),
     env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS reject_conquest_v2_reward_completion'
+    ),
+    env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS player_conquest_v2_reward_feed_events_no_delete'
     ),
     env.AUTH_DB.prepare(
@@ -274,12 +277,16 @@ describe('Conquest V2 off-chain weekly rewards', () => {
     expect(await silverTotal('treasure-player')).toBe(6)
 
     const award = await env.AUTH_DB.prepare(
-      `SELECT silver_card_ids_json, legacy_usdc_micros_audit_only
+      `SELECT id, silver_card_ids_json, legacy_usdc_micros_audit_only,
+              application_status, completed_at
        FROM player_conquest_v2_reward_awards
        WHERE user_id = 'treasure-player'`
     ).first<{
+      id: number
       silver_card_ids_json: string
       legacy_usdc_micros_audit_only: number
+      application_status: string
+      completed_at: string
     }>()
     const cardIds = JSON.parse(award!.silver_card_ids_json) as number[]
     expect(cardIds).toHaveLength(6)
@@ -289,6 +296,32 @@ describe('Conquest V2 off-chain weekly rewards', () => {
       )
     ).toBe(true)
     expect(award!.legacy_usdc_micros_audit_only).toBe(100_000_000)
+    expect(award!.application_status).toBe('APPLIED')
+    expect(award!.completed_at).toBe(DELIVERY_NOW.toISOString())
+    const grants = await env.AUTH_DB.prepare(
+      `SELECT token_id, quantity, before_balance, after_balance
+       FROM player_conquest_v2_reward_inventory_grants
+       WHERE award_id = ? ORDER BY token_id`
+    )
+      .bind(award!.id)
+      .all<{
+        token_id: number
+        quantity: number
+        before_balance: number
+        after_balance: number
+      }>()
+    expect(grants.results.reduce((sum, grant) => sum + grant.quantity, 0)).toBe(
+      6
+    )
+    expect(
+      grants.results.every(
+        grant =>
+          grant.before_balance === 0 &&
+          grant.after_balance === grant.quantity &&
+          cardIds.filter(cardId => cardId === grant.token_id).length ===
+            grant.quantity
+      )
+    ).toBe(true)
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM player_items
@@ -394,6 +427,46 @@ describe('Conquest V2 off-chain weekly rewards', () => {
     expect(await silverTotal('treasure-retry')).toBe(1)
   })
 
+  it('rolls back all evidence when reward receipt completion fails', async () => {
+    await setupPlayer('treasure-receipt-retry', 250)
+    await setWeightPerSilver(1)
+    await enableSchedule(0)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_conquest_v2_reward_completion
+       BEFORE UPDATE OF application_status
+       ON player_conquest_v2_reward_awards
+       WHEN NEW.application_status = 'APPLIED'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Conquest V2 receipt failure');
+       END`
+    ).run()
+
+    await expect(
+      runDueConquestV2Rewards(env.AUTH_DB, SNAPSHOT_NOW)
+    ).rejects.toThrow('injected Conquest V2 receipt failure')
+    expect(await silverTotal('treasure-receipt-retry')).toBe(0)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_conquest_v2_reward_awards) AS awards,
+           (SELECT COUNT(*)
+            FROM player_conquest_v2_reward_inventory_grants) AS grants,
+           (SELECT COUNT(*)
+            FROM player_conquest_v2_reward_feed_events) AS feed,
+           (SELECT COUNT(*) FROM player_notifications
+            WHERE conquest_v2_award_id IS NOT NULL) AS notifications`
+      ).first()
+    ).toEqual({ awards: 0, grants: 0, feed: 0, notifications: 0 })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_conquest_v2_reward_completion'
+    ).run()
+    expect(
+      await runDueConquestV2Rewards(env.AUTH_DB, SNAPSHOT_NOW)
+    ).toMatchObject({ status: 'completed', delivered: 1 })
+    expect(await silverTotal('treasure-receipt-retry')).toBe(1)
+  })
+
   it('keeps schedules and reward evidence immutable', async () => {
     await setupPlayer('treasure-audit', 250)
     await setWeightPerSilver(1)
@@ -411,6 +484,18 @@ describe('Conquest V2 off-chain weekly rewards', () => {
         `UPDATE player_conquest_v2_reward_awards
          SET legacy_usdc_micros_audit_only = 0`
       ).run()
-    ).rejects.toThrow('reward awards are immutable')
+    ).rejects.toThrow('reward receipt completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_v2_reward_inventory_grants
+         SET after_balance = after_balance + 1`
+      ).run()
+    ).rejects.toThrow('reward inventory grants are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_notifications SET payload = '{}'
+         WHERE conquest_v2_award_id IS NOT NULL`
+      ).run()
+    ).rejects.toThrow('reward notifications are immutable')
   })
 })
