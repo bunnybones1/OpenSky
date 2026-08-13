@@ -3,6 +3,7 @@ import { memo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Text } from '~/shared/components/Text'
 import { controlDialog } from '~/shared/hooks/useDialog/control-dialog'
 import { selectSilversState } from '~/shared/state/select-silvers/select-silvers-state'
@@ -59,13 +60,17 @@ export const BurnSilversList = memo(() => {
           {t('generic.Item')}
         </Text>
         <Text fontSize="14px" color="white">
-          {t('generic.UnitPrice')}
+          {env.AUTH_MODE === 'google'
+            ? t('play.exchangeRate')
+            : t('generic.UnitPrice')}
         </Text>
         <Text fontSize="14px" color="white">
           {t('generic.Quantity')}
         </Text>
         <Text fontSize="14px" color="white">
-          {t('generic.Subtotal')}
+          {env.AUTH_MODE === 'google'
+            ? t('play.ticketsReceived')
+            : t('generic.Subtotal')}
         </Text>
       </div>
       {selectedCards.map((item) => (

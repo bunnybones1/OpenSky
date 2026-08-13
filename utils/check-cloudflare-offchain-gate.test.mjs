@@ -21,6 +21,21 @@ const validInput = () => ({
     "env.AUTH_MODE !== 'google'; if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeSilverCardsForTickets(); return } ' +
     'AuthenticationClient.wallet',
+  silverExchangeReview: {
+    list:
+      "env.AUTH_MODE === 'google'; play.exchangeRate; play.ticketsReceived",
+    row:
+      "env.AUTH_MODE === 'google' ? (play.silverExchangeRate) : " +
+      "(<CardPrice />); env.AUTH_MODE === 'google' ? " +
+      '(play.silverTicketsReceived) : (<CardPrice />)',
+    total:
+      "env.AUTH_MODE === 'google'; play.silverExchangeFinal; " +
+      'play.silverExchangeFinalTooltip',
+    confirm: "env.AUTH_MODE === 'google'; play.silverExchangeWarning",
+    locale:
+      'Exchange Rate; 1 Silver → 1 Ticket; Tickets Received; ' +
+      'delivered immediately to your Cloud Weasel inventory'
+  },
   heroExchangeUi:
     "if (env.AUTH_MODE === 'google') { " +
     'identityClient.exchangeGoldCardsForHeroSkins(); return } ' +
@@ -260,6 +275,25 @@ test('rejects a Google Silver exchange that can fall through to a wallet', () =>
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('legacy wallet path')))
   assert.ok(errors.some(error => error.includes('legacy payment catalog')))
+})
+
+test('rejects wallet-market language from the Google Silver review', () => {
+  const input = validInput()
+  input.silverExchangeReview = {
+    list: 'generic.UnitPrice; generic.Subtotal',
+    row: '<CardPrice />',
+    total: 'shop.salesAreFinal',
+    confirm: 'play.convertSilverWarning',
+    locale: 'A legacy transaction'
+  }
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('review list')))
+  assert.ok(errors.some(error => error.includes('review row')))
+  assert.ok(errors.some(error => error.includes('review total')))
+  assert.ok(errors.some(error => error.includes('review confirm')))
+  assert.ok(errors.some(error => error.includes('review locale')))
+  assert.ok(errors.some(error => error.includes('legacy CardPrice branches')))
+  assert.ok(errors.some(error => error.includes('wallet market pricing')))
 })
 
 test('rejects a Google Hero exchange that can fall through to a wallet', () => {

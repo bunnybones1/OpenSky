@@ -96,6 +96,7 @@ export const offchainGateErrors = ({
   policySource,
   pendingGoldSources = '',
   silverExchangeUi = '',
+  silverExchangeReview = {},
   heroExchangeUi = '',
   googleRewardUi = {},
   googleRewardCopy = [],
@@ -187,6 +188,65 @@ export const offchainGateErrors = ({
       errors.push(
         'Google Silver exchange still loads the legacy payment catalog'
       )
+    }
+  }
+  if (Object.keys(silverExchangeReview).length) {
+    const requiredTokens = {
+      list: [
+        "env.AUTH_MODE === 'google'",
+        'play.exchangeRate',
+        'play.ticketsReceived'
+      ],
+      row: [
+        "env.AUTH_MODE === 'google'",
+        'play.silverExchangeRate',
+        'play.silverTicketsReceived'
+      ],
+      total: [
+        "env.AUTH_MODE === 'google'",
+        'play.silverExchangeFinal',
+        'play.silverExchangeFinalTooltip'
+      ],
+      confirm: [
+        "env.AUTH_MODE === 'google'",
+        'play.silverExchangeWarning'
+      ],
+      locale: [
+        'Exchange Rate',
+        '1 Silver → 1 Ticket',
+        'Tickets Received',
+        'delivered immediately to your Cloud Weasel inventory'
+      ]
+    }
+    for (const [surface, tokens] of Object.entries(requiredTokens)) {
+      const source = silverExchangeReview[surface] ?? ''
+      for (const token of tokens) {
+        if (!source.includes(token)) {
+          errors.push(
+            `Google Silver review ${surface} is missing off-chain projection: ${token}`
+          )
+        }
+      }
+    }
+    const row = silverExchangeReview.row ?? ''
+    if ([...row.matchAll(/<CardPrice\b/g)].length !== 2) {
+      errors.push(
+        'Google Silver review row must retain exactly two legacy CardPrice branches'
+      )
+    }
+    for (const token of [
+      'play.silverExchangeRate',
+      'play.silverTicketsReceived'
+    ]) {
+      const escaped = token.replaceAll('.', '\\.')
+      const googleBeforeLegacyPrice = new RegExp(
+        `env\\.AUTH_MODE\\s*===\\s*['"]google['"]\\s*\\?[\\s\\S]*?${escaped}[\\s\\S]*?\\)\\s*:\\s*\\(\\s*<CardPrice`
+      )
+      if (!googleBeforeLegacyPrice.test(row)) {
+        errors.push(
+          `Google Silver review can mount wallet market pricing before: ${token}`
+        )
+      }
     }
   }
   if (heroExchangeUi) {
@@ -394,6 +454,9 @@ const main = async () => {
     pendingGoldPage,
     pendingGoldCard,
     pendingGoldHeader,
+    silverExchangeList,
+    silverExchangeRow,
+    silverExchangeTotal,
     silverExchangeUi,
     heroExchangeUi,
     conquestInfo,
@@ -469,6 +532,27 @@ const main = async () => {
       path.join(
         root,
         'webapp/src/PendingGoldsPage/components/PendingGoldsHeader.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversList/BurnSilversList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversList/BurnSilverListRow/BurnSilverListRow.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/components/BurnSilversTotalRow.tsx'
       ),
       'utf8'
     ),
@@ -621,6 +705,13 @@ const main = async () => {
     policySource,
     pendingGoldSources: `${pendingGoldPage}\n${pendingGoldCard}\n${pendingGoldHeader}`,
     silverExchangeUi,
+    silverExchangeReview: {
+      list: silverExchangeList,
+      row: silverExchangeRow,
+      total: silverExchangeTotal,
+      confirm: silverExchangeUi,
+      locale: englishLocaleSource
+    },
     heroExchangeUi,
     googleRewardUi: {
       conquestInfo,
@@ -659,7 +750,15 @@ const main = async () => {
       englishLocale.tooltip.goldCardsExplainerLineTwoOffchain,
       englishLocale.tooltip.progressionInfoOffchain,
       englishLocale.tooltip.silverCardsExplainerLineOneOffchain,
-      englishLocale.tooltip.silverCardsExplainerLineTwoOffchain
+      englishLocale.tooltip.silverCardsExplainerLineTwoOffchain,
+      englishLocale.play.exchangeRate,
+      englishLocale.play.ticketsReceived,
+      englishLocale.play.silverExchangeFinal,
+      englishLocale.play.silverExchangeFinalTooltip,
+      englishLocale.play.silverExchangeRate,
+      englishLocale.play.silverExchangeWarning,
+      englishLocale.play.silverTicketsReceived_one,
+      englishLocale.play.silverTicketsReceived_other
     ],
     rewardSources: {
       conquestDelivery,

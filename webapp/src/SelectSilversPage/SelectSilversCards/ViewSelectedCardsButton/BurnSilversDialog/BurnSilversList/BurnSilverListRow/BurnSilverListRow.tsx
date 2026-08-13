@@ -2,10 +2,13 @@ import { SwapType } from '@0xsequence/metadata'
 import { ItemType } from '@opensky/proto'
 import clsx from 'clsx'
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { CardPrice } from '~/shared/components/CardPrice'
 import { CardRow } from '~/shared/components/CardRow/CardRow'
 import { Icon } from '~/shared/components/Icon/Icon'
+import { Text } from '~/shared/components/Text'
 import {
   selectSilversState,
   updateSelectSilversState
@@ -21,6 +24,8 @@ interface CartItemListRowProps {
 }
 
 export const BurnSilverListRow = memo(({ id, quantity }: CartItemListRowProps) => {
+  const { t } = useTranslation()
+
   const removeItem = useCallback(() => {
     const newItems = selectSilversState.selectedCards.filter((card) => card.id !== id)
 
@@ -76,7 +81,13 @@ export const BurnSilverListRow = memo(({ id, quantity }: CartItemListRowProps) =
           width: 'full'
         })}
       >
-        <CardPrice mode={SwapType.BUY} tokenId={id} quantity={quantity} />
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="white" fontSize="16px">
+            {t('play.silverExchangeRate')}
+          </Text>
+        ) : (
+          <CardPrice mode={SwapType.BUY} tokenId={id} quantity={quantity} />
+        )}
       </div>
       <div
         className={Sprinkles({
@@ -102,7 +113,18 @@ export const BurnSilverListRow = memo(({ id, quantity }: CartItemListRowProps) =
           width: 'full'
         })}
       >
-        <CardPrice isSubtotal mode={SwapType.SELL} tokenId={id} quantity={quantity} />
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="white" fontSize="16px">
+            {t('play.silverTicketsReceived', { count: quantity })}
+          </Text>
+        ) : (
+          <CardPrice
+            isSubtotal
+            mode={SwapType.SELL}
+            tokenId={id}
+            quantity={quantity}
+          />
+        )}
       </div>
     </div>
   )

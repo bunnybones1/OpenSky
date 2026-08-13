@@ -159,7 +159,11 @@ export const ConfirmConvertSilverCardsDialog = memo(() => {
       confirmColor="blue"
       dismissColor="default"
       isConfirmDisabled={loading}
-      prompText={t('play.convertSilverWarning')}
+      prompText={
+        env.AUTH_MODE === 'google'
+          ? t('play.silverExchangeWarning')
+          : t('play.convertSilverWarning')
+      }
     />
   )
 })

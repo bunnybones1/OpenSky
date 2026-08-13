@@ -3,6 +3,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
 import { Tooltip } from '~/shared/components/Tooltip/Tooltip'
@@ -58,9 +59,18 @@ export const BurnSilversTotalRow = memo(() => {
           fontWeight="400"
           marginRight="8px"
         >
-          {t('shop.salesAreFinal')}
+          {env.AUTH_MODE === 'google'
+            ? t('play.silverExchangeFinal')
+            : t('shop.salesAreFinal')}
         </Text>
-        <Tooltip placement="top" tooltip={t('shop.salesAreFinalTooltip')}>
+        <Tooltip
+          placement="top"
+          tooltip={
+            env.AUTH_MODE === 'google'
+              ? t('play.silverExchangeFinalTooltip')
+              : t('shop.salesAreFinalTooltip')
+          }
+        >
           <Icon type="info" height={FONT_SIZE} color="purple9" />
         </Tooltip>
       </div>
