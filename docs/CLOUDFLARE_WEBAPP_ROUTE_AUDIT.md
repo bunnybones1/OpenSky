@@ -55,6 +55,11 @@ render diagnostics rather than leaving that source navigation item pointed at
 the 404 page. It reads browser storage and graphics capabilities only; it does
 not create player or reward state.
 
+The shared development-host predicate treats only local addresses, explicit
+`dev…` subdomain labels, and ngrok hosts as development. It does not substring-
+match the `.dev` public suffix, so a production `*.workers.dev` hostname cannot
+expose the source Secret Debug footer link or enable game debug behavior.
+
 ## Production rollout
 
 Milestone `4866602` was deployed on 2026-08-13 as Worker version
