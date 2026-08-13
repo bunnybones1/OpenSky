@@ -6,10 +6,11 @@ and Cloudflare disposition, enforced by
 `utils/audit-cloudflare-worker-runners.mjs` during the Cloudflare build.
 
 Production migration `0068_conquest_v2_offchain_rewards.sql` and main Worker
-version `832577c3-f39c-49c5-ac46-4e0bc1f4d38d` were deployed on 2026-08-12.
+version `54a2c25a-f38d-435c-b807-0d3a4c55e73a` were deployed on 2026-08-12.
 Post-deploy D1 verification found zero Conquest V2 schedules, cycles, awards,
 and failure incidents, as expected for the disabled-by-default rollout. Public
-webapp, Google-provider session, and Ping smoke checks returned HTTP 200.
+webapp, Google-provider session, Ping, and the disabled public treasure-info
+projection returned HTTP 200.
 
 The central reward rule is: a gameplay reward must be delivered to authoritative
 off-chain inventory. It must not require a wallet, blockchain transaction, or
