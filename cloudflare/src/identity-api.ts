@@ -21,6 +21,10 @@ import { AccountActionsRepository } from './account-actions'
 import { AccountDeletionRepository } from './account-deletion'
 import { RpcError } from './errors'
 import { WalletLinkError, WalletLinksRepository } from './wallet-links'
+import {
+  WalletContentsError,
+  WalletContentsRepository
+} from './wallet-contents'
 
 const OAUTH_STATE_COOKIE = 'opensky_google_state'
 const OAUTH_VERIFIER_COOKIE = 'opensky_google_verifier'
@@ -249,6 +253,47 @@ const walletLinkRequest = async (
     return json(
       { code: 'wallet.internal', message: 'Unable to update wallet links.' },
       500
+    )
+  }
+}
+
+const walletContentsRequest = async (
+  request: Request,
+  env: Env
+): Promise<Response> => {
+  const userId = await requestUserId(request, env)
+  if (!userId) {
+    return json(
+      { code: 'wallet.unauthenticated', message: 'Sign in is required.' },
+      401
+    )
+  }
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
+    return json(
+      await new WalletContentsRepository(env.AUTH_DB, {
+        indexerUrl: env.WALLET_INDEXER_URL_137,
+        accessKey: env.WALLET_INDEXER_ACCESS_KEY,
+        contractAddress: env.WALLET_ASSET_CONTRACT_137
+      }).read(userId)
+    )
+  } catch (error) {
+    if (error instanceof WalletContentsError) {
+      return json(
+        { code: error.code, message: error.message },
+        error.status
+      )
+    }
+    if (error instanceof RpcError) {
+      return json({ code: error.code, message: error.message }, error.status)
+    }
+    console.error('Wallet contents request failed', error)
+    return json(
+      {
+        code: 'wallet.contents_unavailable',
+        message: 'Wallet contents are temporarily unavailable.'
+      },
+      503
     )
   }
 }
@@ -618,6 +663,12 @@ export const handleIdentityRequest = async (
   }
   if (url.pathname === '/api/auth/wallet' && request.method === 'DELETE') {
     return walletLinkRequest(request, env, 'unlink')
+  }
+  if (
+    url.pathname === '/api/auth/wallet/contents' &&
+    request.method === 'GET'
+  ) {
+    return walletContentsRequest(request, env)
   }
   if (url.pathname === '/api/auth/google/start' && request.method === 'GET') {
     return beginGoogleLogin(request, env)

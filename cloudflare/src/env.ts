@@ -8,6 +8,9 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
   WALLET_RPC_URL_137?: string
+  WALLET_INDEXER_URL_137?: string
+  WALLET_INDEXER_ACCESS_KEY?: string
+  WALLET_ASSET_CONTRACT_137?: string
   ONESIGNAL_APP_ID?: string
   ONESIGNAL_REST_API_KEY?: string
   STRIPE_SECRET_KEY?: string

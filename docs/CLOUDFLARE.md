@@ -504,9 +504,14 @@ and progress are not migrated.
   chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.
   RPC failure fails closed and never creates a wallet link. The WalletConnect
   browser adapter and merged wallet-content reads remain pending a public
-  project ID, origin allowlist, and product mapping. Wallet ownership is
-  read-only: Cloud Weasel rewards use canonical off-chain D1 inventory and
-  never require a mint or reward-transfer transaction.
+  project ID and origin allowlist. The authenticated
+  `GET /api/auth/wallet/contents` adapter is implemented but remains inert
+  until a reviewed Polygon asset contract and Sequence Indexer URL/access key
+  are configured. It filters every returned row by linked address, chain, and
+  contract, decodes the source token-ID scheme at the response boundary, and
+  has bounded pagination. These external holdings are never copied into D1.
+  Wallet ownership is read-only: Cloud Weasel rewards use canonical off-chain
+  D1 inventory and never require a mint or reward-transfer transaction.
 - Optional OneSignal device push is ported as a projection of reward inbox
   notifications. Browser subscriptions are associated with the Google identity
   ID rather than a wallet address; the scheduled sender uses stable provider

@@ -13,6 +13,12 @@ GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
 # webapp/config/webapp.cloudflare.json and is not a secret.
 WALLET_RPC_URL_137=https://replace-with-your-polygon-rpc.example
 
+# Optional read-only wallet contents. All three values are required together.
+# The access key comes from Sequence Builder and grants indexer reads only.
+WALLET_INDEXER_URL_137=https://polygon-indexer.sequence.app
+WALLET_INDEXER_ACCESS_KEY=replace-with-sequence-project-access-key
+WALLET_ASSET_CONTRACT_137=0xreplace-with-reviewed-opensky-assets-contract
+
 # Optional OneSignal device push. Keep the REST API key in a Wrangler secret.
 # The public app ID must also be placed in webapp/config/webapp.cloudflare.json
 # so the browser can opt a device into the same OneSignal application.

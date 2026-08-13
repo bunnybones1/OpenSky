@@ -253,7 +253,8 @@ const main = async () => {
     tradableBadge,
     skypassThumbnail,
     englishLocaleSource,
-    analyticsWorker
+    analyticsWorker,
+    walletContents
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -399,7 +400,8 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8'),
-    readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8')
+    readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/wallet-contents.ts'), 'utf8')
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
   const errors = offchainGateErrors({
@@ -457,7 +459,7 @@ const main = async () => {
       mobileStoreFulfillment,
       skypassAutoClaim: `${skypassAutoClaim}\n${playerRpc}`
     },
-    observationalSources: { analyticsWorker }
+    observationalSources: { analyticsWorker, walletContents }
   })
   if (errors.length) {
     for (const error of errors)

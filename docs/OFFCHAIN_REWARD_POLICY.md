@@ -18,6 +18,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
 - WalletConnect remains optional. A verified wallet may contribute read-only
   external ownership to content views, but it does not authenticate the player,
   own the Cloud Weasel account, or become the destination for earned rewards.
+  The wallet-content adapter is an authenticated observational projection. It
+  filters a configured chain and contract, never writes `player_items`, and is
+  included in the same release-gate scan as game analytics.
 - Legacy burner/account migration is retired for the zero-user launch. Future
   identity providers must link to the Google-owned account through a new
   reviewed flow, not revive the source migration RPCs.
