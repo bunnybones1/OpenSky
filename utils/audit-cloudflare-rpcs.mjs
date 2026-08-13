@@ -10,13 +10,149 @@ export const extractGoRpcMethods = source =>
 export const extractTsRpcCases = source =>
   [...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)].map(match => match[1])
 
-export const auditRpcCoverage = (sourceMethods, portedMethods) => {
+const rpcCaseBodies = source => {
+  const matches = [
+    ...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)
+  ]
+  const bodies = new Map()
+  let groupedMethods = []
+  for (let index = 0; index < matches.length; index++) {
+    const match = matches[index]
+    groupedMethods.push(match[1])
+    const bodyStart = match.index + match[0].length
+    const bodyEnd = matches[index + 1]?.index ?? source.length
+    const body = source.slice(bodyStart, bodyEnd)
+    if (!body.trim()) continue
+    for (const method of groupedMethods) bodies.set(method, body)
+    groupedMethods = []
+  }
+  return bodies
+}
+
+// A switch label is not an implementation. These are the only reviewed
+// terminal compatibility cases in the TypeScript gateway; adding another
+// unconditional unimplemented/deprecated case must fail the release gate.
+export const REVIEWED_TS_RPC_TOMBSTONES = {
+  SignIn: {
+    disposition: 'source-faithful',
+    evidence: [
+      'throw internal(',
+      'deprecated method, use GetAuthToken + RegisterAccount'
+    ]
+  },
+  IAPVerifyGoogleProducts2: {
+    disposition: 'superseded',
+    evidence: [
+      'throw unimplemented(',
+      'VerifyGooglePlayPayment with the signed-in identity'
+    ]
+  },
+  IAPVerifyAppleProducts2: {
+    disposition: 'superseded',
+    evidence: [
+      'throw unimplemented(',
+      'VerifyAppleAppStorePayment with the signed-in identity'
+    ]
+  },
+  JoinEarlyAccessList: {
+    disposition: 'retired',
+    evidence: [
+      'throw unimplemented(',
+      'Cloud Weasel early access is retired'
+    ]
+  },
+  AdminListAccounts: {
+    disposition: 'source-faithful',
+    evidence: ['await staff.requireAdmin(', 'throw unimplemented()']
+  },
+  AdminSearchAccounts: {
+    disposition: 'source-faithful',
+    evidence: ['await staff.requireAdmin(', 'throw unimplemented()']
+  },
+  GetMatchLiveRecordsURI: {
+    disposition: 'source-faithful',
+    evidence: [
+      "await requestBody<{ matchID?: number }>(request)",
+      'throw unimplemented()'
+    ]
+  }
+}
+
+export const tsRpcTombstoneAuditErrors = source => {
+  const errors = []
+  const bodies = rpcCaseBodies(source)
+  const reviewed = new Set(Object.keys(REVIEWED_TS_RPC_TOMBSTONES))
+
+  for (const [method, review] of Object.entries(
+    REVIEWED_TS_RPC_TOMBSTONES
+  )) {
+    const body = bodies.get(method)
+    if (!body) {
+      errors.push(`reviewed TypeScript RPC tombstone disappeared: ${method}`)
+      continue
+    }
+    for (const token of review.evidence) {
+      if (!body.includes(token)) {
+        errors.push(`${method} lost ${review.disposition} tombstone evidence: ${token}`)
+      }
+    }
+  }
+
+  for (const [method, body] of bodies) {
+    const terminalCompatibilityThrow =
+      /\bthrow\s+unimplemented\s*\(/.test(body) ||
+      /\bthrow\s+internal\s*\(\s*['"`]deprecated method/.test(body)
+    if (terminalCompatibilityThrow && !reviewed.has(method)) {
+      errors.push(`unreviewed TypeScript RPC tombstone: ${method}`)
+    }
+  }
+  return errors
+}
+
+export const auditRpcCoverage = (
+  sourceMethods,
+  portedMethods,
+  tombstones = REVIEWED_TS_RPC_TOMBSTONES
+) => {
   const source = new Set(sourceMethods)
   const ported = new Set(portedMethods)
-  const implemented = [...source].filter(method => ported.has(method)).sort()
+  const tombstoneMethods = new Set(Object.keys(tombstones))
+  const sourceTombstones = Object.entries(tombstones)
+    .filter(
+      ([method, review]) =>
+        source.has(method) &&
+        ported.has(method) &&
+        review.disposition === 'source-faithful'
+    )
+    .map(([method]) => method)
+    .sort()
+  const supersededTombstones = Object.entries(tombstones)
+    .filter(
+      ([method, review]) =>
+        source.has(method) &&
+        ported.has(method) &&
+        review.disposition === 'superseded'
+    )
+    .map(([method]) => method)
+    .sort()
+  const retiredTombstones = Object.entries(tombstones)
+    .filter(
+      ([method, review]) =>
+        source.has(method) &&
+        ported.has(method) &&
+        review.disposition === 'retired'
+    )
+    .map(([method]) => method)
+    .sort()
+  const implemented = [...source]
+    .filter(method => ported.has(method) && !tombstoneMethods.has(method))
+    .sort()
   return {
     source: [...source].sort(),
     implemented,
+    sourceTombstones,
+    supersededTombstones,
+    retiredTombstones,
     missing: [...source].filter(method => !ported.has(method)).sort(),
     adapters: [...ported].filter(method => !source.has(method)).sort()
   }
@@ -111,11 +247,15 @@ export const partitionRpcGaps = methods => ({
 
 export const checkRpcCoverage = audit => {
   const errors = []
-  if (audit.implemented.length < 149) {
+  if (audit.implemented.length < 148) {
     errors.push(`ported RPC count regressed to ${audit.implemented.length}`)
   }
+  const sourceTombstones = audit.sourceTombstones ?? []
   for (const method of CRITICAL_METHODS) {
-    if (!audit.implemented.includes(method)) {
+    if (
+      !audit.implemented.includes(method) &&
+      !sourceTombstones.includes(method)
+    ) {
       errors.push(`critical RPC is missing: ${method}`)
     }
   }
@@ -126,6 +266,19 @@ export const checkRpcCoverage = audit => {
     }
   }
   return errors
+}
+
+export const rpcFulfillmentSummary = audit => {
+  const gaps = partitionRpcGaps(audit.missing)
+  return {
+    sourceTombstones: audit.sourceTombstones ?? [],
+    superseded: [
+      ...gaps.superseded,
+      ...(audit.supersededTombstones ?? [])
+    ].sort(),
+    retired: [...gaps.retired, ...(audit.retiredTombstones ?? [])].sort(),
+    actionable: gaps.actionable
+  }
 }
 
 export const rpcPortCategory = method => {
@@ -172,37 +325,45 @@ const loadAudit = async root => {
     )
   }
   const gateway = await readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
-  return auditRpcCoverage(methods, extractTsRpcCases(gateway))
+  return {
+    audit: auditRpcCoverage(methods, extractTsRpcCases(gateway)),
+    tombstoneErrors: tsRpcTombstoneAuditErrors(gateway)
+  }
 }
 
 const main = async () => {
   const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
-  const audit = await loadAudit(root)
-  const errors = checkRpcCoverage(audit)
+  const { audit, tombstoneErrors } = await loadAudit(root)
+  const errors = [...checkRpcCoverage(audit), ...tombstoneErrors]
+  const fulfillment = rpcFulfillmentSummary(audit)
   if (process.argv.includes('--json')) {
     process.stdout.write(
-      `${JSON.stringify({ ...audit, gaps: partitionRpcGaps(audit.missing) }, null, 2)}\n`
+      `${JSON.stringify({ ...audit, fulfillment }, null, 2)}\n`
     )
   } else {
-    const gaps = partitionRpcGaps(audit.missing)
     const fulfilled =
-      audit.implemented.length + gaps.superseded.length + gaps.retired.length
+      audit.implemented.length +
+      fulfillment.sourceTombstones.length +
+      fulfillment.superseded.length +
+      fulfillment.retired.length
     process.stdout.write(
       [
         `Source RPCs: ${audit.source.length}`,
-        `Ported source RPCs: ${audit.implemented.length}`,
-        `Superseded source RPCs: ${gaps.superseded.length}`,
-        `Retired source RPCs: ${gaps.retired.length}`,
+        `Functional TypeScript RPCs: ${audit.implemented.length}`,
+        `Source-faithful tombstones: ${fulfillment.sourceTombstones.length}`,
+        `Superseded source RPCs: ${fulfillment.superseded.length}`,
+        `Retired source RPCs: ${fulfillment.retired.length}`,
         `Fulfilled/retired source contracts: ${fulfilled}`,
-        `Actionable source RPC gaps: ${gaps.actionable.length}`,
+        `Actionable source RPC gaps: ${fulfillment.actionable.length}`,
         `Cloudflare-only adapters: ${audit.adapters.length}`,
         '',
-        `Actionable: ${gaps.actionable.join(', ')}`,
-        `Superseded: ${gaps.superseded.join(', ')}`,
-        `Retired: ${gaps.retired.join(', ')}`,
+        `Actionable: ${fulfillment.actionable.join(', ')}`,
+        `Source tombstones: ${fulfillment.sourceTombstones.join(', ')}`,
+        `Superseded: ${fulfillment.superseded.join(', ')}`,
+        `Retired: ${fulfillment.retired.join(', ')}`,
         audit.adapters.length ? `Adapters: ${audit.adapters.join(', ')}` : ''
       ]
-        .filter((line, index) => line || index < 8)
+        .filter((line, index) => line || index < 9)
         .join('\n') + '\n'
     )
   }

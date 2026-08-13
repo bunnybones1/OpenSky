@@ -15,18 +15,22 @@ The audit discovers exported Go `*Server` methods from `api/rpc`, compares them
 with the TypeScript cases in `cloudflare/src/api.ts`, and fails if the ported
 count or the critical player-facing compatibility set regresses.
 
-| Surface                      | Methods |
-| ---------------------------- | ------: |
-| Source Go RPCs               |     172 |
-| Ported source RPCs           |     155 |
-| Cloudflare-superseded RPCs   |      15 |
-| Deliberately retired RPCs    |       2 |
-| Actionable source RPC gaps   |       0 |
-| Cloudflare-only RPC adapters |       3 |
+| Surface                         | Methods |
+| ------------------------------- | ------: |
+| Source Go RPCs                  |     172 |
+| Functional TypeScript RPCs      |     148 |
+| Source-faithful tombstones      |       4 |
+| Cloudflare-superseded RPCs      |      17 |
+| Deliberately retired RPCs       |       3 |
+| Actionable source RPC gaps      |       0 |
+| Cloudflare-only RPC adapters    |       3 |
 
-Together, 172/172 source contracts (100%) are implemented, replaced by a
-reviewed Cloud Weasel contract, or intentionally retired. This is a product-
-intent measure; the audit still prints every raw source omission.
+Together, 172/172 source contracts (100%) are functionally implemented,
+preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
+Weasel contract, or intentionally retired. This is a product-intent measure;
+it is not a claim that a TypeScript `case` label is an implementation. The
+release gate parses fall-through case bodies and rejects any new
+`unimplemented` or deprecated terminal case without an explicit disposition.
 
 ## Completed source surface
 
@@ -37,7 +41,10 @@ certificate OIDs, the complete three-certificate JWS chain, and source-pinned
 Apple PKI roots. Sandbox, revoked, mismatched, future-signed, or untrusted
 transactions fail before reward storage.
 
-All admin/operations RPCs are now ported. `GMUpdateSkypassRewards` uses the
+All functional admin/operations RPCs are now ported. The source's already-
+unimplemented `AdminListAccounts` and `AdminSearchAccounts` endpoints remain
+role-gated source-faithful tombstones and are not counted as functional ports.
+`GMUpdateSkypassRewards` uses the
 source CSV contract but adds a dormant capability, an HTTPS-origin allowlist,
 bounded fetches, immutable audits, and a D1-enforced freeze after the first
 claim in a season. An import now prepares an immutable, player-invisible draft
@@ -68,6 +75,10 @@ separate authorities.
   web flow.
 - `MigrateAccount` and `MigrateFromBurner` are retired for a zero-user Google-
   identity launch. Future providers get new reviewed account-linking flows.
+- Four source-disabled endpoints remain source-faithful tombstones rather than
+  being inflated into the functional-port count: deprecated `SignIn`, the two
+  source-unimplemented `Admin*Accounts` endpoints, and disabled
+  `GetMatchLiveRecordsURI`.
 - The wallet-address-based `IAPVerifyGoogleProducts2` and
   `IAPVerifyAppleProducts2` methods are authenticated tombstones directing
   current clients to identity-scoped verification. `JoinEarlyAccessList` is an

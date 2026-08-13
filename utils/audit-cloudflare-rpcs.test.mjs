@@ -6,8 +6,10 @@ import {
   checkRpcCoverage,
   extractGoRpcMethods,
   extractTsRpcCases,
+  rpcFulfillmentSummary,
   partitionRpcGaps,
-  summarizeRpcCategories
+  summarizeRpcCategories,
+  tsRpcTombstoneAuditErrors
 } from './audit-cloudflare-rpcs.mjs'
 
 test('extracts exported Go Server RPCs and TypeScript gateway cases', () => {
@@ -27,12 +29,72 @@ func (s *Server) GetAccount(ctx context.Context, address string) error { return 
 })
 
 test('separates implemented, missing, and Cloudflare-only adapters', () => {
-  assert.deepEqual(auditRpcCoverage(['Ping', 'Clock'], ['Ping', 'IdentityOnly']), {
-    source: ['Clock', 'Ping'],
-    implemented: ['Ping'],
-    missing: ['Clock'],
-    adapters: ['IdentityOnly']
-  })
+  assert.deepEqual(
+    auditRpcCoverage(['Ping', 'Clock'], ['Ping', 'IdentityOnly'], {}),
+    {
+      source: ['Clock', 'Ping'],
+      implemented: ['Ping'],
+      sourceTombstones: [],
+      supersededTombstones: [],
+      retiredTombstones: [],
+      missing: ['Clock'],
+      adapters: ['IdentityOnly']
+    }
+  )
+})
+
+test('does not count terminal compatibility cases as functional ports', () => {
+  const tombstones = {
+    SourceStub: { disposition: 'source-faithful' },
+    Replaced: { disposition: 'superseded' },
+    Retired: { disposition: 'retired' }
+  }
+  const audit = auditRpcCoverage(
+    ['Ping', 'SourceStub', 'Replaced', 'Retired', 'MissingReplacement'],
+    ['Ping', 'SourceStub', 'Replaced', 'Retired'],
+    tombstones
+  )
+  assert.deepEqual(audit.implemented, ['Ping'])
+  assert.deepEqual(audit.sourceTombstones, ['SourceStub'])
+  assert.deepEqual(audit.supersededTombstones, ['Replaced'])
+  assert.deepEqual(audit.retiredTombstones, ['Retired'])
+  assert.deepEqual(
+    rpcFulfillmentSummary({
+      ...audit,
+      missing: ['InternalMatchStart', 'MigrateAccount']
+    }),
+    {
+      sourceTombstones: ['SourceStub'],
+      superseded: ['InternalMatchStart', 'Replaced'],
+      retired: ['MigrateAccount', 'Retired'],
+      actionable: []
+    }
+  )
+})
+
+test('finds shared tombstone bodies and rejects a new placeholder', () => {
+  const source = `
+switch (method) {
+  case 'AdminListAccounts':
+  case 'AdminSearchAccounts': {
+    await staff.requireAdmin(principal.userId)
+    throw unimplemented()
+  }
+  case 'EntirelyNewPlaceholder': {
+    throw unimplemented('later')
+  }
+}`
+  const errors = tsRpcTombstoneAuditErrors(source)
+  assert.ok(
+    errors.some(error =>
+      error.includes('unreviewed TypeScript RPC tombstone: EntirelyNewPlaceholder')
+    )
+  )
+  assert.ok(
+    !errors.some(error =>
+      error.includes('unreviewed TypeScript RPC tombstone: AdminListAccounts')
+    )
+  )
 })
 
 test('coverage check fails closed on count and critical regressions', () => {
