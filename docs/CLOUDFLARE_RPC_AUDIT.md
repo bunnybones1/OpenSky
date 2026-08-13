@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs      |      17 |
 | Deliberately retired RPCs       |       3 |
 | Actionable source RPC gaps      |       0 |
-| Cloudflare-only RPC adapters    |       7 |
+| Cloudflare-only RPC adapters    |      11 |
 
 Together, 172/172 source contracts (100%) are functionally implemented,
 preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
@@ -73,6 +73,13 @@ use separate dormant capabilities, exact-manifest confirmation, immutable
 idempotency receipts, and audits; none writes queue readiness or game-mode
 status. The RPC audit allowlists all seven adapters by name and rejects a new
 or missing Cloudflare-only method.
+
+Four reviewed leaderboard adapters similarly list, propose, independently
+activate, and disable immutable weekly schedule versions around the already
+pinned source reward-policy digest. Monotonic compare-and-swap versions prevent
+competing cadence decisions from both landing. Separate dormant capabilities,
+idempotency receipts, and immutable audits keep the cron path disabled until an
+explicit UTC cadence receives second-actor approval.
 
 ## Reviewed non-ports
 

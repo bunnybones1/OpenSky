@@ -75,6 +75,10 @@ import {
   seasonName
 } from './legacy-seasons'
 import { nextLeaderboardRewardTime } from './leaderboard-reward-worker'
+import {
+  LEADERBOARD_REWARD_SCHEDULE_OPERATION_HEADER,
+  LeaderboardRewardScheduleOperationsRepository
+} from './leaderboard-reward-schedule-operations'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
 import { listPaymentProviderProducts } from './payment-provider-products'
@@ -284,6 +288,8 @@ export const handleApiRequest = async (
     env.AUTH_DB
   )
   const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
+  const leaderboardRewardSchedules =
+    new LeaderboardRewardScheduleOperationsRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
   const content = new ContentRepository(env.AUTH_DB)
   const playerRpc = new PlayerRpcRepository(env.AUTH_DB)
@@ -1252,6 +1258,82 @@ export const handleApiRequest = async (
         const body = await requestBody<{ version?: unknown }>(request)
         return json(request, env, {
           pools: await conquestRewardPools.list(body.version)
+        })
+      }
+
+      case 'GMListLeaderboardRewardSchedules': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ version?: unknown }>(request)
+        return json(request, env, {
+          schedules: await leaderboardRewardSchedules.list(body.version)
+        })
+      }
+
+      case 'GMProposeLeaderboardRewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireLeaderboardRewardScheduleWrite(
+          principal.userId,
+          'PROPOSE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          replacesVersion?: unknown
+          startsAt?: unknown
+          firstRunAt?: unknown
+          policyVersion?: unknown
+          policyHash?: unknown
+          reason?: unknown
+          reviewReference?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await leaderboardRewardSchedules.propose(
+            principal.userId,
+            body,
+            request.headers.get(LEADERBOARD_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMActivateLeaderboardRewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireLeaderboardRewardScheduleWrite(
+          principal.userId,
+          'ACTIVATE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          policyVersion?: unknown
+          policyHash?: unknown
+          reviewReference?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await leaderboardRewardSchedules.activate(
+            principal.userId,
+            body,
+            request.headers.get(LEADERBOARD_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMDisableLeaderboardRewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireLeaderboardRewardScheduleWrite(
+          principal.userId,
+          'DISABLE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          replacesVersion?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await leaderboardRewardSchedules.disable(
+            principal.userId,
+            body,
+            request.headers.get(LEADERBOARD_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
         })
       }
 

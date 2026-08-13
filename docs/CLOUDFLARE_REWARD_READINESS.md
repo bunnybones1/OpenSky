@@ -70,7 +70,10 @@ itself.
   without direct SQL, while production retains zero capability grants and zero
   pools until the fork owner supplies and reviews the contents.
 - Leaderboard requires one explicit UTC cadence and a second-actor activation
-  of the pinned rank/card/ticket policy before its first boundary.
+  of the pinned rank/card/ticket policy before its first boundary. Reviewed
+  staff adapters now propose, independently activate, list, and immediately
+  disable immutable schedule versions without direct SQL; production retains
+  zero capability grants and zero cadence rows until that policy decision.
 - Conquest V2 requires an explicit cadence, current economy settings with at
   least one Silver at every eligible treasure level, and second-actor approval
   of the exact resulting quantities and card pool.

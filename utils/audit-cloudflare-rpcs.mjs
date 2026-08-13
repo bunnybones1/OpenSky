@@ -236,6 +236,10 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMActivateSkypassRewards',
   'GMGrantBaseCards',
   'GMGrantItems',
+  'GMActivateLeaderboardRewardSchedule',
+  'GMDisableLeaderboardRewardSchedule',
+  'GMListLeaderboardRewardSchedules',
+  'GMProposeLeaderboardRewardSchedule',
   'GMListConquestRewardPools',
   'GMProposeConquestRewardPool',
   'GMRetireConquestRewardPool'

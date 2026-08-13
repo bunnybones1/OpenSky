@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:ci && pnpm check:cloudflare:targets && pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:locales && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:ci && pnpm check:cloudflare:targets && pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:leaderboard-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:locales && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -22,6 +22,7 @@
     "generate:cloudflare:cards": "node ./utils/generate-cloudflare-card-library.mjs",
     "check:cloudflare:cards": "node --test ./utils/generate-cloudflare-card-library.test.mjs && node ./utils/generate-cloudflare-card-library.mjs --check",
     "check:cloudflare:conquest-gate": "node --test ./utils/check-cloudflare-conquest-gate.test.mjs && node ./utils/check-cloudflare-conquest-gate.mjs",
+    "check:cloudflare:leaderboard-gate": "node --test ./utils/check-cloudflare-leaderboard-gate.test.mjs && node ./utils/check-cloudflare-leaderboard-gate.mjs",
     "check:cloudflare:offchain": "node --test ./utils/check-cloudflare-offchain-gate.test.mjs && node ./utils/check-cloudflare-offchain-gate.mjs",
     "check:cloudflare:reward-producers": "node --test ./utils/audit-cloudflare-reward-producers.test.mjs && node ./utils/audit-cloudflare-reward-producers.mjs",
     "check:cloudflare:reward-mutators": "node --test ./utils/audit-cloudflare-reward-mutators.test.mjs && node ./utils/audit-cloudflare-reward-mutators.mjs",

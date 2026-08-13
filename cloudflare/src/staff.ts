@@ -12,6 +12,7 @@ import type {
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { isConquestQueueReady } from './conquest-readiness'
 import type { ConquestRewardPoolOperation } from './conquest-reward-pool-operations'
+import type { LeaderboardRewardScheduleOperation } from './leaderboard-reward-schedule-operations'
 
 interface StatusCountRow {
   account_status: AccountStatus
@@ -303,6 +304,25 @@ export class StaffRepository {
     if (!row) {
       throw permissionDenied(
         `Conquest reward pool ${permission.toLowerCase()} access required`
+      )
+    }
+  }
+
+  async requireLeaderboardRewardScheduleWrite(
+    userId: string,
+    permission: LeaderboardRewardScheduleOperation
+  ): Promise<void> {
+    await this.requireAdmin(userId)
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_leaderboard_reward_schedule_permissions
+         WHERE user_id = ? AND permission = ?`
+      )
+      .bind(userId, permission)
+      .first()
+    if (!row) {
+      throw permissionDenied(
+        `leaderboard reward schedule ${permission.toLowerCase()} access required`
       )
     }
   }
