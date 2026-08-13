@@ -20,6 +20,7 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     cookieRepositorySource,
     cookieMigrationSource,
     appLayoutSource,
+    navBarSource,
     deckViewerSource,
     deckViewerFooterSource
   ] = await Promise.all([
@@ -46,6 +47,7 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
     readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8'),
     readFile('webapp/src/AppLayout/AppLayout.tsx', 'utf8'),
+    readFile('webapp/src/AppLayout/NavBar/NavBar.tsx', 'utf8'),
     readFile('webapp/src/AppLayout/DeckViewer/DeckViewer.tsx', 'utf8'),
     readFile(
       'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
@@ -68,6 +70,7 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       cookieRepositorySource,
       cookieMigrationSource,
       appLayoutSource,
+      navBarSource,
       deckViewerSource,
       deckViewerFooterSource
     }),
@@ -91,6 +94,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     cookieRepositorySource,
     cookieMigrationSource,
     appLayoutSource,
+    navBarSource,
     deckViewerSource,
     deckViewerFooterSource
   ] = await Promise.all([
@@ -117,6 +121,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     readFile('cloudflare/src/cookie-policies.ts', 'utf8'),
     readFile('cloudflare/migrations/0092_identity_cookie_policy.sql', 'utf8'),
     readFile('webapp/src/AppLayout/AppLayout.tsx', 'utf8'),
+    readFile('webapp/src/AppLayout/NavBar/NavBar.tsx', 'utf8'),
     readFile('webapp/src/AppLayout/DeckViewer/DeckViewer.tsx', 'utf8'),
     readFile(
       'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
@@ -146,6 +151,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     ),
     identityShellSource: identityShellSource
       .replace('Element: ErrorDialog', 'Element: MissingErrorDialog')
+      .replace('useUpdatePageOffsets()', 'useUpdatePageOffsets({ includeBanners: false })')
       .concat('\nSequenceConfirmSignatureDialog'),
     accountSettingsSource: accountSettingsSource
       .replace(
@@ -183,6 +189,10 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
       '<DeckViewer />',
       '{!isIdentityMode && <DeckViewer />}'
     ),
+    navBarSource: navBarSource.replace(
+      '<Banners />',
+      "{env.AUTH_MODE !== 'google' && <Banners />}"
+    ),
     deckViewerSource: deckViewerSource.replace(
       "useBanners(env.AUTH_MODE !== 'google')",
       'useBanners()'
@@ -213,6 +223,7 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('cookie persistence policy')))
   assert.ok(errors.some(error => error.includes('cookie schema guard')))
   assert.ok(errors.some(error => error.includes('suppresses')))
+  assert.ok(errors.some(error => error.includes('banner strip')))
   assert.ok(errors.some(error => error.includes('absent banner query')))
   assert.ok(errors.some(error => error.includes('market-cart control')))
 })

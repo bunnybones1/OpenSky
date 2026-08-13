@@ -1,7 +1,6 @@
 import clsx from 'clsx'
 import { memo } from 'react'
 
-import env from '~/env'
 import { Portal } from '~/shared/components/Portal'
 import { ProfileLink } from '~/shared/components/ProfileLink/ProfileLink'
 import { NAVBAR_ID } from '~/shared/constants/ui'
@@ -41,7 +40,7 @@ export const NavBar = memo(() => {
         )}
         id={NAVBAR_ID}
       >
-        {env.AUTH_MODE !== 'google' && <Banners />}
+        <Banners />
         <div
           className={Sprinkles({
             width: 'full',

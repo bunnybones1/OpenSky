@@ -73,6 +73,12 @@ SkyPass prism-unlock link use the identity-backed deck and inventory APIs. Its
 legacy “Add missing to cart” action remains wallet-mode only, and Google mode
 does not issue the absent banner query merely to calculate viewer spacing.
 
+The source announcement banner strip is mounted in Google mode as well. Player
+reads use the ported `GetBanners` contract, which exposes only currently active
+D1 rows in source order. The original sanitized markup, external-link handling,
+local dismissal, and responsive page offsets are preserved. The Deck Viewer
+shares that global query result but cannot initiate a second banner request.
+
 App-shell milestone `3dd82f6` restored the original wallet-independent dialogs
 in production. Follow-up milestone `f988b30` fixed the identity-policy owner
 model discovered during live QA, and D1 migration `0092` plus Worker version

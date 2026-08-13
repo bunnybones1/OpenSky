@@ -76,6 +76,7 @@ export const webappRouteAuditErrors = ({
   cookieRepositorySource,
   cookieMigrationSource,
   appLayoutSource,
+  navBarSource,
   deckViewerSource,
   deckViewerFooterSource
 }) => {
@@ -163,7 +164,7 @@ export const webappRouteAuditErrors = ({
     'Element: OfflineDialog',
     'useAnalytics()',
     'useUserPilot()',
-    'useUpdatePageOffsets({ includeBanners: false })',
+    'useUpdatePageOffsets()',
     'analytics.trackView()'
   ]) {
     if (!identityShellSource.includes(token)) {
@@ -234,6 +235,12 @@ export const webappRouteAuditErrors = ({
   if (!appLayoutSource.includes('<DeckViewer />')) {
     errors.push('Google app layout does not mount the original Deck Viewer')
   }
+  if (!navBarSource.includes('<Banners />')) {
+    errors.push('Google navigation does not mount the original banner strip')
+  }
+  if (/AUTH_MODE[^\n]*<Banners\s*\/>/.test(navBarSource)) {
+    errors.push('Google navigation still suppresses the original banner strip')
+  }
   if (appLayoutSource.includes('!isIdentityMode && <DeckViewer />')) {
     errors.push('Google app layout still suppresses the original Deck Viewer')
   }
@@ -270,6 +277,7 @@ const main = async () => {
     cookieRepositorySource,
     cookieMigrationSource,
     appLayoutSource,
+    navBarSource,
     deckViewerSource,
     deckViewerFooterSource
   ] = await Promise.all([
@@ -318,6 +326,10 @@ const main = async () => {
     ),
     readFile(path.join(root, 'webapp/src/AppLayout/AppLayout.tsx'), 'utf8'),
     readFile(
+      path.join(root, 'webapp/src/AppLayout/NavBar/NavBar.tsx'),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'webapp/src/AppLayout/DeckViewer/DeckViewer.tsx'),
       'utf8'
     ),
@@ -344,6 +356,7 @@ const main = async () => {
     cookieRepositorySource,
     cookieMigrationSource,
     appLayoutSource,
+    navBarSource,
     deckViewerSource,
     deckViewerFooterSource
   })

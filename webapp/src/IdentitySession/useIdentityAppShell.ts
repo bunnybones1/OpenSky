@@ -46,7 +46,7 @@ export const useIdentityAppShell = () => {
 
   useAnalytics()
   useUserPilot()
-  useUpdatePageOffsets({ includeBanners: false })
+  useUpdatePageOffsets()
 
   const pathName = useSelector(pathNameSelector)
   useEffect(() => {
