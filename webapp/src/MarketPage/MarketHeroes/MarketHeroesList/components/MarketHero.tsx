@@ -15,11 +15,36 @@ import { useDispatch } from '~/shared/redux/index'
 
 export interface MarketHeroProps {
   id: number
+  inventoryOnly?: boolean
 }
+
+const IdentityMarketHeroBalance = memo(({ id }: MarketHeroProps) => {
+  const { data: balance } = useTokenBalance(ItemType.SW_HERO_SKINS, id)
+
+  const balances = useMemo<BalanceOrPrice[] | undefined>(() => {
+    if (balance === undefined) return undefined
+    return [
+      {
+        amount: !!balance ? balance.balance : 0,
+        icon: { type: 'heroes-gold' },
+        id: 'HERO'
+      }
+    ]
+  }, [balance])
+
+  return (
+    <HeroBalanceAndPriceInfo
+      balances={balances}
+      id={id}
+      areBalancesLoading={balances === undefined}
+    />
+  )
+})
+
+IdentityMarketHeroBalance.displayName = 'IdentityMarketHeroBalance'
 
 const MarketHeroBalance = memo(({ id }: MarketHeroProps) => {
   const { data: balance } = useTokenBalance(ItemType.SW_HERO_SKINS, id)
-
   const { data: price } = useHeroSkinMintCost(id, 1)
 
   const balances = useMemo<BalanceOrPrice[] | undefined>(() => {
@@ -57,7 +82,7 @@ const MarketHeroBalance = memo(({ id }: MarketHeroProps) => {
 
 MarketHeroBalance.displayName = 'MarketHeroBalance'
 
-export const MarketHero = memo(({ id }: MarketHeroProps) => {
+export const MarketHero = memo(({ id, inventoryOnly }: MarketHeroProps) => {
   const dispatch = useDispatch()
 
   const onClick = useCallback(
@@ -74,7 +99,9 @@ export const MarketHero = memo(({ id }: MarketHeroProps) => {
       id={id}
       isTiltable
       onClick={onClick}
-      BalanceAndPriceInfo={MarketHeroBalance}
+      BalanceAndPriceInfo={
+        inventoryOnly ? IdentityMarketHeroBalance : MarketHeroBalance
+      }
     />
   )
 })

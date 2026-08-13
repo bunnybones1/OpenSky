@@ -30,60 +30,66 @@ const SearchResultsFontSize = {
   desktop: '16px'
 } as const
 
-export const MarketHeroesSearchBar = memo(() => {
-  const { numSearchResults } = useSnapshot(marketHeroesState)
-  const { t } = useTranslation()
+interface MarketHeroesSearchBarProps {
+  inventoryOnly?: boolean
+}
 
-  const dispatch = useDispatch()
+export const MarketHeroesSearchBar = memo(
+  ({ inventoryOnly }: MarketHeroesSearchBarProps) => {
+    const { numSearchResults } = useSnapshot(marketHeroesState)
+    const { t } = useTranslation()
 
-  const onItemsClick = useCallback(() => {
-    dispatch(push(makeItemsHeroesRoute()))
-  }, [dispatch])
+    const dispatch = useDispatch()
 
-  return (
-    <SearchBar
-      background="default"
-      justifyContent="flex-start"
-      className={BasicSearchBarStyle}
-    >
-      {() => (
-        <>
-          <div className={SearchBarSideStyle}>
-            <MarketHeroesOwnershipFilter />
-            <MarketHeroesSortSelect />
-            {numSearchResults !== undefined && (
-              <div
-                className={clsx(
-                  Sprinkles({
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-start'
-                  }),
-                  SearchResultsWrapper
-                )}
-              >
-                <Text color="purple9" fontSize={SearchResultsFontSize}>
-                  {t('search.searchResults', { results: numSearchResults })}
-                </Text>
-              </div>
-            )}
-          </div>
-          <div className={clsx(SearchBarSideStyle, 'isRight')}>
-            {!!isSecretShopVisible && (
-              <Button
-                frameType="rounded"
-                colorType="default"
-                isToggled
-                onClick={onItemsClick}
-                leftAdornment={MarketButtonAdornment}
-              />
-            )}
-            <MarketHeroesSearchInput />
-          </div>
-        </>
-      )}
-    </SearchBar>
-  )
-})
+    const onItemsClick = useCallback(() => {
+      dispatch(push(makeItemsHeroesRoute()))
+    }, [dispatch])
+
+    return (
+      <SearchBar
+        background="default"
+        justifyContent="flex-start"
+        className={BasicSearchBarStyle}
+      >
+        {() => (
+          <>
+            <div className={SearchBarSideStyle}>
+              <MarketHeroesOwnershipFilter />
+              <MarketHeroesSortSelect inventoryOnly={inventoryOnly} />
+              {numSearchResults !== undefined && (
+                <div
+                  className={clsx(
+                    Sprinkles({
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start'
+                    }),
+                    SearchResultsWrapper
+                  )}
+                >
+                  <Text color="purple9" fontSize={SearchResultsFontSize}>
+                    {t('search.searchResults', { results: numSearchResults })}
+                  </Text>
+                </div>
+              )}
+            </div>
+            <div className={clsx(SearchBarSideStyle, 'isRight')}>
+              {!!isSecretShopVisible && (
+                <Button
+                  frameType="rounded"
+                  colorType="default"
+                  isToggled
+                  onClick={onItemsClick}
+                  leftAdornment={MarketButtonAdornment}
+                />
+              )}
+              <MarketHeroesSearchInput />
+            </div>
+          </>
+        )}
+      </SearchBar>
+    )
+  }
+)
 
 MarketHeroesSearchBar.displayName = 'MarketHeroesSearchBar'

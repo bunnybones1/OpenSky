@@ -20,6 +20,11 @@ const readMarketFidelitySources = async () => {
     marketCardBackSource,
     marketCardBacksSearchSource,
     marketCardBackFeatureSource,
+    marketHeroesListSource,
+    marketHeroListHookSource,
+    marketHeroSource,
+    marketHeroesSearchSource,
+    heroMintCostSource,
     cartQuerySource
   ] = await Promise.all([
     readFile('webapp/src/MarketPage/components/MarketPageSubNav.tsx', 'utf8'),
@@ -75,6 +80,26 @@ const readMarketFidelitySources = async () => {
       'webapp/src/MarketPage/MarketCardBackFeature/MarketCardBackFeature.tsx',
       'utf8'
     ),
+    readFile(
+      'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/MarketHeroesList.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/hooks/useMarketHeroesList.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/components/MarketHero.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/MarketPage/MarketHeroes/MarketHeroesSearchBar/MarketHeroesSearchBar.tsx',
+      'utf8'
+    ),
+    readFile(
+      'webapp/src/shared/queries/hero-skins/useHeroSkinMintCost.ts',
+      'utf8'
+    ),
     readFile('webapp/src/shared/queries/useCart.ts', 'utf8')
   ])
   return {
@@ -92,6 +117,11 @@ const readMarketFidelitySources = async () => {
     marketCardBackSource,
     marketCardBacksSearchSource,
     marketCardBackFeatureSource,
+    marketHeroesListSource,
+    marketHeroListHookSource,
+    marketHeroSource,
+    marketHeroesSearchSource,
+    heroMintCostSource,
     cartQuerySource
   }
 }
@@ -602,4 +632,82 @@ test('rejects card-back catalog wallet controls in Google mode', async () => {
   assert.ok(errors.some(error => error.includes('transaction guard')))
   assert.ok(errors.some(error => error.includes('filter substitution')))
   assert.ok(errors.some(error => error.includes('detail substitution')))
+})
+
+test('rejects hero catalog mint pricing in Google mode', async () => {
+  const marketFidelitySources = await readMarketFidelitySources()
+  const commonFiles = {
+    legacySource: 'webapp/src/App.tsx',
+    identitySource: 'webapp/src/IdentitySession/IdentityApp.tsx',
+    policySource: 'docs/CLOUDFLARE_WEBAPP_ROUTE_AUDIT.md',
+    authenticationClientSource:
+      'webapp/src/clients/AuthenticationClient/AuthenticationClient.ts',
+    identityApiSource: 'cloudflare/src/identity-api.ts',
+    identityShellSource: 'webapp/src/IdentitySession/useIdentityAppShell.ts',
+    accountSettingsSource:
+      'webapp/src/AccountPage/AccountIdentity/ExpandedBattleTag/SettingsButton/AccountSettingsDialog/components/AccountSettingsControls.tsx',
+    pageOffsetSource: 'webapp/src/hooks/useUpdatePageOffset.ts',
+    bannerQuerySource: 'webapp/src/shared/queries/useBanners.ts',
+    cookieDialogSource:
+      'webapp/src/hooks/useAppDialogs/components/CookieSettingsDialog.tsx',
+    cookieDisclaimerSource:
+      'webapp/src/AppLayout/components/CookieDisclaimer.tsx',
+    cookieRepositorySource: 'cloudflare/src/cookie-policies.ts',
+    cookieMigrationSource:
+      'cloudflare/migrations/0092_identity_cookie_policy.sql',
+    appLayoutSource: 'webapp/src/AppLayout/AppLayout.tsx',
+    navBarSource: 'webapp/src/AppLayout/NavBar/NavBar.tsx',
+    deckViewerSource: 'webapp/src/AppLayout/DeckViewer/DeckViewer.tsx',
+    deckViewerFooterSource:
+      'webapp/src/AppLayout/DeckViewer/DeckViewerFooter/DeckViewerFooter.tsx',
+    adminPageSource: 'webapp/src/AdminPage/AdminPage.tsx',
+    staffRepositorySource: 'cloudflare/src/staff.ts',
+    identityMarketSource: 'webapp/src/MarketPage/IdentityMarketPage.tsx',
+    marketDeckSource:
+      'webapp/src/MarketPage/MarketDecks/MarketDecksList/MarketDeck/MarketDeck.tsx',
+    marketNavSource:
+      'webapp/src/AppLayout/NavBar/LinkSection/components/MarketLink.tsx'
+  }
+  const base = Object.fromEntries(
+    await Promise.all(
+      Object.entries(commonFiles).map(async ([name, file]) => [
+        name,
+        await readFile(file, 'utf8')
+      ])
+    )
+  )
+  base.shopPrototypeSource = await Promise.all([
+    readFile('webapp/src/ShopPage/shared/queries/mock-data.ts', 'utf8'),
+    readFile('webapp/src/ShopPage/ShopSection/ShopSection.tsx', 'utf8'),
+    readFile(
+      'webapp/src/ShopPage/ShopSection/ShopBox/components/PriceButton.tsx',
+      'utf8'
+    )
+  ]).then(parts => parts.join('\n'))
+
+  const errors = webappRouteAuditErrors({
+    ...base,
+    ...marketFidelitySources,
+    marketHeroListHookSource: marketFidelitySources.marketHeroListHookSource
+      .replace('useHeroSkinMintCosts(inventoryOnly)', 'useHeroSkinMintCosts()')
+      .replace('!inventoryOnly &&', 'true &&'),
+    marketHeroSource: marketFidelitySources.marketHeroSource.replace(
+      "IdentityMarketHeroBalance.displayName = 'IdentityMarketHeroBalance'",
+      "const restoredPrice = useHeroSkinMintCost(id, 1)\nIdentityMarketHeroBalance.displayName = 'IdentityMarketHeroBalance'"
+    ),
+    marketHeroesSearchSource:
+      marketFidelitySources.marketHeroesSearchSource.replace(
+        '<MarketHeroesSortSelect inventoryOnly={inventoryOnly} />',
+        '<MarketHeroesSortSelect />'
+      ),
+    heroMintCostSource: marketFidelitySources.heroMintCostSource.replace(
+      '!isDisabled &&',
+      'true &&'
+    )
+  })
+
+  assert.ok(errors.some(error => error.includes('price guard')))
+  assert.ok(errors.some(error => error.includes('restores mint pricing')))
+  assert.ok(errors.some(error => error.includes('quantity sorting')))
+  assert.ok(errors.some(error => error.includes('mint-cost query guard')))
 })

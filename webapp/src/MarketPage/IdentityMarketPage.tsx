@@ -12,6 +12,7 @@ import { MarketCardBacks } from './MarketCardBacks/MarketCardBacks'
 import { MarketCardDetails } from './MarketCardDetails/MarketCardDetails'
 import { MarketCards } from './MarketCards/MarketCards'
 import MarketDecks from './MarketDecks/MarketDecks'
+import { MarketHeroes } from './MarketHeroes/MarketHeroes'
 import { MarketStickerFeature } from './MarketStickerFeature/MarketStickerFeature'
 import { MarketStickers } from './MarketStickers/MarketStickers'
 
@@ -63,6 +64,10 @@ export const IdentityMarketPage = memo(() => {
         <Route
           element={<MarketCardBackFeature inventoryOnly />}
           path={ROUTES_CONFIG.routes.MARKET.routes.CARDBACK.path}
+        />
+        <Route
+          element={<MarketHeroes inventoryOnly />}
+          path={ROUTES_CONFIG.routes.MARKET.routes.HEROES.path}
         />
         <Route
           path="*"

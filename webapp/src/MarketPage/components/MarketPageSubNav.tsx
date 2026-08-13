@@ -44,6 +44,13 @@ export const MarketPageSubNav = memo(() => {
             id="decks"
           />,
           <SubNavButton
+            key="heroes"
+            to={makeMarketHeroSkinsRoute()}
+            text={t('shop.subNavHeroes')}
+            icon="heroes"
+            id="heroes"
+          />,
+          <SubNavButton
             key="stickers"
             to={makeMarketStickersRoute()}
             text={t('shop.subNavStickers')}

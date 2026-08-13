@@ -28,10 +28,20 @@ const getId = ({ id }: MarketHeroProps) => {
   return id
 }
 
-export const MarketHeroesList = memo(() => {
+interface MarketHeroesListProps {
+  inventoryOnly?: boolean
+}
+
+const IdentityMarketHero = memo((props: MarketHeroProps) => (
+  <MarketHero {...props} inventoryOnly />
+))
+
+IdentityMarketHero.displayName = 'IdentityMarketHero'
+
+export const MarketHeroesList = memo(({ inventoryOnly }: MarketHeroesListProps) => {
   const numColumns = useCardListNumColumns()
 
-  const { marketHeroSkinList } = useMarketHeroesList()
+  const { marketHeroSkinList } = useMarketHeroesList(inventoryOnly)
 
   const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
     numColumns,
@@ -54,7 +64,7 @@ export const MarketHeroesList = memo(() => {
       ref={listParentRef}
     >
       <VirtualizedItemList<MarketHeroProps>
-        ItemComponent={MarketHero}
+        ItemComponent={inventoryOnly ? IdentityMarketHero : MarketHero}
         getItemId={getId}
         ListLoader={Loader}
         items={marketHeroSkinList || DEFAULT_LIST}

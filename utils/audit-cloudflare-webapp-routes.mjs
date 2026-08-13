@@ -99,6 +99,11 @@ export const webappRouteAuditErrors = ({
   marketCardBackSource,
   marketCardBacksSearchSource,
   marketCardBackFeatureSource,
+  marketHeroesListSource,
+  marketHeroListHookSource,
+  marketHeroSource,
+  marketHeroesSearchSource,
+  heroMintCostSource,
   cartQuerySource
 }) => {
   const errors = []
@@ -343,13 +348,15 @@ export const webappRouteAuditErrors = ({
     '<MarketCardBacks inventoryOnly />',
     '<MarketCardBackFeature inventoryOnly />',
     'ROUTES_CONFIG.routes.MARKET.routes.CARDBACKS.path',
-    'ROUTES_CONFIG.routes.MARKET.routes.CARDBACK.path'
+    'ROUTES_CONFIG.routes.MARKET.routes.CARDBACK.path',
+    '<MarketHeroes inventoryOnly />',
+    'ROUTES_CONFIG.routes.MARKET.routes.HEROES.path'
   ]) {
     if (!identityMarketSource.includes(token)) {
       errors.push(`Google read-only Market fidelity is missing: ${token}`)
     }
   }
-  for (const forbidden of ['ViewOrderButton', 'MarketHeroes']) {
+  for (const forbidden of ['ViewOrderButton', '<MarketHeroes />']) {
     if (identityMarketSource.includes(forbidden)) {
       errors.push(
         `Google read-only Market mounts legacy trading UI: ${forbidden}`
@@ -365,6 +372,7 @@ export const webappRouteAuditErrors = ({
   for (const token of [
     'makeMarketCardsRoute()',
     'makeNavigateToMarketDecksRoute()',
+    'makeMarketHeroSkinsRoute()',
     'makeMarketStickersRoute()',
     'makeMarketCardBacksRoute()'
   ]) {
@@ -453,6 +461,56 @@ export const webappRouteAuditErrors = ({
   ]) {
     if (!marketCardBackFeatureSource.includes(token)) {
       errors.push(`Google card-back detail substitution is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'useMarketHeroesList(inventoryOnly)',
+    'ItemComponent={inventoryOnly ? IdentityMarketHero : MarketHero}'
+  ]) {
+    if (!marketHeroesListSource.includes(token)) {
+      errors.push(`Google hero catalog adapter is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'useHeroSkinMintCosts(inventoryOnly)',
+    'useTokenBalances(ItemType.SW_HERO_SKINS)',
+    'if (inventoryOnly) {',
+    '!inventoryOnly &&'
+  ]) {
+    if (!marketHeroListHookSource.includes(token)) {
+      errors.push(`Google hero catalog price guard is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'IdentityMarketHeroBalance',
+    'inventoryOnly ? IdentityMarketHeroBalance : MarketHeroBalance'
+  ]) {
+    if (!marketHeroSource.includes(token)) {
+      errors.push(`Google hero catalog balance adapter is missing: ${token}`)
+    }
+  }
+  const identityHeroBalanceSource = marketHeroSource.slice(
+    marketHeroSource.indexOf('const IdentityMarketHeroBalance'),
+    marketHeroSource.indexOf(
+      "IdentityMarketHeroBalance.displayName = 'IdentityMarketHeroBalance'"
+    )
+  )
+  if (
+    identityHeroBalanceSource.includes('useHeroSkinMintCost') ||
+    identityHeroBalanceSource.includes('prices=')
+  ) {
+    errors.push('Google hero catalog balance adapter restores mint pricing')
+  }
+  if (
+    !marketHeroesSearchSource.includes(
+      '<MarketHeroesSortSelect inventoryOnly={inventoryOnly} />'
+    )
+  ) {
+    errors.push('Google hero catalog quantity sorting substitution is missing')
+  }
+  for (const token of ['!isDisabled &&', "env.AUTH_MODE !== 'google'"]) {
+    if (!heroMintCostSource.includes(token)) {
+      errors.push(`Google hero mint-cost query guard is missing: ${token}`)
     }
   }
   for (const token of [
@@ -552,6 +610,11 @@ const main = async () => {
     marketCardBackSource,
     marketCardBacksSearchSource,
     marketCardBackFeatureSource,
+    marketHeroesListSource,
+    marketHeroListHookSource,
+    marketHeroSource,
+    marketHeroesSearchSource,
+    heroMintCostSource,
     cartQuerySource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
@@ -748,6 +811,41 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/MarketHeroesList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/hooks/useMarketHeroesList.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketHeroes/MarketHeroesList/components/MarketHero.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/MarketPage/MarketHeroes/MarketHeroesSearchBar/MarketHeroesSearchBar.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/shared/queries/hero-skins/useHeroSkinMintCost.ts'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'webapp/src/shared/queries/useCart.ts'), 'utf8')
   ])
   const errors = webappRouteAuditErrors({
@@ -788,6 +886,11 @@ const main = async () => {
     marketCardBackSource,
     marketCardBacksSearchSource,
     marketCardBackFeatureSource,
+    marketHeroesListSource,
+    marketHeroListHookSource,
+    marketHeroSource,
+    marketHeroesSearchSource,
+    heroMintCostSource,
     cartQuerySource
   })
   if (errors.length) {

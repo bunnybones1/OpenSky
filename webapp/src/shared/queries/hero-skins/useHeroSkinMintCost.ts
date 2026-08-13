@@ -168,7 +168,7 @@ export const useHeroSkinMintCost = (
   )
 }
 
-export const useHeroSkinMintCosts = () => {
+export const useHeroSkinMintCosts = (isDisabled = false) => {
   const { userAddress } = useSnapshot(authenticationState)
   const { data: cardsSortedByPrice } = useTokensSortedByPrice(
     SwapType.BUY,
@@ -185,7 +185,11 @@ export const useHeroSkinMintCosts = () => {
     queries: AllHeroSkinIds.map((id) => ({
       queryKey: getHeroSkinMintPriceKey(id, 1),
       queryFn: heroSkinMintPriceFetcher(id, 1, cardsSortedByPriceAscending),
-      enabled: env.AUTH_MODE !== 'google' && !!userAddress && !!cardsSortedByPrice,
+      enabled:
+        !isDisabled &&
+        env.AUTH_MODE !== 'google' &&
+        !!userAddress &&
+        !!cardsSortedByPrice,
       staleTime: THIRTY_SECONDS
     }))
   })
