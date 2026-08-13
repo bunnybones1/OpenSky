@@ -168,3 +168,17 @@ chunk and `/game/cloudflare/` entry both returned HTTP 200. Neither screen
 exposed the source Secret Debug footer link, confirming that the public
 `workers.dev` suffix no longer activates development behavior. Verification was
 read-only and did not start another match or change the browser game cache.
+
+Read-only deck-Market milestone `d0c14a4`, canonical navigation fix `d461079`,
+and navigation safety gate `f34e07b` were deployed on 2026-08-13 as Worker
+version `0e0ac2b7-b320-455f-91b6-442fdd4b5d3a`. Production HTML referenced the
+fully tested entry asset `index-4892359f.js`, and the local-bot game entry
+returned HTTP 200. A signed-in Home client linked Market directly to
+`/market/decks?column=score`; the destination rendered the original Decks
+subnav, Top Decks and Most Played filters, and a zero-results state. A
+read-only production D1 query confirmed `player_deck_ranks` also contained zero
+rows (`changes: 0`, `rows_written: 0`), so the empty state was authoritative.
+No wallet price, cart, buy, sell, review-order, or WalletConnect transaction
+control rendered. The release passed 334 main Worker tests, 216 multiplayer
+tests, analytics tests, browser/game tests, and every off-chain reward,
+mint-queue, route, auth-mode, and transaction safety gate.
