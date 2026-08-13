@@ -63,7 +63,12 @@ const GOOGLE_REWARD_UI_REQUIREMENTS = {
   conquestNotifications: ["env.AUTH_MODE === 'google'"],
   conquestRewardFeed: ["env.AUTH_MODE !== 'google'"],
   tradableBadge: ["env.AUTH_MODE === 'google') return null"],
-  skypassThumbnail: ["env.AUTH_MODE !== 'google'"]
+  skypassThumbnail: ["env.AUTH_MODE !== 'google'"],
+  skypassClaim: [
+    "env.AUTH_MODE === 'google') return",
+    "env.AUTH_MODE !== 'google'",
+    'openConversionDialog'
+  ]
 }
 
 const OPTIONAL_WALLET_REQUIREMENTS = [
@@ -197,6 +202,27 @@ export const offchainGateErrors = ({
         }
       }
     }
+    const skypassClaim = googleRewardUi.skypassClaim
+    if (
+      skypassClaim &&
+      !/const onDialogClose[\s\S]*?if\s*\(env\.AUTH_MODE === ['"]google['"]\)\s*return[\s\S]*?openConversionDialog\(\)/.test(
+        skypassClaim
+      )
+    ) {
+      errors.push(
+        'Google SkyPass card dialog can open the legacy wallet-conversion prompt'
+      )
+    }
+    if (
+      skypassClaim &&
+      !/else if\s*\(\s*env\.AUTH_MODE !== ['"]google['"][\s\S]*?\)\s*\{\s*if\s*\(!!shouldSeeConversionDialog\(\)\)\s*\{\s*openConversionDialog\(\)/.test(
+        skypassClaim
+      )
+    ) {
+      errors.push(
+        'Google SkyPass item claim can open the legacy wallet-conversion prompt'
+      )
+    }
   }
   for (const copy of googleRewardCopy) {
     if (/\b(?:mint|minted|minting|tradable|blockchain|wallet)\b/i.test(copy)) {
@@ -287,6 +313,7 @@ const main = async () => {
     conquestRewardFeed,
     tradableBadge,
     skypassThumbnail,
+    skypassClaim,
     englishLocaleSource,
     analyticsWorker,
     walletContents,
@@ -436,6 +463,13 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/SkyPassPage/SkyPassForeground/SkyPassClaimReward/SkyPassClaimReward.tsx'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'webapp/locales/en/webapp.json'), 'utf8'),
     readFile(path.join(root, 'game-analytics/src/cloudflareWorker.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/wallet-contents.ts'), 'utf8'),
@@ -473,7 +507,8 @@ const main = async () => {
       conquestNotifications,
       conquestRewardFeed,
       tradableBadge,
-      skypassThumbnail
+      skypassThumbnail,
+      skypassClaim
     },
     googleRewardCopy: [
       englishLocale.generic.Collected,

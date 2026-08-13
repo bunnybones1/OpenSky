@@ -451,7 +451,9 @@ and progress are not migrated.
   per-season premium entitlements. The entitlement belongs to the Google
   identity, defaults to false without creating a row, and is independent of
   authentication and any future WalletConnect link; the basic track stays
-  wallet-free.
+  wallet-free. Claimed rewards are delivered directly to D1 inventory; the
+  preserved post-claim Sequence-wallet conversion prompt is unreachable in
+  Google mode.
 - Premium toggles require both `ADMIN` and a separately dormant
   `ENTITLEMENT_WRITE` capability. The source production giveaway limit is an
   explicit per-season D1 row and is checked before grant-versus-removal, while
@@ -521,10 +523,14 @@ and progress are not migrated.
   idempotency keys, five bounded attempts, and a dead-letter receipt. Missing or
   partial configuration sends nothing, and provider failure can never roll back
   a reward or suppress its authoritative in-app notification.
-- Seasonal invite-sticker redemption and marketplace writes still need Cloud
-  Weasel product decisions; the source admin RPC surface is ported. Conquest
-  settlement is implemented, but production has no active reward-pool rows;
-  matchmaking remains disabled until an
+- Seasonal invite-sticker redemption is ported to delayed D1 inventory with
+  source thresholds, top-five friend attribution, and retry-safe receipts. It
+  remains inactive until a versioned current-season sticker schedule is
+  approved; the repository contains no source schedule for season 62, so the
+  original rewards screen correctly reports `Coming Soon`. Marketplace writes
+  still need a Cloud Weasel product decision. Conquest settlement is
+  implemented, but production has no active reward-pool rows; matchmaking
+  remains disabled until an
   explicitly approved pool and a pre-enable delivery drill pass.
 - Existing Go/Postgres account data will not be migrated into D1. Cloud Weasel
   launches with zero users, so source burner/account migration is deliberately

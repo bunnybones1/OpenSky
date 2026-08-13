@@ -53,7 +53,12 @@ const validInput = () => ({
     conquestNotifications: "env.AUTH_MODE === 'google'",
     conquestRewardFeed: "env.AUTH_MODE !== 'google'",
     tradableBadge: "if (env.AUTH_MODE === 'google') return null",
-    skypassThumbnail: "env.AUTH_MODE !== 'google'"
+    skypassThumbnail: "env.AUTH_MODE !== 'google'",
+    skypassClaim:
+      "const onDialogClose = () => { if (env.AUTH_MODE === 'google') return; " +
+      'openConversionDialog() }; ' +
+      "else if (env.AUTH_MODE !== 'google' && reward) { " +
+      'if (!!shouldSeeConversionDialog()) { openConversionDialog() } }'
   },
   googleRewardCopy: [
     'Collected',
@@ -190,4 +195,33 @@ test('rejects legacy ownership language from Google reward surfaces', () => {
   const errors = offchainGateErrors(input)
   assert.ok(errors.some(error => error.includes('tradableBadge')))
   assert.ok(errors.some(error => error.includes('ownership language')))
+})
+
+test('rejects a SkyPass claim that can prompt Google identities for wallet conversion', () => {
+  const input = validInput()
+  input.googleRewardUi.skypassClaim = 'openConversionDialog()'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('skypassClaim')))
+  assert.ok(errors.some(error => error.includes('card dialog')))
+  assert.ok(errors.some(error => error.includes('item claim')))
+})
+
+test('requires both SkyPass wallet-conversion exits to stay Google-guarded', () => {
+  const input = validInput()
+  input.googleRewardUi.skypassClaim =
+    "const onDialogClose = () => { if (env.AUTH_MODE === 'google') return; " +
+    'openConversionDialog() }; ' +
+    'else if (reward) { if (!!shouldSeeConversionDialog()) { ' +
+    'openConversionDialog() } }'
+  let errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('item claim')))
+  assert.ok(!errors.some(error => error.includes('card dialog')))
+
+  input.googleRewardUi.skypassClaim =
+    'const onDialogClose = () => { openConversionDialog() }; ' +
+    "else if (env.AUTH_MODE !== 'google' && reward) { " +
+    'if (!!shouldSeeConversionDialog()) { openConversionDialog() } }'
+  errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('card dialog')))
+  assert.ok(!errors.some(error => error.includes('item claim')))
 })

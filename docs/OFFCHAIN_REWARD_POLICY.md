@@ -19,6 +19,9 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
 - Google-auth product copy describes these items as Cloud Weasel inventory,
   collectibles, exchanges, claims, or deliveries. Mint/tradable badges and
   blockchain-wallet reward copy remain confined to the legacy-wallet product.
+  A successful Google-identity claim must also stay in that product boundary:
+  post-claim wallet-conversion prompts are legacy-wallet behavior and cannot be
+  reached after an off-chain delivery.
 - WalletConnect remains optional. A verified wallet may contribute read-only
   external ownership to content views, but it does not authenticate the player,
   own the Cloud Weasel account, or become the destination for earned rewards.

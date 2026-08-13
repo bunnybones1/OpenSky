@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { usePrevious } from 'react-use'
 
+import env from '~/env'
 import { mockClaimReward } from '~/HomePage/NotificationsDialog/mock/data'
 import {
   CardSet,
@@ -122,6 +123,8 @@ export const SkyPassClaimReward = memo(
     const [areDialogRewardsNew, setAreDialogRewardsNew] = useState(false)
 
     const onDialogClose = useCallback(() => {
+      if (env.AUTH_MODE === 'google') return
+
       const account = getAuthedAccount()
 
       if (
@@ -234,8 +237,9 @@ export const SkyPassClaimReward = memo(
           if (isItemTypeACard(selectedReward.itemType) && !postClaimURL) {
             handleOpenModal(response.rewards)
           } else if (
-            selectedReward.itemType === ItemType.SW_CARD_BACKS ||
-            selectedReward.itemType === ItemType.SW_STICKERS
+            env.AUTH_MODE !== 'google' &&
+            (selectedReward.itemType === ItemType.SW_CARD_BACKS ||
+              selectedReward.itemType === ItemType.SW_STICKERS)
           ) {
             if (!!shouldSeeConversionDialog()) {
               openConversionDialog()
