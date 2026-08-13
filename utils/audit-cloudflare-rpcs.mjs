@@ -242,7 +242,11 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMProposeLeaderboardRewardSchedule',
   'GMListConquestRewardPools',
   'GMProposeConquestRewardPool',
-  'GMRetireConquestRewardPool'
+  'GMRetireConquestRewardPool',
+  'GMActivateConquestV2RewardSchedule',
+  'GMDisableConquestV2RewardSchedule',
+  'GMListConquestV2RewardSchedules',
+  'GMProposeConquestV2RewardSchedule'
 ])
 
 export const partitionRpcGaps = methods => ({

@@ -150,6 +150,57 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (evidence.v2ScheduleActivation !== undefined) {
+    for (const token of [
+      'CREATE TABLE conquest_v2_reward_schedule_activations',
+      'activated_by_user_id <> created_by_user_id',
+      'settings.version = NEW.settings_version',
+      'settings.mutation_id = NEW.settings_mutation_id',
+      'Conquest V2 reward policy activation is invalid'
+    ]) {
+      if (!evidence.v2ScheduleActivation.includes(token)) {
+        errors.push(`Conquest V2 schedule activation is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.v2ScheduleOperationsMigration !== undefined) {
+    for (const token of [
+      'CREATE TABLE staff_conquest_v2_reward_schedule_permissions',
+      "permission IN ('PROPOSE', 'ACTIVATE', 'DISABLE')",
+      'CREATE TABLE staff_conquest_v2_reward_schedule_operations',
+      'CREATE UNIQUE INDEX staff_conquest_v2_reward_schedule_operations_once_idx',
+      'CREATE TRIGGER staff_conquest_v2_reward_schedule_operation_apply_guard',
+      'activation.activated_at = NEW.created_at',
+      'activation.activated_at <= schedule.starts_at',
+      'CREATE TABLE staff_conquest_v2_reward_schedule_audit',
+      'staff Conquest V2 reward schedule audit rows are immutable'
+    ]) {
+      if (!evidence.v2ScheduleOperationsMigration.includes(token)) {
+        errors.push(
+          `Conquest V2 schedule operations migration is missing: ${token}`
+        )
+      }
+    }
+  }
+  if (evidence.v2ScheduleOperations !== undefined) {
+    for (const token of [
+      "ConquestV2RewardScheduleOperation =\n  | 'PROPOSE'\n  | 'ACTIVATE'\n  | 'DISABLE'",
+      'version !== replacesVersion + 1',
+      'CONQUEST_V2_REWARD_POLICY_HASH',
+      'createdByUserId === actorUserId',
+      'settings confirmation does not match',
+      'settings changed after proposal',
+      'Silver quantity confirmation is unsafe',
+      'startsAt must be in the future',
+      "'x-cloud-weasel-operation-key'"
+    ]) {
+      if (!evidence.v2ScheduleOperations.includes(token)) {
+        errors.push(
+          `Conquest V2 schedule operations adapter is missing: ${token}`
+        )
+      }
+    }
+  }
   if (evidence.staff !== undefined) {
     for (const token of [
       'requireConquestRewardPoolWrite(',
@@ -157,6 +208,14 @@ export const conquestGateErrors = (config, evidence = {}) => {
     ]) {
       if (!evidence.staff.includes(token)) {
         errors.push(`Conquest pool staff authority is missing: ${token}`)
+      }
+    }
+    for (const token of [
+      'requireConquestV2RewardScheduleWrite(',
+      'staff_conquest_v2_reward_schedule_permissions'
+    ]) {
+      if (!evidence.staff.includes(token)) {
+        errors.push(`Conquest V2 schedule staff authority is missing: ${token}`)
       }
     }
   }
@@ -173,6 +232,18 @@ export const conquestGateErrors = (config, evidence = {}) => {
   if (evidence.api !== undefined) {
     if (!evidence.api.includes('FROM conquest_approved_active_reward_pools')) {
       errors.push('Conquest rewards API lost approved-pool gate')
+    }
+  }
+  if (evidence.gateway !== undefined) {
+    for (const token of [
+      "case 'GMListConquestV2RewardSchedules'",
+      "case 'GMProposeConquestV2RewardSchedule'",
+      "case 'GMActivateConquestV2RewardSchedule'",
+      "case 'GMDisableConquestV2RewardSchedule'"
+    ]) {
+      if (!evidence.gateway.includes(token)) {
+        errors.push(`Conquest V2 schedule RPC surface is missing: ${token}`)
+      }
     }
   }
   if (evidence.readiness !== undefined) {
@@ -201,10 +272,14 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    v2ScheduleActivation,
+    v2ScheduleOperationsMigration,
+    v2ScheduleOperations,
     staff,
     cardLibrary,
     settlement,
     api,
+    gateway,
     readiness
   ] = await Promise.all([
     readFile(
@@ -247,6 +322,33 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0089_conquest_v2_reward_policy_activation.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0097_conquest_v2_reward_schedule_operations.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'src',
+        'conquest-v2-reward-schedule-operations.ts'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'staff.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare', 'src', 'generated', 'card-library.json'),
@@ -257,6 +359,7 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare', 'src', 'conquest-readiness.ts'),
       'utf8'
@@ -268,10 +371,14 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    v2ScheduleActivation,
+    v2ScheduleOperationsMigration,
+    v2ScheduleOperations,
     staff,
     cardLibrary,
     settlement,
     api,
+    gateway,
     readiness
   })
   if (errors.length) {
@@ -280,7 +387,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    'Conquest deployment defaults remain disabled; pool approval, settlement, and runtime admission are receipt-gated\n'
+    'Conquest deployment defaults remain disabled; pool, V2 schedule, settlement, and runtime admission are independently reviewed and receipt-gated\n'
   )
 }
 

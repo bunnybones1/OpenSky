@@ -54,6 +54,10 @@ import {
   ConquestRewardPoolOperationsRepository
 } from './conquest-reward-pool-operations'
 import { ConquestV2EconomyRepository } from './conquest-v2-economy'
+import {
+  CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER,
+  ConquestV2RewardScheduleOperationsRepository
+} from './conquest-v2-reward-schedule-operations'
 import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
 import { DeckRanksRepository } from './deck-ranks'
@@ -288,6 +292,8 @@ export const handleApiRequest = async (
     env.AUTH_DB
   )
   const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
+  const conquestV2RewardSchedules =
+    new ConquestV2RewardScheduleOperationsRepository(env.AUTH_DB)
   const leaderboardRewardSchedules =
     new LeaderboardRewardScheduleOperationsRepository(env.AUTH_DB)
   const deckRanks = new DeckRanksRepository(env.AUTH_DB)
@@ -1419,6 +1425,95 @@ export const handleApiRequest = async (
         await requestBody<Record<string, never>>(request)
         return json(request, env, {
           summary: await conquestV2Economy.summary()
+        })
+      }
+
+      case 'GMListConquestV2RewardSchedules': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ version?: unknown }>(request)
+        return json(request, env, {
+          schedules: await conquestV2RewardSchedules.list(body.version),
+          reviewInputs: await conquestV2RewardSchedules.reviewInputs()
+        })
+      }
+
+      case 'GMProposeConquestV2RewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestV2RewardScheduleWrite(
+          principal.userId,
+          'PROPOSE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          replacesVersion?: unknown
+          startsAt?: unknown
+          firstRunAt?: unknown
+          firstSeason?: unknown
+          firstWeek?: unknown
+          deliveryDelaySeconds?: unknown
+          rewardCardSets?: unknown
+          policyVersion?: unknown
+          policyHash?: unknown
+          settingsVersion?: unknown
+          settingsMutationId?: unknown
+          weightPerSilverCard?: unknown
+          silverCounts?: unknown
+          reason?: unknown
+          reviewReference?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await conquestV2RewardSchedules.propose(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMActivateConquestV2RewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestV2RewardScheduleWrite(
+          principal.userId,
+          'ACTIVATE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          policyVersion?: unknown
+          policyHash?: unknown
+          settingsVersion?: unknown
+          settingsMutationId?: unknown
+          weightPerSilverCard?: unknown
+          silverCounts?: unknown
+          reviewReference?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await conquestV2RewardSchedules.activate(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMDisableConquestV2RewardSchedule': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestV2RewardScheduleWrite(
+          principal.userId,
+          'DISABLE'
+        )
+        const body = await requestBody<{
+          version?: unknown
+          replacesVersion?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          schedule: await conquestV2RewardSchedules.disable(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER)
+          )
         })
       }
 

@@ -67,15 +67,52 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "'x-cloud-weasel-operation-key'",
       'operation_key, operation, pool_version, actor_user_id'
     ].join('\n'),
+    v2ScheduleActivation: [
+      'CREATE TABLE conquest_v2_reward_schedule_activations',
+      'activated_by_user_id <> created_by_user_id',
+      'settings.version = NEW.settings_version',
+      'settings.mutation_id = NEW.settings_mutation_id',
+      'Conquest V2 reward policy activation is invalid'
+    ].join('\n'),
+    v2ScheduleOperationsMigration: [
+      'CREATE TABLE staff_conquest_v2_reward_schedule_permissions',
+      "permission IN ('PROPOSE', 'ACTIVATE', 'DISABLE')",
+      'CREATE TABLE staff_conquest_v2_reward_schedule_operations',
+      'CREATE UNIQUE INDEX staff_conquest_v2_reward_schedule_operations_once_idx',
+      'CREATE TRIGGER staff_conquest_v2_reward_schedule_operation_apply_guard',
+      'activation.activated_at = NEW.created_at',
+      'activation.activated_at <= schedule.starts_at',
+      'CREATE TABLE staff_conquest_v2_reward_schedule_audit',
+      'staff Conquest V2 reward schedule audit rows are immutable'
+    ].join('\n'),
+    v2ScheduleOperations: [
+      "ConquestV2RewardScheduleOperation =\n  | 'PROPOSE'\n  | 'ACTIVATE'\n  | 'DISABLE'",
+      'version !== replacesVersion + 1',
+      'CONQUEST_V2_REWARD_POLICY_HASH',
+      'createdByUserId === actorUserId',
+      'settings confirmation does not match',
+      'settings changed after proposal',
+      'Silver quantity confirmation is unsafe',
+      'startsAt must be in the future',
+      "'x-cloud-weasel-operation-key'"
+    ].join('\n'),
     staff: [
       'requireConquestRewardPoolWrite(',
-      'staff_conquest_reward_pool_permissions'
+      'staff_conquest_reward_pool_permissions',
+      'requireConquestV2RewardScheduleWrite(',
+      'staff_conquest_v2_reward_schedule_permissions'
     ].join('\n'),
     settlement: [
       'FROM conquest_approved_active_reward_pools',
       'SELECT 1 FROM conquest_approved_active_reward_pools'
     ].join('\n'),
     api: 'FROM conquest_approved_active_reward_pools',
+    gateway: [
+      "case 'GMListConquestV2RewardSchedules'",
+      "case 'GMProposeConquestV2RewardSchedule'",
+      "case 'GMActivateConquestV2RewardSchedule'",
+      "case 'GMDisableConquestV2RewardSchedule'"
+    ].join('\n'),
     readiness: 'JOIN conquest_approved_active_reward_pools approved'
   }
   assert.deepEqual(conquestGateErrors({}, evidence), [])
@@ -85,9 +122,13 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'poolActivation',
     'poolOperationsMigration',
     'poolOperations',
+    'v2ScheduleActivation',
+    'v2ScheduleOperationsMigration',
+    'v2ScheduleOperations',
     'staff',
     'settlement',
     'api',
+    'gateway',
     'readiness'
   ]) {
     assert.ok(

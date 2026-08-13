@@ -76,7 +76,11 @@ itself.
   zero capability grants and zero cadence rows until that policy decision.
 - Conquest V2 requires an explicit cadence, current economy settings with at
   least one Silver at every eligible treasure level, and second-actor approval
-  of the exact resulting quantities and card pool.
+  of the exact resulting quantities and card pool. Reviewed staff adapters now
+  list the authoritative review inputs and propose, independently activate, or
+  immediately disable immutable schedules without direct SQL. Production still
+  has zero capability grants and zero schedule rows, so this operational
+  surface remains dormant until those economy choices are supplied.
 - Referral stickers require source-equivalent current-season sticker metadata
   and a distinct actor to activate its exact thresholds. With no season-62
   source schedule in the repository, the original screen correctly says

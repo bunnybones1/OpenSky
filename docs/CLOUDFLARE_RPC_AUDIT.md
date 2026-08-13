@@ -23,7 +23,7 @@ count or the critical player-facing compatibility set regresses.
 | Cloudflare-superseded RPCs      |      17 |
 | Deliberately retired RPCs       |       3 |
 | Actionable source RPC gaps      |       0 |
-| Cloudflare-only RPC adapters    |      11 |
+| Cloudflare-only RPC adapters    |      15 |
 
 Together, 172/172 source contracts (100%) are functionally implemented,
 preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
@@ -71,7 +71,7 @@ Conquest reward-pool replacement: `GMListConquestRewardPools`,
 without inventing contents or requiring hand-written production SQL. Writes
 use separate dormant capabilities, exact-manifest confirmation, immutable
 idempotency receipts, and audits; none writes queue readiness or game-mode
-status. The RPC audit allowlists all seven adapters by name and rejects a new
+status. The RPC audit allowlists every reviewed adapter by name and rejects a new
 or missing Cloudflare-only method.
 
 Four reviewed leaderboard adapters similarly list, propose, independently
@@ -80,6 +80,14 @@ pinned source reward-policy digest. Monotonic compare-and-swap versions prevent
 competing cadence decisions from both landing. Separate dormant capabilities,
 idempotency receipts, and immutable audits keep the cron path disabled until an
 explicit UTC cadence receives second-actor approval.
+
+Four reviewed Conquest V2 adapters expose the already-versioned weekly treasure
+schedule without direct D1 writes: list, propose, independently activate, and
+disable. Every proposal explicitly confirms the current economy mutation,
+source algorithm digest, 11-level Silver vector, eligible card sets, UTC
+cadence, season/week anchor, and delivery delay. Separate dormant capabilities,
+monotonic versions, immutable receipts, and a second actor keep production
+inert until those product inputs are deliberately approved.
 
 ## Reviewed non-ports
 
