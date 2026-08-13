@@ -10,6 +10,11 @@ interface StickerRow {
   required_points: number
 }
 
+interface ActiveScheduleRow {
+  schedule_version: number
+  minimum_points: number
+}
+
 interface AwardedCostRow {
   required_points: number
 }
@@ -60,6 +65,7 @@ const carryPointsIntoSeason = async (
 const candidateUsers = async (
   database: D1Database,
   season: number,
+  scheduleVersion: number,
   minimumPoints: number
 ): Promise<CandidateRow[]> => {
   const rows = await database
@@ -71,8 +77,8 @@ const candidateUsers = async (
          AND item.balance >= ?
          AND settings.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')
          AND EXISTS (
-           SELECT 1 FROM content_stickers sticker
-           WHERE sticker.season = ?
+           SELECT 1 FROM referral_sticker_active_schedule_entries sticker
+           WHERE sticker.season = ? AND sticker.schedule_version = ?
              AND sticker.required_points <= item.balance + COALESCE((
                SELECT MAX(previous.required_points)
                FROM referral_sticker_reward_awards previous
@@ -89,7 +95,7 @@ const candidateUsers = async (
        ORDER BY item.user_id ASC
        LIMIT ?`
     )
-    .bind(minimumPoints, season, MAX_PREPARATIONS_PER_RUN)
+    .bind(minimumPoints, season, scheduleVersion, MAX_PREPARATIONS_PER_RUN)
     .all<CandidateRow>()
   return rows.results
 }
@@ -98,21 +104,23 @@ const prepareForUser = async (
   database: D1Database,
   userId: string,
   season: number,
+  scheduleVersion: number,
   now: Date
 ): Promise<boolean> => {
   const [stickersResult, previous, points, friendsResult] = await Promise.all([
     database
       .prepare(
         `SELECT sticker.token_id, sticker.required_points
-         FROM content_stickers sticker
-         WHERE sticker.season = ? AND NOT EXISTS (
+         FROM referral_sticker_active_schedule_entries sticker
+         WHERE sticker.season = ? AND sticker.schedule_version = ?
+           AND NOT EXISTS (
            SELECT 1 FROM referral_sticker_reward_awards award
            WHERE award.user_id = ? AND award.season = sticker.season
              AND award.token_id = sticker.token_id
          )
          ORDER BY sticker.required_points ASC, sticker.id ASC`
       )
-      .bind(season, userId)
+      .bind(season, scheduleVersion, userId)
       .all<StickerRow>(),
     database
       .prepare(
@@ -263,6 +271,17 @@ const prepareForUser = async (
   statements.push(
     database
       .prepare(
+        `INSERT INTO referral_sticker_reward_batch_schedule_receipts
+           (batch_id, schedule_version, created_at)
+         SELECT id, ?, created_at
+         FROM referral_sticker_reward_batches
+         WHERE claim_token = ? AND status = 'PREPARING'`
+      )
+      .bind(scheduleVersion, claimToken)
+  )
+  statements.push(
+    database
+      .prepare(
         `UPDATE referral_sticker_reward_batches SET status = 'PENDING'
          WHERE claim_token = ? AND status = 'PREPARING'`
       )
@@ -390,27 +409,37 @@ export const runReferralStickerRewards = async (
 ): Promise<ReferralStickerRewardRun> => {
   const season = seasonFromDate(now)
   const nowText = now.toISOString()
-  const minimum = await database
+  const schedule = await database
     .prepare(
-      `SELECT MIN(required_points) AS required_points
-       FROM content_stickers WHERE season = ?`
+      `SELECT schedule_version, MIN(required_points) AS minimum_points
+       FROM referral_sticker_active_schedule_entries WHERE season = ?
+       GROUP BY schedule_version`
     )
     .bind(season)
-    .first<{ required_points: number | null }>()
+    .first<ActiveScheduleRow>()
 
   let prepared = 0
   if (
-    minimum?.required_points !== null &&
-    minimum?.required_points !== undefined
+    schedule?.minimum_points !== null &&
+    schedule?.minimum_points !== undefined
   ) {
     await carryPointsIntoSeason(database, season, nowText)
     const candidates = await candidateUsers(
       database,
       season,
-      minimum.required_points
+      schedule.schedule_version,
+      schedule.minimum_points
     )
     for (const candidate of candidates) {
-      if (await prepareForUser(database, candidate.user_id, season, now)) {
+      if (
+        await prepareForUser(
+          database,
+          candidate.user_id,
+          season,
+          schedule.schedule_version,
+          now
+        )
+      ) {
         prepared += 1
       }
     }
@@ -425,8 +454,8 @@ export const runReferralStickerRewards = async (
     status:
       prepared > 0 || delivered > 0
         ? 'processed'
-        : minimum?.required_points === null ||
-            minimum?.required_points === undefined
+        : schedule?.minimum_points === null ||
+            schedule?.minimum_points === undefined
           ? 'no_content'
           : 'idle',
     prepared,

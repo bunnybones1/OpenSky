@@ -546,7 +546,10 @@ and progress are not migrated.
 - Seasonal invite-sticker redemption is ported to delayed D1 inventory with
   source thresholds, top-five friend attribution, and retry-safe receipts. It
   remains inactive until a versioned current-season sticker schedule is
-  approved; the repository contains no source schedule for season 62, so the
+  approved by a second actor. Raw sticker metadata is never activation
+  authority; an active version freezes its exact IDs/thresholds and every
+  point-deduction batch records that schedule receipt. The repository contains
+  no source schedule for season 62, so the
   original rewards screen correctly reports `Coming Soon`. Marketplace writes
   still need a Cloud Weasel product decision. Conquest settlement is
   implemented, but production has no active reward-pool rows; matchmaking

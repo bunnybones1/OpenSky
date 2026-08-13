@@ -396,7 +396,7 @@ export class ContentRepository {
     const rows = await this.database
       .prepare(
         `SELECT id, token_id, required_points, season
-         FROM content_stickers WHERE season = ?
+         FROM referral_sticker_active_schedule_entries WHERE season = ?
          ORDER BY required_points ASC, id ASC`
       )
       .bind(season)

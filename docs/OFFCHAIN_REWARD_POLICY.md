@@ -20,6 +20,10 @@ imply an NFT, token mint, blockchain transaction, or cash-redemption right.
   reward's timing and contents, never its Cloud Weasel fulfillment mechanism.
   New ports must preserve those outcomes through authenticated D1 inventory or
   another explicit off-chain entitlement with an immutable operation receipt.
+- Configured reward content and reward activation are separate authorities.
+  Raw catalog rows must not spend progression value or appear as earnable
+  rewards until an immutable, independently reviewed schedule activates the
+  exact off-chain contents and thresholds.
 - Google-auth product copy describes these items as Cloud Weasel inventory,
   collectibles, exchanges, claims, or deliveries. Mint/tradable badges and
   blockchain-wallet reward copy remain confined to the legacy-wallet product.
@@ -80,7 +84,10 @@ excluding transaction code from the Google-identity route tree.
 
 Referral sticker rewards retain the source thresholds, top-five friend-point
 attribution, season carry-forward, 23-hour delay, and 100 copies of each earned
-sticker. The former batch mint is an identity-inventory delivery. A batch may
+sticker. Raw content metadata remains dormant until a two-actor, append-only
+schedule activates an exact set of IDs and thresholds; each deduction batch
+records that schedule version. The former batch mint is an identity-inventory
+delivery. A batch may
 move from `DELIVERING` to `DELIVERED` only when an immutable per-sticker receipt
 proves its exact before balance, 100-unit credit, and resulting balance in
 `player_items`. A failed finalization rolls the entire delivery back for a

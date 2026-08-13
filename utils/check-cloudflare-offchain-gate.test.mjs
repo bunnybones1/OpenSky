@@ -131,6 +131,20 @@ const validInput = () => ({
     'match Conquest point player receipts are immutable; ' +
     'match Conquest point completion is invalid; ' +
     'match Conquest point receipts are immutable',
+  referralStickerSource:
+    'referral_sticker_active_schedule_entries; schedule.schedule_version; ' +
+    'referral_sticker_reward_batch_schedule_receipts; INSERT INTO player_items',
+  referralStickerContentSource:
+    'FROM referral_sticker_active_schedule_entries WHERE season = ?',
+  referralStickerScheduleMigration:
+    'referral_sticker_schedule_versions; ' +
+    "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE')); " +
+    'activated_by_user_id <> created_by_user_id; ' +
+    'length(trim(NEW.activated_by_user_id)) = 0; ' +
+    'schedule.activated_at <= batch_row.created_at; ' +
+    'referral sticker schedule activation is invalid; ' +
+    'active referral sticker schedule entries are immutable; ' +
+    'active referral sticker schedule receipt required',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -249,6 +263,19 @@ test('rejects Conquest points without capped immutable player receipts', () => {
   assert.ok(
     errors.some(error => error.includes('Conquest point receipt schema'))
   )
+})
+
+test('rejects referral sticker fulfillment without reviewed schedule activation', () => {
+  const input = validInput()
+  input.referralStickerScheduleMigration =
+    'referral_sticker_schedule_versions'
+  input.referralStickerContentSource = 'FROM content_stickers WHERE season = ?'
+  const errors = offchainGateErrors(input)
+  assert.ok(errors.some(error => error.includes('activated_by_user_id')))
+  assert.ok(
+    errors.some(error => error.includes('active referral sticker schedule'))
+  )
+  assert.ok(errors.some(error => error.includes('unactivated reward metadata')))
 })
 
 test('rejects player inventory writes from an observational pipeline', () => {

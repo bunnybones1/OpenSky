@@ -13,6 +13,38 @@ const inviterId = 'sticker-inviter'
 const firstFriendId = 'sticker-friend-1'
 const secondFriendId = 'sticker-friend-2'
 
+const activateSchedule = async (
+  season: number,
+  entries: Array<{ tokenId: number; requiredPoints: number }>,
+  version = season
+) => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO referral_sticker_schedule_versions
+       (version, season, status, expected_entry_count, created_by_user_id,
+        activated_by_user_id, reason, review_reference, created_at,
+        activated_at)
+     VALUES (?, ?, 'DRAFT', ?, 'system:test-author', NULL,
+             'test schedule', 'test:review', ?, NULL)`
+  )
+    .bind(version, season, entries.length, NOW.toISOString())
+    .run()
+  for (const entry of entries) {
+    await env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_entries
+         (schedule_version, token_id, required_points) VALUES (?, ?, ?)`
+    )
+      .bind(version, entry.tokenId, entry.requiredPoints)
+      .run()
+  }
+  await env.AUTH_DB.prepare(
+    `UPDATE referral_sticker_schedule_versions
+     SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+         activated_at = ? WHERE version = ?`
+  )
+    .bind(NOW.toISOString(), version)
+    .run()
+}
+
 const addUser = async (userId: string) => {
   const createdAt = NOW.toISOString()
   await env.AUTH_DB.prepare(
@@ -69,6 +101,11 @@ const setupRewards = async () => {
        VALUES (101, 10, ?), (102, 20, ?), (103, 30, ?)`
     ).bind(SEASON, SEASON, SEASON)
   ])
+  await activateSchedule(SEASON, [
+    { tokenId: 101, requiredPoints: 10 },
+    { tokenId: 102, requiredPoints: 20 },
+    { tokenId: 103, requiredPoints: 30 }
+  ])
 }
 
 beforeEach(async () => {
@@ -84,6 +121,18 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS referral_sticker_reward_batches_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_batch_schedule_receipts_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_schedule_versions_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_schedule_entries_active_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS content_stickers_active_schedule_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
@@ -92,6 +141,7 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_batches'),
+    env.AUTH_DB.prepare('DELETE FROM referral_sticker_schedule_versions'),
     env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'sticker-%'`),
     env.AUTH_DB.prepare('DELETE FROM content_stickers')
   ])
@@ -122,6 +172,54 @@ beforeEach(async () => {
        BEGIN
          SELECT RAISE(ABORT, 'referral sticker reward batches are immutable');
        END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_batch_schedule_receipts_no_delete
+       BEFORE DELETE ON referral_sticker_reward_batch_schedule_receipts
+       WHEN EXISTS (
+         SELECT 1
+         FROM referral_sticker_reward_batches batch_row
+         JOIN users ON users.id = batch_row.user_id
+         WHERE batch_row.id = OLD.batch_id
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'referral sticker batch schedule receipts are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_schedule_versions_no_delete
+       BEFORE DELETE ON referral_sticker_schedule_versions
+       BEGIN
+         SELECT RAISE(ABORT, 'referral sticker schedule versions are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_schedule_entries_active_no_delete
+       BEFORE DELETE ON referral_sticker_schedule_entries
+       WHEN EXISTS (
+         SELECT 1 FROM referral_sticker_schedule_versions schedule
+         WHERE schedule.version = OLD.schedule_version
+           AND schedule.status = 'ACTIVE'
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'active referral sticker schedule entries are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER content_stickers_active_schedule_no_delete
+       BEFORE DELETE ON content_stickers
+       WHEN EXISTS (
+         SELECT 1
+         FROM referral_sticker_schedule_entries entry
+         JOIN referral_sticker_schedule_versions schedule
+           ON schedule.version = entry.schedule_version
+         WHERE schedule.status = 'ACTIVE'
+           AND schedule.season = OLD.season
+           AND entry.token_id = OLD.token_id
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'active referral sticker metadata is immutable');
+       END`
     )
   ])
 })
@@ -139,6 +237,121 @@ describe('off-chain referral sticker rewards', () => {
         'SELECT COUNT(*) AS count FROM referral_sticker_reward_batches'
       ).first('count')
     ).toBe(0)
+  })
+
+  it('keeps raw sticker metadata dormant until an exact two-actor schedule is activated', async () => {
+    await addUser(inviterId)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKER_POINTS', 0, 25, 0, 'test', ?, ?)`
+      ).bind(inviterId, NOW.toISOString(), NOW.toISOString()),
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_stickers (token_id, required_points, season)
+         VALUES (101, 10, ?), (102, 20, ?)`
+      ).bind(SEASON, SEASON)
+    ])
+
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toEqual({
+      status: 'no_content',
+      prepared: 0,
+      delivered: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'`
+      )
+        .bind(inviterId)
+        .first('balance')
+    ).toBe(25)
+
+    await env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_versions
+         (version, season, status, expected_entry_count, created_by_user_id,
+          activated_by_user_id, reason, review_reference, created_at,
+          activated_at)
+       VALUES (99, ?, 'DRAFT', 2, 'system:test-author', NULL,
+               'test schedule', 'test:review', ?, NULL)`
+    )
+      .bind(SEASON, NOW.toISOString())
+      .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_entries
+         (schedule_version, token_id, required_points)
+       VALUES (99, 101, 10)`
+    ).run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE referral_sticker_schedule_versions
+         SET status = 'ACTIVE', activated_by_user_id = 'system:test-author',
+             activated_at = ? WHERE version = 99`
+      )
+        .bind(NOW.toISOString())
+        .run()
+    ).rejects.toThrow('referral sticker schedule activation is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO referral_sticker_schedule_entries
+           (schedule_version, token_id, required_points)
+         VALUES (99, 102, 21)`
+      ).run()
+    ).rejects.toThrow('referral sticker schedule entry is invalid')
+    await env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_entries
+         (schedule_version, token_id, required_points)
+       VALUES (99, 102, 20)`
+    ).run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE referral_sticker_schedule_versions
+         SET status = 'ACTIVE', activated_by_user_id = '',
+             activated_at = ? WHERE version = 99`
+      )
+        .bind(NOW.toISOString())
+        .run()
+    ).rejects.toThrow('referral sticker schedule activation is invalid')
+    await env.AUTH_DB.prepare(
+      `UPDATE referral_sticker_schedule_versions
+       SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+           activated_at = ? WHERE version = 99`
+    )
+      .bind(NOW.toISOString())
+      .run()
+
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
+      prepared: 1
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT receipt.schedule_version
+         FROM referral_sticker_reward_batch_schedule_receipts receipt`
+      ).first()
+    ).toEqual({ schedule_version: 99 })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE referral_sticker_reward_batch_schedule_receipts
+         SET schedule_version = 100`
+      ).run()
+    ).rejects.toThrow(
+      'referral sticker batch schedule receipts are immutable'
+    )
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE content_stickers SET required_points = 21
+         WHERE season = ? AND token_id = 102`
+      )
+        .bind(SEASON)
+        .run()
+    ).rejects.toThrow('active referral sticker metadata is immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM referral_sticker_schedule_entries
+         WHERE schedule_version = 99 AND token_id = 102`
+      ).run()
+    ).rejects.toThrow('active referral sticker schedule entries are immutable')
   })
 
   it('preserves thresholds and friend attribution, then delivers D1 inventory', async () => {
@@ -278,6 +491,7 @@ describe('off-chain referral sticker rewards', () => {
          VALUES (100, 0, ?)`
       ).bind(SEASON)
     ])
+    await activateSchedule(SEASON, [{ tokenId: 100, requiredPoints: 0 }])
 
     expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
       prepared: 1

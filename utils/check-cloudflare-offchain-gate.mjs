@@ -108,6 +108,9 @@ export const offchainGateErrors = ({
   matchReceiptMigration = '',
   conquestPointSource = '',
   conquestPointMigration = '',
+  referralStickerSource = '',
+  referralStickerContentSource = '',
+  referralStickerScheduleMigration = '',
   observationalSources = {},
   optionalWalletSource = ''
 }) => {
@@ -502,6 +505,45 @@ export const offchainGateErrors = ({
       errors.push('Conquest point grant contains a legacy chain effect')
     }
   }
+  if (referralStickerSource || referralStickerScheduleMigration) {
+    for (const token of [
+      'referral_sticker_active_schedule_entries',
+      'schedule.schedule_version',
+      'referral_sticker_reward_batch_schedule_receipts',
+      'INSERT INTO player_items'
+    ]) {
+      if (!referralStickerSource.includes(token)) {
+        errors.push(
+          `referral sticker reward is missing activation safeguard: ${token}`
+        )
+      }
+    }
+    if (
+      !referralStickerContentSource.includes(
+        'FROM referral_sticker_active_schedule_entries WHERE season = ?'
+      )
+    ) {
+      errors.push(
+        'referral sticker content can expose unactivated reward metadata'
+      )
+    }
+    for (const token of [
+      'referral_sticker_schedule_versions',
+      "status TEXT NOT NULL CHECK (status IN ('DRAFT', 'ACTIVE'))",
+      'activated_by_user_id <> created_by_user_id',
+      'length(trim(NEW.activated_by_user_id)) = 0',
+      'schedule.activated_at <= batch_row.created_at',
+      'referral sticker schedule activation is invalid',
+      'active referral sticker schedule entries are immutable',
+      'active referral sticker schedule receipt required'
+    ]) {
+      if (!referralStickerScheduleMigration.includes(token)) {
+        errors.push(
+          `referral sticker schedule is missing safeguard: ${token}`
+        )
+      }
+    }
+  }
   for (const [name, source] of Object.entries(observationalSources)) {
     if (/\bplayer_items\b|INSERT(?: OR IGNORE)? INTO player_/i.test(source)) {
       errors.push(`${name} observational pipeline can mutate player rewards`)
@@ -548,6 +590,7 @@ const main = async () => {
     leaderboardRewards,
     playerRpc,
     referralStickerRewards,
+    contentSource,
     silverTicketExchange,
     heroSkinExchange,
     operatorCardGrant,
@@ -593,7 +636,8 @@ const main = async () => {
     matchExperienceSource,
     matchReceiptMigration,
     conquestPointSource,
-    conquestPointMigration
+    conquestPointMigration,
+    referralStickerScheduleMigration
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/config/webapp.cloudflare.json'), 'utf8'),
     readFile(
@@ -616,6 +660,7 @@ const main = async () => {
       path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
       'utf8'
     ),
+    readFile(path.join(root, 'cloudflare/src/content.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare/src/silver-ticket-exchange.ts'),
       'utf8'
@@ -865,6 +910,13 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare/migrations/0071_conquest_point_receipts.sql'),
       'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0087_referral_sticker_schedule_activation.sql'
+      ),
+      'utf8'
     )
   ])
   const englishLocale = JSON.parse(englishLocaleSource)
@@ -978,6 +1030,9 @@ const main = async () => {
     matchReceiptMigration,
     conquestPointSource,
     conquestPointMigration,
+    referralStickerSource: referralStickerRewards,
+    referralStickerContentSource: contentSource,
+    referralStickerScheduleMigration,
     observationalSources: { analyticsWorker, walletContents },
     optionalWalletSource: `${walletConnector}\n${walletSettings}`
   })

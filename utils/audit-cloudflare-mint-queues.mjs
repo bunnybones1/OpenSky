@@ -51,6 +51,8 @@ export const EXPECTED_QUEUES = {
     sourceProducer: true,
     disposition: 'offchain',
     evidence: [
+      'referral_sticker_active_schedule_entries',
+      'referral_sticker_reward_batch_schedule_receipts',
       'referral_sticker_reward_inventory_grants',
       'referral sticker inventory grants are immutable',
       'referral sticker reward batch update is invalid'
@@ -266,6 +268,13 @@ const main = async () => {
         path.join(
           root,
           'cloudflare/migrations/0082_referral_sticker_delivery_receipts.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare/migrations/0087_referral_sticker_schedule_activation.sql'
         ),
         'utf8'
       )

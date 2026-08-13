@@ -45,7 +45,7 @@ const evidence = {
   MintTicketRewardsQueue:
     'player_leaderboard_reward_inventory_grants leaderboard reward inventory grants are immutable leaderboard reward receipt completion is invalid SW_CONQUEST_TICKET',
   MintStickerRewardsQueue:
-    'referral_sticker_reward_inventory_grants referral sticker inventory grants are immutable referral sticker reward batch update is invalid',
+    'referral_sticker_active_schedule_entries referral_sticker_reward_batch_schedule_receipts referral_sticker_reward_inventory_grants referral sticker inventory grants are immutable referral sticker reward batch update is invalid',
   DelayedMintingQueue:
     'player_conquest_gold_delivery_inventory_grants Conquest Gold grant receipts are immutable Conquest Gold delivery transition is invalid',
   SendConquestExtraRewardQueue:

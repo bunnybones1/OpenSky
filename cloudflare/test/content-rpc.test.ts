@@ -14,6 +14,35 @@ import { PlayerRepository } from '../src/player'
 const testEnv = env as unknown as Env
 const userId = 'content-player-user-id'
 
+const activateStickerSchedule = async (
+  season: number,
+  tokenId: number,
+  requiredPoints: number
+) => {
+  const now = new Date().toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_versions
+         (version, season, status, expected_entry_count, created_by_user_id,
+          activated_by_user_id, reason, review_reference, created_at,
+          activated_at)
+       VALUES (?, ?, 'DRAFT', 1, 'system:test-author', NULL,
+               'test schedule', 'test:review', ?, NULL)`
+    ).bind(season, season, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO referral_sticker_schedule_entries
+         (schedule_version, token_id, required_points) VALUES (?, ?, ?)`
+    ).bind(season, tokenId, requiredPoints)
+  ])
+  await env.AUTH_DB.prepare(
+    `UPDATE referral_sticker_schedule_versions
+     SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+         activated_at = ? WHERE version = ?`
+  )
+    .bind(now, season)
+    .run()
+}
+
 const rpc = async (method: string, body: object, signedIn = true) => {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (signedIn) {
@@ -35,11 +64,60 @@ const rpc = async (method: string, body: object, signedIn = true) => {
 
 beforeEach(async () => {
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_schedule_versions_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS referral_sticker_schedule_entries_active_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS content_stickers_active_schedule_no_delete'
+    )
+  ])
+  await env.AUTH_DB.batch([
     env.AUTH_DB.prepare('DELETE FROM content_notification_templates'),
+    env.AUTH_DB.prepare('DELETE FROM referral_sticker_schedule_versions'),
     env.AUTH_DB.prepare('DELETE FROM users'),
     env.AUTH_DB.prepare('DELETE FROM content_banners'),
     env.AUTH_DB.prepare('DELETE FROM content_featured_streamers'),
     env.AUTH_DB.prepare('DELETE FROM content_stickers')
+  ])
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_schedule_versions_no_delete
+       BEFORE DELETE ON referral_sticker_schedule_versions
+       BEGIN
+         SELECT RAISE(ABORT, 'referral sticker schedule versions are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER referral_sticker_schedule_entries_active_no_delete
+       BEFORE DELETE ON referral_sticker_schedule_entries
+       WHEN EXISTS (
+         SELECT 1 FROM referral_sticker_schedule_versions schedule
+         WHERE schedule.version = OLD.schedule_version
+           AND schedule.status = 'ACTIVE'
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'active referral sticker schedule entries are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER content_stickers_active_schedule_no_delete
+       BEFORE DELETE ON content_stickers
+       WHEN EXISTS (
+         SELECT 1
+         FROM referral_sticker_schedule_entries entry
+         JOIN referral_sticker_schedule_versions schedule
+           ON schedule.version = entry.schedule_version
+         WHERE schedule.status = 'ACTIVE'
+           AND schedule.season = OLD.season
+           AND entry.token_id = OLD.token_id
+       )
+       BEGIN
+         SELECT RAISE(ABORT, 'active referral sticker metadata is immutable');
+       END`
+    )
   ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
@@ -109,6 +187,7 @@ describe('source content RPC compatibility', () => {
          VALUES (?, 'SW_STICKERS', 77, 3, 1, 'test', ?, ?)`
       ).bind(userId, now, now)
     ])
+    await activateStickerSchedule(season, 77, 25)
 
     expect(await (await rpc('GetStickers', {}, false)).json()).toEqual({
       stickers: [
@@ -122,6 +201,12 @@ describe('source content RPC compatibility', () => {
         }
       ]
     })
+    expect(
+      await (
+        await rpc('GetStickersBySeason', { season: season + 1 }, false)
+      ).json()
+    ).toEqual({ stickers: [] })
+    await activateStickerSchedule(season + 1, 88, 50)
     expect(
       await (
         await rpc('GetStickersBySeason', { season: season + 1 }, false)
