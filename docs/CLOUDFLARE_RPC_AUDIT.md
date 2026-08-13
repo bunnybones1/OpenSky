@@ -170,7 +170,9 @@ history RPCs use D1 as the shared authority for the public API, matchmaker
 admission, and final match dispatch. Writes require the dormant
 `GAME_MODE_WRITE` capability and append immutable source-shaped history.
 Conquest has an additional database-enforced active-pool plus recorded-drill
-gate, so a broad administrator cannot accidentally bypass the reward rollout.
+gate backed by the real off-chain settlement and delayed-delivery receipt keys.
+Match admission rechecks the proof and active time window so a broad
+administrator cannot bypass the reward rollout or leave an expired pool open.
 
 Manual account actions now follow the same fail-closed pattern. Ban,
 suspension, flag, and vet writes require `ADMIN` plus the separately dormant

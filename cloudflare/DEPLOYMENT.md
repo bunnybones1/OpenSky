@@ -228,8 +228,9 @@ pending a public WalletConnect/Reown project ID and origin allowlist. Contract-a
 ERC-1271 verification also remains pending an approved chain RPC; the deployed
 proof boundary currently accepts EOAs only. Captcha is deployed but remains
 disabled until Cloud Weasel hCaptcha credentials are provisioned.
-Seasonal invite-sticker redemption and marketplace writes still need Cloud
-Weasel product decisions. Legacy account migration is retired for the zero-user
+Seasonal invite-sticker redemption is fully ported to delayed off-chain D1
+inventory but needs an approved current-season sticker schedule. Marketplace
+writes still need a Cloud Weasel product decision. Legacy account migration is retired for the zero-user
 launch, and the source admin RPC surface is ported behind dormant granular
 capabilities. No production staff identity is provisioned. Conquest queues stay disabled until an
 explicit production reward pool is approved and the enablement drill validates

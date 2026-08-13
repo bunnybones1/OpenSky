@@ -68,6 +68,9 @@ commented-out runner is accidentally counted as active.
 
 The production mint-queue gate reads the implementation evidence behind every
 row. A queue is not accepted merely because its source producer is absent.
+It also rejects any retirement disposition on a queue with a real source
+producer: removing minting must preserve that reward through an exact off-chain
+fulfillment path, not remove the player outcome.
 The separate reward-producer gate also scans upstream Go inventory, XP, hero,
 and starter-deck mutations, so a grant cannot evade review merely because its
 later mint happens in another worker.

@@ -53,3 +53,18 @@ test('rejects a new producer, changed count, and missing evidence', () => {
   assert.ok(errors.some(error => error.includes('reviewed count')))
   assert.ok(errors.some(error => error.includes('missing offchain-skypass')))
 })
+
+test('forbids retirement as the disposition for an active reward producer', () => {
+  const review = EXPECTED_REWARD_PRODUCER_FILES['api/lib/skypass/reward_applier.go']
+  const original = review.disposition
+  try {
+    review.disposition = 'retired-whole-feature'
+    assert.ok(
+      rewardProducerAuditErrors(reviewedInput()).some(error =>
+        error.includes('cannot use a retirement disposition')
+      )
+    )
+  } finally {
+    review.disposition = original
+  }
+})

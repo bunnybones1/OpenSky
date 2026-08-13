@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  EXPECTED_QUEUES,
   mintQueueAuditErrors,
   sendTxnQueues
 } from './audit-cloudflare-mint-queues.mjs'
@@ -110,4 +111,29 @@ test('rejects a mint replacement that loses exact fulfillment evidence', () => {
         error.includes('stripe_checkout_fulfillment_receipts')
     )
   )
+})
+
+test('forbids retirement as the disposition for any source-produced reward', () => {
+  const review = EXPECTED_QUEUES.ExitConquestQueue
+  const original = review.disposition
+  try {
+    review.disposition = 'retired-whole-feature'
+    const errors = mintQueueAuditErrors({
+      runnerSource,
+      goSource: activeTasks.map(task => `${task}{}`).join('\n'),
+      evidenceSources: evidence
+    })
+    assert.ok(
+      errors.some(error =>
+        error.includes('must have an offchain disposition')
+      )
+    )
+    assert.ok(
+      errors.some(error =>
+        error.includes('cannot retire a source-produced reward')
+      )
+    )
+  } finally {
+    review.disposition = original
+  }
 })

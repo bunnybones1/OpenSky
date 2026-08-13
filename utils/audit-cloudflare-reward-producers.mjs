@@ -227,6 +227,14 @@ export const rewardProducerAuditErrors = ({ sources, evidenceSources }) => {
       errors.push(`reviewed source reward-producer file disappeared: ${file}`)
       continue
     }
+    if (
+      review.disposition.startsWith('retired') ||
+      review.disposition.includes('whole-feature')
+    ) {
+      errors.push(
+        `${file} is an active source reward producer and cannot use a retirement disposition`
+      )
+    }
     const evidence = evidenceSources[file] ?? ''
     for (const token of review.evidence) {
       if (!evidence.includes(token)) {
@@ -292,7 +300,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    `All ${Object.keys(EXPECTED_REWARD_PRODUCER_FILES).length} source reward-producer files have reviewed off-chain or whole-feature dispositions\n`
+    `All ${Object.keys(EXPECTED_REWARD_PRODUCER_FILES).length} source reward-producer files have reviewed non-retirement Cloudflare dispositions\n`
   )
 }
 

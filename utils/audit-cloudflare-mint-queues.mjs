@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const EXPECTED_QUEUES = {
+export const EXPECTED_QUEUES = {
   ExitConquestQueue: {
     task: 'ExitConquestTask',
     sourceProducer: true,
@@ -175,6 +175,22 @@ export const mintQueueAuditErrors = ({
     }
     if (review.sourceProducer && producers === 0) {
       errors.push(`${queue} lost its reviewed source producer`)
+    }
+    if (
+      review.sourceProducer &&
+      !review.disposition.startsWith('offchain')
+    ) {
+      errors.push(
+        `${queue} has a source reward producer and must have an offchain disposition`
+      )
+    }
+    if (
+      review.disposition.startsWith('retired') &&
+      (review.sourceProducer || producers > 0)
+    ) {
+      errors.push(
+        `${queue} cannot retire a source-produced reward instead of replacing its fulfillment offchain`
+      )
     }
     const evidence = evidenceSources[queue] ?? ''
     for (const token of review.evidence) {
