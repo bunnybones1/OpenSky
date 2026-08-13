@@ -52,6 +52,15 @@ scans every producer module for both canonical `player_items` writes and an
 idempotent receipt/delivery key, in addition to excluding transaction code from
 the Google-identity route tree.
 
+Conquest V2 weekly treasure follows the same rule. Its source point thresholds,
+float32 weights, point rollover, expansion-only card selection, and delayed
+delivery are preserved. Minted Silver is replaced by `SW_SILVER_CARDS` in D1,
+protected by an immutable cycle entry and award receipt. Activation is rejected
+unless every qualifying treasure level receives at least one off-chain item.
+The former USDC amount is reconciliation metadata only: it must never become
+inventory, a claim, a notification value, or player-facing promise without a
+separately reviewed noncash reward design.
+
 The Legacy Hero exchange is also governed by this policy. It retains the
 source product's price of ten identity-owned Gold cards per Hero skin, but D1
 atomically debits the selected Gold inventory and credits `SW_HERO_SKINS`.

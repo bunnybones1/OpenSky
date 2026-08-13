@@ -21,8 +21,8 @@ mint. WalletConnect remains an optional ownership integration only.
 | --- | --- | --- |
 | `AccountDeletionRunner` | Ported | Scheduled D1 finalization with bounded, retry-safe cleanup. |
 | `BalanceSyncRunner` | Superseded | Optional wallet links replace wallet balance as account authority. |
-| `ConquestV2PoolRunner` | Dormant | Preview-only pool calculations remain gated pending an off-chain economy contract. |
-| `ConquestV2RewardsRunner` | Dormant | No production reward producer; activation requires an off-chain delivery design and tests. |
+| `ConquestV2PoolRunner` | Ported | D1 preserves the source float32 pool hysteresis and snapshots its result into immutable weekly cycles; the public USDC surface remains zero-gated. |
+| `ConquestV2RewardsRunner` | Ported | Explicit, disabled-by-default schedules snapshot weekly points, preserve rollover and delayed delivery, then grant deterministic expansion-only Silver cards to D1 inventory. Legacy USDC calculations are audit-only. |
 | `CrashedMatchCleanupRunner` | Superseded | Authoritative match Durable Objects persist deadlines and recover them with alarms. |
 | `DeckRankUpdateRunner` | Ported | Match settlement applies deck rank changes through an idempotent D1 coordinator. |
 | `FixStarterDecksRunner` | Retired | One-time legacy-account repair is unnecessary for the zero-user fork; new decks are validated at write time. |
@@ -52,3 +52,14 @@ reward delivery paths rather than recreating the source mint queues. External
 device push is strictly optional: without complete OneSignal configuration the
 scheduled pass is a read-only no-op. In-app notifications and their off-chain
 rewards remain authoritative and do not depend on it.
+
+Conquest V2 settlement is deployed dormant by design: migration `0068` seeds no
+schedule. Enabling it requires an immutable cadence, season/week anchor,
+delivery delay, reward card sets, and a source settings `WeightPerSilverCard`
+that gives even level-one treasure at least one off-chain item. The Worker
+refuses to create a cycle or deduct points if that invariant fails. Once a
+cycle begins, point rollover, award receipts, inventory grants, notifications,
+and feed rows are retry-safe. Failed runs create immutable incident rows and
+remain retryable indefinitely; a cycle cannot terminally strand rolled-over
+points. The source USDC projection is retained only in an
+operator reconciliation column and is never returned as a player reward.

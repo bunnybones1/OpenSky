@@ -137,10 +137,7 @@ export const offchainGateErrors = ({
       googleGuard
     )
     const googleReturn = heroExchangeUi.indexOf('return', offchainExchange)
-    const legacyWallet = heroExchangeUi.indexOf(
-      'getHeroMintTxns',
-      googleReturn
-    )
+    const legacyWallet = heroExchangeUi.indexOf('getHeroMintTxns', googleReturn)
     if (
       googleGuard < 0 ||
       offchainExchange < googleGuard ||
@@ -168,7 +165,9 @@ export const offchainGateErrors = ({
   }
   for (const copy of googleRewardCopy) {
     if (/\b(?:mint|minted|minting|tradable|blockchain|wallet)\b/i.test(copy)) {
-      errors.push(`Google reward copy contains legacy ownership language: ${copy}`)
+      errors.push(
+        `Google reward copy contains legacy ownership language: ${copy}`
+      )
     }
   }
   for (const [name, source] of Object.entries(rewardSources)) {
@@ -212,6 +211,7 @@ const main = async () => {
     appSource,
     policySource,
     conquestDelivery,
+    conquestV2Rewards,
     leaderboardRewards,
     playerRpc,
     referralStickerRewards,
@@ -245,6 +245,10 @@ const main = async () => {
     readFile(path.join(root, 'docs/OFFCHAIN_REWARD_POLICY.md'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/conquest-delivery.ts'), 'utf8'),
     readFile(
+      path.join(root, 'cloudflare/src/conquest-v2-reward-worker.ts'),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
       'utf8'
     ),
@@ -257,10 +261,7 @@ const main = async () => {
       path.join(root, 'cloudflare/src/silver-ticket-exchange.ts'),
       'utf8'
     ),
-    readFile(
-      path.join(root, 'cloudflare/src/hero-skin-exchange.ts'),
-      'utf8'
-    ),
+    readFile(path.join(root, 'cloudflare/src/hero-skin-exchange.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/player-support.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare/src/stripe-checkout.ts'), 'utf8'),
     readFile(
@@ -389,6 +390,7 @@ const main = async () => {
     ],
     rewardSources: {
       conquestDelivery,
+      conquestV2Rewards,
       leaderboardRewards,
       playerRpc,
       referralStickerRewards,

@@ -18,14 +18,18 @@ export const EXPECTED_RUNNERS = {
     evidence: ['WalletLinksRepository', 'cleanupExpired']
   },
   ConquestV2PoolRunner: {
-    disposition: 'dormant',
-    evidenceFile: 'cloudflare/src/api.ts',
-    evidence: ["case 'ConquestV2Pool'", 'amount: 0, totalWeight: 0']
+    disposition: 'ported',
+    evidenceFile: 'cloudflare/src/conquest-v2-economy.ts',
+    evidence: ['poolSnapshot', 'conquest_v2_pool_cache']
   },
   ConquestV2RewardsRunner: {
-    disposition: 'dormant',
-    evidenceFile: 'utils/audit-cloudflare-mint-queues.mjs',
-    evidence: ['ConquestV2SendRewardQueue', "disposition: 'dormant'"]
+    disposition: 'ported',
+    evidenceFile: 'cloudflare/src/conquest-v2-reward-worker.ts',
+    evidence: [
+      'runDueConquestV2Rewards',
+      'player_conquest_v2_reward_awards',
+      'player_items'
+    ]
   },
   CrashedMatchCleanupRunner: {
     disposition: 'superseded',
@@ -35,7 +39,10 @@ export const EXPECTED_RUNNERS = {
   DeckRankUpdateRunner: {
     disposition: 'ported',
     evidenceFile: 'game-server-cloudflare/src/deck-ranks.ts',
-    evidence: ['api/lib/decks/rank_updater.go', 'multiplayer_match_deck_ranks_applied']
+    evidence: [
+      'api/lib/decks/rank_updater.go',
+      'multiplayer_match_deck_ranks_applied'
+    ]
   },
   FixStarterDecksRunner: {
     disposition: 'retired',
@@ -45,7 +52,10 @@ export const EXPECTED_RUNNERS = {
   GiveawayOffChainTokensRunner: {
     disposition: 'retired',
     evidenceFile: 'api/lib/jobqueue/giveaway_offchain_tokens_runner.go',
-    evidence: ['GiveawayOffChainTokensTask', 'used to give away off-chain tokens in mass']
+    evidence: [
+      'GiveawayOffChainTokensTask',
+      'used to give away off-chain tokens in mass'
+    ]
   },
   GrantStickerRewardsRunner: {
     disposition: 'ported',
@@ -70,12 +80,18 @@ export const EXPECTED_RUNNERS = {
   OnChainPaymentEventRunner: {
     disposition: 'retired',
     evidenceFile: 'docs/CLOUDFLARE_RPC_AUDIT.md',
-    evidence: ['on-chain/burner transaction-preparation RPCs', 'off-chain reward policy']
+    evidence: [
+      'on-chain/burner transaction-preparation RPCs',
+      'off-chain reward policy'
+    ]
   },
   OnChainPaymentListenerRunner: {
     disposition: 'retired',
     evidenceFile: 'docs/CLOUDFLARE_RPC_AUDIT.md',
-    evidence: ['on-chain/burner transaction-preparation RPCs', 'off-chain reward policy']
+    evidence: [
+      'on-chain/burner transaction-preparation RPCs',
+      'off-chain reward policy'
+    ]
   },
   PromoteGrandmastersRunner: {
     disposition: 'ported',
@@ -134,9 +150,9 @@ export const stripGoComments = source =>
 
 export const extractActiveRunnerRegistrations = source => [
   ...new Set(
-    [...stripGoComments(source).matchAll(/\bNew([A-Za-z0-9]+Runner)\s*\(/g)].map(
-      match => match[1]
-    )
+    [
+      ...stripGoComments(source).matchAll(/\bNew([A-Za-z0-9]+Runner)\s*\(/g)
+    ].map(match => match[1])
   )
 ]
 
@@ -146,26 +162,37 @@ export const auditWorkerRunners = ({ source, evidenceSources }) => {
   const errors = []
 
   for (const runner of active) {
-    if (!EXPECTED_RUNNERS[runner]) errors.push(`unreviewed active runner: ${runner}`)
+    if (!EXPECTED_RUNNERS[runner])
+      errors.push(`unreviewed active runner: ${runner}`)
   }
   for (const runner of reviewed) {
-    if (!active.includes(runner)) errors.push(`reviewed runner is no longer active: ${runner}`)
+    if (!active.includes(runner))
+      errors.push(`reviewed runner is no longer active: ${runner}`)
     const review = EXPECTED_RUNNERS[runner]
     const evidence = evidenceSources[runner] ?? ''
     for (const token of review.evidence) {
       if (!evidence.includes(token)) {
-        errors.push(`${runner} is missing ${review.disposition} evidence: ${token}`)
+        errors.push(
+          `${runner} is missing ${review.disposition} evidence: ${token}`
+        )
       }
     }
   }
 
   const byDisposition = Object.fromEntries(
-    ['ported', 'superseded', 'retired', 'dormant', 'optional', 'actionable'].map(
-      disposition => [
-        disposition,
-        active.filter(runner => EXPECTED_RUNNERS[runner]?.disposition === disposition)
-      ]
-    )
+    [
+      'ported',
+      'superseded',
+      'retired',
+      'dormant',
+      'optional',
+      'actionable'
+    ].map(disposition => [
+      disposition,
+      active.filter(
+        runner => EXPECTED_RUNNERS[runner]?.disposition === disposition
+      )
+    ])
   )
   return { active, reviewed, byDisposition, errors }
 }
@@ -186,24 +213,35 @@ const loadAudit = async root => {
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const audit = await loadAudit(root)
   if (process.argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`)
   } else {
-    process.stdout.write(`Active source worker runners: ${audit.active.length}\n`)
+    process.stdout.write(
+      `Active source worker runners: ${audit.active.length}\n`
+    )
     for (const [disposition, runners] of Object.entries(audit.byDisposition)) {
-      process.stdout.write(`${disposition}: ${runners.length}${
-        runners.length ? ` (${runners.join(', ')})` : ''
-      }\n`)
+      process.stdout.write(
+        `${disposition}: ${runners.length}${
+          runners.length ? ` (${runners.join(', ')})` : ''
+        }\n`
+      )
     }
   }
   if (audit.errors.length) {
-    for (const error of audit.errors) process.stderr.write(`Worker audit: ${error}\n`)
+    for (const error of audit.errors)
+      process.stderr.write(`Worker audit: ${error}\n`)
     process.exitCode = 1
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

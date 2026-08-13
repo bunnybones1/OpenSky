@@ -271,7 +271,7 @@ export class ConquestV2EconomyRepository {
     })
   }
 
-  private async pool(at = new Date()): Promise<ConquestV2Pool> {
+  async poolSnapshot(at = new Date()): Promise<ConquestV2Pool> {
     const cache = await this.database
       .prepare(
         `SELECT amount, total_weight, expires_at
@@ -327,7 +327,7 @@ export class ConquestV2EconomyRepository {
   async summary(at = new Date()): Promise<ConquestV2Summary> {
     // Source SummaryGetter asks the pool manager first, then obtains a fresh
     // treasure-level snapshot for its response.
-    const pool = await this.pool(at)
+    const pool = await this.poolSnapshot(at)
     const treasureLevels = await this.treasureLevels()
     let totalWeight = 0
     for (const level of treasureLevels) {

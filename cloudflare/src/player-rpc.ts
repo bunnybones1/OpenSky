@@ -367,6 +367,13 @@ interface LeaderboardFeedRow {
   created_at: string
 }
 
+interface ConquestV2RewardFeedRow {
+  id: number
+  treasure_level: number
+  token_ids_json: string
+  created_at: string
+}
+
 const FEED_PAGE_SIZE = 50
 const MAX_FEED_PAGE_SIZE = 100
 
@@ -432,8 +439,8 @@ const rewardTokenIds = (
           : 0xff
     tokenIds.push((typeCode << 16) + (Number(card.id) & 0x00ffff))
   }
-  const definitionTokenIds = parseAttributes(attributes || null).tokenIDs
-    .map(Number)
+  const definitionTokenIds = parseAttributes(attributes || null)
+    .tokenIDs.map(Number)
     .filter(Number.isSafeInteger)
   const itemTypeCode =
     itemType === 405 ? 5 : itemType === 407 ? 6 : itemType === 302 ? 8 : null
@@ -591,44 +598,57 @@ export class PlayerRpcRepository {
       .first()
     if (!account) throw notFound('account was not found')
 
-    const [rankRows, skypassRows, conquestRows, leaderboardRows] =
-      await Promise.all([
-        this.database
-          .prepare(
-            `SELECT rowid AS row_id, game_mode, season, player_rank,
+    const [
+      rankRows,
+      skypassRows,
+      conquestRows,
+      leaderboardRows,
+      conquestV2RewardRows
+    ] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT rowid AS row_id, game_mode, season, player_rank,
                   player_rank_stage, awarded_at
            FROM player_rank_up_rewards
            WHERE user_id = ?`
-          )
-          .bind(userId)
-          .all<RankFeedRow>(),
-        this.database
-          .prepare(
-            `SELECT claim.rowid AS row_id, claim.rewards, claim.claimed_at,
+        )
+        .bind(userId)
+        .all<RankFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT claim.rowid AS row_id, claim.rewards, claim.claimed_at,
                     reward.item_type, reward.amount, reward.attributes
              FROM player_skypass_claims claim
              JOIN skypass_rewards reward ON reward.id = claim.reward_id
              WHERE claim.user_id = ?`
-          )
-          .bind(userId)
-          .all<SkypassFeedRow>(),
-        this.database
-          .prepare(
-            `SELECT id AS row_id, event_type, token_ids_json, created_at
+        )
+        .bind(userId)
+        .all<SkypassFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT id AS row_id, event_type, token_ids_json, created_at
            FROM player_conquest_feed_events
            WHERE user_id = ?`
-          )
-          .bind(userId)
-          .all<ConquestFeedRow>(),
-        this.database
-          .prepare(
-            `SELECT id, game_mode, leaderboard_rank, token_ids_json, created_at
+        )
+        .bind(userId)
+        .all<ConquestFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT id, game_mode, leaderboard_rank, token_ids_json, created_at
            FROM player_leaderboard_reward_feed_events
            WHERE user_id = ?`
-          )
-          .bind(userId)
-          .all<LeaderboardFeedRow>()
-      ])
+        )
+        .bind(userId)
+        .all<LeaderboardFeedRow>(),
+      this.database
+        .prepare(
+          `SELECT id, treasure_level, token_ids_json, created_at
+             FROM player_conquest_v2_reward_feed_events
+             WHERE user_id = ?`
+        )
+        .bind(userId)
+        .all<ConquestV2RewardFeedRow>()
+    ])
 
     // The generated client type marks `match` as required, but the source Go
     // pointer is absent for every non-MATCH event returned by this endpoint.
@@ -699,6 +719,19 @@ export class PlayerRpcRepository {
         createdAt: row.created_at,
         gameMode: row.game_mode,
         leaderboardRank: row.leaderboard_rank,
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
+        cards: [],
+        heroes: []
+      } as unknown as FeedEvent)
+    }
+    for (const row of conquestV2RewardRows.results) {
+      events.push({
+        id: 2_251_799_813_685_248 + row.id,
+        // The source event's numeric field represented USDC. In identity mode,
+        // return the actual off-chain card value through the existing generic
+        // REWARD contract rather than inventing a cash amount.
+        type: 'REWARD',
+        createdAt: row.created_at,
         tokenIds: parseJsonArray(row.token_ids_json).map(Number),
         cards: [],
         heroes: []
@@ -2846,10 +2879,7 @@ export class PlayerRpcRepository {
     const amount = requestedTokenIds.length || reward.amount
     const candidates = this.cardCandidates(attributes, reward.season)
     const explicitCandidates = new Set(
-      this.cardCandidates(
-        { ...attributes, cardSets: [] },
-        reward.season
-      )
+      this.cardCandidates({ ...attributes, cardSets: [] }, reward.season)
     )
     const granted: number[] = []
 
@@ -3085,8 +3115,8 @@ export class PlayerRpcRepository {
   ): Promise<Array<Record<string, unknown>>> {
     const requested = [
       ...new Set(
-        parseAttributes(reward.attributes).tokenIDs
-          .map(Number)
+        parseAttributes(reward.attributes)
+          .tokenIDs.map(Number)
           .filter(Number.isSafeInteger)
       )
     ]
@@ -3196,8 +3226,8 @@ export class PlayerRpcRepository {
     statements: D1PreparedStatement[],
     now: string
   ): Array<Record<string, unknown>> {
-    const cardBackIds = parseAttributes(reward.attributes).tokenIDs
-      .map(Number)
+    const cardBackIds = parseAttributes(reward.attributes)
+      .tokenIDs.map(Number)
       .filter(Number.isSafeInteger)
     if (!cardBackIds.length) throw new Error('no card backs provided')
     for (const tokenId of cardBackIds) {
@@ -3224,8 +3254,8 @@ export class PlayerRpcRepository {
   ): Promise<Array<Record<string, unknown>>> {
     const titleIds = [
       ...new Set(
-        parseAttributes(reward.attributes).tokenIDs
-          .map(Number)
+        parseAttributes(reward.attributes)
+          .tokenIDs.map(Number)
           .filter(Number.isSafeInteger)
       )
     ]
@@ -3379,11 +3409,11 @@ export class PlayerRpcRepository {
                             rewardStatements,
                             now
                           )
-            : (() => {
-                throw new Error(
-                  `unsupported item type ${itemType || 'UNKNOWN'}`
-                )
-              })()
+                        : (() => {
+                            throw new Error(
+                              `unsupported item type ${itemType || 'UNKNOWN'}`
+                            )
+                          })()
       gainedRewards.push(...applied)
       statements.push(
         this.database

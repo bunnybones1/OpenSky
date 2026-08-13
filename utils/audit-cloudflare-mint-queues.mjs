@@ -40,8 +40,8 @@ const EXPECTED_QUEUES = {
   },
   ConquestV2SendRewardQueue: {
     task: 'ConquestV2SendRewardTask',
-    disposition: 'dormant',
-    evidence: ['staff_conquest_config_permissions', 'preview']
+    disposition: 'offchain',
+    evidence: ['player_conquest_v2_reward_awards', 'player_items']
   },
   MintLeaderboardRewardsQueue: {
     task: 'MintLeaderboardRewardsTask',
@@ -71,25 +71,39 @@ const EXPECTED_QUEUES = {
 }
 
 export const sendTxnQueues = source => {
-  const body = source.match(/func \(r \*SendTxnsRunner\) Queues\(\) \[\]string \{([\s\S]*?)\n\}/)?.[1]
-  return body ? [...body.matchAll(/\b([A-Za-z0-9]+Queue),/g)].map(match => match[1]) : []
+  const body = source.match(
+    /func \(r \*SendTxnsRunner\) Queues\(\) \[\]string \{([\s\S]*?)\n\}/
+  )?.[1]
+  return body
+    ? [...body.matchAll(/\b([A-Za-z0-9]+Queue),/g)].map(match => match[1])
+    : []
 }
 
-export const mintQueueAuditErrors = ({ runnerSource, goSource, evidenceSources }) => {
+export const mintQueueAuditErrors = ({
+  runnerSource,
+  goSource,
+  evidenceSources
+}) => {
   const errors = []
   const actual = sendTxnQueues(runnerSource)
-  if (!actual.length) errors.push('SendTxnsRunner queue list could not be parsed')
+  if (!actual.length)
+    errors.push('SendTxnsRunner queue list could not be parsed')
   for (const queue of actual) {
-    if (!EXPECTED_QUEUES[queue]) errors.push(`unreviewed transaction queue: ${queue}`)
+    if (!EXPECTED_QUEUES[queue])
+      errors.push(`unreviewed transaction queue: ${queue}`)
   }
   for (const queue of Object.keys(EXPECTED_QUEUES)) {
-    if (!actual.includes(queue)) errors.push(`reviewed transaction queue disappeared: ${queue}`)
+    if (!actual.includes(queue))
+      errors.push(`reviewed transaction queue disappeared: ${queue}`)
   }
   for (const [queue, review] of Object.entries(EXPECTED_QUEUES)) {
-    const producers = [...goSource.matchAll(new RegExp(`\\b${review.task}\\s*\\{`, 'g'))]
-      .length
+    const producers = [
+      ...goSource.matchAll(new RegExp(`\\b${review.task}\\s*\\{`, 'g'))
+    ].length
     if (review.disposition === 'producerless' && producers !== 0) {
-      errors.push(`${queue} gained ${producers} production producer(s) without review`)
+      errors.push(
+        `${queue} gained ${producers} production producer(s) without review`
+      )
     }
     if (review.disposition !== 'producerless' && producers === 0) {
       errors.push(`${queue} lost its reviewed source producer`)
@@ -107,7 +121,10 @@ export const mintQueueAuditErrors = ({ runnerSource, goSource, evidenceSources }
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const runnerSource = await readFile(
     path.join(root, 'api/lib/jobqueue/send_txns_runner.go'),
     'utf8'
@@ -121,16 +138,41 @@ const main = async () => {
     'api/lib/skypass/reward_applier.go'
   ]
   const goSource = (
-    await Promise.all(producerFiles.map(file => readFile(path.join(root, file), 'utf8')))
+    await Promise.all(
+      producerFiles.map(file => readFile(path.join(root, file), 'utf8'))
+    )
   ).join('\n')
-  const [conquestSettlement, conquestDelivery, referral, leaderboard, skypass, conquestV2] = await Promise.all([
-    readFile(path.join(root, 'game-server-cloudflare/src/conquest-settlement.ts'), 'utf8'),
+  const [
+    conquestSettlement,
+    conquestDelivery,
+    referral,
+    leaderboard,
+    skypass,
+    conquestV2
+  ] = await Promise.all([
+    readFile(
+      path.join(root, 'game-server-cloudflare/src/conquest-settlement.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare/src/conquest-delivery.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare/src/player-rpc.ts'), 'utf8'),
     Promise.all([
-      readFile(path.join(root, 'cloudflare/src/conquest-v2-economy.ts'), 'utf8'),
+      readFile(
+        path.join(root, 'cloudflare/src/conquest-v2-economy.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(root, 'cloudflare/src/conquest-v2-reward-worker.ts'),
+        'utf8'
+      ),
       readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
       readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
       readFile(path.join(root, 'docs/CLOUDFLARE_RPC_AUDIT.md'), 'utf8')
@@ -146,15 +188,25 @@ const main = async () => {
     MintSkypassSilverCardsQueue: skypass,
     MintSkypassStickersQueue: skypass
   }
-  const errors = mintQueueAuditErrors({ runnerSource, goSource, evidenceSources })
+  const errors = mintQueueAuditErrors({
+    runnerSource,
+    goSource,
+    evidenceSources
+  })
   if (errors.length) {
-    for (const error of errors) process.stderr.write(`Mint queue audit: ${error}\n`)
+    for (const error of errors)
+      process.stderr.write(`Mint queue audit: ${error}\n`)
     process.exitCode = 1
     return
   }
-  process.stdout.write('All 13 source transaction queues have reviewed Cloudflare dispositions\n')
+  process.stdout.write(
+    'All 13 source transaction queues have reviewed Cloudflare dispositions\n'
+  )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }
