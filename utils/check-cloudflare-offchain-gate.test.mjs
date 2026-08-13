@@ -83,6 +83,12 @@ const validInput = () => ({
     'match experience player receipts are immutable; ' +
     'match experience completion is invalid; ' +
     'match experience receipts are immutable',
+  conquestPointSource:
+    'multiplayer_match_conquest_point_players; settlement_token; POINTS_CAP',
+  conquestPointMigration:
+    'match Conquest point player receipts are immutable; ' +
+    'match Conquest point completion is invalid; ' +
+    'match Conquest point receipts are immutable',
   observationalSources: {
     analytics: 'INSERT INTO multiplayer_match_analytics'
   },
@@ -186,6 +192,20 @@ test('rejects a chain effect from the match XP grant', () => {
     offchainGateErrors(input).some(error =>
       error.includes('match XP grant contains a legacy chain effect')
     )
+  )
+})
+
+test('rejects Conquest points without capped immutable player receipts', () => {
+  const input = validInput()
+  input.conquestPointSource =
+    'UPDATE player_conquest_points SET current_points = current_points + 4'
+  input.conquestPointMigration = 'CREATE TABLE point_rewards (id TEXT)'
+  const errors = offchainGateErrors(input)
+  assert.ok(
+    errors.some(error => error.includes('Conquest point grant is missing'))
+  )
+  assert.ok(
+    errors.some(error => error.includes('Conquest point receipt schema'))
   )
 })
 

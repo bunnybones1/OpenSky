@@ -158,6 +158,11 @@ the source operation order. This prevents simultaneous match completions from
 losing counters, Glicko changes, or the rank-up XP receipt passed into the
 off-chain experience settlement.
 
+Conquest event points likewise use immutable per-player match receipts. The
+source 13,750-point cap and before/after treasure progress are calculated from
+the current D1 balance inside settlement, so simultaneous matches cannot award
+the same remaining cap space or report stale progress.
+
 The Cloudflare release gate also keeps the preserved legacy transaction pages
 out of `IdentityApp`. Premium SkyPass is currently disabled; when product and
 Stripe configuration are ready, its original page may return only after the

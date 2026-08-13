@@ -45,7 +45,6 @@ interface MatchRow {
 interface PlayerRow {
   account_id: number | null
   hero: string
-  current_points: number | null
 }
 
 interface ItemRow {
@@ -59,6 +58,15 @@ interface ReceiptRow {
   player1_rewards_json: string
   player2_rewards_json: string
   processed_at: string
+  settlement_token: string
+}
+
+interface PlayerReceiptRow {
+  player_index: 0 | 1
+  account_id: number
+  awarded_points: number
+  before_points: number
+  after_points: number
 }
 
 export interface ConquestPointsReceipt {
@@ -99,24 +107,52 @@ const parseRewards = (value: string): Reward[] => {
 const receipt = async (
   database: D1Database,
   proposalId: string,
-  applied: boolean
+  settlementToken?: string
 ): Promise<ConquestPointsReceipt | undefined> => {
-  const row = await database
-    .prepare(
-      `SELECT player1_points, player2_points, player1_rewards_json,
-              player2_rewards_json, processed_at
-       FROM multiplayer_match_conquest_points WHERE proposal_id = ?`
-    )
-    .bind(proposalId)
-    .first<ReceiptRow>()
+  const [row, playerRows] = await Promise.all([
+    database
+      .prepare(
+        `SELECT player1_points, player2_points, player1_rewards_json,
+                player2_rewards_json, processed_at, settlement_token
+         FROM multiplayer_match_conquest_points WHERE proposal_id = ?`
+      )
+      .bind(proposalId)
+      .first<ReceiptRow>(),
+    database
+      .prepare(
+        `SELECT player_index, account_id, awarded_points, before_points,
+                after_points
+         FROM multiplayer_match_conquest_point_players
+         WHERE proposal_id = ? ORDER BY player_index`
+      )
+      .bind(proposalId)
+      .all<PlayerReceiptRow>()
+  ])
+  const storedRewards: [Reward[], Reward[]] = row
+    ? [
+        parseRewards(row.player1_rewards_json),
+        parseRewards(row.player2_rewards_json)
+      ]
+    : [[], []]
+  for (const player of playerRows.results) {
+    storedRewards[player.player_index] = [
+      {
+        accountID: player.account_id,
+        type: RewardType.CONQUEST_POINTS,
+        conquestV2TreasureProgress: {
+          beforeMatch: progress(player.before_points),
+          afterMatch: progress(player.after_points)
+        }
+      }
+    ]
+  }
   return row
     ? {
-        applied,
+        applied:
+          settlementToken !== undefined &&
+          row.settlement_token === settlementToken,
         points: [row.player1_points, row.player2_points],
-        rewards: [
-          parseRewards(row.player1_rewards_json),
-          parseRewards(row.player2_rewards_json)
-        ],
+        rewards: storedRewards,
         processedAt: row.processed_at
       }
     : undefined
@@ -169,7 +205,7 @@ export const applyConquestPoints = async (
   turnCount: number,
   processedAt: string
 ): Promise<ConquestPointsReceipt> => {
-  const existing = await receipt(database, proposalId, false)
+  const existing = await receipt(database, proposalId)
   if (existing) return existing
   const match = await database
     .prepare(
@@ -193,16 +229,13 @@ export const applyConquestPoints = async (
     userIds.map(userId =>
       database
         .prepare(
-          `SELECT account.id AS account_id, conquest.hero,
-                  points.current_points
+          `SELECT account.id AS account_id, conquest.hero
            FROM player_conquests conquest
            LEFT JOIN game_accounts account ON account.user_id = conquest.user_id
-           LEFT JOIN player_conquest_points points
-             ON points.user_id = conquest.user_id AND points.event_id = ?
            WHERE conquest.user_id = ? AND conquest.status = 'IN_PROGRESS'
              AND conquest.mode = ? LIMIT 1`
         )
-        .bind(EVENT_ID, userId, conquestMode)
+        .bind(userId, conquestMode)
         .first<PlayerRow>()
     )
   )
@@ -210,11 +243,12 @@ export const applyConquestPoints = async (
     throw new Error('there is no conquest in progress')
   }
 
-  const points: [number, number] = [0, 0]
-  const rewards: [Reward[], Reward[]] = [[], []]
+  const rawPoints: [number, number] = [0, 0]
+  const eligiblePlayers: [boolean, boolean] = [false, false]
   if (winner !== undefined) {
     for (const player of [0, 1] as const) {
       if (!eligible(player, winner, status, turnCount)) continue
+      eligiblePlayers[player] = true
       const ids = cards[player]
       const placeholders = ids.map(() => '?').join(',')
       const cardFilter = ids.length
@@ -245,23 +279,14 @@ export const applyConquestPoints = async (
       if (items.results.some(item => item.item_type === 'SW_HERO_SKINS')) {
         earned += Math.ceil(earned * 0.25)
       }
-      const before = players[player]!.current_points ?? 0
-      earned = Math.max(0, Math.min(earned, POINTS_CAP - before))
-      points[player] = earned
-      rewards[player].push({
-        accountID: players[player]!.account_id ?? 0,
-        type: RewardType.CONQUEST_POINTS,
-        conquestV2TreasureProgress: {
-          beforeMatch: progress(before),
-          afterMatch: progress(before + earned)
-        }
-      })
+      rawPoints[player] = earned
     }
   }
 
   const statements: D1PreparedStatement[] = []
+  const settlementToken = crypto.randomUUID()
   for (const player of [0, 1] as const) {
-    if (points[player] <= 0) continue
+    if (!eligiblePlayers[player]) continue
     statements.push(
       database
         .prepare(
@@ -272,22 +297,84 @@ export const applyConquestPoints = async (
         .bind(userIds[player], EVENT_ID, processedAt),
       database
         .prepare(
-          `UPDATE player_conquest_points
-           SET current_points = current_points + ?,
-               total_points = total_points + ?, updated_at = ?
-           WHERE user_id = ? AND event_id = ?
+          `INSERT INTO multiplayer_match_conquest_point_players
+             (proposal_id, player_index, user_id, settlement_token,
+              account_id, raw_points, before_points, before_total_points,
+              awarded_points, after_points, after_total_points, processed_at)
+           SELECT ?, ?, points.user_id, ?, ?, ?, points.current_points,
+                  points.total_points,
+                  MIN(?, MAX(0, ? - points.current_points)),
+                  points.current_points + MIN(
+                    ?, MAX(0, ? - points.current_points)
+                  ),
+                  points.total_points + MIN(
+                    ?, MAX(0, ? - points.current_points)
+                  ), ?
+           FROM player_conquest_points points
+           WHERE points.user_id = ? AND points.event_id = ?
              AND NOT EXISTS (
                SELECT 1 FROM multiplayer_match_conquest_points
                WHERE proposal_id = ?
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM multiplayer_match_conquest_point_players
+               WHERE proposal_id = ? AND player_index = ?
              )`
         )
         .bind(
-          points[player],
-          points[player],
+          proposalId,
+          player,
+          settlementToken,
+          players[player]!.account_id ?? 0,
+          rawPoints[player],
+          rawPoints[player],
+          POINTS_CAP,
+          rawPoints[player],
+          POINTS_CAP,
+          rawPoints[player],
+          POINTS_CAP,
           processedAt,
           userIds[player],
           EVENT_ID,
-          proposalId
+          proposalId,
+          proposalId,
+          player
+        ),
+      database
+        .prepare(
+          `UPDATE player_conquest_points
+           SET current_points = (
+                 SELECT after_points
+                 FROM multiplayer_match_conquest_point_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               ),
+               total_points = (
+                 SELECT after_total_points
+                 FROM multiplayer_match_conquest_point_players receipt
+                 WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+                   AND receipt.settlement_token = ?
+               ),
+               updated_at = ?
+           WHERE user_id = ? AND event_id = ? AND EXISTS (
+             SELECT 1 FROM multiplayer_match_conquest_point_players receipt
+             WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+               AND receipt.settlement_token = ?
+           )`
+        )
+        .bind(
+          proposalId,
+          player,
+          settlementToken,
+          proposalId,
+          player,
+          settlementToken,
+          processedAt,
+          userIds[player],
+          EVENT_ID,
+          proposalId,
+          player,
+          settlementToken
         )
     )
   }
@@ -296,8 +383,21 @@ export const applyConquestPoints = async (
       .prepare(
         `INSERT INTO multiplayer_match_conquest_points
            (proposal_id, player1_points, player2_points, player1_rewards_json,
-            player2_rewards_json, processed_at)
-         SELECT ?, ?, ?, ?, ?, ?
+            player2_rewards_json, processed_at, player_count,
+            settlement_token)
+         SELECT ?,
+                COALESCE((SELECT awarded_points
+                  FROM multiplayer_match_conquest_point_players
+                  WHERE proposal_id = ? AND player_index = 0
+                    AND settlement_token = ?), 0),
+                COALESCE((SELECT awarded_points
+                  FROM multiplayer_match_conquest_point_players
+                  WHERE proposal_id = ? AND player_index = 1
+                    AND settlement_token = ?), 0),
+                '[]', '[]', ?,
+                (SELECT COUNT(*)
+                 FROM multiplayer_match_conquest_point_players
+                 WHERE proposal_id = ? AND settlement_token = ?), ?
          WHERE NOT EXISTS (
            SELECT 1 FROM multiplayer_match_conquest_points
            WHERE proposal_id = ?
@@ -305,16 +405,19 @@ export const applyConquestPoints = async (
       )
       .bind(
         proposalId,
-        points[0],
-        points[1],
-        JSON.stringify(rewards[0]),
-        JSON.stringify(rewards[1]),
+        proposalId,
+        settlementToken,
+        proposalId,
+        settlementToken,
         processedAt,
+        proposalId,
+        settlementToken,
+        settlementToken,
         proposalId
       )
   )
   await database.batch(statements)
-  const stored = await receipt(database, proposalId, true)
+  const stored = await receipt(database, proposalId, settlementToken)
   if (!stored) throw new Error('conquest points receipt was not persisted')
   return stored
 }

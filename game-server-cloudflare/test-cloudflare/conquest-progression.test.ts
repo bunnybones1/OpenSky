@@ -97,7 +97,6 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
-    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_points'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_conquest_progress'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_points'),
     env.AUTH_DB.prepare('DELETE FROM player_conquests'),
@@ -213,6 +212,145 @@ describe('source Conquest authoritative match progression', () => {
 
     expect(receipt.points).toEqual([4, 0])
     expect(receipt.rewards.map(rewards => rewards.length)).toEqual([1, 0])
+  })
+
+  it('serializes simultaneous point awards at the source event cap', async () => {
+    const firstProposal = 'conquest-points-cap-one'
+    const secondProposal = 'conquest-points-cap-two'
+    await setup(firstProposal)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, status, created_at, updated_at)
+       SELECT ?, ?, mode, version, player1_principal, player2_principal,
+              player1_user_id, player2_user_id, match_payload_json, status,
+              created_at, updated_at
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(secondProposal, `replay-${secondProposal}`, firstProposal)
+      .run()
+    await env.AUTH_DB.batch(
+      [USER_1, USER_2].map(userId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_conquest_points
+             (user_id, event_id, current_points, total_points, updated_at)
+           VALUES (?, 2, 13747, 13747, ?)`
+        ).bind(userId, '2026-08-11T12:01:30.000Z')
+      )
+    )
+
+    const receipts = await Promise.all(
+      [firstProposal, secondProposal].map(proposalId =>
+        applyConquestPoints(
+          env.AUTH_DB,
+          proposalId,
+          0,
+          MatchStatus.COMPLETED,
+          5,
+          '2026-08-11T12:01:31.000Z'
+        )
+      )
+    )
+    expect(receipts.every(receipt => receipt.applied)).toBe(true)
+    expect(
+      receipts.map(receipt => receipt.points[0]).sort((a, b) => a - b)
+    ).toEqual([0, 3])
+    expect(
+      receipts.map(receipt => receipt.points[1]).sort((a, b) => a - b)
+    ).toEqual([0, 3])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT user_id, current_points, total_points
+         FROM player_conquest_points ORDER BY user_id`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { user_id: USER_1, current_points: 13750, total_points: 13750 },
+        { user_id: USER_2, current_points: 13750, total_points: 13750 }
+      ]
+    })
+    const transitions = await env.AUTH_DB.prepare(
+      `SELECT user_id, before_points, awarded_points, after_points
+       FROM multiplayer_match_conquest_point_players
+       WHERE proposal_id IN (?, ?) ORDER BY user_id, before_points`
+    )
+      .bind(firstProposal, secondProposal)
+      .all()
+    expect(transitions.results).toMatchObject([
+      { user_id: USER_1, before_points: 13747, awarded_points: 3, after_points: 13750 },
+      { user_id: USER_1, before_points: 13750, awarded_points: 0, after_points: 13750 },
+      { user_id: USER_2, before_points: 13747, awarded_points: 3, after_points: 13750 },
+      { user_id: USER_2, before_points: 13750, awarded_points: 0, after_points: 13750 }
+    ])
+  })
+
+  it('coalesces simultaneous retries into one Conquest point award', async () => {
+    const proposalId = 'conquest-points-duplicate'
+    await setup(proposalId)
+    const settle = () =>
+      applyConquestPoints(
+        env.AUTH_DB,
+        proposalId,
+        0,
+        MatchStatus.COMPLETED,
+        5,
+        '2026-08-11T12:01:32.000Z'
+      )
+
+    const receipts = await Promise.all([settle(), settle()])
+    expect(receipts.map(receipt => receipt.applied).sort()).toEqual([
+      false,
+      true
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT user_id, current_points FROM player_conquest_points
+         ORDER BY user_id`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { user_id: USER_1, current_points: 4 },
+        { user_id: USER_2, current_points: 4 }
+      ]
+    })
+  })
+
+  it('rolls back point balances when final receipt persistence fails', async () => {
+    const proposalId = 'conquest-points-rollback'
+    await setup(proposalId)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_conquest_point_failure
+       BEFORE INSERT ON multiplayer_match_conquest_points
+       BEGIN
+         SELECT RAISE(ABORT, 'injected Conquest point failure');
+       END`
+    ).run()
+
+    await expect(
+      applyConquestPoints(
+        env.AUTH_DB,
+        proposalId,
+        0,
+        MatchStatus.COMPLETED,
+        5,
+        '2026-08-11T12:01:33.000Z'
+      )
+    ).rejects.toThrow('injected Conquest point failure')
+    await env.AUTH_DB.prepare('DROP TRIGGER test_conquest_point_failure').run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_conquest_points`
+      ).first('count')
+    ).toBe(0)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_conquest_point_players WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(0)
   })
 
   it('records a win and zero-win completion exactly once', async () => {
