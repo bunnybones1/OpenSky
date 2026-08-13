@@ -24,7 +24,8 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
     deckViewerSource,
     deckViewerFooterSource,
     adminPageSource,
-    staffRepositorySource
+    staffRepositorySource,
+    shopPrototypeSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -56,7 +57,15 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       'utf8'
     ),
     readFile('webapp/src/AdminPage/AdminPage.tsx', 'utf8'),
-    readFile('cloudflare/src/staff.ts', 'utf8')
+    readFile('cloudflare/src/staff.ts', 'utf8'),
+    Promise.all([
+      readFile('webapp/src/ShopPage/shared/queries/mock-data.ts', 'utf8'),
+      readFile('webapp/src/ShopPage/ShopSection/ShopSection.tsx', 'utf8'),
+      readFile(
+        'webapp/src/ShopPage/ShopSection/ShopBox/components/PriceButton.tsx',
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n'))
   ])
   assert.deepEqual(
     webappRouteAuditErrors({
@@ -78,7 +87,8 @@ test('accepts the current reviewed legacy-to-identity route map', async () => {
       deckViewerSource,
       deckViewerFooterSource,
       adminPageSource,
-      staffRepositorySource
+      staffRepositorySource,
+      shopPrototypeSource
     }),
     []
   )
@@ -104,7 +114,8 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     deckViewerSource,
     deckViewerFooterSource,
     adminPageSource,
-    staffRepositorySource
+    staffRepositorySource,
+    shopPrototypeSource
   ] = await Promise.all([
     readFile('webapp/src/App.tsx', 'utf8'),
     readFile('webapp/src/IdentitySession/IdentityApp.tsx', 'utf8'),
@@ -136,7 +147,15 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
       'utf8'
     ),
     readFile('webapp/src/AdminPage/AdminPage.tsx', 'utf8'),
-    readFile('cloudflare/src/staff.ts', 'utf8')
+    readFile('cloudflare/src/staff.ts', 'utf8'),
+    Promise.all([
+      readFile('webapp/src/ShopPage/shared/queries/mock-data.ts', 'utf8'),
+      readFile('webapp/src/ShopPage/ShopSection/ShopSection.tsx', 'utf8'),
+      readFile(
+        'webapp/src/ShopPage/ShopSection/ShopBox/components/PriceButton.tsx',
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n'))
   ])
   const errors = webappRouteAuditErrors({
     legacySource: legacySource.replace(
@@ -218,6 +237,10 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
     staffRepositorySource: staffRepositorySource.replace(
       "permission = 'CONTENT_WRITE'",
       "permission = 'UNSAFE_WRITE'"
+    ),
+    shopPrototypeSource: shopPrototypeSource.replace(
+      'onClick={noop}',
+      'onClick={purchaseOffer}'
     )
   })
   assert.ok(errors.some(error => error.includes('unreviewed legacy')))
@@ -246,4 +269,5 @@ test('rejects unreviewed, lost, and silently redirected product routes', async (
   assert.ok(errors.some(error => error.includes('market-cart control')))
   assert.ok(errors.some(error => error.includes('role confirmation')))
   assert.ok(errors.some(error => error.includes('server authorization')))
+  assert.ok(errors.some(error => error.includes('Shop prototype changed')))
 })

@@ -209,10 +209,12 @@ receipt blob is not reward authority. Provider credentials and raw purchase
 tokens never enter reward evidence.
 
 The source transaction-queue audit also inventories all 13 queues consumed by
-`SendTxnsRunner`. Eight have an active source producer and five are source-
-producerless compatibility queues. Every queue, including the producerless
-ones, is linked to an off-chain implementation or an explicit whole-feature
-retirement. A newly added queue, a revived producerless task, or missing
+`SendTxnsRunner`. It discovers task producers across every executable Go file
+under `api`, rather than trusting a curated package list. Eight queues have an
+active source producer and five are source-producerless compatibility queues.
+Every queue, including the producerless ones, is linked to an off-chain
+implementation or an explicit whole-feature retirement. A newly added queue, a
+producer moved into a new package, a revived producerless task, or missing
 Cloudflare evidence fails the production build. The producerless Conquest
 extra-reward transfer is the only whole-feature retirement: the source has no
 production producer, and Cloud Weasel has no corresponding earning or purchase

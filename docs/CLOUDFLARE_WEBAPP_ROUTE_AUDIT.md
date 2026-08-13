@@ -18,7 +18,7 @@ original 404/deleted-account destinations disappear.
 | `SKY_PASS`          | `preserved-offchain-rewards`           | Original free and premium tracks backed by active D1 reward policy.                                                     |
 | `SKY_PASS_PURCHASE` | `preserved-identity-commerce`          | Original page/artwork with Google-only Stripe controls and exact off-chain fulfillment.                                 |
 | `CACHE_INFO`        | `legacy-diagnostic`                    | Not mounted; internal cache diagnostics are not a player surface.                                                       |
-| `SHOP`              | `legacy-secret-shop`                   | Source-secret feature remains unadvertised pending product and reward review.                                           |
+| `SHOP`              | `unreleased-source-mock`               | Not mounted: its source data is explicitly `MOCK_SHOP_ITEMS`, its copy is placeholder lorem ipsum, and every offer button is wired to `noop`; there is no earning, purchase, or API behavior to retire. |
 | `HERO_FEATURE`      | `preserved-offchain-controls`          | Original Hero page with Google Gold-card exchange.                                                                      |
 | `SELECT_GOLDS`      | `preserved-offchain-controls`          | Original selection UI with identity-owned D1 exchange.                                                                  |
 | `LEADERBOARD`       | `preserved-original-page`              | Original player and deck leaderboards.                                                                                  |
@@ -39,6 +39,13 @@ Home. Google account deletion retains the source destination without reviving
 the wallet transaction: the browser starts a same-origin Google re-verification
 flow, the Worker records the deletion request in D1, clears the identity
 session, and redirects to `/deleted-account`.
+
+The hidden Shop prototype is not excluded because it mentions USDC or would
+eventually have minted assets. It has no source fulfillment at all: hard-coded
+mock offers expire relative to browser load, all sections repeat placeholder
+copy, and the only action handler is `noop`. Promoting those values would invent
+an economy rather than preserve shipped work. Any real offer later introduced
+must use an approved catalog and receipt-backed off-chain fulfillment.
 
 ## Production rollout
 

@@ -3,9 +3,19 @@ import test from 'node:test'
 
 import {
   EXPECTED_QUEUES,
+  isExecutableGoSource,
   mintQueueAuditErrors,
   sendTxnQueues
 } from './audit-cloudflare-mint-queues.mjs'
+
+test('discovers producers across executable Go source without test or binding noise', () => {
+  assert.equal(isExecutableGoSource('/repo/api/lib/new/rewards.go'), true)
+  assert.equal(isExecutableGoSource('/repo/api/cmd/new/main.go'), true)
+  assert.equal(isExecutableGoSource('/repo/api/lib/new/rewards_test.go'), false)
+  assert.equal(isExecutableGoSource('/repo/api/proto/rewards.gen.go'), false)
+  assert.equal(isExecutableGoSource('/repo/api/contracts/rewards.go'), false)
+  assert.equal(isExecutableGoSource('/repo/api/lib/mock/rewards.go'), false)
+})
 
 const queues = [
   'ExitConquestQueue',

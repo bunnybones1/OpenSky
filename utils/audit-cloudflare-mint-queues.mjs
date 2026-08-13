@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const EXPECTED_QUEUES = {
   ExitConquestQueue: {
@@ -161,6 +161,24 @@ export const sendTxnQueues = source => {
     : []
 }
 
+export const isExecutableGoSource = file =>
+  file.endsWith('.go') &&
+  !file.endsWith('_test.go') &&
+  !file.endsWith('.gen.go') &&
+  !file.includes('/contracts/') &&
+  !file.includes('/mock/')
+
+const sourceFiles = async directory => {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const nested = await Promise.all(
+    entries.map(entry => {
+      const entryPath = path.join(directory, entry.name)
+      return entry.isDirectory() ? sourceFiles(entryPath) : [entryPath]
+    })
+  )
+  return nested.flat()
+}
+
 export const mintQueueAuditErrors = ({
   runnerSource,
   goSource,
@@ -218,24 +236,19 @@ export const mintQueueAuditErrors = ({
 
 const main = async () => {
   const root = path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
+    path.dirname(fileURLToPath(import.meta.url)),
     '..'
   )
   const runnerSource = await readFile(
     path.join(root, 'api/lib/jobqueue/send_txns_runner.go'),
     'utf8'
   )
-  const producerFiles = [
-    'api/lib/conquest/state_manager.go',
-    'api/lib/jobqueue/delayed_minting.go',
-    'api/lib/jobqueue/grant_sticker_rewards_task.go',
-    'api/lib/jobqueue/conquest_v2_rewards_runner.go',
-    'api/lib/jobqueue/leaderboard_rewards_runner.go',
-    'api/lib/skypass/reward_applier.go'
-  ]
+  const producerFiles = (await sourceFiles(path.join(root, 'api'))).filter(
+    isExecutableGoSource
+  )
   const goSource = (
     await Promise.all(
-      producerFiles.map(file => readFile(path.join(root, file), 'utf8'))
+      producerFiles.map(file => readFile(file, 'utf8'))
     )
   ).join('\n')
   const [

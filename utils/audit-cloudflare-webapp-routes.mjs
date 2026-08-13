@@ -25,7 +25,7 @@ const REVIEWED_LEGACY_ROUTES = {
     mounted: true
   },
   CACHE_INFO: { disposition: 'legacy-diagnostic', mounted: false },
-  SHOP: { disposition: 'legacy-secret-shop', mounted: false },
+  SHOP: { disposition: 'unreleased-source-mock', mounted: false },
   HERO_FEATURE: {
     disposition: 'preserved-offchain-controls',
     mounted: true
@@ -80,7 +80,8 @@ export const webappRouteAuditErrors = ({
   deckViewerSource,
   deckViewerFooterSource,
   adminPageSource,
-  staffRepositorySource
+  staffRepositorySource,
+  shopPrototypeSource
 }) => {
   const errors = []
   const legacyRoutes = routeNames(legacySource)
@@ -118,6 +119,18 @@ export const webappRouteAuditErrors = ({
   for (const route of REVIEWED_IDENTITY_ADDITIONS) {
     if (!identityRoutes.has(route)) {
       errors.push(`reviewed identity-only webapp route disappeared: ${route}`)
+    }
+  }
+  for (const token of [
+    'MOCK_SHOP_ITEMS',
+    'Lorem ipsum dolor sit amet',
+    "import noop from 'lodash-es/noop'",
+    'onClick={noop}'
+  ]) {
+    if (!shopPrototypeSource.includes(token)) {
+      errors.push(
+        `unreleased Shop prototype changed and requires product review: ${token}`
+      )
     }
   }
   for (const token of [
@@ -315,7 +328,8 @@ const main = async () => {
     deckViewerSource,
     deckViewerFooterSource,
     adminPageSource,
-    staffRepositorySource
+    staffRepositorySource,
+    shopPrototypeSource
   ] = await Promise.all([
     readFile(path.join(root, 'webapp/src/App.tsx'), 'utf8'),
     readFile(
@@ -377,7 +391,24 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'webapp/src/AdminPage/AdminPage.tsx'), 'utf8'),
-    readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
+    Promise.all([
+      readFile(
+        path.join(root, 'webapp/src/ShopPage/shared/queries/mock-data.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(root, 'webapp/src/ShopPage/ShopSection/ShopSection.tsx'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'webapp/src/ShopPage/ShopSection/ShopBox/components/PriceButton.tsx'
+        ),
+        'utf8'
+      )
+    ]).then(parts => parts.join('\n'))
   ])
   const errors = webappRouteAuditErrors({
     legacySource,
@@ -398,7 +429,8 @@ const main = async () => {
     deckViewerSource,
     deckViewerFooterSource,
     adminPageSource,
-    staffRepositorySource
+    staffRepositorySource,
+    shopPrototypeSource
   })
   if (errors.length) {
     for (const error of errors)
