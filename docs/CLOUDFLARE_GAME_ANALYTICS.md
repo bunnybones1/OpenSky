@@ -27,7 +27,7 @@ The analytics Worker exposes only `/health`; replay archives and CSVs have no pu
 
 - D1 migration `0065_multiplayer_match_analytics.sql` is applied in production.
 - Queues `cloud-weasel-game-analytics` and `cloud-weasel-game-analytics-dead-letter` are provisioned.
-- Production Worker deployment is intentionally waiting for R2 to be enabled on Cloudflare account `528badc1c29c30196335df252a73c5a6`; a read-only bucket-list recheck on 2026-08-13 still returned Cloudflare `10042` (“Please enable R2 through the Cloudflare Dashboard”). Both analytics queues remain provisioned with no producer or consumer, and no analytics Worker exists yet.
+- Production Worker deployment is intentionally waiting for R2 to be enabled on Cloudflare account `528badc1c29c30196335df252a73c5a6`; a read-only bucket-list recheck on 2026-08-14 still returned Cloudflare `10042` (“Please enable R2 through the Cloudflare Dashboard”). Both analytics queues remain provisioned with no producer or consumer, and no analytics Worker exists yet.
 - The package deploy command uses the Wrangler version pinned in the workspace's
   `cloudflare` package; it no longer assumes an uninstalled package-local CLI.
 - Do not deploy the game-server producer until bucket `cloud-weasel-game-analytics` exists and the analytics consumer is healthy.

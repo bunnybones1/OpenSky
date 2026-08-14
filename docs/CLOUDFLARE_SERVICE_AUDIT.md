@@ -39,7 +39,7 @@ product description or Cloudflare runtime.
 
 - Enable R2, create `cloud-weasel-game-analytics`, deploy the analytics consumer,
   verify it, and only then deploy the game-server replay producer.
-  A fresh read-only check still returned Cloudflare `10042` on 2026-08-13; the
+  A fresh read-only check still returned Cloudflare `10042` on 2026-08-14; the
   two queues exist with zero producers and zero consumers, but no bucket or
   analytics Worker is active.
 - External device push has a disabled-by-default OneSignal adapter. Activation
