@@ -497,12 +497,18 @@ describe('Cloud Weasel accepted-match service', () => {
       status: { conquestConstructed: true, conquestDiscovery: true }
     })
     expect(await isConquestQueueReady(env.AUTH_DB)).toBe(true)
-    expect(await isConquestQueueReady(env.AUTH_DB, new Date(endsAt))).toBe(
-      false
-    )
-    const afterExpiry = await currentEnabledGameModes(
+    expect(await isConquestQueueReady(env.AUTH_DB, new Date(endsAt))).toBe(true)
+    const afterEnd = new Date(Date.parse(endsAt) + 1)
+    expect(await isConquestQueueReady(env.AUTH_DB, afterEnd)).toBe(false)
+    const atExpiry = await currentEnabledGameModes(
       env as unknown as Parameters<typeof currentEnabledGameModes>[0],
       new Date(endsAt)
+    )
+    expect(atExpiry.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(true)
+    expect(atExpiry.has(GameMode.CONQUEST_DISCOVERY)).toBe(true)
+    const afterExpiry = await currentEnabledGameModes(
+      env as unknown as Parameters<typeof currentEnabledGameModes>[0],
+      afterEnd
     )
     expect(afterExpiry.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(false)
     expect(afterExpiry.has(GameMode.CONQUEST_DISCOVERY)).toBe(false)
@@ -549,7 +555,7 @@ describe('Cloud Weasel accepted-match service', () => {
     ).rejects.toThrow('Conquest queue readiness receipts are immutable')
   })
 
-  it('keeps an exact receipt-backed run drainable after admission closes', async () => {
+  it('keeps an exact receipt-backed run drainable after the inclusive window closes', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const { endsAt, verifiedAt } =
       await provisionReceiptBackedConquestReadiness()
@@ -564,12 +570,12 @@ describe('Cloud Weasel accepted-match service', () => {
 
     const publicModes = await currentEnabledGameModes(
       env as unknown as Parameters<typeof currentEnabledGameModes>[0],
-      new Date(endsAt)
+      new Date(Date.parse(endsAt) + 1)
     )
     expect(publicModes.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(false)
     const matchmakerModes = await currentMatchmakerGameModes(
       env as unknown as Parameters<typeof currentMatchmakerGameModes>[0],
-      new Date(endsAt)
+      new Date(Date.parse(endsAt) + 1)
     )
     expect(matchmakerModes.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(true)
     expect(matchmakerModes.has(GameMode.CONQUEST_DISCOVERY)).toBe(false)
@@ -639,7 +645,7 @@ describe('Cloud Weasel accepted-match service', () => {
       insertActiveConquest(
         USER_ID,
         'match-service-forged-conquest-window',
-        endsAt
+        new Date(Date.parse(endsAt) + 1).toISOString()
       )
     ])
     await env.AUTH_DB.prepare(

@@ -19,7 +19,7 @@ export const REWARD_READINESS_QUERY = `SELECT
   (SELECT COUNT(*) FROM conquest_approved_active_reward_pools) AS conquest_pools_approved,
   (SELECT COUNT(*) FROM conquest_verified_queue_pools
     WHERE starts_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      AND ends_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) AS conquest_verified_pools,
+      AND ends_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) AS conquest_verified_pools,
   (SELECT COUNT(*) FROM leaderboard_reward_schedule_versions) AS leaderboard_schedules_total,
   (SELECT COUNT(*) FROM (
      SELECT enabled FROM leaderboard_reward_schedule_versions
@@ -233,13 +233,18 @@ export const rewardReadinessRow = output => {
 
 const printReport = ({ tracks }) => {
   const widths = {
-    track: Math.max('Reward track'.length, ...tracks.map(row => row.track.length)),
+    track: Math.max(
+      'Reward track'.length,
+      ...tracks.map(row => row.track.length)
+    ),
     status: Math.max('Status'.length, ...tracks.map(row => row.status.length))
   }
   process.stdout.write(
     `${'Reward track'.padEnd(widths.track)}  ${'Status'.padEnd(widths.status)}  Authority\n`
   )
-  process.stdout.write(`${'-'.repeat(widths.track)}  ${'-'.repeat(widths.status)}  ---------\n`)
+  process.stdout.write(
+    `${'-'.repeat(widths.track)}  ${'-'.repeat(widths.status)}  ---------\n`
+  )
   for (const row of tracks) {
     process.stdout.write(
       `${row.track.padEnd(widths.track)}  ${row.status.padEnd(widths.status)}  ${row.authority}\n`
@@ -248,11 +253,18 @@ const printReport = ({ tracks }) => {
 }
 
 const main = async () => {
-  if (!/^\s*SELECT\b/i.test(REWARD_READINESS_QUERY) || /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE)\b/i.test(REWARD_READINESS_QUERY)) {
+  if (
+    !/^\s*SELECT\b/i.test(REWARD_READINESS_QUERY) ||
+    /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE)\b/i.test(
+      REWARD_READINESS_QUERY
+    )
+  ) {
     throw new Error('reward readiness audit must remain a read-only SELECT')
   }
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const config = JSON.parse(await readFile(path.join(root, 'wrangler.jsonc'), 'utf8'))
+  const config = JSON.parse(
+    await readFile(path.join(root, 'wrangler.jsonc'), 'utf8')
+  )
   const command = spawnSync(
     'pnpm',
     [
@@ -287,7 +299,8 @@ const main = async () => {
   }
   const report = rewardReadiness(rewardReadinessRow(command.stdout))
   if (report.errors.length) {
-    for (const error of report.errors) process.stderr.write(`Reward readiness: ${error}\n`)
+    for (const error of report.errors)
+      process.stderr.write(`Reward readiness: ${error}\n`)
     process.exitCode = 1
     return
   }
@@ -298,6 +311,9 @@ const main = async () => {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

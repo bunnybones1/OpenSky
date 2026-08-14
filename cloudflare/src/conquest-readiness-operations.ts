@@ -141,7 +141,7 @@ const present = (
     row.approved === 1 &&
     row.delivered_at <= now &&
     row.starts_at <= now &&
-    row.ends_at > now,
+    row.ends_at >= now,
   verification:
     row.verified_by_user_id && row.drill_reference && row.verified_at
       ? {

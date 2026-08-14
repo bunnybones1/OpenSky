@@ -319,7 +319,7 @@ export const settlePendingConquest = async (
   if (
     !Number.isFinite(admittedAt) ||
     Date.parse(pool.starts_at) > admittedAt ||
-    Date.parse(pool.ends_at) <= admittedAt
+    Date.parse(pool.ends_at) < admittedAt
   ) {
     throw new Error('Conquest run was not admitted by its pinned reward pool')
   }
@@ -386,7 +386,7 @@ export const settlePendingConquest = async (
              WHERE conquest_approved_reward_pools.version =
                    player_conquests.reward_pool_version
                AND starts_at <= player_conquests.created_at
-               AND ends_at > player_conquests.created_at
+               AND ends_at >= player_conquests.created_at
            )`
       )
       .bind(

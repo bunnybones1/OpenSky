@@ -216,7 +216,7 @@ describe('source conquest RPC foundation', () => {
         Hero.ADA,
         new Date(readiness.endsAt)
       )
-    ).rejects.toThrow('enter conquest')
+    ).resolves.toBe(true)
     expect(
       await env.AUTH_DB.prepare(
         `SELECT
@@ -228,7 +228,7 @@ describe('source conquest RPC foundation', () => {
       )
         .bind(userId, userId)
         .first()
-    ).toEqual({ balance: 2, conquests: 0 })
+    ).toEqual({ balance: 1, conquests: 1 })
 
     expect(
       await (await rpc('EnterConquest', { hero: Hero.ADA })).json()

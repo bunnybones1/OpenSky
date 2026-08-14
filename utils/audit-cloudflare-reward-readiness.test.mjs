@@ -29,11 +29,20 @@ test('uses one read-only scalar SELECT', () => {
     REWARD_READINESS_QUERY,
     /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE)\b/i
   )
-  assert.match(REWARD_READINESS_QUERY, /conquest_verified_queue_pools[\s\S]*ends_at > strftime/)
+  assert.match(
+    REWARD_READINESS_QUERY,
+    /conquest_verified_queue_pools[\s\S]*ends_at >= strftime/
+  )
   assert.match(REWARD_READINESS_QUERY, /conquest_approved_active_reward_pools/)
-  assert.doesNotMatch(REWARD_READINESS_QUERY, /conquest_reward_pools WHERE status = 'ACTIVE'/)
+  assert.doesNotMatch(
+    REWARD_READINESS_QUERY,
+    /conquest_reward_pools WHERE status = 'ACTIVE'/
+  )
   assert.match(REWARD_READINESS_QUERY, /ORDER BY version DESC LIMIT 1/)
-  assert.match(REWARD_READINESS_QUERY, /activation\.policy_hash = '[0-9a-f]{64}'/)
+  assert.match(
+    REWARD_READINESS_QUERY,
+    /activation\.policy_hash = '[0-9a-f]{64}'/
+  )
   assert.match(REWARD_READINESS_QUERY, /2021-11-22T14:00:00\.000Z/)
   assert.match(REWARD_READINESS_QUERY, /skypass_reward_active_policies/)
 })
@@ -70,7 +79,10 @@ test('distinguishes configuration, activation, readiness, and fully active track
   let statuses = Object.fromEntries(
     rewardReadiness(configured).tracks.map(row => [row.track, row.status])
   )
-  assert.equal(statuses['Original Conquest card settlement'], 'dormant-readiness')
+  assert.equal(
+    statuses['Original Conquest card settlement'],
+    'dormant-readiness'
+  )
   assert.equal(statuses['Weekly leaderboard rewards'], 'dormant-readiness')
   assert.equal(statuses['Conquest V2 weekly treasure'], 'dormant-readiness')
   assert.equal(statuses['Referral sticker rewards'], 'dormant-activation')

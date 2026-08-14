@@ -392,7 +392,8 @@ and progress are not migrated.
   A new run can spend that ticket only while constructed Conquest is enabled
   and the same independently approved, receipt-verified reward window used by
   matchmaking is current. Both checks are inside the entry batch, including
-  the strict queue-expiry boundary. Retrying an already-active run remains
+  the source-inclusive end instant; the first instant after it is closed.
+  Retrying an already-active run remains
   source-idempotent after a switch-off and never spends another ticket.
   The preserved Conquest page polls the source game-mode status RPC every ten
   seconds and keeps its existing Start and ticket-purchase controls locked

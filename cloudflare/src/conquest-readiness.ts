@@ -19,7 +19,7 @@ export const isConquestQueueReady = async (
        FROM conquest_verified_queue_pools verified
        JOIN conquest_approved_active_reward_pools approved
          ON approved.version = verified.pool_version
-       WHERE verified.starts_at <= ? AND verified.ends_at > ? LIMIT 1`
+       WHERE verified.starts_at <= ? AND verified.ends_at >= ? LIMIT 1`
     )
     .bind(timestamp, timestamp)
     .first()

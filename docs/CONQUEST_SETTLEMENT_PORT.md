@@ -41,7 +41,7 @@ run only after that task settles.
   settlement.
 - Production Conquest modes are false in both the match service and API status.
 - Versioned Silver/Gold pool storage fails closed for missing, unapproved, or
-  malformed pools and for new admission at the exact expiry boundary.
+  malformed pools and for new admission after the inclusive expiry boundary.
 - A pool must start as `DRAFT`, freeze the exact ordered Silver/Gold card
   manifest and counts in an immutable proposal receipt, receive independent
   second-actor approval, and only then transition to `ACTIVE`. Settlement,
@@ -111,8 +111,9 @@ run only after that task settles.
   `APPLIED` operation; an abandoned `PREPARING` row stays visibly unverified
   and cannot be mistaken for rollout authority.
 - Match-service admission re-evaluates that proof and the pool time window on
-  every read. An enabled operator flag therefore fails closed at the exact pool
-  expiry boundary without waiting for another write or deployment.
+  every read. Matching the source `Lte`/`Gte` query, the exact end instant is
+  still eligible; the first instant after it fails closed without waiting for
+  another write or deployment.
 - Matchmaker draining is intentionally separate from public admission. After
   expiry or pool retirement, only an `IN_PROGRESS` run whose immutable pin,
   canonical creation time, approved manifest, drill receipts, and applied
@@ -198,13 +199,14 @@ Object alarm may partially grant inventory before the receipt is durable.
   payload with one settlement, one delayed delivery, and no duplicate feed or
   inventory writes.
 - D1 rollback coverage for failures at each statement in the batch.
-- Entry coverage proves disabled, unverified, and exact-expiry states cannot
-  consume a ticket; enabled receipt-backed entry remains concurrency-safe, and
-  retrying an active run after switch-off does not spend again.
-- Drain coverage proves exact-expiry public admission is false while a valid
-  admitted run remains matchable, boundary-time or missing pins fail closed,
-  both dispatch identities must qualify, and an explicit operator disable
-  overrides the drain path.
+- Entry coverage proves disabled, unverified, and post-expiry states cannot
+  consume a ticket; the source-inclusive exact end remains eligible, enabled
+  receipt-backed entry remains concurrency-safe, and retrying an active run
+  after switch-off does not spend again.
+- Drain coverage proves public admission closes immediately after the inclusive
+  end while a valid admitted run remains matchable, post-boundary or missing
+  pins fail closed, both dispatch identities must qualify, and an explicit
+  operator disable overrides the drain path.
 - Feed events, inventory balances, Conquest stats, and terminal status agree.
 - Production read-only probes show no pre-enable Conquest rows or grants.
 - Conquest mode flags remain false until all checks pass against the deployed

@@ -118,7 +118,7 @@ export class ConquestRepository {
            AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
                IS conquest.created_at
            AND pool.starts_at <= conquest.created_at
-           AND pool.ends_at > conquest.created_at
+           AND pool.ends_at >= conquest.created_at
          LIMIT 1`
       )
       .bind(userId, mode)
@@ -142,7 +142,7 @@ export class ConquestRepository {
            AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
                IS conquest.created_at
            AND pool.starts_at <= conquest.created_at
-           AND pool.ends_at > conquest.created_at`
+           AND pool.ends_at >= conquest.created_at`
       )
       .all<{ mode: GameMode }>()
     return new Set(rows.results.map(row => row.mode))
@@ -201,7 +201,7 @@ export class ConquestRepository {
            FROM conquest_verified_queue_pools verified
            JOIN conquest_approved_active_reward_pools approved
              ON approved.version = verified.pool_version
-           WHERE verified.starts_at <= ? AND verified.ends_at > ?
+           WHERE verified.starts_at <= ? AND verified.ends_at >= ?
              AND EXISTS (
              SELECT 1 FROM player_account_stats
              WHERE user_id = ?

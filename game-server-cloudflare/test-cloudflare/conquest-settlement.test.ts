@@ -779,9 +779,7 @@ describe('source Conquest reward settlement', () => {
         SETTLED_AT,
         sequenceDraw(0)
       )
-    ).rejects.toThrow(
-      'Conquest run was not admitted by its pinned reward pool'
-    )
+    ).rejects.toThrow('Conquest run was not admitted by its pinned reward pool')
     expect((await inventory()).results).toEqual([])
   })
 
@@ -809,7 +807,11 @@ describe('source Conquest reward settlement', () => {
   })
 
   it('preserves the source pool end-time inclusivity', async () => {
-    const conquest = await setup(1, { endsAt: SETTLED_AT })
+    const conquest = await setup(1, {
+      endsAt: SETTLED_AT,
+      createdAt: '2026-08-12T00:00:00.000Z',
+      runCreatedAt: SETTLED_AT
+    })
     await expect(
       settlePendingConquest(
         env.AUTH_DB,

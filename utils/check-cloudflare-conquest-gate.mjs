@@ -93,8 +93,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'JOIN conquest_verified_drill_receipts drill',
       'JOIN staff_conquest_readiness_operations operation',
       "operation.status = 'APPLIED'",
-      'ready.verified_at >= pool.starts_at',
-      'ready.verified_at < pool.ends_at'
+      'ready.verified_at >= pool.starts_at'
     ]) {
       if (!evidence.drainMigration.includes(token)) {
         errors.push(
@@ -112,7 +111,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       "conquest.status = 'IN_PROGRESS'",
       "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
       'pool.starts_at <= conquest.created_at',
-      'pool.ends_at > conquest.created_at'
+      'pool.ends_at >= conquest.created_at'
     ]) {
       if (!evidence.drainRepository.includes(token)) {
         errors.push(`Conquest admitted-run drain boundary is missing: ${token}`)
@@ -241,6 +240,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'LEFT JOIN staff_conquest_readiness_operations applied',
       "applied.status = 'APPLIED'",
       'CASE WHEN applied.operation_key IS NULL',
+      'row.ends_at >= now',
       'Conquest readiness receipt confirmation does not match',
       'active verified Conquest drill evidence required',
       'INSERT INTO conquest_queue_readiness',
@@ -335,7 +335,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'FROM conquest_approved_reward_pools',
       'conquest.reward_pool_version',
       'Conquest run has no pinned reward pool',
-      'Date.parse(pool.ends_at) <= admittedAt',
+      'Date.parse(pool.ends_at) < admittedAt',
       'AND reward_pool_version = ?'
     ]) {
       if (!evidence.settlement.includes(token)) {
@@ -351,7 +351,6 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'CREATE TRIGGER player_conquests_reward_pool_pin_no_update',
       'conquest.reward_pool_version = NEW.pool_version',
       "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
-      'pool.ends_at > conquest.created_at',
       'Conquest reward pool pin is immutable'
     ]) {
       if (!evidence.settlementPinning.includes(token)) {
@@ -365,12 +364,43 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'FROM game_mode_status',
       "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
       'FROM conquest_verified_queue_pools verified',
-      'verified.starts_at <= ? AND verified.ends_at > ?',
+      'verified.starts_at <= ? AND verified.ends_at >= ?',
       'reward_pool_version',
       'verified.pool_version'
     ]) {
       if (!evidence.api.includes(token)) {
         errors.push(`Conquest player API lost admission gate: ${token}`)
+      }
+    }
+  }
+  if (evidence.sourceRewardPool !== undefined) {
+    for (const token of [
+      '"start_at": db.Lte(now)',
+      '"end_at":   db.Gte(now)'
+    ]) {
+      if (!evidence.sourceRewardPool.includes(token)) {
+        errors.push(
+          `source Conquest inclusive pool contract is missing: ${token}`
+        )
+      }
+    }
+  }
+  if (evidence.boundaryMigration !== undefined) {
+    for (const token of [
+      'DROP TRIGGER game_mode_status_conquest_pool_insert_guard',
+      'DROP TRIGGER conquest_queue_readiness_insert_guard',
+      'DROP TRIGGER staff_conquest_readiness_operation_insert_guard',
+      'DROP TRIGGER player_conquest_settlements_insert_guard',
+      'CREATE VIEW conquest_verified_queue_pools',
+      'CREATE VIEW conquest_approved_queue_pools',
+      'ready.verified_at <= pool.ends_at',
+      'pool.ends_at >= NEW.verified_at',
+      'pool.ends_at >= NEW.created_at',
+      "verified.ends_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+      'pool.ends_at >= conquest.created_at'
+    ]) {
+      if (!evidence.boundaryMigration.includes(token)) {
+        errors.push(`Conquest inclusive end migration is missing: ${token}`)
       }
     }
   }
@@ -476,7 +506,9 @@ const main = async () => {
     playerConquestButton,
     gameModesQuery,
     gateway,
-    readiness
+    readiness,
+    sourceRewardPool,
+    boundaryMigration
   ] = await Promise.all([
     readFile(
       path.join(root, 'match-service-cloudflare', 'src', 'worker.ts'),
@@ -634,6 +666,16 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare', 'src', 'conquest-readiness.ts'),
       'utf8'
+    ),
+    readFile(path.join(root, 'api', 'data', 'reward_pool_store.go'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0103_conquest_inclusive_pool_end.sql'
+      ),
+      'utf8'
     )
   ])
   const errors = conquestGateErrors(config, {
@@ -660,7 +702,9 @@ const main = async () => {
     playerConquestButton,
     gameModesQuery,
     gateway,
-    readiness
+    readiness,
+    sourceRewardPool,
+    boundaryMigration
   })
   if (errors.length) {
     for (const error of errors)

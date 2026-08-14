@@ -102,6 +102,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'LEFT JOIN staff_conquest_readiness_operations applied',
       "applied.status = 'APPLIED'",
       'CASE WHEN applied.operation_key IS NULL',
+      'row.ends_at >= now',
       'Conquest readiness receipt confirmation does not match',
       'active verified Conquest drill evidence required',
       'INSERT INTO conquest_queue_readiness',
@@ -148,7 +149,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'FROM conquest_approved_reward_pools',
       'conquest.reward_pool_version',
       'Conquest run has no pinned reward pool',
-      'Date.parse(pool.ends_at) <= admittedAt',
+      'Date.parse(pool.ends_at) < admittedAt',
       'AND reward_pool_version = ?'
     ].join('\n'),
     settlementPinning: [
@@ -158,7 +159,6 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'CREATE TRIGGER player_conquests_reward_pool_pin_no_update',
       'conquest.reward_pool_version = NEW.pool_version',
       "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
-      'pool.ends_at > conquest.created_at',
       'Conquest reward pool pin is immutable'
     ].join('\n'),
     drainMigration: [
@@ -167,8 +167,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'JOIN conquest_verified_drill_receipts drill',
       'JOIN staff_conquest_readiness_operations operation',
       "operation.status = 'APPLIED'",
-      'ready.verified_at >= pool.starts_at',
-      'ready.verified_at < pool.ends_at'
+      'ready.verified_at >= pool.starts_at'
     ].join('\n'),
     drainRepository: [
       'isDrainable(userId: string, mode: GameMode)',
@@ -178,7 +177,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "conquest.status = 'IN_PROGRESS'",
       "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
       'pool.starts_at <= conquest.created_at',
-      'pool.ends_at > conquest.created_at'
+      'pool.ends_at >= conquest.created_at'
     ].join('\n'),
     matchmaker: "'https://cloud-weasel-match/internal/matchmaker/game-modes'",
     api: [
@@ -186,7 +185,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'FROM game_mode_status',
       "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
       'FROM conquest_verified_queue_pools verified',
-      'verified.starts_at <= ? AND verified.ends_at > ?',
+      'verified.starts_at <= ? AND verified.ends_at >= ?',
       'reward_pool_version',
       'verified.pool_version'
     ].join('\n'),
@@ -215,7 +214,24 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "case 'GMActivateConquestV2RewardSchedule'",
       "case 'GMDisableConquestV2RewardSchedule'"
     ].join('\n'),
-    readiness: 'JOIN conquest_approved_active_reward_pools approved'
+    readiness: 'JOIN conquest_approved_active_reward_pools approved',
+    sourceRewardPool: [
+      '"start_at": db.Lte(now)',
+      '"end_at":   db.Gte(now)'
+    ].join('\n'),
+    boundaryMigration: [
+      'DROP TRIGGER game_mode_status_conquest_pool_insert_guard',
+      'DROP TRIGGER conquest_queue_readiness_insert_guard',
+      'DROP TRIGGER staff_conquest_readiness_operation_insert_guard',
+      'DROP TRIGGER player_conquest_settlements_insert_guard',
+      'CREATE VIEW conquest_verified_queue_pools',
+      'CREATE VIEW conquest_approved_queue_pools',
+      'ready.verified_at <= pool.ends_at',
+      'pool.ends_at >= NEW.verified_at',
+      'pool.ends_at >= NEW.created_at',
+      "verified.ends_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+      'pool.ends_at >= conquest.created_at'
+    ].join('\n')
   }
   assert.deepEqual(conquestGateErrors({}, evidence), [])
   for (const source of [
@@ -241,7 +257,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'playerConquestButton',
     'gameModesQuery',
     'gateway',
-    'readiness'
+    'readiness',
+    'sourceRewardPool',
+    'boundaryMigration'
   ]) {
     assert.ok(
       conquestGateErrors({}, { ...evidence, [source]: '' }).length > 0,
