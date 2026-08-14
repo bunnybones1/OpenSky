@@ -630,6 +630,22 @@ describe('legacy player RPC compatibility', () => {
           `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
         ).bind(grandweaverId, earlier),
         env.AUTH_DB.prepare(
+          `INSERT INTO player_profiles
+             (user_id, level, xp, next_level_xp, created_at, updated_at)
+           VALUES (?, 1, 0, 200, ?, ?)`
+        ).bind(grandweaverId, earlier, earlier),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_progression
+             (user_id, basic_skypass_level, basic_skypass_xp,
+              basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+           VALUES (?, 1, 0, 200, 0, ?, ?)`
+        ).bind(grandweaverId, earlier, earlier),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_settings
+             (user_id, name, locale, created_at, updated_at)
+           VALUES (?, ?, 'en', ?, ?)`
+        ).bind(grandweaverId, `Account.GW.${index}`, earlier, earlier),
+        env.AUTH_DB.prepare(
           `INSERT INTO player_account_stats
              (user_id, game_mode, season, score, player_rank,
               player_rank_stage, created_at, updated_at)
@@ -648,6 +664,22 @@ describe('legacy player RPC compatibility', () => {
       env.AUTH_DB.prepare(
         `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
       ).bind(lowerMasterId, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_profiles
+           (user_id, level, xp, next_level_xp, created_at, updated_at)
+         VALUES (?, 1, 0, 200, ?, ?)`
+      ).bind(lowerMasterId, earlier, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_progression
+           (user_id, basic_skypass_level, basic_skypass_xp,
+            basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+         VALUES (?, 1, 0, 200, 0, ?, ?)`
+      ).bind(lowerMasterId, earlier, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, created_at, updated_at)
+         VALUES (?, 'Account.Lower.Master', 'en', ?, ?)`
+      ).bind(lowerMasterId, earlier, earlier),
       env.AUTH_DB.prepare(
         `INSERT INTO player_account_stats
            (user_id, game_mode, season, score, player_rank,
@@ -675,6 +707,35 @@ describe('legacy player RPC compatibility', () => {
           }
         }
       }
+    })
+
+    const leaderboard = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 10 },
+        req: {
+          gameMode: 'RANKED_CONSTRUCTED',
+          playerRank: 'MASTER',
+          season
+        }
+      },
+      false
+    )
+    expect(await leaderboard.json()).toMatchObject({
+      res: [
+        {
+          account: { name: 'Cloud Weasel Player' },
+          rank: 1,
+          rankedSilverReward: 0,
+          rankedTicketReward: 1
+        },
+        {
+          account: { name: 'Account.Lower.Master' },
+          rank: 2,
+          rankedSilverReward: 0,
+          rankedTicketReward: 1
+        }
+      ]
     })
   })
 
@@ -736,6 +797,24 @@ describe('legacy player RPC compatibility', () => {
     ])
     expect(firstBody.page.hasBefore).toBe(true)
 
+    const insertedUserId = 'leaderboard-inserted-before-cursor'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Inserted.Weasel', 'inserted@example.com', ?, ?)`
+    )
+      .bind(insertedUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(insertedUserId)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 100, player_rank = 'EXPERT',
+           player_rank_stage = 'STAGE_I', updated_at = ?
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+    )
+      .bind(now, insertedUserId, season)
+      .run()
+
     const next = await rpc(
       'ListLeaderboard',
       {
@@ -744,17 +823,69 @@ describe('legacy player RPC compatibility', () => {
       },
       false
     )
-    expect(await next.json()).toMatchObject({
+    const nextBody = await next.json<{
+      page: { before: string }
+      res: Array<{ account: { name: string } }>
+    }>()
+    expect(nextBody).toMatchObject({
       res: [
         {
           account: { name: 'Beta.Weasel' },
           rank: 2,
           accountStat: { score: 10 },
-          rankedSilverReward: 9,
+          rankedSilverReward: 8,
           rankedTicketReward: 2
         }
       ]
     })
+
+    const previous = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 1, after: nextBody.page.before },
+        req: { gameMode: 'RANKED_CONSTRUCTED', season }
+      },
+      false
+    )
+    expect(await previous.json()).toMatchObject({
+      res: [{ account: { name: 'Alpha.Weasel' }, rank: 1 }]
+    })
+
+    const mismatchedFilter = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 1, before: firstBody.page.after },
+        req: {
+          gameMode: 'RANKED_CONSTRUCTED',
+          playerRank: 'WANDERER',
+          season
+        }
+      },
+      false
+    )
+    expect(mismatchedFilter.status).toBe(400)
+    const ambiguousDirection = await rpc(
+      'ListLeaderboard',
+      {
+        page: {
+          pageSize: 1,
+          before: firstBody.page.after,
+          after: firstBody.page.after
+        },
+        req: { gameMode: 'RANKED_CONSTRUCTED', season }
+      },
+      false
+    )
+    expect(ambiguousDirection.status).toBe(400)
+    const malformedCursor = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 1, before: 'not-a-cursor' },
+        req: { gameMode: 'RANKED_CONSTRUCTED', season }
+      },
+      false
+    )
+    expect(malformedCursor.status).toBe(400)
 
     const centered = await rpc('AccountLeaderboard', {
       page: { pageSize: 3 },
@@ -770,6 +901,143 @@ describe('legacy player RPC compatibility', () => {
         await centered.json<{ res: Array<{ account: { address: string } }> }>()
       ).res.map(entry => entry.account.address)
     ).toContain(identityReference)
+  })
+
+  it('keeps rank buckets and reward placement stable through leaderboard filters', async () => {
+    const season = seasonFromDate()
+    const now = '2026-08-14T00:00:00.000Z'
+    const players = [
+      ['leaderboard-expert', 'Expert.Weasel', 'EXPERT', 30, 'CA', 'ACTIVE'],
+      ['leaderboard-alpha', 'Alpha.Rank', 'WANDERER', 20, 'CA', 'ACTIVE'],
+      ['leaderboard-beta', 'Beta.Rank', 'WANDERER', 10, 'US', 'ACTIVE'],
+      ['leaderboard-banned', 'Banned.Rank', 'GRANDWEAVER', 9999, 'US', 'BANNED']
+    ] as const
+    for (const [id, name, rank, score, region, status] of players) {
+      await env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(id, name, `${id}@example.com`, now, now)
+        .run()
+      await new PlayerRepository(env.AUTH_DB).bootstrap(id)
+      await env.AUTH_DB.batch([
+        env.AUTH_DB.prepare(
+          `UPDATE player_account_settings
+           SET region = ?, account_status = ? WHERE user_id = ?`
+        ).bind(region, status, id),
+        env.AUTH_DB.prepare(
+          `UPDATE player_account_stats
+           SET score = ?, player_rank = ?, player_rank_stage = 'STAGE_I',
+               created_at = ?, updated_at = ?
+           WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+             AND season = ?`
+        ).bind(score, rank, now, now, id, season)
+      ])
+    }
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings SET region = 'CA' WHERE user_id = ?`
+      ).bind(userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET score = 15, player_rank = 'WANDERER',
+             player_rank_stage = 'STAGE_I', created_at = ?, updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      ).bind(now, now, userId, season)
+    ])
+
+    const wanderers = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 10 },
+        req: {
+          gameMode: 'RANKED_CONSTRUCTED',
+          playerRank: 'WANDERER',
+          season
+        }
+      },
+      false
+    )
+    const wandererBody = await wanderers.json<{
+      res: Array<{
+        account: { id: number; name: string; address: string }
+        rank: number
+        rankedSilverReward: number
+      }>
+    }>()
+    expect(
+      wandererBody.res.map(entry => ({
+        name: entry.account.name,
+        rank: entry.rank,
+        silver: entry.rankedSilverReward
+      }))
+    ).toEqual([
+      { name: 'Alpha.Rank', rank: 1, silver: 9 },
+      { name: 'Cloud Weasel Player', rank: 2, silver: 8 },
+      { name: 'Beta.Rank', rank: 3, silver: 8 }
+    ])
+    expect(wandererBody.res.every(entry => entry.account.id > 0)).toBe(true)
+
+    const regional = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 10 },
+        req: { gameMode: 'RANKED_CONSTRUCTED', region: 'US', season }
+      },
+      false
+    )
+    expect(await regional.json()).toMatchObject({
+      res: [
+        {
+          account: { name: 'Beta.Rank' },
+          rank: 3,
+          rankedSilverReward: 8
+        }
+      ]
+    })
+
+    const searched = await rpc(
+      'ListLeaderboard',
+      {
+        page: { pageSize: 10 },
+        req: {
+          gameMode: 'RANKED_CONSTRUCTED',
+          playerNamePrefix: 'Beta',
+          season
+        }
+      },
+      false
+    )
+    expect(await searched.json()).toMatchObject({
+      res: [{ account: { name: 'Beta.Rank' }, rank: 3 }]
+    })
+
+    const centered = await rpc('AccountLeaderboard', {
+      page: { pageSize: 10 },
+      req: {
+        accountAddress: identityReference,
+        gameMode: 'RANKED_CONSTRUCTED',
+        season
+      }
+    })
+    const centeredBody = await centered.json<{
+      page: { pageSize: number }
+      res: Array<{
+        account: { address: string }
+        accountStat: { playerRank: string }
+      }>
+    }>()
+    expect(centeredBody.page.pageSize).toBe(3)
+    expect(
+      centeredBody.res.every(
+        entry => entry.accountStat.playerRank === 'WANDERER'
+      )
+    ).toBe(true)
+    expect(centeredBody.res.map(entry => entry.account.address)).toContain(
+      identityReference
+    )
   })
 
   it('lists only the signed-in player source-visible match history', async () => {

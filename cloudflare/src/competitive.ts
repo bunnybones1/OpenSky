@@ -90,6 +90,7 @@ interface StatRow {
 }
 
 interface LeaderboardRow extends StatRow {
+  account_id: number
   name: string
   locale: string
   region: string | null
@@ -102,6 +103,11 @@ interface LeaderboardRow extends StatRow {
   next_level_xp: number
   basic_skypass_level: number
   warm_ups: number
+}
+
+interface ProjectedLeaderboardRow extends LeaderboardRow {
+  leaderboard_rank: number
+  reward_rank?: number
 }
 
 interface MatchRow {
@@ -306,6 +312,78 @@ const decodeCursor = (cursor?: string): number => {
   }
 }
 
+interface LeaderboardCursor {
+  account_id: number
+  player_rank?: PlayerRank
+  score: number
+  updated_at: string
+}
+
+const leaderboardHasRankFilter = (request: LeaderboardRequest): boolean =>
+  request.playerRank !== undefined &&
+  request.playerRank !== ('UNKNOWN' as PlayerRank)
+
+const encodeLeaderboardCursor = (
+  row: ProjectedLeaderboardRow,
+  hasRankFilter: boolean
+): string =>
+  btoa(
+    JSON.stringify([
+      String(row.account_id),
+      ...(!hasRankFilter ? [row.player_rank] : []),
+      String(row.score),
+      row.updated_at
+    ])
+  )
+
+const decodeLeaderboardCursor = (
+  value: string,
+  hasRankFilter: boolean
+): LeaderboardCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    const expectedLength = hasRankFilter ? 3 : 4
+    if (!Array.isArray(values) || values.length !== expectedLength) {
+      throw new Error('cursor shape')
+    }
+    const accountId = Number(values[0])
+    const rank = hasRankFilter ? undefined : String(values[1])
+    const score = Number(values[hasRankFilter ? 1 : 2])
+    const updatedAt = values[hasRankFilter ? 2 : 3]
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+      throw new Error('cursor account')
+    }
+    if (rank !== undefined && RANK_ORDER[rank] === undefined) {
+      throw new Error('cursor rank')
+    }
+    if (!Number.isSafeInteger(score)) throw new Error('cursor score')
+    if (typeof updatedAt !== 'string' || updatedAt.length === 0) {
+      throw new Error('cursor updated')
+    }
+    return {
+      account_id: accountId,
+      ...(rank !== undefined ? { player_rank: rank as PlayerRank } : {}),
+      score,
+      updated_at: updatedAt
+    }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const compareLeaderboardCursor = (
+  row: ProjectedLeaderboardRow,
+  cursor: LeaderboardCursor,
+  hasRankFilter: boolean
+): number =>
+  (!hasRankFilter
+    ? (RANK_ORDER[cursor.player_rank!] ?? 0) -
+      (RANK_ORDER[row.player_rank] ?? 0)
+    : 0) ||
+  cursor.score - row.score ||
+  row.updated_at.localeCompare(cursor.updated_at) ||
+  row.account_id - cursor.account_id
+
 const durationSeconds = (value: string, field: string): number => {
   if (!value || !/^(?:\d+(?:\.\d+)?(?:h|m|s))+$/.test(value)) {
     throw invalidArgument(`${field} invalid value`)
@@ -458,11 +536,74 @@ const syntheticStat = (
     xp
   })
 
-const compareRows = (left: StatRow, right: StatRow): number =>
+const compareRows = (left: LeaderboardRow, right: LeaderboardRow): number =>
   (RANK_ORDER[right.player_rank] ?? 0) - (RANK_ORDER[left.player_rank] ?? 0) ||
   right.score - left.score ||
   left.updated_at.localeCompare(right.updated_at) ||
+  left.account_id - right.account_id ||
   left.user_id.localeCompare(right.user_id)
+
+const compareRankPositionRows = (
+  left: LeaderboardRow,
+  right: LeaderboardRow
+): number =>
+  right.score - left.score ||
+  left.updated_at.localeCompare(right.updated_at) ||
+  left.account_id - right.account_id ||
+  left.user_id.localeCompare(right.user_id)
+
+const compareRewardRows = (
+  left: LeaderboardRow,
+  right: LeaderboardRow
+): number =>
+  right.score - left.score ||
+  right.created_at.localeCompare(left.created_at) ||
+  left.account_id - right.account_id ||
+  left.user_id.localeCompare(right.user_id)
+
+const projectLeaderboardRows = (
+  rows: LeaderboardRow[]
+): ProjectedLeaderboardRow[] => {
+  const exactPositions = new Map<string, number>()
+  const rankCounts = new Map<PlayerRank, number>()
+  const ordered = [...rows].sort(compareRows)
+  for (const row of ordered) {
+    const position = (rankCounts.get(row.player_rank) ?? 0) + 1
+    rankCounts.set(row.player_rank, position)
+    exactPositions.set(row.user_id, position)
+  }
+
+  const masterPositions = new Map(
+    rows
+      .filter(row => ['MASTER', 'GRANDWEAVER'].includes(row.player_rank))
+      .sort(compareRankPositionRows)
+      .map((row, index) => [row.user_id, index + 1])
+  )
+  const rewardPositions = new Map(
+    [...rows]
+      .sort(compareRewardRows)
+      .slice(0, 500)
+      .map((row, index) => [row.user_id, index + 1])
+  )
+
+  return ordered.map(row => {
+    const rawPosition =
+      row.player_rank === ('MASTER' as PlayerRank)
+        ? (masterPositions.get(row.user_id) ?? 0)
+        : (exactPositions.get(row.user_id) ?? 0)
+    const leaderboardRank =
+      row.player_rank === ('MASTER' as PlayerRank) &&
+      rawPosition > GRANDWEAVER_COUNT
+        ? rawPosition - GRANDWEAVER_COUNT
+        : rawPosition
+    const rewardRank = rewardPositions.get(row.user_id)
+    return {
+      ...row,
+      leaderboard_rank: leaderboardRank,
+      ...(rewardRank !== undefined ? { reward_rank: rewardRank } : {})
+    }
+  })
+}
 
 const deckClassForPrisms = (value: unknown): DeckClass => {
   const prisms = Array.isArray(value)
@@ -711,7 +852,8 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT stats.*, account.name, account.locale, account.region,
+        `SELECT stats.*, game.id AS account_id,
+                account.name, account.locale, account.region,
                 account.tag_art_id, account.title_id,
                 users.created_at AS user_created_at,
                 profile.updated_at AS profile_updated_at,
@@ -722,12 +864,14 @@ export class CompetitiveRepository {
          JOIN player_profiles profile ON profile.user_id = stats.user_id
          JOIN player_progression progression ON progression.user_id = stats.user_id
          JOIN player_account_settings account ON account.user_id = stats.user_id
+         JOIN game_accounts game ON game.user_id = stats.user_id
          WHERE stats.game_mode = ? AND stats.season = ?
-           AND account.leaderboard_eligible = 1`
+           AND account.leaderboard_eligible = 1
+           AND account.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')`
       )
       .bind(request.gameMode, season)
       .all<LeaderboardRow>()
-    let rows = result.results
+    let rows = projectLeaderboardRows(result.results)
     if (request.region) {
       const region = request.region.trim().toUpperCase()
       rows = rows.filter(row => row.region === region)
@@ -748,19 +892,14 @@ export class CompetitiveRepository {
         rows = rows.filter(row => row.name.toLocaleLowerCase().includes(needle))
       }
     }
-    return rows.sort(compareRows)
+    return rows
   }
 
-  private entry(
-    row: LeaderboardRow,
-    allRows: LeaderboardRow[]
-  ): LeaderboardEntry {
-    const rank =
-      allRows.findIndex(candidate => candidate.user_id === row.user_id) + 1
-    const rewards = leaderboardRewardsForRank(rank)
+  private entry(row: ProjectedLeaderboardRow): LeaderboardEntry {
+    const rewards = leaderboardRewardsForRank(row.reward_rank ?? 0)
     return {
       account: {
-        id: 0,
+        id: row.account_id,
         address: identityReferenceFor(row.user_id),
         name: row.name,
         locale: row.locale,
@@ -776,8 +915,8 @@ export class CompetitiveRepository {
         ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
         ...(row.title_id !== null ? { titleID: row.title_id } : {})
       },
-      accountStat: statFromRow(row, rank),
-      rank,
+      accountStat: statFromRow(row, row.leaderboard_rank),
+      rank: row.leaderboard_rank,
       rankedSilverReward: rewards.silverCards,
       rankedTicketReward: rewards.conquestTickets
     }
@@ -786,18 +925,44 @@ export class CompetitiveRepository {
   async listLeaderboard(page: Page | undefined, request: LeaderboardRequest) {
     const rows = await this.leaderboardRows(request)
     const size = pageSize(page)
-    const offset = decodeCursor(page?.before)
-    const slice = rows.slice(offset, offset + size)
-    const nextOffset = offset + slice.length
+    if (page?.before && page.after) {
+      throw invalidArgument('page cannot use before and after together')
+    }
+    const hasRankFilter = leaderboardHasRankFilter(request)
+    let start = 0
+    let end = Math.min(rows.length, size)
+    if (page?.before) {
+      const cursor = decodeLeaderboardCursor(page.before, hasRankFilter)
+      const next = rows.findIndex(
+        row => compareLeaderboardCursor(row, cursor, hasRankFilter) > 0
+      )
+      start = next < 0 ? rows.length : next
+      end = Math.min(rows.length, start + size)
+    } else if (page?.after) {
+      const cursor = decodeLeaderboardCursor(page.after, hasRankFilter)
+      const previousEnd = rows.findIndex(
+        row => compareLeaderboardCursor(row, cursor, hasRankFilter) >= 0
+      )
+      end = previousEnd < 0 ? rows.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const slice = rows.slice(start, end)
     return {
       page: {
         pageSize: size,
-        ...(nextOffset < rows.length
-          ? { hasBefore: true, after: encodeCursor(nextOffset) }
-          : { hasBefore: false }),
-        ...(offset > 0 ? { hasAfter: true } : { hasAfter: false })
+        hasBefore: end < rows.length,
+        hasAfter: start > 0,
+        ...(slice.length > 0
+          ? {
+              before: encodeLeaderboardCursor(slice[0], hasRankFilter),
+              after: encodeLeaderboardCursor(
+                slice[slice.length - 1],
+                hasRankFilter
+              )
+            }
+          : {})
       } satisfies Page,
-      res: slice.map(row => this.entry(row, rows))
+      res: slice.map(row => this.entry(row))
     }
   }
 
@@ -810,18 +975,32 @@ export class CompetitiveRepository {
     }
     const userId = request.accountAddress.slice('identity:'.length)
     await this.ensureCurrentStats(userId)
-    const rows = await this.leaderboardRows(request)
-    const target = rows.findIndex(row => row.user_id === userId)
+    const rows = await this.leaderboardRows({
+      gameMode: request.gameMode,
+      season: request.season
+    })
+    const targetRow = rows.find(row => row.user_id === userId)
+    if (!targetRow)
+      throw invalidArgument('no leaderboard entry for this player')
+    const rankRows = rows.filter(
+      row => row.player_rank === targetRow.player_rank
+    )
+    const target = rankRows.findIndex(row => row.user_id === userId)
     if (target < 0)
       throw invalidArgument('no leaderboard entry for this player')
-    const size = pageSize(page)
+    const size = Math.min(
+      pageSize(page),
+      targetRow.player_rank === ('GRANDWEAVER' as PlayerRank)
+        ? GRANDWEAVER_COUNT
+        : MAX_PAGE_SIZE
+    )
     const start = Math.max(
       0,
-      Math.min(target - Math.floor(size / 2), rows.length - size)
+      Math.min(target - Math.floor(size / 2), rankRows.length - size)
     )
     return {
-      page: { pageSize: Math.min(size, rows.length) } satisfies Page,
-      res: rows.slice(start, start + size).map(row => this.entry(row, rows))
+      page: { pageSize: Math.min(size, rankRows.length) } satisfies Page,
+      res: rankRows.slice(start, start + size).map(row => this.entry(row))
     }
   }
 
