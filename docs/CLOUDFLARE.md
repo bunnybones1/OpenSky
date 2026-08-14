@@ -520,6 +520,21 @@ and progress are not migrated.
   `/assets/index-d976a081.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- Saved-deck list and search reads now preserve the source paginator's
+  page-size limits, sort metadata, UUID tie break, null ordering, first/last
+  cursors, and bidirectional keyset traversal. A deck inserted or renamed
+  ahead of an existing cursor no longer duplicates or skips the following
+  page, while malformed or dual-direction cursors fail closed. Milestone
+  `bfb6ebc1` passed exact-head release-contract run `31783035490`, the
+  362-test main Worker suite, and the complete cross-service release contract
+  before deployment on 2026-08-14 as Worker version
+  `a6550f45-96f8-43e4-88e6-c790591dfcc2`. No migration was required. The
+  public Version RPC reported that exact version; a read-only production D1
+  aggregate found 10 saved decks and zero favorites, with `changed_db: false`
+  and no rows written. Cloudflare uploaded no asset changes, retaining
+  `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
