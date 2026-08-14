@@ -76,7 +76,7 @@ interface AccountStatsRow {
   player_rank_state: string
   level: number | null
   xp: number | null
-  basic_skypass_level: number | null
+  season_level: number | null
   updated_at: string
 }
 
@@ -127,7 +127,7 @@ interface PlayerExperienceRow {
   account_id: number | null
   level: number
   xp: number
-  basic_skypass_level: number
+  season_level: number
   hero_count: number
 }
 
@@ -731,7 +731,11 @@ export const applyMatchExperience = async (
         ? database
             .prepare(
               `SELECT account.id AS account_id, profile.level, profile.xp,
-                      progression.basic_skypass_level,
+                      COALESCE(MAX(
+                        0,
+                        stats.achieved_account_level
+                          - stats.initial_account_level
+                      ), 0) AS season_level,
                       (SELECT COUNT(*) FROM player_items item
                        WHERE item.user_id = profile.user_id
                          AND item.item_type = 'SW_HERO' AND item.balance > 0)
@@ -740,9 +744,11 @@ export const applyMatchExperience = async (
                JOIN player_progression progression
                  ON progression.user_id = profile.user_id
                LEFT JOIN game_accounts account ON account.user_id = profile.user_id
+               LEFT JOIN player_skypass_season_stats stats
+                 ON stats.user_id = profile.user_id AND stats.season = ?
                WHERE profile.user_id = ?`
             )
-            .bind(userId)
+            .bind(season, userId)
             .first<PlayerExperienceRow>()
         : Promise.resolve(null)
     )
@@ -755,7 +761,7 @@ export const applyMatchExperience = async (
           gameMode: gameModes[index],
           level: row.level,
           experience: row.xp,
-          seasonLevel: row.basic_skypass_level,
+          seasonLevel: row.season_level,
           heroCount: row.hero_count
         } satisfies MatchExperiencePlayer)
       : undefined
@@ -833,7 +839,11 @@ export const applyMatchExperience = async (
                         SELECT json_group_array(json_set(
                           reward.value,
                           '$.exp.currentLevel',
-                            progression.basic_skypass_level,
+                            COALESCE(MAX(
+                              0,
+                              season_stats.achieved_account_level
+                                - season_stats.initial_account_level
+                            ), 0),
                           '$.exp.beforeMatchExp', profile.xp
                         ))
                         FROM json_each(input.match_rewards_json) reward
@@ -864,6 +874,9 @@ export const applyMatchExperience = async (
              CROSS JOIN input
              LEFT JOIN player_invites invite
                ON invite.invitee_user_id = profile.user_id
+             LEFT JOIN player_skypass_season_stats season_stats
+               ON season_stats.user_id = profile.user_id
+              AND season_stats.season = ?
              WHERE profile.user_id = ?
                AND NOT EXISTS (
                  SELECT 1 FROM multiplayer_match_experience
@@ -907,6 +920,7 @@ export const applyMatchExperience = async (
           matchExperienceGain,
           suppressedAtLevel,
           JSON.stringify(rewards[player]),
+          season,
           season,
           season,
           userId,
@@ -1444,12 +1458,21 @@ export const applyMatchStats = async (
                       stats.player_rank, stats.player_rank_stage,
                       stats.player_rank_state, stats.updated_at,
                       profile.level, profile.xp,
-                      progression.basic_skypass_level
+                      CASE WHEN progression.user_id IS NULL THEN NULL
+                        ELSE COALESCE(MAX(
+                          0,
+                          skypass.achieved_account_level
+                            - skypass.initial_account_level
+                        ), 0)
+                      END AS season_level
                FROM player_account_stats stats
                LEFT JOIN game_accounts account ON account.user_id = stats.user_id
                LEFT JOIN player_profiles profile ON profile.user_id = stats.user_id
                LEFT JOIN player_progression progression
                  ON progression.user_id = stats.user_id
+               LEFT JOIN player_skypass_season_stats skypass
+                 ON skypass.user_id = stats.user_id
+                AND skypass.season = stats.season
                WHERE stats.user_id = ? AND stats.game_mode = ? AND stats.season = ?`
               )
               .bind(userId, modes[player], season)
@@ -1466,7 +1489,7 @@ export const applyMatchStats = async (
               player_rank_state: '[-1,0,0,0]',
               level: null,
               xp: null,
-              basic_skypass_level: null,
+              season_level: null,
               updated_at: processedAt
             } satisfies AccountStatsRow)
         : Promise.resolve(null)
@@ -1533,7 +1556,7 @@ export const applyMatchStats = async (
         protectedResult.rank.experienceReward > 0 &&
         stats.level !== null &&
         stats.xp !== null &&
-        stats.basic_skypass_level !== null
+        stats.season_level !== null
       ) {
         const alreadyAwarded = await database
           .prepare(
@@ -1552,7 +1575,7 @@ export const applyMatchStats = async (
                 gameMode: modes[player],
                 level: stats.level,
                 experience: stats.xp,
-                seasonLevel: stats.basic_skypass_level,
+                seasonLevel: stats.season_level,
                 heroCount: 0
               },
               protectedResult.rank.experienceReward,

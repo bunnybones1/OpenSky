@@ -70,7 +70,7 @@ describe('legacy BotMatchEnd compatibility', () => {
           exp: {
             amount: 0,
             reason: 'TutorialCompleted',
-            currentLevel: 1,
+            currentLevel: 0,
             requiredExp: 200,
             beforeMatchExp: 0
           }

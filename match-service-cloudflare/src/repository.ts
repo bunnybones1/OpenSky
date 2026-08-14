@@ -32,7 +32,7 @@ interface HumanProfileRow {
   level: number
   xp: number
   next_level_xp: number
-  basic_skypass_level: number
+  season_level: number
 }
 
 interface HumanStatRow {
@@ -538,14 +538,20 @@ export class MatchRepository {
                   p.level,
                   p.xp,
                   p.next_level_xp,
-                  g.basic_skypass_level
+                  COALESCE(MAX(
+                    0,
+                    skypass.achieved_account_level
+                      - skypass.initial_account_level
+                  ), 0) AS season_level
            FROM users u
            JOIN player_profiles p ON p.user_id = u.id
-           JOIN player_progression g ON g.user_id = u.id
+           JOIN player_progression progression ON progression.user_id = u.id
            JOIN player_account_settings account ON account.user_id = u.id
+           LEFT JOIN player_skypass_season_stats skypass
+             ON skypass.user_id = u.id AND skypass.season = ?
            WHERE u.id = ?`
         )
-        .bind(userId)
+        .bind(currentSeason, userId)
         .first<HumanProfileRow>(),
       this.database
         .prepare('SELECT id FROM game_accounts WHERE user_id = ?')
@@ -704,7 +710,7 @@ export class MatchRepository {
         experience: profile.xp,
         warmUps: profile.warm_ups,
         level: profile.level,
-        seasonLevel: profile.basic_skypass_level,
+        seasonLevel: profile.season_level,
         levelUpXP: profile.next_level_xp,
         stats: statsFromRows(statRows.results, profile.level, profile.xp),
         isBurnerWallet: false,

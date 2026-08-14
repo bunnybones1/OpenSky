@@ -1,4 +1,5 @@
 import { invalidArgument } from './errors'
+import { seasonFromDate } from './legacy-seasons'
 
 const TUTORIAL_LEVELS = ['LEVEL_1', 'LEVEL_2', 'LEVEL_3', 'LEVEL_4'] as const
 
@@ -27,7 +28,7 @@ interface PlayerProgressRow {
   level: number
   xp: number
   next_level_xp: number
-  basic_skypass_level: number
+  season_level: number
 }
 
 interface QuestRow {
@@ -168,13 +169,18 @@ export class BotMatchRepository {
     const player = await this.database
       .prepare(
         `SELECT profile.level, profile.xp, profile.next_level_xp,
-                progression.basic_skypass_level
+                COALESCE(MAX(
+                  0,
+                  stats.achieved_account_level - stats.initial_account_level
+                ), 0) AS season_level
          FROM player_profiles profile
          JOIN player_progression progression
            ON progression.user_id = profile.user_id
+         LEFT JOIN player_skypass_season_stats stats
+           ON stats.user_id = profile.user_id AND stats.season = ?
          WHERE profile.user_id = ?`
       )
-      .bind(userId)
+      .bind(seasonFromDate(), userId)
       .first<PlayerProgressRow>()
     if (!player) throw new Error('player progression is missing')
 
@@ -187,7 +193,7 @@ export class BotMatchRepository {
         exp: {
           amount: 0,
           reason: 'TutorialCompleted',
-          currentLevel: player.basic_skypass_level,
+          currentLevel: player.season_level,
           requiredExp: player.next_level_xp,
           beforeMatchExp: player.xp
         }

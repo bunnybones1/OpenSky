@@ -589,8 +589,14 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       applied: true,
       rewards: [
         [
-          { type: 'EXP', exp: { amount: 30, reason: 'MatchPlayed' } },
-          { type: 'EXP', exp: { amount: 20, reason: 'Victory' } },
+          {
+            type: 'EXP',
+            exp: { amount: 30, reason: 'MatchPlayed', currentLevel: 0 }
+          },
+          {
+            type: 'EXP',
+            exp: { amount: 20, reason: 'Victory', currentLevel: 0 }
+          },
           {
             type: 'RANK',
             gameMode: 'RANKED_CONSTRUCTED',
@@ -600,7 +606,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
             }
           }
         ],
-        [{ type: 'EXP', exp: { amount: 30, reason: 'MatchPlayed' } }]
+        [
+          {
+            type: 'EXP',
+            exp: { amount: 30, reason: 'MatchPlayed', currentLevel: 0 }
+          }
+        ]
       ]
     })
 
@@ -905,7 +916,11 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(stats.rewards[0]).toEqual([
       expect.objectContaining({
         type: 'EXP',
-        exp: expect.objectContaining({ amount: 100, reason: 'RankUp' })
+        exp: expect.objectContaining({
+          amount: 100,
+          reason: 'RankUp',
+          currentLevel: 0
+        })
       }),
       expect.objectContaining({
         type: 'RANK',

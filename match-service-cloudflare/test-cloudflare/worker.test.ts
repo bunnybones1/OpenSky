@@ -1036,6 +1036,7 @@ describe('Cloud Weasel accepted-match service', () => {
           titleID: 77,
           crystalID: 7,
           warmUps: 2,
+          seasonLevel: 0,
           stats: {
             rankedConstructed: {
               gameMode: GameMode.RANKED_CONSTRUCTED,
