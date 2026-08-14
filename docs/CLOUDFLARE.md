@@ -1039,6 +1039,25 @@ and progress are not migrated.
   post-deployment D1 evidence retained 63 inventory rows, zero Conquest rows or
   blocked-pending violations, zero writes, and no pending migrations. Public
   probes kept both Conquest modes disabled and `weeklyGolds` empty.
+- Delayed Gold moderation now follows every canonical account-status change,
+  not only explicit GM sanction calls. Migration `0110` atomically disables
+  unclaimed entitlements when identity-native deletion or a sanction starts,
+  restores only moderation-disabled entitlements after moderator vetting or a
+  temporary ban/suspension expiry, and rejects direct delivery-state changes
+  that disagree with the account row. Delivered and failed receipts remain
+  immutable. Milestone `a2ac64c9` was deployed on 2026-08-14 as main Worker
+  version `4b748017-cd97-4709-92f4-1aa5bcfb6ee2` after exact-head run
+  `31840191714` passed in 8m30s. The D1 migration request returned a transient
+  timeout after commit; recovery proved the migration ledger complete, both
+  triggers installed, and no pending migrations before deployment continued.
+  Final read-only evidence retained 63 inventory rows, zero Gold deliveries,
+  zero blocked-pending or active-disabled violations, and zero writes. Public
+  Ping, Version, game-mode, Conquest-reward, and protocol-v3 game-health probes
+  returned `200` with `no-store`; both Practice modes remained enabled, both
+  Conquest modes remained disabled, and `weeklyGolds` remained empty. The full
+  release gate passed 382 main Worker tests, 231 multiplayer tests, 25 browser
+  game tests, six analytics tests, every type/source/off-chain safety audit,
+  and the exact original webapp/game production build.
 - Optional EVM ownership proofs are deployed independently of Google login.
   EOA signatures are verified locally; Polygon smart-contract wallets use the
   chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.

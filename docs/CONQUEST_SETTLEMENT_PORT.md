@@ -347,6 +347,41 @@ not invoke an authenticated points RPC against a real account merely to create
 state. This parity fix introduced no pool, queue, run, reward, schedule,
 inventory grant, or economy authority.
 
+### Account-status synchronization milestone
+
+Commit `a2ac64c9` and migration `0110_conquest_gold_account_status_sync.sql`
+close the remaining off-chain moderation projection gap. The source explicitly
+disables pending mint tasks for sanctions and restores them for moderator
+vetting, while its automatic expiry path restores account access without
+re-enabling the task. Cloud Weasel retains the source sanction/vet behavior and
+intentionally completes the temporary-sanction lifecycle for identity-owned
+rewards: an expired ban or suspension restores the same already-earned Gold
+entitlement without selecting a new card. Identity-native `TO_DELETE` and
+`DELETED` transitions also disable it, a status path the original wallet-era
+product did not have.
+
+D1 now treats `player_account_settings.account_status` as the authority for
+every unclaimed Gold delivery. One transaction synchronizes `PENDING` and
+`DISABLED` on any account-status change, and a separate guard rejects a direct
+toggle that contradicts the account row. Only receipt-`READY` rows participate;
+delivered or retry-exhausted rows are never revived. Regression coverage proves
+sanction, explicit vet, natural expiry, deletion, player-visible pending-card
+reads, blocked claims, direct mismatch rejection, and later delivery.
+
+Exact-head GitHub run `31840191714` passed in 8m30s before rollout. The remote
+migration request returned Cloudflare D1 timeout `7429` after the commit had
+completed; fail-closed recovery verified the migration ledger, both trigger
+names, and invariant counts before deployment resumed. Main Worker version
+`4b748017-cd97-4709-92f4-1aa5bcfb6ee2` then reached 100% traffic. The final
+read-only D1 snapshot retained 63 inventory rows, zero Gold deliveries, zero
+blocked-pending or active-disabled rows, both synchronization triggers, zero
+writes, and no pending migrations. Public Ping, Version, game-mode,
+Conquest-reward, and protocol-v3 game-health probes returned `200` with
+`no-store`; both Practice modes remained enabled, both Conquest modes stayed
+disabled, and `weeklyGolds` stayed empty. The complete gate passed 382 main
+Worker tests, 231 multiplayer tests, 25 browser game tests, six analytics
+tests, every type/source/off-chain audit, and the original webapp/game build.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
