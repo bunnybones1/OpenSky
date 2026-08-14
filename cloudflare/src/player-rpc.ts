@@ -12,7 +12,8 @@ import type {
   Page,
   Quest,
   SkypassLevel,
-  SkypassReward
+  SkypassReward,
+  SortBy
 } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
@@ -394,24 +395,6 @@ const feedPageSize = (page?: Page) =>
       : FEED_PAGE_SIZE
   )
 
-const feedCursor = (cursor?: string) => {
-  if (!cursor) return 0
-  try {
-    const decoded = JSON.parse(atob(cursor)) as { offset?: unknown }
-    if (
-      Number.isSafeInteger(decoded.offset) &&
-      (decoded.offset as number) >= 0
-    ) {
-      return decoded.offset as number
-    }
-  } catch {
-    // Fall through to the source-compatible invalid page error.
-  }
-  throw invalidArgument('page cursor is invalid')
-}
-
-const feedCursorFor = (offset: number) => btoa(JSON.stringify({ offset }))
-
 interface FeedEventCursor {
   id: number
   createdAt: string
@@ -448,6 +431,294 @@ const compareFeedEventCursor = (
 ): number =>
   Date.parse(cursor.createdAt) - Date.parse(event.createdAt) ||
   cursor.id - event.id
+
+type DeckCursorMode = 'list' | 'search'
+type DeckSortValue = string | number | boolean | null
+type DeckSortOrder = 'ASC' | 'DESC'
+
+interface DeckSortSpec {
+  column: string
+  order: DeckSortOrder
+}
+
+interface DeckSortConfig {
+  specs: DeckSortSpec[]
+  uniqueOrder: DeckSortOrder
+  nullsLast: boolean
+}
+
+interface DeckPageCursor {
+  uuid: string
+  values: Array<string | null>
+}
+
+const DECK_SORT_ALIASES: Record<string, string> = {
+  uuid: 'uuid',
+  name: 'name',
+  class: 'class',
+  deck_string: 'deck_string',
+  deckString: 'deck_string',
+  art: 'art',
+  created_at: 'created_at',
+  createdAt: 'created_at',
+  updated_at: 'updated_at',
+  updatedAt: 'updated_at',
+  favorited_at: 'favorited_at',
+  favoritedAt: 'favorited_at',
+  deck_type: 'deck_type',
+  deckType: 'deck_type',
+  is_new: 'is_new',
+  isNew: 'is_new',
+  conquest_v2_points: 'conquest_v2_points',
+  conquestV2Points: 'conquest_v2_points'
+}
+
+const defaultDeckSort = (mode: DeckCursorMode): DeckSortSpec[] =>
+  mode === 'list'
+    ? [
+        { column: 'favorited_at', order: 'DESC' },
+        { column: 'name', order: 'ASC' }
+      ]
+    : [
+        { column: 'name', order: 'ASC' },
+        { column: 'created_at', order: 'DESC' }
+      ]
+
+const deckSortConfig = (
+  mode: DeckCursorMode,
+  requested?: SortBy[]
+): DeckSortConfig => {
+  const source = requested?.length ? requested : defaultDeckSort(mode)
+  const specs: DeckSortSpec[] = []
+  let uniqueOrder: DeckSortOrder = 'DESC'
+  for (const item of source) {
+    const column = DECK_SORT_ALIASES[item.column]
+    if (!column) {
+      throw invalidArgument(`unsupported deck sort column '${item.column}'`)
+    }
+    if (item.order !== 'ASC' && item.order !== 'DESC') {
+      throw invalidArgument('deck sort order is invalid')
+    }
+    if (column === 'uuid') {
+      uniqueOrder = item.order
+    } else {
+      specs.push({ column, order: item.order })
+    }
+  }
+  // Preserve the source paginator's ambiguity rule: one non-unique sort key
+  // gives the UUID tie-break the same direction.
+  if (specs.length === 1) uniqueOrder = specs[0].order
+  return { specs, uniqueOrder, nullsLast: mode === 'list' }
+}
+
+const deckSortValue = (deck: Deck, column: string): DeckSortValue => {
+  switch (column) {
+    case 'uuid':
+      return deck.uuid
+    case 'name':
+      return deck.name
+    case 'class':
+      return deck.class
+    case 'deck_string':
+      return deck.deckString
+    case 'art':
+      return deck.art
+    case 'created_at':
+      return deck.createdAt
+    case 'updated_at':
+      return deck.updatedAt
+    case 'favorited_at':
+      return deck.favoritedAt || null
+    case 'deck_type':
+      return deck.deckType
+    case 'is_new':
+      return deck.isNew
+    case 'conquest_v2_points':
+      return deck.conquestV2Points
+    default:
+      throw invalidArgument(`unsupported deck sort column '${column}'`)
+  }
+}
+
+const serializedDeckSortValue = (deck: Deck, column: string): string | null => {
+  const value = deckSortValue(deck, column)
+  return value === null ? null : String(value)
+}
+
+const compareDeckSortValues = (
+  left: DeckSortValue,
+  right: DeckSortValue,
+  order: DeckSortOrder,
+  nullsLast: boolean
+): number => {
+  if (left === null || right === null) {
+    if (left === right) return 0
+    const effectiveNullsLast = nullsLast || order === 'ASC'
+    return left === null
+      ? effectiveNullsLast
+        ? 1
+        : -1
+      : effectiveNullsLast
+        ? -1
+        : 1
+  }
+  const compared =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left).localeCompare(String(right))
+  return order === 'ASC' ? compared : -compared
+}
+
+const compareDecks = (
+  left: Deck,
+  right: Deck,
+  config: DeckSortConfig
+): number => {
+  for (const spec of config.specs) {
+    const compared = compareDeckSortValues(
+      deckSortValue(left, spec.column),
+      deckSortValue(right, spec.column),
+      spec.order,
+      config.nullsLast
+    )
+    if (compared !== 0) return compared
+  }
+  return compareDeckSortValues(left.uuid, right.uuid, config.uniqueOrder, false)
+}
+
+const encodeDeckCursor = (deck: Deck, config: DeckSortConfig): string =>
+  btoa(
+    JSON.stringify([
+      deck.uuid,
+      ...config.specs.map(spec => serializedDeckSortValue(deck, spec.column))
+    ])
+  )
+
+const decodeDeckCursor = (
+  value: string,
+  config: DeckSortConfig
+): DeckPageCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== config.specs.length + 1 ||
+      typeof values[0] !== 'string' ||
+      !values[0]
+    ) {
+      throw new Error('cursor shape')
+    }
+    const sortValues = values.slice(1)
+    if (sortValues.some(item => item !== null && typeof item !== 'string')) {
+      throw new Error('cursor values')
+    }
+    return {
+      uuid: values[0],
+      values: sortValues as Array<string | null>
+    }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const cursorDeckSortValue = (
+  value: string | null,
+  column: string
+): DeckSortValue => {
+  if (value === null) return null
+  if (['art', 'conquest_v2_points'].includes(column)) {
+    const number = Number(value)
+    if (!Number.isFinite(number))
+      throw invalidArgument('page cursor is invalid')
+    return number
+  }
+  if (column === 'is_new') {
+    if (value !== 'true' && value !== 'false') {
+      throw invalidArgument('page cursor is invalid')
+    }
+    return value === 'true'
+  }
+  return value
+}
+
+const compareDeckCursor = (
+  deck: Deck,
+  cursor: DeckPageCursor,
+  config: DeckSortConfig
+): number => {
+  for (const [index, spec] of config.specs.entries()) {
+    const compared = compareDeckSortValues(
+      deckSortValue(deck, spec.column),
+      cursorDeckSortValue(cursor.values[index], spec.column),
+      spec.order,
+      config.nullsLast
+    )
+    if (compared !== 0) return compared
+  }
+  return compareDeckSortValues(
+    deck.uuid,
+    cursor.uuid,
+    config.uniqueOrder,
+    false
+  )
+}
+
+const pagedDecks = (
+  decks: Deck[],
+  page: Page | undefined,
+  mode: DeckCursorMode,
+  defaultPageSize: number
+): { page: Page; res: Deck[] } => {
+  if (page?.before && page.after) {
+    throw invalidArgument('before and after cannot be used together')
+  }
+  const config = deckSortConfig(mode, page?.sort)
+  const ordered = [...decks].sort((left, right) =>
+    compareDecks(left, right, config)
+  )
+  const pageSize = Math.min(
+    200,
+    Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+      ? page!.pageSize!
+      : defaultPageSize
+  )
+  let start = 0
+  let end = Math.min(ordered.length, pageSize)
+  if (page?.before) {
+    const cursor = decodeDeckCursor(page.before, config)
+    const next = ordered.findIndex(
+      deck => compareDeckCursor(deck, cursor, config) > 0
+    )
+    start = next < 0 ? ordered.length : next
+    end = Math.min(ordered.length, start + pageSize)
+  } else if (page?.after) {
+    const cursor = decodeDeckCursor(page.after, config)
+    const previousEnd = ordered.findIndex(
+      deck => compareDeckCursor(deck, cursor, config) >= 0
+    )
+    end = previousEnd < 0 ? ordered.length : previousEnd
+    start = Math.max(0, end - pageSize)
+  }
+  const res = ordered.slice(start, end)
+  return {
+    page: {
+      pageSize,
+      hasBefore: end < ordered.length,
+      hasAfter: start > 0,
+      sort: config.specs.map(spec => ({
+        column: spec.column,
+        order: spec.order as SortBy['order']
+      })),
+      ...(res.length > 0
+        ? {
+            before: encodeDeckCursor(res[0], config),
+            after: encodeDeckCursor(res[res.length - 1], config)
+          }
+        : {})
+    },
+    res
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -1121,6 +1392,13 @@ export class PlayerRpcRepository {
     }))
   }
 
+  async listDeckPage(
+    userId: string,
+    page?: Page
+  ): Promise<{ page: Page; res: Deck[] }> {
+    return pagedDecks(await this.listDecks(userId), page, 'list', 200)
+  }
+
   async searchDecks(
     userId: string,
     request: {
@@ -1130,10 +1408,6 @@ export class PlayerRpcRepository {
     },
     page?: Page
   ): Promise<{ page: Page; res: Deck[] }> {
-    if (page?.before && page.after) {
-      throw invalidArgument('before and after cannot be used together')
-    }
-
     const decks = (await this.listDecks(userId))
       .filter(
         deck => !request.deckString || deck.deckString === request.deckString
@@ -1144,39 +1418,7 @@ export class PlayerRpcRepository {
           deck.name.toLowerCase().includes(request.name.toLowerCase())
       )
       .filter(deck => !request.class || deck.class === request.class)
-      .sort(
-        (left, right) =>
-          left.name.localeCompare(right.name) ||
-          Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
-          right.uuid.localeCompare(left.uuid)
-      )
-
-    const pageSize = Math.min(
-      200,
-      Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
-        ? page!.pageSize!
-        : 20
-    )
-    const requestedOffset = page?.before
-      ? feedCursor(page.before)
-      : page?.after
-        ? Math.max(0, feedCursor(page.after) - pageSize)
-        : 0
-    const offset = Math.min(requestedOffset, decks.length)
-    const res = decks.slice(offset, offset + pageSize)
-    const end = offset + res.length
-
-    return {
-      page: {
-        pageSize,
-        hasBefore: end < decks.length,
-        hasAfter: offset > 0,
-        ...(end < decks.length ? { before: feedCursorFor(end) } : {}),
-        ...(offset > 0 ? { after: feedCursorFor(offset) } : {}),
-        ...(page?.sort ? { sort: page.sort } : {})
-      },
-      res
-    }
+    return pagedDecks(decks, page, 'search', 20)
   }
 
   async checkDeck(

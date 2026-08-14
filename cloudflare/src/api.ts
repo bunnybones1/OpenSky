@@ -2204,10 +2204,12 @@ export const handleApiRequest = async (
 
       case 'ListDecks': {
         const principal = await identityPrincipal(request, env)
-        return json(request, env, {
-          page: { pageSize: 200 },
-          res: await playerRpc.listDecks(principal.userId)
-        })
+        const body = await requestBody<{ page?: Page }>(request)
+        return json(
+          request,
+          env,
+          await playerRpc.listDeckPage(principal.userId, body.page)
+        )
       }
 
       case 'ListDeckRanks': {

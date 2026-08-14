@@ -1542,6 +1542,33 @@ describe('legacy player RPC compatibility', () => {
         })
       ])
     )
+
+    const first = await rpc('ListDecks', { page: { pageSize: 2 } })
+    const firstPage = await first.json<{
+      page: { after: string; hasBefore: boolean; hasAfter: boolean }
+      res: Array<{ uuid: string; name: string }>
+    }>()
+    expect(firstPage.res.map(deck => deck.name)).toEqual([
+      'Ada Starter',
+      'Ari Starter'
+    ])
+    expect(firstPage.page).toMatchObject({
+      hasBefore: true,
+      hasAfter: false
+    })
+    expect(JSON.parse(atob(firstPage.page.after))).toEqual([
+      firstPage.res[1].uuid,
+      null,
+      'Ari Starter'
+    ])
+
+    const second = await rpc('ListDecks', {
+      page: { pageSize: 2, before: firstPage.page.after }
+    })
+    expect(await second.json()).toMatchObject({
+      page: { hasBefore: true, hasAfter: true },
+      res: [{ name: 'Bouran Starter' }, { name: 'Lotus Starter' }]
+    })
   })
 
   it('searches private decks with source filters and cursor pagination', async () => {
@@ -1560,8 +1587,13 @@ describe('legacy player RPC compatibility', () => {
     })
     expect(first.status).toBe(200)
     const firstBody = await first.json<{
-      page: { before: string; hasBefore: boolean; hasAfter: boolean }
-      res: Array<{ name: string }>
+      page: {
+        before: string
+        after: string
+        hasBefore: boolean
+        hasAfter: boolean
+      }
+      res: Array<{ uuid: string; name: string; createdAt: string }>
     }>()
     expect(firstBody.res.map(deck => deck.name)).toEqual([
       'Ada Starter',
@@ -1570,16 +1602,32 @@ describe('legacy player RPC compatibility', () => {
     expect(firstBody.page).toMatchObject({
       hasBefore: true,
       hasAfter: false,
-      before: expect.any(String)
+      after: expect.any(String)
     })
+    expect(JSON.parse(atob(firstBody.page.after))).toEqual([
+      firstBody.res[1].uuid,
+      firstBody.res[1].name,
+      firstBody.res[1].createdAt
+    ])
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_decks SET name = 'Aardvark' WHERE user_id = ? AND name = ?`
+    )
+      .bind(userId, 'Samya Starter')
+      .run()
 
     const second = await rpc('SearchDecks', {
       req: {},
-      page: { pageSize: 2, before: firstBody.page.before }
+      page: { pageSize: 2, before: firstBody.page.after }
     })
     expect(second.status).toBe(200)
     const secondBody = await second.json<{
-      page: { hasBefore: boolean; hasAfter: boolean; after: string }
+      page: {
+        before: string
+        hasBefore: boolean
+        hasAfter: boolean
+        after: string
+      }
       res: Array<{ name: string }>
     }>()
     expect(secondBody.res.map(deck => deck.name)).toEqual([
@@ -1587,16 +1635,32 @@ describe('legacy player RPC compatibility', () => {
       'Lotus Starter'
     ])
     expect(secondBody.page).toMatchObject({
-      hasBefore: true,
+      hasBefore: false,
       hasAfter: true,
       after: expect.any(String)
+    })
+
+    const previous = await rpc('SearchDecks', {
+      req: {},
+      page: { pageSize: 2, after: secondBody.page.before }
+    })
+    expect(await previous.json()).toMatchObject({
+      res: [{ name: 'Ada Starter' }, { name: 'Ari Starter' }]
     })
 
     expect(
       (
         await rpc('SearchDecks', {
           req: {},
-          page: { before: firstBody.page.before, after: firstBody.page.before }
+          page: { before: firstBody.page.after, after: firstBody.page.after }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc('SearchDecks', {
+          req: {},
+          page: { before: 'not-a-cursor' }
         })
       ).status
     ).toBe(400)
