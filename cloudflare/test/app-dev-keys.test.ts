@@ -186,27 +186,95 @@ describe('app developer key management', () => {
   it('lists bounded source-shaped pages with stable cursors', async () => {
     await enableAdmin()
     const repo = new AppDevKeyRepository(env.AUTH_DB)
-    await repo.create(ADMIN, { name: 'list-a', email: 'list-a@example.com' })
-    await repo.create(ADMIN, { name: 'list-b', email: 'list-b@example.com' })
+    await repo.create(ADMIN, {
+      name: '000-list-b',
+      email: '000-list-b@example.com'
+    })
+    await repo.create(ADMIN, {
+      name: '000-list-c',
+      email: '000-list-c@example.com'
+    })
     const first = await (
       await rpcAs(ADMIN, 'GMListAppDevKeys', { page: { pageSize: 1 } })
     ).json<{
-      page: { after?: string; hasBefore: boolean }
+      page: {
+        before?: string
+        after?: string
+        hasBefore: boolean
+        hasAfter: boolean
+        sort: Array<{ column: string; order: string }>
+      }
       data: Array<{ id: number; name: string }>
     }>()
-    expect(first.data).toHaveLength(1)
+    expect(first.data.map(item => item.name)).toEqual(['000-list-b'])
     expect(first.page.hasBefore).toBe(true)
+    expect(first.page.hasAfter).toBe(false)
+    expect(first.page.sort).toEqual([{ column: 'name', order: 'ASC' }])
+    expect(JSON.parse(atob(first.page.before!))).toEqual([
+      String(first.data[0].id),
+      '000-list-b'
+    ])
+    expect(first.page.after).toBe(first.page.before)
+
+    // An insertion ahead of the keyset cursor must not shift the next page.
+    await repo.create(ADMIN, {
+      name: '000-list-a',
+      email: '000-list-a@example.com'
+    })
     const second = await (
       await rpcAs(ADMIN, 'GMListAppDevKeys', {
-        page: { pageSize: 1, after: first.page.after }
+        page: { pageSize: 1, before: first.page.after }
       })
-    ).json<{ data: Array<{ id: number; name: string }> }>()
-    expect(second.data).toHaveLength(1)
-    expect(second.data[0].id).not.toBe(first.data[0].id)
+    ).json<{
+      page: { before?: string; hasBefore: boolean; hasAfter: boolean }
+      data: Array<{ id: number; name: string }>
+    }>()
+    expect(second.data.map(item => item.name)).toEqual(['000-list-c'])
+    expect(second.page.hasAfter).toBe(true)
+
+    const previous = await (
+      await rpcAs(ADMIN, 'GMListAppDevKeys', {
+        page: { pageSize: 1, after: second.page.before }
+      })
+    ).json<{ data: Array<{ name: string }> }>()
+    expect(previous.data.map(item => item.name)).toEqual(['000-list-b'])
+
     expect(
       (
         await rpcAs(ADMIN, 'GMListAppDevKeys', {
-          page: { sort: [{ column: 'app_key', order: 'ASC' }] }
+          page: { before: first.page.after, after: first.page.before }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListAppDevKeys', {
+          page: { before: 'not-a-cursor' }
+        })
+      ).status
+    ).toBe(400)
+
+    const idDescending = await (
+      await rpcAs(ADMIN, 'GMListAppDevKeys', {
+        page: {
+          pageSize: 500,
+          sort: [{ column: 'id', order: 'DESC' }]
+        }
+      })
+    ).json<{
+      page: { pageSize: number; before?: string; sort: unknown[] }
+      data: Array<{ id: number }>
+    }>()
+    expect(idDescending.page.pageSize).toBe(200)
+    expect(idDescending.page.sort).toEqual([])
+    expect(JSON.parse(atob(idDescending.page.before!))).toEqual([
+      String(idDescending.data[0].id)
+    ])
+
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMListAppDevKeys', {
+          page: { sort: [{ column: 'unknown', order: 'ASC' }] }
         })
       ).status
     ).toBe(400)
