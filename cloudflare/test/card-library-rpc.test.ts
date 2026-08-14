@@ -1,8 +1,13 @@
 import { env } from 'cloudflare:workers'
+import { SortOrder } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
-import { cardLibrarySource, searchLibraryCards } from '../src/card-library'
+import {
+  cardLibrarySource,
+  type CardInventoryBalance,
+  searchLibraryCards
+} from '../src/card-library'
 import type { Env } from '../src/env'
 
 const testEnv = env as unknown as Env
@@ -117,18 +122,84 @@ describe('source card-library RPC compatibility', () => {
       req: { criteria: { ids: [1, 2] } }
     })
     const firstBody = await first.json<{
-      page: { before: string; hasBefore: boolean }
+      page: { after: string; hasBefore: boolean }
       res: Array<{ card: { id: number } }>
     }>()
     expect(firstBody.page.hasBefore).toBe(true)
+    expect(JSON.parse(atob(firstBody.page.after))).toEqual(['1', '4'])
     const second = await rpc('SearchCards', {
-      page: { pageSize: 1, before: firstBody.page.before },
+      page: { pageSize: 1, before: firstBody.page.after },
       req: { criteria: { ids: [1, 2] } }
     })
-    expect(await second.json()).toMatchObject({
+    const secondBody = await second.json<{
+      page: { before: string; hasAfter: boolean; hasBefore: boolean }
+      res: Array<{ card: { id: number } }>
+    }>()
+    expect(secondBody).toMatchObject({
       page: { hasAfter: true, hasBefore: false },
       res: [{ card: { id: 2 } }]
     })
+    expect(
+      await (
+        await rpc('SearchCards', {
+          page: { pageSize: 1, after: secondBody.page.before },
+          req: { criteria: { ids: [1, 2] } }
+        })
+      ).json()
+    ).toMatchObject({ res: [{ card: { id: 1 } }] })
+
+    expect(
+      (
+        await rpc('SearchCards', {
+          page: { before: firstBody.page.after, after: firstBody.page.after },
+          req: { criteria: { ids: [1, 2] } }
+        })
+      ).status
+    ).toBe(500)
+    expect(
+      (
+        await rpc('SearchCards', {
+          page: { before: 'not-a-cursor' },
+          req: { criteria: { ids: [1, 2] } }
+        })
+      ).status
+    ).toBe(500)
+  })
+
+  it('keeps owned-card pages stable when inventory changes ahead of a cursor', () => {
+    const balance = (tokenId: number): CardInventoryBalance => ({
+      itemType: 'SW_BASE_CARDS',
+      tokenId,
+      balance: 1,
+      isNew: false,
+      createdAt: '2026-01-01T00:00:00.000Z'
+    })
+    const first = searchLibraryCards(
+      { ownedCards: true },
+      { pageSize: 1 },
+      [balance(2), balance(3)],
+      true
+    )
+    expect(first.res.map(item => item.card.id)).toEqual([2])
+
+    const second = searchLibraryCards(
+      { ownedCards: true },
+      { pageSize: 1, before: first.page.after },
+      [balance(1), balance(2), balance(3)],
+      true
+    )
+    expect(second.res.map(item => item.card.id)).toEqual([3])
+
+    const descending = searchLibraryCards(
+      { ids: [1, 2] },
+      {
+        pageSize: 1,
+        sort: [{ column: 'id', order: SortOrder.DESC }]
+      }
+    )
+    expect(descending.res.map(item => item.card.id)).toEqual([2])
+    expect(descending.page.sort).toEqual([])
+    expect(JSON.parse(atob(descending.page.after!))).toEqual(['2'])
   })
 
   it('applies source ownership frames and only includes balances when requested', () => {

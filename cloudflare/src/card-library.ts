@@ -3,7 +3,8 @@ import type {
   Card,
   CardSearchCriteria,
   CardWithBalance,
-  Page
+  Page,
+  SortBy
 } from '@opensky/proto'
 
 type LibraryCard = (typeof cardLibrary.cards)[number]
@@ -139,37 +140,71 @@ const cardMatchesText = (card: LibraryCard, value: string): boolean => {
   return requested.every(term => document.some(word => word.startsWith(term)))
 }
 
-const encodeSearchCursor = (offset: number): string =>
-  btoa(JSON.stringify({ offset }))
+type CardSortValue = string | number | null
 
-const decodeSearchCursor = (cursor: string): number => {
-  try {
-    const parsed = JSON.parse(atob(cursor)) as { offset?: unknown }
-    if (
-      typeof parsed.offset !== 'number' ||
-      !Number.isSafeInteger(parsed.offset) ||
-      parsed.offset < 0
-    ) {
-      throw new Error('invalid offset')
-    }
-    return parsed.offset
-  } catch {
-    throw new Error('invalid card search cursor')
-  }
+interface CardSortConfig {
+  sort: SortBy[]
+  uniqueOrder: SortBy['order']
 }
 
-const sortValue = (card: LibraryCard, column: string): string | number => {
+interface CardSearchCursor {
+  id: number
+  values: Array<string | null>
+}
+
+const CARD_SORT_COLUMNS: Record<string, string> = {
+  id: 'id',
+  name: 'name',
+  mana_cost: 'mana_cost',
+  manaCost: 'mana_cost',
+  mana_weight: 'mana_weight',
+  power: 'power',
+  health: 'health',
+  attached_spell_id: 'attached_spell_id',
+  attachedSpellID: 'attached_spell_id',
+  class: 'class',
+  element: 'element',
+  status: 'status',
+  type: 'type'
+}
+
+const cardSortConfig = (page: Page): CardSortConfig => {
+  const requested = page.sort?.length
+    ? page.sort
+    : [{ column: 'mana_weight', order: 'ASC' as SortBy['order'] }]
+  const sort: SortBy[] = []
+  let uniqueOrder = 'ASC' as SortBy['order']
+  for (const item of requested) {
+    const column = CARD_SORT_COLUMNS[item.column]
+    if (!column)
+      throw new Error(`unsupported card sort column '${item.column}'`)
+    if (item.order !== 'ASC' && item.order !== 'DESC') {
+      throw new Error('card sort order is invalid')
+    }
+    if (column === 'id') {
+      uniqueOrder = item.order
+    } else {
+      sort.push({ column, order: item.order })
+    }
+  }
+  if (sort.length === 1) uniqueOrder = sort[0].order
+  return { sort, uniqueOrder }
+}
+
+const sortValue = (card: LibraryCard, column: string): CardSortValue => {
   switch (column) {
     case 'name':
-      return card.name.toLowerCase()
+      return card.name
     case 'mana_cost':
-    case 'manaCost':
+      return card.manaCost
     case 'mana_weight':
-      return card.manaCost < 0 ? Number.MAX_SAFE_INTEGER : card.manaCost
+      return card.manaCost < 0 ? 999_999 : card.manaCost
     case 'power':
       return card.power
     case 'health':
       return card.health
+    case 'attached_spell_id':
+      return card.attachedSpellID ?? null
     case 'class':
       return card.class
     case 'element':
@@ -177,25 +212,116 @@ const sortValue = (card: LibraryCard, column: string): string | number => {
     case 'type':
       return card.type
     case 'id':
-    default:
       return card.id
+    default:
+      throw new Error(`unsupported card sort column '${column}'`)
   }
 }
 
-const compareSearchCards = (page: Page) => {
-  const sorts = page.sort?.length
-    ? page.sort
-    : [{ column: 'mana_weight', order: 'ASC' as const }]
+const compareCardSortValues = (
+  left: CardSortValue,
+  right: CardSortValue,
+  order: SortBy['order']
+): number => {
+  if (left === null || right === null) {
+    if (left === right) return 0
+    const nullsLast = order === 'ASC'
+    return left === null ? (nullsLast ? 1 : -1) : nullsLast ? -1 : 1
+  }
+  const compared =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left).localeCompare(String(right))
+  return order === 'ASC' ? compared : -compared
+}
+
+const compareSearchCards = (config: CardSortConfig) => {
   return (left: LibraryCard, right: LibraryCard): number => {
-    for (const sort of sorts) {
+    for (const sort of config.sort) {
       const leftValue = sortValue(left, sort.column)
       const rightValue = sortValue(right, sort.column)
-      const comparison =
-        leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0
-      if (comparison) return sort.order === 'DESC' ? -comparison : comparison
+      const comparison = compareCardSortValues(
+        leftValue,
+        rightValue,
+        sort.order
+      )
+      if (comparison) return comparison
     }
-    return left.id - right.id
+    return compareCardSortValues(left.id, right.id, config.uniqueOrder)
   }
+}
+
+const encodeSearchCursor = (
+  card: LibraryCard,
+  config: CardSortConfig
+): string =>
+  btoa(
+    JSON.stringify([
+      String(card.id),
+      ...config.sort.map(item => {
+        const value = sortValue(card, item.column)
+        return value === null ? null : String(value)
+      })
+    ])
+  )
+
+const decodeSearchCursor = (
+  cursor: string,
+  config: CardSortConfig
+): CardSearchCursor => {
+  try {
+    const values = JSON.parse(atob(cursor)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== config.sort.length + 1 ||
+      values.some(item => item !== null && typeof item !== 'string') ||
+      typeof values[0] !== 'string'
+    ) {
+      throw new Error('invalid cursor shape')
+    }
+    const id = Number(values[0])
+    if (!Number.isSafeInteger(id) || id < 0) throw new Error('invalid card ID')
+    return { id, values: values.slice(1) as Array<string | null> }
+  } catch {
+    throw new Error('invalid card search cursor')
+  }
+}
+
+const cursorSortValue = (
+  value: string | null,
+  column: string
+): CardSortValue => {
+  if (value === null) return null
+  if (
+    [
+      'mana_cost',
+      'mana_weight',
+      'power',
+      'health',
+      'attached_spell_id'
+    ].includes(column)
+  ) {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) throw new Error('invalid card search cursor')
+    return parsed
+  }
+  return value
+}
+
+const compareSearchCursor = (
+  card: LibraryCard,
+  cursor: CardSearchCursor,
+  config: CardSortConfig
+): number => {
+  for (const [index, sort] of config.sort.entries()) {
+    const compared = compareCardSortValues(
+      sortValue(card, sort.column),
+      cursorSortValue(cursor.values[index], sort.column),
+      sort.order
+    )
+    if (compared) return compared
+  }
+  return compareCardSortValues(card.id, cursor.id, config.uniqueOrder)
 }
 
 export const searchLibraryCards = (
@@ -243,6 +369,7 @@ export const searchLibraryCards = (
     ? new Set(criteria.cardManaCost.map(Number).filter(Number.isFinite))
     : undefined
 
+  const sortConfig = cardSortConfig(requestedPage)
   const filtered = searchableCards
     .filter(card => criteria.includeTokens || card.class !== 'TOK')
     .filter(card => card.asset !== '')
@@ -266,16 +393,26 @@ export const searchLibraryCards = (
         ? true
         : ownedIds.has(card.id) === criteria.ownedCards
     )
-    .sort(compareSearchCards(requestedPage))
+    .sort(compareSearchCards(sortConfig))
 
-  const requestedOffset = requestedPage.before
-    ? decodeSearchCursor(requestedPage.before)
-    : requestedPage.after
-      ? Math.max(0, decodeSearchCursor(requestedPage.after) - pageSize)
-      : 0
-  const offset = Math.min(requestedOffset, filtered.length)
-  const selected = filtered.slice(offset, offset + pageSize)
-  const end = offset + selected.length
+  let start = 0
+  let end = Math.min(filtered.length, pageSize)
+  if (requestedPage.before) {
+    const cursor = decodeSearchCursor(requestedPage.before, sortConfig)
+    const next = filtered.findIndex(
+      card => compareSearchCursor(card, cursor, sortConfig) > 0
+    )
+    start = next < 0 ? filtered.length : next
+    end = Math.min(filtered.length, start + pageSize)
+  } else if (requestedPage.after) {
+    const cursor = decodeSearchCursor(requestedPage.after, sortConfig)
+    const previousEnd = filtered.findIndex(
+      card => compareSearchCursor(card, cursor, sortConfig) >= 0
+    )
+    end = previousEnd < 0 ? filtered.length : previousEnd
+    start = Math.max(0, end - pageSize)
+  }
+  const selected = filtered.slice(start, end)
   const inventoryByCard = new Map<number, CardInventoryBalance[]>()
   for (const item of inventory) {
     if (!cardFrames.has(item.itemType) || item.balance <= 0) continue
@@ -309,10 +446,14 @@ export const searchLibraryCards = (
     page: {
       pageSize,
       hasBefore: end < filtered.length,
-      hasAfter: offset > 0,
-      ...(end < filtered.length ? { before: encodeSearchCursor(end) } : {}),
-      ...(offset > 0 ? { after: encodeSearchCursor(offset) } : {}),
-      ...(requestedPage.sort ? { sort: requestedPage.sort } : {})
+      hasAfter: start > 0,
+      sort: sortConfig.sort,
+      ...(selected.length
+        ? {
+            before: encodeSearchCursor(selected[0], sortConfig),
+            after: encodeSearchCursor(selected[selected.length - 1], sortConfig)
+          }
+        : {})
     },
     res
   }
