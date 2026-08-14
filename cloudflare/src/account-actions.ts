@@ -23,6 +23,7 @@ type SupportedActionType = 'MOD_BAN' | 'MOD_SUSPENSION' | 'MOD_FLAG' | 'MOD_VET'
 interface ActionRow {
   id: number
   account_user_id: string
+  target_account_id?: number | null
   account_address: string
   action_type: ActionType
   created_by_account_id: number
@@ -43,20 +44,164 @@ interface AccountStatusRow {
     | 'DELETED'
 }
 
-const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
+type ActionSortValue = string | number | null
 
-const cursorOffset = (value?: string) => {
-  if (!value) return 0
-  try {
-    const parsed = JSON.parse(atob(value)) as { offset?: unknown }
-    if (Number.isSafeInteger(parsed.offset) && (parsed.offset as number) >= 0) {
-      return parsed.offset as number
-    }
-  } catch {
-    // Fall through to the source-compatible invalid page response.
-  }
-  throw invalidArgument('page cursor is invalid')
+interface ActionSortConfig {
+  sort: Array<{
+    response: SortBy
+    value: (row: ActionRow) => ActionSortValue
+    numeric: boolean
+  }>
+  uniqueOrder: SortBy['order']
 }
+
+interface ActionCursor {
+  id: number
+  values: Array<string | null>
+}
+
+const SORT_COLUMNS: Record<
+  string,
+  | {
+      value: (row: ActionRow) => ActionSortValue
+      numeric?: boolean
+      unique?: boolean
+    }
+  | undefined
+> = {
+  id: { value: row => row.id, numeric: true, unique: true },
+  account_id: { value: row => row.target_account_id ?? null, numeric: true },
+  accountID: { value: row => row.target_account_id ?? null, numeric: true },
+  account_address: { value: row => row.account_address },
+  accountAddress: { value: row => row.account_address },
+  action_type: { value: row => row.action_type },
+  actionType: { value: row => row.action_type },
+  is_active: { value: row => (row.deactivated === 0 ? 'true' : 'false') },
+  isActive: { value: row => (row.deactivated === 0 ? 'true' : 'false') },
+  created_by: { value: row => row.created_by_account_id, numeric: true },
+  createdBy: { value: row => row.created_by_account_id, numeric: true },
+  expires_at: { value: row => row.expires_at },
+  expiresAt: { value: row => row.expires_at },
+  created_at: { value: row => row.created_at },
+  createdAt: { value: row => row.created_at },
+  updated_at: { value: row => row.updated_at },
+  updatedAt: { value: row => row.updated_at }
+}
+
+const compareSortValues = (
+  left: ActionSortValue,
+  right: ActionSortValue,
+  order: SortBy['order']
+): number => {
+  if (left === null || right === null) {
+    if (left === right) return 0
+    return left === null ? (order === 'ASC' ? 1 : -1) : order === 'ASC' ? -1 : 1
+  }
+  const compared =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left) < String(right)
+        ? -1
+        : String(left) > String(right)
+          ? 1
+          : 0
+  return order === 'ASC' ? compared : -compared
+}
+
+const actionSort = (page?: Page): ActionSortConfig => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [{ column: 'created_at', order: 'DESC' as SortBy['order'] }]
+  const sort: ActionSortConfig['sort'] = []
+  let uniqueOrder = 'DESC' as SortBy['order']
+  for (const item of requested) {
+    const column = SORT_COLUMNS[item.column]
+    if (!column || !['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('account action sort is invalid')
+    }
+    if (column.unique) {
+      uniqueOrder = item.order
+    } else {
+      sort.push({
+        response: item,
+        value: column.value,
+        numeric: column.numeric === true
+      })
+    }
+  }
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
+}
+
+const encodeCursor = (row: ActionRow, config: ActionSortConfig) =>
+  btoa(
+    JSON.stringify([
+      String(row.id),
+      ...config.sort.map(item => {
+        const value = item.value(row)
+        return value === null ? null : String(value)
+      })
+    ])
+  )
+
+const decodeCursor = (
+  value: string,
+  config: ActionSortConfig
+): ActionCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== config.sort.length + 1 ||
+      values.some(item => item !== null && typeof item !== 'string') ||
+      typeof values[0] !== 'string'
+    ) {
+      throw new Error('cursor shape')
+    }
+    const id = Number(values[0])
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('cursor ID')
+    return { id, values: values.slice(1) as Array<string | null> }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const compareCursor = (
+  row: ActionRow,
+  cursor: ActionCursor,
+  config: ActionSortConfig
+): number => {
+  for (const [index, item] of config.sort.entries()) {
+    const raw = cursor.values[index]
+    let cursorValue: ActionSortValue = raw
+    if (raw !== null && item.numeric) {
+      const parsed = Number(raw)
+      if (!Number.isSafeInteger(parsed))
+        throw invalidArgument('page cursor is invalid')
+      cursorValue = parsed
+    }
+    const compared = compareSortValues(
+      item.value(row),
+      cursorValue,
+      item.response.order
+    )
+    if (compared) return compared
+  }
+  return compareSortValues(row.id, cursor.id, config.uniqueOrder)
+}
+
+const sortRows = (rows: ActionRow[], config: ActionSortConfig) =>
+  rows.sort((left, right) => {
+    for (const item of config.sort) {
+      const compared = compareSortValues(
+        item.value(left),
+        item.value(right),
+        item.response.order
+      )
+      if (compared) return compared
+    }
+    return compareSortValues(left.id, right.id, config.uniqueOrder)
+  })
 
 const pageSize = (page?: Page, fallback = DEFAULT_PAGE_SIZE) =>
   Math.min(
@@ -127,10 +272,11 @@ export class AccountActionsRepository {
       throw invalidArgument('using before and after together is invalid')
     }
     const size = pageSize(page)
-    const offset = cursorOffset(page?.before ?? page?.after)
+    const sort = actionSort(page)
     const result = await this.database
       .prepare(
-        `SELECT action.id, action.account_user_id, action.account_address,
+        `SELECT action.id, action.account_user_id,
+                target.id AS target_account_id, action.account_address,
                 action.action_type, action.created_by_account_id,
                 action.expires_at, action.created_at, action.updated_at,
                 CASE WHEN deactivation.action_id IS NULL THEN 0 ELSE 1 END
@@ -138,23 +284,38 @@ export class AccountActionsRepository {
          FROM player_account_actions action
          LEFT JOIN player_account_action_deactivations deactivation
            ON deactivation.action_id = action.id
-         ORDER BY action.created_at DESC, action.id DESC
-         LIMIT ? OFFSET ?`
+         LEFT JOIN game_accounts target ON target.user_id = action.account_user_id`
       )
-      .bind(size + 1, offset)
       .all<ActionRow>()
-    const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    const rows = sortRows(result.results, sort)
+    let start = 0
+    let end = Math.min(rows.length, size)
+    if (page?.before) {
+      const cursor = decodeCursor(page.before, sort)
+      const next = rows.findIndex(row => compareCursor(row, cursor, sort) > 0)
+      start = next < 0 ? rows.length : next
+      end = Math.min(rows.length, start + size)
+    } else if (page?.after) {
+      const cursor = decodeCursor(page.after, sort)
+      const previousEnd = rows.findIndex(
+        row => compareCursor(row, cursor, sort) >= 0
+      )
+      end = previousEnd < 0 ? rows.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const selected = rows.slice(start, end)
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort: [{ column: 'created_at', order: 'DESC' as SortBy['order'] }]
+        before: selected.length ? encodeCursor(selected[0], sort) : undefined,
+        after: selected.length
+          ? encodeCursor(selected[selected.length - 1], sort)
+          : undefined,
+        hasBefore: end < rows.length,
+        hasAfter: start > 0,
+        sort: sort.sort.map(item => item.response)
       },
-      actions: rows.map(accountAction)
+      actions: selected.map(accountAction)
     }
   }
 
