@@ -8,7 +8,7 @@
   },
   "scripts": {
     "bootstrap": "pnpm clean && pnpm install",
-    "build:cloudflare": "pnpm check:cloudflare:ci && pnpm check:cloudflare:targets && pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:leaderboard-gate && pnpm check:cloudflare:referral-sticker-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:locales && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
+    "build:cloudflare": "pnpm check:cloudflare:ci && pnpm check:cloudflare:targets && pnpm check:cloudflare:release && pnpm check:cloudflare:deployment-verifier && pnpm check:cloudflare:dev-host && pnpm check:cloudflare:services && pnpm check:cloudflare:rpcs && pnpm check:cloudflare:float32 && pnpm check:cloudflare:worker-runners && pnpm check:cloudflare:moderation-score && pnpm check:cloudflare:conquest-gate && pnpm check:cloudflare:leaderboard-gate && pnpm check:cloudflare:referral-sticker-gate && pnpm check:cloudflare:offchain && pnpm check:cloudflare:reward-producers && pnpm check:cloudflare:reward-mutators && pnpm check:cloudflare:chain-effects && pnpm check:cloudflare:mint-queues && pnpm check:cloudflare:reward-visibility && pnpm check:cloudflare:browser-transactions && pnpm check:cloudflare:webapp-routes && pnpm check:cloudflare:auth-mode && pnpm check:cloudflare:locales && pnpm check:cloudflare:reward-readiness && pnpm check:cloudflare:typecheck && pnpm check:cloudflare:browser-code && pnpm check:cloudflare:main-worker && pnpm check:cloudflare:multiplayer && pnpm check:cloudflare:analytics && node ./utils/build-cloudflare.mjs",
     "dist": "pnpm -r dist",
     "watch": "pnpm -r watch",
     "test": "pnpm -r --no-bail exec tsc -p . --noEmit",
@@ -16,6 +16,8 @@
     "audit:fix": "pnpm dlx pnpm-audit-fix",
     "audit:cloudflare:rpcs": "node ./utils/audit-cloudflare-rpcs.mjs",
     "check:cloudflare:rpcs": "node --test ./utils/audit-cloudflare-rpcs.test.mjs && node ./utils/audit-cloudflare-rpcs.mjs --check",
+    "audit:cloudflare:float32": "node ./utils/audit-cloudflare-float32.mjs",
+    "check:cloudflare:float32": "node --test ./utils/audit-cloudflare-float32.test.mjs && node ./utils/audit-cloudflare-float32.mjs",
     "audit:cloudflare:worker-runners": "node ./utils/audit-cloudflare-worker-runners.mjs",
     "check:cloudflare:worker-runners": "node --test ./utils/audit-cloudflare-worker-runners.test.mjs && node ./utils/audit-cloudflare-worker-runners.mjs",
     "check:cloudflare:moderation-score": "node --test ./utils/check-cloudflare-moderation-score-gate.test.mjs && node ./utils/check-cloudflare-moderation-score-gate.mjs",
