@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import type { Env } from '../src/env'
@@ -9,6 +9,10 @@ import {
 } from '../src/identity-session'
 
 const testEnv = env as unknown as Env
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 const rpc = async (method: string, signedIn = false) => {
   const headers = new Headers({ 'Content-Type': 'application/json' })
@@ -80,6 +84,25 @@ describe('source system and progression RPC compatibility', () => {
   it('derives source hero unlock levels from the current SkyPass data', async () => {
     expect(await (await rpc('HeroUnlockLevels')).json()).toMatchObject({
       res: { SAMYA: 6, BOURAN: 12, ARI: 18, LOTUS: 24 }
+    })
+  })
+
+  it('preserves the source season and quest countdown response contracts', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-10T15:00:00.000Z'))
+
+    expect(await (await rpc('GetCurrentSeasonStartTime')).json()).toEqual({
+      res: '2026-07-27T14:00:01.000Z'
+    })
+    expect(await (await rpc('GetNextSeasonTime')).json()).toEqual({
+      res: '2026-08-24T14:00:00.000Z'
+    })
+    expect(await (await rpc('GetQuestsAutoRerollTime')).json()).toEqual({
+      res: {
+        daily: '2026-08-11T14:00:00.000Z',
+        weekly: '2026-08-17T14:00:00.000Z',
+        seasonal: '2026-08-24T14:00:00.000Z'
+      }
     })
   })
 
