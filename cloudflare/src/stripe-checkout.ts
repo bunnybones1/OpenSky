@@ -108,18 +108,37 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
 const STAFF_PAGE_SIZE = 20
 const MAX_STAFF_PAGE_SIZE = 200
 
-const encodeCursor = (offset: number): string =>
-  btoa(JSON.stringify({ offset }))
-
-const cursorOffset = (value?: string): number => {
-  if (!value) return 0
-  try {
-    const decoded = JSON.parse(atob(value)) as { offset?: unknown }
+const staffPaymentSortOrder = (page?: Page): SortBy['order'] => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [{ column: 'created_at', order: 'DESC' as SortBy['order'] }]
+  let order = 'DESC' as SortBy['order']
+  for (const item of requested) {
+    const itemOrder = item.order ?? ('DESC' as SortBy['order'])
     if (
-      Number.isSafeInteger(decoded.offset) &&
-      (decoded.offset as number) >= 0
+      !['created_at', 'createdAt'].includes(item.column) ||
+      !['ASC', 'DESC'].includes(itemOrder)
     ) {
-      return decoded.offset as number
+      throw invalidArgument('payment sort is invalid')
+    }
+    order = itemOrder
+  }
+  return order
+}
+
+const encodeStaffPaymentCursor = (row: StaffPaymentRow): string =>
+  btoa(JSON.stringify([row.created_at]))
+
+const decodeStaffPaymentCursor = (value: string): string => {
+  try {
+    const decoded = JSON.parse(atob(value)) as unknown
+    if (
+      Array.isArray(decoded) &&
+      decoded.length === 1 &&
+      typeof decoded[0] === 'string' &&
+      decoded[0].length > 0
+    ) {
+      return decoded[0]
     }
   } catch {
     // Fall through to the source-compatible invalid page response.
@@ -910,7 +929,13 @@ export class StripeCheckoutRepository {
         ? input.page!.pageSize!
         : STAFF_PAGE_SIZE
     )
-    const offset = cursorOffset(input.page?.before ?? input.page?.after)
+    const order = staffPaymentSortOrder(input.page)
+    const reverse = input.page?.after !== undefined
+    const cursorValue = reverse ? input.page?.after : input.page?.before
+    const cursor =
+      cursorValue !== undefined
+        ? decodeStaffPaymentCursor(cursorValue)
+        : undefined
     const bindings: unknown[] = []
     const filters: string[] = []
     if (input.address !== undefined) {
@@ -922,14 +947,9 @@ export class StripeCheckoutRepository {
         return {
           page: {
             pageSize: size,
-            hasBefore: false,
-            hasAfter: offset > 0,
-            sort: [
-              {
-                column: 'created_at',
-                order: 'DESC' as SortBy['order']
-              }
-            ]
+            hasBefore: reverse && cursorValue !== undefined,
+            hasAfter: !reverse && cursorValue !== undefined,
+            sort: []
           },
           payments: []
         }
@@ -949,7 +969,16 @@ export class StripeCheckoutRepository {
     if (input.provider && input.provider !== ('STRIPE' as PaymentProvider)) {
       filters.push('0 = 1')
     }
+    if (cursor !== undefined) {
+      const forwardOperator = order === 'ASC' ? '>' : '<'
+      const reverseOperator = order === 'ASC' ? '<' : '>'
+      filters.push(
+        `payment.created_at ${reverse ? reverseOperator : forwardOperator} ?`
+      )
+      bindings.push(cursor)
+    }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
+    const queryOrder = reverse ? (order === 'ASC' ? 'DESC' : 'ASC') : order
     const result = await this.database
       .prepare(
         `SELECT staff.id AS staff_id, game.id AS account_id,
@@ -960,26 +989,24 @@ export class StripeCheckoutRepository {
            ON staff.payment_id = payment.id
          LEFT JOIN game_accounts game ON game.user_id = payment.user_id
          ${where}
-         ORDER BY payment.created_at DESC, payment.id DESC
-         LIMIT ? OFFSET ?`
+         ORDER BY payment.created_at ${queryOrder}
+         LIMIT ?`
       )
-      .bind(...bindings, size + 1, offset)
+      .bind(...bindings, size + 1)
       .all<StaffPaymentRow>()
+    const hasExtra = result.results.length > size
     const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    if (reverse) rows.reverse()
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort: [
-          {
-            column: 'created_at',
-            order: 'DESC' as SortBy['order']
-          }
-        ]
+        before: rows.length ? encodeStaffPaymentCursor(rows[0]) : undefined,
+        after: rows.length
+          ? encodeStaffPaymentCursor(rows[rows.length - 1])
+          : undefined,
+        hasBefore: reverse ? cursorValue !== undefined : hasExtra,
+        hasAfter: reverse ? hasExtra : cursorValue !== undefined,
+        sort: []
       },
       payments: rows.map(row => ({
         id: row.staff_id,

@@ -890,6 +890,16 @@ describe('dormant Stripe Checkout port', () => {
       externalTxnID: 'cs_test_staff_second'
     })
     expect(firstPage.page.hasBefore).toBe(true)
+    expect(firstPage.page.sort).toEqual([])
+    expect(JSON.parse(atob(firstPage.page.after!))).toEqual([
+      firstPage.payments[0].createdAt
+    ])
+
+    const third = await createPending(
+      'skypass_0001',
+      'cs_test_staff_third',
+      new Date(NOW.getTime() + 120_000)
+    )
     const secondPage = await second.repository.listStaffPayments({
       page: { pageSize: 1, before: firstPage.page.after }
     })
@@ -897,6 +907,57 @@ describe('dormant Stripe Checkout port', () => {
       status: 'SUCCEEDED',
       externalTxnID: 'cs_test_staff_first'
     })
+    const backwardPage = await third.repository.listStaffPayments({
+      page: { pageSize: 1, after: secondPage.page.before }
+    })
+    expect(backwardPage.payments[0]).toMatchObject({
+      status: 'PENDING',
+      externalTxnID: 'cs_test_staff_second'
+    })
+    expect(backwardPage.page).toMatchObject({
+      hasBefore: true,
+      hasAfter: true,
+      sort: []
+    })
+
+    const ascending = await third.repository.listStaffPayments({
+      page: {
+        pageSize: 1,
+        sort: [{ column: 'createdAt', order: 'ASC' as never }]
+      }
+    })
+    expect(ascending.payments[0]).toMatchObject({
+      status: 'SUCCEEDED',
+      externalTxnID: 'cs_test_staff_first'
+    })
+    expect(ascending.page.sort).toEqual([])
+    expect(
+      (
+        await third.repository.listStaffPayments({
+          page: { pageSize: 999 }
+        })
+      ).page.pageSize
+    ).toBe(200)
+    await expect(
+      third.repository.listStaffPayments({
+        page: { before: 'not-a-cursor' }
+      })
+    ).rejects.toThrow('page cursor is invalid')
+    await expect(
+      third.repository.listStaffPayments({
+        page: {
+          before: firstPage.page.after,
+          after: firstPage.page.before
+        }
+      })
+    ).rejects.toThrow('using before and after together is invalid')
+    await expect(
+      third.repository.listStaffPayments({
+        page: {
+          sort: [{ column: 'status', order: 'ASC' as never }]
+        }
+      })
+    ).rejects.toThrow('payment sort is invalid')
     expect(
       (
         await second.repository.listStaffPayments({
