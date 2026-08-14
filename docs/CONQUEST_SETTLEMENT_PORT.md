@@ -191,6 +191,30 @@ production Conquest point rows, wrote zero rows (`changed_db: false`), and
 confirmed there were no pending migrations. The public game-mode RPC continued
 to report both Conquest modes false.
 
+## Rolling-score rollout proof — 2026-08-13
+
+Commit `15c3e0f0` is deployed as game-server version
+`cdfed2f2-90f4-44aa-bb5c-ab0846b06e34`. The main Worker remains version
+`2aa77b77-afa3-458e-8560-220f070ac883`; neither it nor the match service or
+matchmaker was deployed for this isolated milestone. Production retained web
+entry `/assets/index-b1769b84.js` and game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, and direct header probes confirmed
+both fingerprinted assets remain one-year immutable at the browser and edge.
+
+Migration `0104_conquest_match_scores.sql` created the immutable rolling-score
+receipt table and both update/delete guards. The pinned migration runner then
+reported no pending migrations. Read-only D1 probes verified the table and
+triggers, found zero score receipts and zero Conquest matches, and wrote zero
+rows (`changed_db: false`). The four pre-existing Conquest account-stat rows
+remain two per mode with minimum, maximum, and total score all zero.
+
+The complete local release contract and exact GitHub head passed before the
+rollout; exact-head run `31773250265` completed successfully. The deployed
+game-server health endpoint reports protocol version 3, while the public
+`GetGameModesStatus` RPC continues to report both Conquest modes false. The
+score port is therefore live for future admitted matches but cannot open a
+queue or create a reward authority by deployment alone.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
