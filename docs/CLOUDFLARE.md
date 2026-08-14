@@ -560,6 +560,24 @@ and progress are not migrated.
   changes; the game bundle remained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verification covered all six
   locales and the release-safe cache policy.
+- Account and deck-rank ratio fields now retain the source Go `float32`
+  arithmetic and shortest JSON representation instead of exposing JavaScript
+  binary64 expansions. Account rank progress also preserves the source order
+  of operations before flooring to hundredths; for example, source cases
+  `1 / 3` and `116 / 200` serialize as `0.33333334` and `0.58`. Deck win ratios
+  are normalized before sorting and cursor generation, so pagination uses the
+  same value returned to the client. Milestone `95fd3234` passed exact-head
+  release-contract run `31804350514`, the 373-test main Worker suite, 230
+  multiplayer tests, 25 game tests including the replay secret-map regression,
+  and 6 analytics tests. It was deployed on 2026-08-14 as Worker version
+  `b3f793c3-cbbf-4c21-86de-3f2cd268d670` after a transient Cloudflare API
+  timeout was confirmed not to have published a partial version. The retry
+  uploaded no asset changes. The production verifier retained
+  `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Public Ping, Version, game-mode, and Conquest
+  reward probes passed; the reward-readiness audit remained error-free with
+  both Conquest modes disabled and no policy-gated reward track activated.
 - Card-library searches now use the source `[id, mana_weight]` keyset cursor by
   default, preserving explicit sort metadata, the one-column unique-key
   direction rule, PostgreSQL null ordering, first/last response cursors, and
