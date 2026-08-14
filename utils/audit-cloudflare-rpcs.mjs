@@ -2,6 +2,8 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import ts from 'typescript'
+
 export const extractGoRpcMethods = source =>
   [...source.matchAll(/^func\s+\(\w+\s+\*Server\)\s+([A-Z]\w*)\s*\(/gm)].map(
     match => match[1]
@@ -9,6 +11,92 @@ export const extractGoRpcMethods = source =>
 
 export const extractTsRpcCases = source =>
   [...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)].map(match => match[1])
+
+export const extractSourceRpcAccess = source =>
+  Object.fromEntries(
+    [...source.matchAll(/"([A-Za-z][A-Za-z0-9]*)"\s*:\s*\{([^}]*)\}/g)]
+      .map(([, method, sessions]) => [
+        method,
+        sessions.includes('SessionTypePublic') ? 'public' : 'authenticated'
+      ])
+      .sort(([left], [right]) => left.localeCompare(right))
+  )
+
+export const extractSourcePublicRpcs = source =>
+  Object.entries(extractSourceRpcAccess(source))
+    .filter(([, access]) => access === 'public')
+    .map(([method]) => method)
+
+/**
+ * Extracts Worker RPCs that unconditionally authenticate through the shared
+ * principal boundary. Empty case clauses inherit the next clause's body so
+ * source-compatible aliases such as FavoriteDeck/UnfavoriteDeck are covered.
+ */
+export const extractWorkerAuthenticatedRpcs = source => {
+  const file = ts.createSourceFile(
+    'api.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
+  const methods = new Set()
+  const authenticators = new Set([
+    'identityPrincipal',
+    'rpcPrincipal',
+    'walletPrincipal'
+  ])
+  const visit = node => {
+    if (ts.isSwitchStatement(node)) {
+      let pending = []
+      for (const clause of node.caseBlock.clauses) {
+        if (!ts.isCaseClause(clause) || !ts.isStringLiteral(clause.expression)) {
+          pending = []
+          continue
+        }
+        pending.push(clause.expression.text)
+        if (clause.statements.length === 0) continue
+        let authenticated = false
+        const inspect = child => {
+          if (
+            ts.isCallExpression(child) &&
+            ts.isIdentifier(child.expression) &&
+            authenticators.has(child.expression.text)
+          ) {
+            authenticated = true
+          }
+          ts.forEachChild(child, inspect)
+        }
+        for (const statement of clause.statements) inspect(statement)
+        if (authenticated) pending.forEach(method => methods.add(method))
+        pending = []
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return [...methods].sort()
+}
+
+export const rpcAccessAuditErrors = ({
+  functionalRpcs,
+  sourceRpcAccess,
+  workerAuthenticatedRpcs
+}) => {
+  const authenticated = new Set(workerAuthenticatedRpcs)
+  return functionalRpcs.flatMap(rpc => {
+    if (!Object.hasOwn(sourceRpcAccess, rpc)) {
+      return [`functional source RPC is absent from the source access map: ${rpc}`]
+    }
+    const sourceAccess = sourceRpcAccess[rpc]
+    const workerAccess = authenticated.has(rpc) ? 'authenticated' : 'public'
+    return sourceAccess === workerAccess
+      ? []
+      : [
+          `functional RPC access drift: ${rpc} is ${sourceAccess} in source and ${workerAccess} in Worker`
+        ]
+  })
+}
 
 const rpcCaseBodies = source => {
   const matches = [...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)]
@@ -357,13 +445,18 @@ const loadAudit = async root => {
       )
     )
   }
-  const gateway = await readFile(
-    path.join(root, 'cloudflare/src/api.ts'),
-    'utf8'
-  )
+  const [gateway, accessControl] = await Promise.all([
+    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'api/rpc/middleware/access_control.go'),
+      'utf8'
+    )
+  ])
   return {
     audit: auditRpcCoverage(methods, extractTsRpcCases(gateway)),
-    tombstoneErrors: tsRpcTombstoneAuditErrors(gateway)
+    tombstoneErrors: tsRpcTombstoneAuditErrors(gateway),
+    gateway,
+    accessControl
   }
 }
 
@@ -372,8 +465,17 @@ const main = async () => {
     path.dirname(new URL(import.meta.url).pathname),
     '..'
   )
-  const { audit, tombstoneErrors } = await loadAudit(root)
-  const errors = [...checkRpcCoverage(audit), ...tombstoneErrors]
+  const { audit, tombstoneErrors, gateway, accessControl } =
+    await loadAudit(root)
+  const errors = [
+    ...checkRpcCoverage(audit),
+    ...tombstoneErrors,
+    ...rpcAccessAuditErrors({
+      functionalRpcs: audit.implemented,
+      sourceRpcAccess: extractSourceRpcAccess(accessControl),
+      workerAuthenticatedRpcs: extractWorkerAuthenticatedRpcs(gateway)
+    })
+  ]
   const fulfillment = rpcFulfillmentSummary(audit)
   if (process.argv.includes('--json')) {
     process.stdout.write(
@@ -395,6 +497,7 @@ const main = async () => {
         `Fulfilled/retired source contracts: ${fulfilled}`,
         `Actionable source RPC gaps: ${fulfillment.actionable.length}`,
         `Cloudflare-only adapters: ${audit.adapters.length}`,
+        `Functional RPC access contracts: ${audit.implemented.length}`,
         '',
         `Actionable: ${fulfillment.actionable.join(', ')}`,
         `Source tombstones: ${fulfillment.sourceTombstones.join(', ')}`,
@@ -402,7 +505,7 @@ const main = async () => {
         `Retired: ${fulfillment.retired.join(', ')}`,
         audit.adapters.length ? `Adapters: ${audit.adapters.join(', ')}` : ''
       ]
-        .filter((line, index) => line || index < 9)
+        .filter((line, index) => line || index < 10)
         .join('\n') + '\n'
     )
   }

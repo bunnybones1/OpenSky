@@ -9,8 +9,12 @@ import {
   REVIEWED_TS_RPC_TOMBSTONES,
   SUPERSEDED_SOURCE_RPCS,
   extractGoRpcMethods,
-  extractTsRpcCases
+  extractSourcePublicRpcs,
+  extractTsRpcCases,
+  extractWorkerAuthenticatedRpcs
 } from './audit-cloudflare-rpcs.mjs'
+
+export { extractSourcePublicRpcs, extractWorkerAuthenticatedRpcs }
 
 // These source calls remain in the preserved browser for the legacy wallet
 // build, but Google identity mode replaces or retires them before invocation.
@@ -235,63 +239,6 @@ export const browserRpcTestAuditErrors = ({
     .map(browserMethodToRpc)
     .filter(rpc => !nonPorts.has(rpc) && !tested.has(rpc))
     .map(rpc => `browser Worker RPC has no direct contract-test reference: ${rpc}`)
-}
-
-export const extractSourcePublicRpcs = source =>
-  [...source.matchAll(/"([A-Za-z][A-Za-z0-9]*)"\s*:\s*\{([^}]*)\}/g)]
-    .filter(([, , sessions]) => sessions.includes('SessionTypePublic'))
-    .map(([, method]) => method)
-    .sort()
-
-/**
- * Extracts Worker RPCs that unconditionally authenticate through the shared
- * principal boundary. Empty case clauses inherit the next clause's body so
- * source-compatible aliases such as FavoriteDeck/UnfavoriteDeck are covered.
- */
-export const extractWorkerAuthenticatedRpcs = source => {
-  const file = ts.createSourceFile(
-    'api.ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS
-  )
-  const methods = new Set()
-  const authenticators = new Set([
-    'identityPrincipal',
-    'rpcPrincipal',
-    'walletPrincipal'
-  ])
-  const visit = node => {
-    if (ts.isSwitchStatement(node)) {
-      let pending = []
-      for (const clause of node.caseBlock.clauses) {
-        if (!ts.isCaseClause(clause) || !ts.isStringLiteral(clause.expression)) {
-          pending = []
-          continue
-        }
-        pending.push(clause.expression.text)
-        if (clause.statements.length === 0) continue
-        let authenticated = false
-        const inspect = child => {
-          if (
-            ts.isCallExpression(child) &&
-            ts.isIdentifier(child.expression) &&
-            authenticators.has(child.expression.text)
-          ) {
-            authenticated = true
-          }
-          ts.forEachChild(child, inspect)
-        }
-        for (const statement of clause.statements) inspect(statement)
-        if (authenticated) pending.forEach(method => methods.add(method))
-        pending = []
-      }
-    }
-    ts.forEachChild(node, visit)
-  }
-  visit(file)
-  return [...methods].sort()
 }
 
 export const browserRpcAccessAuditErrors = ({

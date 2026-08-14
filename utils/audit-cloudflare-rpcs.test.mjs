@@ -5,8 +5,11 @@ import {
   auditRpcCoverage,
   checkRpcCoverage,
   extractGoRpcMethods,
+  extractSourceRpcAccess,
   extractTsRpcCases,
+  extractWorkerAuthenticatedRpcs,
   rpcFulfillmentSummary,
+  rpcAccessAuditErrors,
   partitionRpcGaps,
   summarizeRpcCategories,
   tsRpcTombstoneAuditErrors,
@@ -26,6 +29,60 @@ func (s *Server) GetAccount(ctx context.Context, address string) error { return 
   assert.deepEqual(
     extractTsRpcCases(`switch (method) { case 'Ping': break; case 'Adapter': break }`),
     ['Ping', 'Adapter']
+  )
+})
+
+test('extracts source and Worker access boundaries including aliases', () => {
+  assert.deepEqual(
+    extractSourceRpcAccess(`
+var accessMap = map[string][]SessionType{
+  "Ping": {SessionTypePublic, SessionTypeUser},
+  "ListQuests": {SessionTypeUser, SessionTypeAdmin},
+}`),
+    { ListQuests: 'authenticated', Ping: 'public' }
+  )
+  assert.deepEqual(
+    extractWorkerAuthenticatedRpcs(`
+switch (method) {
+  case 'Ping': {
+    return ok()
+  }
+  case 'FavoriteDeck':
+  case 'UnfavoriteDeck': {
+    const principal = await rpcPrincipal(request, env)
+    return update(principal)
+  }
+  case 'AccountLeaderboard': {
+    const principal = await optionalRpcPrincipal(request, env)
+    return list(principal)
+  }
+}`),
+    ['FavoriteDeck', 'UnfavoriteDeck']
+  )
+})
+
+test('fails closed on missing or drifted functional RPC access contracts', () => {
+  assert.deepEqual(
+    rpcAccessAuditErrors({
+      functionalRpcs: ['ListQuests', 'Ping'],
+      sourceRpcAccess: {
+        ListQuests: 'authenticated',
+        Ping: 'public'
+      },
+      workerAuthenticatedRpcs: ['ListQuests']
+    }),
+    []
+  )
+  assert.deepEqual(
+    rpcAccessAuditErrors({
+      functionalRpcs: ['Missing', 'Ping'],
+      sourceRpcAccess: { Ping: 'public' },
+      workerAuthenticatedRpcs: ['Ping']
+    }),
+    [
+      'functional source RPC is absent from the source access map: Missing',
+      'functional RPC access drift: Ping is public in source and authenticated in Worker'
+    ]
   )
 })
 
