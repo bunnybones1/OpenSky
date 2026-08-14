@@ -308,6 +308,20 @@ and progress are not migrated.
   hidden, except that an owned starter Hero remains visible until its matching
   starter deck is actually unlocked. Claimed rows remain visible as season
   history. This projection never changes inventory or claim authority.
+  Milestone `3bf77e12` passed exact-head release-contract run `31818919802` in
+  8m33s, its focused 43-test player RPC suite, the 377-test main Worker suite,
+  230 multiplayer tests, 25 game tests, and 6 analytics tests. It was deployed
+  on 2026-08-14 as Worker version
+  `f1638e59-8a24-47be-81e2-338c9f52692e` at 100% traffic with no migration or
+  asset upload required. The production verifier retained
+  `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Public Ping, Version, game-mode, and Conquest
+  reward probes passed: Practice PvP and bot remained enabled, both Conquest
+  modes remained disabled, and `weeklyGolds` remained empty. The read-only
+  reward-readiness audit reported core rewards live, SkyPass `1/1` active, and
+  every policy-gated reward track dormant; the rollout changed no inventory,
+  policy, or reward-queue state.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
