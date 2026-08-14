@@ -648,6 +648,24 @@ and progress are not migrated.
   `/assets/index-d976a081.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
   the release-safe cache policy.
+- Staff account-signal summaries now use the source
+  `[account_id, ...sort_values]` keyset cursor, `score DESC` default, 20-row
+  default, 200-row cap, supported score/account-date sorts, and the unique-key
+  direction rule. The bounded D1 query keeps forward pages stable when a signal
+  is inserted ahead of the cursor, supports backward traversal, and rejects
+  malformed or dual-direction cursors. Aggregate scores remain deliberately
+  neutral until the source model pipeline is ported rather than fabricated.
+  Milestone `ccdb765a` passed exact-head release-contract run `31794879551`,
+  the 368-test main Worker suite, and the complete cross-service release
+  contract before deployment on 2026-08-14 as Worker version
+  `f72aa1ee-581c-4ab6-a78c-723db5420887`. No migration was required. The public
+  Version RPC reported that exact version, and an anonymous
+  `GMAccountSignalSummaries` probe returned `401`. Read-only production D1
+  checks before and after deployment found zero player-report rows and zero
+  account-action signal rows, with `changed_db: false` and no rows written.
+  Cloudflare reused `/assets/index-d976a081.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
