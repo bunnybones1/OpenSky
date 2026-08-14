@@ -488,6 +488,23 @@ and progress are not migrated.
   `changed_db: false` and no rows written. Cloudflare uploaded no asset changes,
   retaining `/assets/index-b1769b84.js` and
   `/game/cloudflare/assets/index-79a70ba2.js`.
+- Player leaderboard reads now preserve the source's global display ranks,
+  independent top-500 reward positions, Master/Grandweaver boundary, numeric
+  account IDs, moderation exclusions, and same-rank account centering. Region,
+  name, and rank filters no longer renumber a player or inflate rewards, while
+  source-shaped keyset cursors remain stable when a higher player appears
+  between pages and support both forward and backward navigation. Milestone
+  `6de9d70e` passed exact-head release-contract run `31780001880`, the 362-test
+  main Worker suite, and the complete cross-service release contract before
+  deployment on 2026-08-14 as Worker version
+  `0ff80e5e-8c3c-42fc-98c2-6f50fc408327`. No migration was required. The
+  public Version RPC reported that exact version; a read-only production D1
+  projection found two game accounts, four eligible ranked rows, zero nonzero
+  scores, and zero ranked settlement receipts, with `changed_db: false` and no
+  rows written. Cloudflare reused the already-known asset set and verification
+  resolved `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
