@@ -884,8 +884,23 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       expect.objectContaining({
         type: 'RANK',
         rank: expect.objectContaining({
-          beforeMatch: expect.objectContaining({ rankStage: 'STAGE_I' }),
-          afterMatch: expect.objectContaining({ rankStage: 'STAGE_II' })
+          beforeMatch: expect.objectContaining({
+            rankStage: 'STAGE_I',
+            rankPosition: 1
+          }),
+          afterMatch: expect.objectContaining({
+            rankStage: 'STAGE_II',
+            rankPosition: 1
+          })
+        })
+      })
+    ])
+    expect(stats.rewards[1]).toEqual([
+      expect.objectContaining({
+        type: 'RANK',
+        rank: expect.objectContaining({
+          beforeMatch: expect.objectContaining({ rankPosition: 2 }),
+          afterMatch: expect.objectContaining({ rankPosition: 2 })
         })
       })
     ])
@@ -964,6 +979,274 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         .bind(USER_ID_1)
         .first('count')
     ).toBe(1)
+  })
+
+  it('projects source Master positions and promotes the top 100 once', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const earlier = '2026-08-13T20:00:00.000Z'
+    const beforeMatch = '2026-08-13T21:00:00.000Z'
+    const processedAt = '2026-08-13T22:00:00.000Z'
+    const statements: D1PreparedStatement[] = [
+      ...[USER_ID_1, USER_ID_2].map(userId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, player_rank_state, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', 126, 1201, 'MASTER',
+                   'STAGE_NONE', '[-1,1750,350,1201]', ?, ?)`
+        ).bind(userId, beforeMatch, beforeMatch)
+      )
+    ]
+    for (let index = 0; index < 100; index += 1) {
+      const userId = `grandweaver-${index}`
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO users
+             (id, display_name, primary_email, avatar_url, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, ?, ?)`
+        ).bind(
+          userId,
+          `Grandweaver ${index}`,
+          `grandweaver-${index}@example.com`,
+          earlier,
+          earlier
+        ),
+        env.AUTH_DB.prepare(
+          `INSERT INTO game_accounts (id, user_id, created_at)
+           VALUES (?, ?, ?)`
+        ).bind(index + 100, userId, earlier),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, player_rank_state, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', 126, 1201, 'GRANDWEAVER',
+                   'STAGE_NONE', '[-1,1750,350,1201]', ?, ?)`
+        ).bind(userId, earlier, earlier)
+      )
+    }
+    const bannedUserId = 'banned-grandweaver'
+    statements.push(
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, avatar_url, created_at, updated_at)
+         VALUES (?, 'Banned Grandweaver', 'banned-grandweaver@example.com',
+                 NULL, ?, ?)`
+      ).bind(bannedUserId, earlier, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO game_accounts (id, user_id, created_at)
+         VALUES (999, ?, ?)`
+      ).bind(bannedUserId, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_settings
+           (user_id, name, locale, account_status, created_at, updated_at)
+         VALUES (?, 'Banned.Grandweaver', 'en', 'BANNED', ?, ?)`
+      ).bind(bannedUserId, earlier, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', 126, 9999, 'GRANDWEAVER',
+                 'STAGE_NONE', '[-1,1750,350,9999]', ?, ?)`
+      ).bind(bannedUserId, earlier, earlier)
+    )
+    for (let index = 0; index < statements.length; index += 75) {
+      await env.AUTH_DB.batch(statements.slice(index, index + 75))
+    }
+
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_grandweaver_receipt_failure
+       BEFORE INSERT ON multiplayer_match_stats_applied
+       BEGIN SELECT RAISE(FAIL, 'injected grandweaver receipt failure'); END`
+    ).run()
+    await expect(
+      applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        0,
+        MatchStatus.COMPLETED,
+        processedAt
+      )
+    ).rejects.toThrow('injected grandweaver receipt failure')
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER test_grandweaver_receipt_failure'
+    ).run()
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, score, player_rank FROM player_account_stats
+           WHERE user_id IN (?, ?) ORDER BY user_id`
+        )
+          .bind(USER_ID_1, USER_ID_2)
+          .all()
+      ).results
+    ).toEqual([
+      { user_id: USER_ID_1, score: 1201, player_rank: 'MASTER' },
+      { user_id: USER_ID_2, score: 1201, player_rank: 'MASTER' }
+    ])
+
+    const result = await applyMatchStats(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      0,
+      MatchStatus.COMPLETED,
+      processedAt
+    )
+    const winnerRank = result.rewards[0].find(
+      reward => reward.type === 'RANK'
+    )!.rank!
+    const loserRank = result.rewards[1].find(
+      reward => reward.type === 'RANK'
+    )!.rank!
+    expect(winnerRank.beforeMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 1,
+      scoreAbove: 1201,
+      scoreBelow: 0
+    })
+    expect(winnerRank.afterMatch).toMatchObject({
+      rank: 'GRANDWEAVER',
+      rankPosition: 1,
+      scoreAbove: 0,
+      scoreBelow: 1201
+    })
+    expect(loserRank.beforeMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 2,
+      scoreAbove: 1201,
+      scoreBelow: 0
+    })
+    expect(loserRank.afterMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 2,
+      scoreAbove: 1201,
+      scoreBelow: 0
+    })
+
+    const activeRanks = await env.AUTH_DB.prepare(
+      `SELECT stats.player_rank, COUNT(*) AS count
+       FROM player_account_stats stats
+       LEFT JOIN player_account_settings settings
+         ON settings.user_id = stats.user_id
+       WHERE stats.game_mode = 'RANKED_CONSTRUCTED' AND stats.season = 126
+         AND COALESCE(settings.account_status, 'ACTIVE') NOT IN (
+           'BANNED', 'SUSPENDED', 'DELETED'
+         )
+       GROUP BY stats.player_rank ORDER BY stats.player_rank`
+    ).all()
+    expect(activeRanks.results).toEqual([
+      { player_rank: 'GRANDWEAVER', count: 100 },
+      { player_rank: 'MASTER', count: 2 }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first('player_rank')
+    ).toBe('GRANDWEAVER')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
+      )
+        .bind(bannedUserId)
+        .first('player_rank')
+    ).toBe('GRANDWEAVER')
+
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        1,
+        MatchStatus.FORFEITED,
+        '2026-08-13T23:00:00.000Z'
+      )
+    ).toMatchObject({ applied: false, rewards: result.rewards })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_account_stats stats
+         LEFT JOIN player_account_settings settings
+           ON settings.user_id = stats.user_id
+         WHERE stats.game_mode = 'RANKED_CONSTRUCTED' AND stats.season = 126
+           AND stats.player_rank = 'GRANDWEAVER'
+           AND COALESCE(settings.account_status, 'ACTIVE') NOT IN (
+             'BANNED', 'SUSPENDED', 'DELETED'
+           )`
+      ).first('count')
+    ).toBe(100)
+  })
+
+  it('preserves the source unpositioned after-rank reward on draws', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const beforeMatch = '2026-08-13T21:00:00.000Z'
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', 126, 1201, 'MASTER',
+                 'STAGE_NONE', '[-1,1750,350,1201]', ?, ?)`
+      ).bind(USER_ID_1, beforeMatch, beforeMatch),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', 126, 1201, 'GRANDWEAVER',
+                 'STAGE_NONE', '[-1,1750,350,1201]', ?, ?)`
+      ).bind(USER_ID_2, beforeMatch, beforeMatch)
+    ])
+
+    const result = await applyMatchStats(
+      env.AUTH_DB,
+      proposalId,
+      126,
+      undefined,
+      MatchStatus.COMPLETED,
+      '2026-08-13T22:00:00.000Z'
+    )
+    const player1Rank = result.rewards[0].find(
+      reward => reward.type === 'RANK'
+    )!.rank!
+    const player2Rank = result.rewards[1].find(
+      reward => reward.type === 'RANK'
+    )!.rank!
+    expect(player1Rank.beforeMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 1,
+      scoreBelow: 1201
+    })
+    expect(player2Rank.beforeMatch).toMatchObject({
+      rank: 'GRANDWEAVER',
+      rankPosition: 1,
+      scoreAbove: 1201
+    })
+    expect(player1Rank.afterMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 0,
+      scoreAbove: 0,
+      scoreBelow: 0
+    })
+    expect(player2Rank.afterMatch).toMatchObject({
+      rank: 'MASTER',
+      rankPosition: 0,
+      scoreAbove: 0,
+      scoreBelow: 0
+    })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, player_rank, tie_count
+           FROM player_account_stats ORDER BY user_id`
+        ).all()
+      ).results
+    ).toEqual([
+      { user_id: USER_ID_1, player_rank: 'MASTER', tie_count: 1 },
+      { user_id: USER_ID_2, player_rank: 'MASTER', tie_count: 1 }
+    ])
   })
 
   it('persists only the ranked side of a mixed practice-PVP match', async () => {

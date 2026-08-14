@@ -77,6 +77,40 @@ interface AccountStatsRow {
   level: number | null
   xp: number | null
   basic_skypass_level: number | null
+  updated_at: string
+}
+
+interface RankProjection {
+  user_id: string
+  account_id: number | null
+  game_mode?: GameMode
+  score: number
+  player_rank: PlayerRank
+  updated_at: string
+}
+
+interface RankContextRow {
+  rank_position: number
+  master_position: number
+  score_below: number | null
+  score_above: number | null
+  grandweaver_floor: number | null
+}
+
+interface RankRewardContext {
+  rankPosition: number
+  scoreBelow: number
+  scoreAbove: number
+  displayRank: PlayerRank
+}
+
+interface RankedTransition {
+  score: number
+  playerRank: PlayerRank
+  playerRankStage: PlayerRankStage
+  playerRankState: string
+  currentDefinition?: RankDefinition
+  nextDefinition?: RankDefinition
 }
 
 interface MatchStatsReceiptRow {
@@ -1105,20 +1139,232 @@ export const applyMatchExperience = async (
 const ranked = (rank: PlayerRank) =>
   ![PlayerRank.UNKNOWN, PlayerRank.UNRANKED].includes(rank)
 
+const MASTER_POINTS = 1_200
+const GRANDWEAVER_COUNT = 100
+const MISSING_ACCOUNT_SORT_ID = Number.MAX_SAFE_INTEGER
+
+const rankContext = async (
+  database: D1Database,
+  gameMode: GameMode,
+  season: number,
+  target: RankProjection,
+  projections: RankProjection[] = []
+): Promise<RankRewardContext> => {
+  const overrides = projections.filter(projection => projection.user_id !== '')
+  const overrideValues = overrides.length
+    ? `VALUES ${overrides.map(() => '(?, ?, ?, ?)').join(', ')}`
+    : 'SELECT NULL, NULL, NULL, NULL WHERE 0'
+  const overrideBindings = overrides.flatMap(projection => [
+    projection.user_id,
+    projection.score,
+    projection.player_rank,
+    projection.updated_at
+  ])
+  const row = await database
+    .prepare(
+      `WITH overrides(user_id, score, player_rank, updated_at) AS (
+         ${overrideValues}
+       ),
+       standings AS (
+         SELECT stats.user_id,
+                COALESCE(account.id, ${MISSING_ACCOUNT_SORT_ID})
+                  AS account_sort_id,
+                COALESCE(overrides.score, stats.score) AS score,
+                COALESCE(overrides.player_rank, stats.player_rank)
+                  AS player_rank,
+                COALESCE(overrides.updated_at, stats.updated_at) AS updated_at
+         FROM player_account_stats stats
+         LEFT JOIN overrides ON overrides.user_id = stats.user_id
+         LEFT JOIN game_accounts account ON account.user_id = stats.user_id
+         LEFT JOIN player_account_settings settings
+           ON settings.user_id = stats.user_id
+         WHERE stats.game_mode = ? AND stats.season = ?
+           AND COALESCE(settings.account_status, 'ACTIVE') NOT IN (
+             'BANNED', 'SUSPENDED', 'DELETED'
+           )
+       ),
+       target(user_id, account_sort_id, score, player_rank, updated_at) AS (
+         VALUES (?, ?, ?, ?, ?)
+       )
+       SELECT
+         (
+           SELECT COUNT(*) FROM standings above, target
+           WHERE (
+             (target.player_rank NOT IN ('MASTER', 'GRANDWEAVER')
+               AND above.player_rank = target.player_rank)
+             OR (target.player_rank = 'MASTER'
+               AND above.player_rank IN ('MASTER', 'GRANDWEAVER'))
+             OR (target.player_rank = 'GRANDWEAVER'
+               AND above.player_rank = 'GRANDWEAVER')
+           )
+           AND (
+             above.score > target.score
+             OR (above.score = target.score
+               AND above.updated_at < target.updated_at)
+             OR (above.score = target.score
+               AND above.updated_at = target.updated_at
+               AND above.account_sort_id < target.account_sort_id)
+             OR (above.score = target.score
+               AND above.updated_at = target.updated_at
+               AND above.account_sort_id = target.account_sort_id
+               AND above.user_id < target.user_id)
+             OR above.user_id = target.user_id
+           )
+         ) AS rank_position,
+         (
+           SELECT COUNT(*) FROM standings above, target
+           WHERE above.player_rank IN ('MASTER', 'GRANDWEAVER')
+             AND (
+               above.score > target.score
+               OR (above.score = target.score
+                 AND above.updated_at < target.updated_at)
+               OR (above.score = target.score
+                 AND above.updated_at = target.updated_at
+                 AND above.account_sort_id < target.account_sort_id)
+               OR (above.score = target.score
+                 AND above.updated_at = target.updated_at
+                 AND above.account_sort_id = target.account_sort_id
+                 AND above.user_id < target.user_id)
+               OR above.user_id = target.user_id
+             )
+         ) AS master_position,
+         (
+           SELECT candidate.score FROM standings candidate, target
+           WHERE candidate.player_rank IN ('MASTER', 'GRANDWEAVER')
+             AND candidate.user_id <> target.user_id
+             AND candidate.score <= target.score
+           ORDER BY candidate.score DESC, candidate.updated_at ASC,
+                    candidate.account_sort_id ASC, candidate.user_id ASC
+           LIMIT 1
+         ) AS score_below,
+         (
+           SELECT candidate.score FROM standings candidate, target
+           WHERE candidate.player_rank IN ('MASTER', 'GRANDWEAVER')
+             AND candidate.user_id <> target.user_id
+             AND candidate.score >= target.score
+           ORDER BY candidate.score ASC, candidate.updated_at DESC,
+                    candidate.account_sort_id DESC, candidate.user_id DESC
+           LIMIT 1
+         ) AS score_above,
+         (
+           SELECT score FROM (
+             SELECT candidate.score, candidate.updated_at,
+                    candidate.account_sort_id, candidate.user_id
+             FROM standings candidate
+             WHERE candidate.player_rank IN ('MASTER', 'GRANDWEAVER')
+             ORDER BY candidate.score DESC, candidate.updated_at ASC,
+                      candidate.account_sort_id ASC, candidate.user_id ASC
+             LIMIT ${GRANDWEAVER_COUNT}
+           ) grandweavers
+           ORDER BY score ASC, updated_at DESC, account_sort_id DESC,
+                    user_id DESC
+           LIMIT 1
+         ) AS grandweaver_floor`
+    )
+    .bind(
+      ...overrideBindings,
+      gameMode,
+      season,
+      target.user_id,
+      target.account_id ?? MISSING_ACCOUNT_SORT_ID,
+      target.score,
+      target.player_rank,
+      target.updated_at
+    )
+    .first<RankContextRow>()
+  if (!row) throw new Error('rank context could not be calculated')
+
+  const masterEligible = target.score >= MASTER_POINTS
+  const isGrandweaver =
+    masterEligible &&
+    row.master_position > 0 &&
+    row.master_position <= GRANDWEAVER_COUNT
+  const adjustedPosition =
+    [PlayerRank.MASTER, PlayerRank.GRANDWEAVER].includes(target.player_rank) &&
+    row.rank_position > GRANDWEAVER_COUNT
+      ? row.rank_position - GRANDWEAVER_COUNT
+      : row.rank_position
+  return {
+    rankPosition: adjustedPosition,
+    scoreBelow: isGrandweaver ? (row.score_below ?? 0) : 0,
+    scoreAbove: isGrandweaver
+      ? (row.score_above ?? 0)
+      : masterEligible
+        ? (row.grandweaver_floor ?? 0)
+        : 0,
+    displayRank: masterEligible
+      ? isGrandweaver
+        ? PlayerRank.GRANDWEAVER
+        : PlayerRank.MASTER
+      : target.player_rank
+  }
+}
+
 const rankData = (
   rank: PlayerRank,
   stage: PlayerRankStage,
   definition: RankDefinition,
-  score: number
+  score: number,
+  context: RankRewardContext,
+  displayRank = rank
 ) => ({
-  rank,
+  rank: displayRank,
   rankStage: stage,
   requiredRankPoints: nextRankPoints(definition),
-  rankPosition: 0,
+  rankPosition: context.rankPosition,
   score,
-  scoreAbove: 0,
-  scoreBelow: 0
+  scoreAbove: context.scoreAbove,
+  scoreBelow: context.scoreBelow
 })
+
+const grandweaverStatements = (
+  database: D1Database,
+  proposalId: string,
+  gameMode: GameMode,
+  season: number
+): D1PreparedStatement[] => [
+  database
+    .prepare(
+      `UPDATE player_account_stats
+       SET player_rank = 'MASTER'
+       WHERE game_mode = ? AND season = ?
+         AND player_rank IN ('MASTER', 'GRANDWEAVER')
+         AND NOT EXISTS (
+           SELECT 1 FROM player_account_settings settings
+           WHERE settings.user_id = player_account_stats.user_id
+             AND settings.account_status IN ('BANNED', 'SUSPENDED', 'DELETED')
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM multiplayer_match_stats_applied
+           WHERE proposal_id = ?
+         )`
+    )
+    .bind(gameMode, season, proposalId),
+  database
+    .prepare(
+      `UPDATE player_account_stats SET player_rank = 'GRANDWEAVER'
+       WHERE rowid IN (
+         SELECT stats.rowid FROM player_account_stats stats
+         LEFT JOIN game_accounts account ON account.user_id = stats.user_id
+         LEFT JOIN player_account_settings settings
+           ON settings.user_id = stats.user_id
+         WHERE stats.game_mode = ? AND stats.season = ?
+           AND stats.player_rank = 'MASTER'
+           AND COALESCE(settings.account_status, 'ACTIVE') NOT IN (
+             'BANNED', 'SUSPENDED', 'DELETED'
+           )
+         ORDER BY stats.score DESC, stats.updated_at ASC,
+                  COALESCE(account.id, ${MISSING_ACCOUNT_SORT_ID}) ASC,
+                  stats.user_id ASC
+         LIMIT ${GRANDWEAVER_COUNT}
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM multiplayer_match_stats_applied
+         WHERE proposal_id = ?
+       )`
+    )
+    .bind(gameMode, season, proposalId)
+]
 
 /**
  * Applies ranked counters and the source Glicko/RP transition exactly once.
@@ -1177,7 +1423,8 @@ export const applyMatchStats = async (
               .prepare(
                 `SELECT stats.user_id, account.id AS account_id, stats.score,
                       stats.player_rank, stats.player_rank_stage,
-                      stats.player_rank_state, profile.level, profile.xp,
+                      stats.player_rank_state, stats.updated_at,
+                      profile.level, profile.xp,
                       progression.basic_skypass_level
                FROM player_account_stats stats
                LEFT JOIN game_accounts account ON account.user_id = stats.user_id
@@ -1200,7 +1447,8 @@ export const applyMatchStats = async (
               player_rank_state: '[-1,0,0,0]',
               level: null,
               xp: null,
-              basic_skypass_level: null
+              basic_skypass_level: null,
+              updated_at: processedAt
             } satisfies AccountStatsRow)
         : Promise.resolve(null)
     )
@@ -1213,6 +1461,10 @@ export const applyMatchStats = async (
   )
   const statements: D1PreparedStatement[] = []
   const rewards: [Reward[], Reward[]] = [[], []]
+  const transitions: [
+    RankedTransition | undefined,
+    RankedTransition | undefined
+  ] = [undefined, undefined]
 
   for (const player of [0, 1] as const) {
     const userId = userIds[player]
@@ -1235,9 +1487,11 @@ export const applyMatchStats = async (
     let playerRank = stats.player_rank
     let playerRankStage = stats.player_rank_stage
     let playerRankState = stats.player_rank_state
+    let currentDefinition: RankDefinition | undefined
+    let nextDefinition: RankDefinition | undefined
 
     if (canUpdateRank) {
-      const currentDefinition = lookupRankByScore(stats.score)
+      currentDefinition = lookupRankByScore(stats.score)
       const updated = updateRankState(
         outcomes[player],
         oldStates[player]!,
@@ -1252,6 +1506,7 @@ export const applyMatchStats = async (
       playerRank = protectedResult.rank.rank
       playerRankStage = protectedResult.rank.stage
       playerRankState = serializeRankState(protectedResult.state)
+      nextDefinition = protectedResult.rank
 
       if (
         outcomes[player] === 1 &&
@@ -1305,25 +1560,15 @@ export const applyMatchStats = async (
           )
         }
       }
-      rewards[player].push({
-        accountID: stats.account_id ?? 0,
-        type: RewardType.RANK,
-        gameMode: modes[player],
-        rank: {
-          beforeMatch: rankData(
-            stats.player_rank,
-            stats.player_rank_stage,
-            currentDefinition,
-            stats.score
-          ),
-          afterMatch: rankData(
-            playerRank,
-            playerRankStage,
-            protectedResult.rank,
-            score
-          )
-        }
-      })
+    }
+
+    transitions[player] = {
+      score,
+      playerRank,
+      playerRankStage,
+      playerRankState,
+      currentDefinition,
+      nextDefinition
     }
 
     statements.push(
@@ -1366,6 +1611,89 @@ export const applyMatchStats = async (
           season,
           proposalId
         )
+    )
+  }
+
+  const projectedRanks = transitions.flatMap((transition, player) => {
+    const stats = accountStats[player]
+    if (!transition || !stats || !ranked(stats.player_rank)) return []
+    return [
+      {
+        user_id: stats.user_id,
+        account_id: stats.account_id,
+        game_mode: modes[player],
+        score: transition.score,
+        player_rank: transition.playerRank,
+        updated_at: processedAt
+      } satisfies RankProjection
+    ]
+  })
+  const grandweaverModes = new Set<GameMode>()
+
+  for (const player of [0, 1] as const) {
+    const stats = accountStats[player]
+    const transition = transitions[player]
+    if (
+      !stats ||
+      !transition?.currentDefinition ||
+      !transition.nextDefinition ||
+      !isRankedGameMode(modes[player])
+    ) {
+      continue
+    }
+    const afterProjection = projectedRanks.find(
+      projection => projection.user_id === stats.user_id
+    )!
+    const modeProjections = projectedRanks.filter(
+      projection => projection.game_mode === modes[player]
+    )
+    const [beforeContext, afterContext] = await Promise.all([
+      rankContext(database, modes[player], season, stats),
+      winner === undefined
+        ? Promise.resolve({
+            rankPosition: 0,
+            scoreBelow: 0,
+            scoreAbove: 0,
+            displayRank: transition.playerRank
+          } satisfies RankRewardContext)
+        : rankContext(
+            database,
+            modes[player],
+            season,
+            afterProjection,
+            modeProjections
+          )
+    ])
+    rewards[player].push({
+      accountID: stats.account_id ?? 0,
+      type: RewardType.RANK,
+      gameMode: modes[player],
+      rank: {
+        beforeMatch: rankData(
+          stats.player_rank,
+          stats.player_rank_stage,
+          transition.currentDefinition,
+          stats.score,
+          beforeContext
+        ),
+        afterMatch: rankData(
+          transition.playerRank,
+          transition.playerRankStage,
+          transition.nextDefinition,
+          transition.score,
+          afterContext,
+          afterContext.displayRank
+        )
+      }
+    })
+    if (winner !== undefined && transition.score >= MASTER_POINTS) {
+      grandweaverModes.add(modes[player])
+    }
+  }
+
+  for (const mode of grandweaverModes) {
+    statements.push(
+      ...grandweaverStatements(database, proposalId, mode, season)
     )
   }
   statements.push(
