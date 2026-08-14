@@ -444,6 +444,19 @@ and progress are not migrated.
   version, both Conquest modes remained disabled, and D1 had no migrations to
   apply. A read-only production query observed 12 completed matches with
   `changed_db: false` and zero rows written.
+- Ranked match settlement now increments the losing account's source
+  `abandonCount` or `forfeitCount` alongside its ordinary loss, while the
+  existing per-proposal stats receipt prevents a conflicting Durable Object
+  retry from reclassifying or double-counting that result. Milestone
+  `0f2f28a8` passed exact-head release-contract run `31774652207` and all 31
+  game-server unit plus 88 Worker tests before the isolated game-server deploy
+  on 2026-08-13 as version `8d2f46c4-d253-42ab-88ef-f1a7cc1e50e7`.
+  Production protocol-v3 health passed. No migration was required; a read-only
+  D1 aggregate found four ranked stat rows, zero accumulated abandons or
+  forfeits, and zero ranked settlement receipts, with `changed_db: false` and
+  no rows written. The API/web Worker and its entry artifacts remained
+  unchanged at `/assets/index-b1769b84.js` and
+  `/game/cloudflare/assets/index-79a70ba2.js`.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
