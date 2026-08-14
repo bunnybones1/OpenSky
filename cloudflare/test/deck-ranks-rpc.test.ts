@@ -258,6 +258,36 @@ describe('deck-rank RPC compatibility', () => {
     expect(JSON.parse(atob(body.page.after))).toEqual([string1, '0.33333334'])
   })
 
+  it('projects games played as float32 while preserving the integer cursor', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE player_deck_ranks
+       SET win_count = 1, loss_count = 16777216
+       WHERE library_revision = ? AND deck_string = ?`
+    )
+      .bind(CURRENT_DECK_RANK_LIBRARY_REVISION, string1)
+      .run()
+
+    const response = await rpc(
+      'SearchDeckRanks',
+      {
+        req: {},
+        page: {
+          pageSize: 1,
+          sort: [{ column: 'games_played', order: 'DESC' }]
+        }
+      },
+      true
+    )
+    const text = await response.text()
+    expect(text).toContain('"gamesPlayed":16777216')
+    const body = JSON.parse(text) as {
+      page: { after: string }
+      res: Array<{ deckString: string }>
+    }
+    expect(body.res.map(rank => rank.deckString)).toEqual([string1])
+    expect(JSON.parse(atob(body.page.after))).toEqual([string1, '16777217'])
+  })
+
   it('supports exact deck, class, and card-containment searches', async () => {
     expect(
       await (

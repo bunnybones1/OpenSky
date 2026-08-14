@@ -10,7 +10,7 @@ import type {
 } from '@opensky/proto'
 
 import { invalidArgument, notFound } from './errors'
-import { goFloat32Ratio } from './go-numbers'
+import { goFloat32, goFloat32Ratio } from './go-numbers'
 import { identityReferenceFor } from './rpc-principal'
 
 export const CURRENT_DECK_RANK_LIBRARY_REVISION = cardLibrary.sourceSha256
@@ -215,7 +215,10 @@ const deckRank = (row: DeckRankRow): DeckRank => ({
   abandonCount: row.abandon_count,
   tieCount: row.tie_count,
   winRatio: row.win_ratio,
-  gamesPlayed: row.games_played,
+  // PostgreSQL orders and cursor-encodes the integer column, then scans the
+  // response field into Go float32. Keep the row integer for pagination and
+  // normalize only the player-facing wire projection.
+  gamesPlayed: goFloat32(row.games_played),
   score: row.score,
   highestPlayerID: String(row.highest_player_account_id ?? 0),
   highestPlayerAddress: row.highest_player_user_id
