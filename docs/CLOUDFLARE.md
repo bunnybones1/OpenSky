@@ -578,6 +578,21 @@ and progress are not migrated.
   release-safe cache policy. Public Ping, Version, game-mode, and Conquest
   reward probes passed; the reward-readiness audit remained error-free with
   both Conquest modes disabled and no policy-gated reward track activated.
+- Deck-rank game counts now preserve the source Go `float32` wire contract
+  without weakening the exact integer pagination boundary. For example, a D1
+  count of `16,777,217` serializes to the source-faithful player value
+  `16,777,216`, while its keyset cursor retains the exact string
+  `"16777217"`. Milestone `6ddce45a` passed exact-head release-contract run
+  `31807079943` in 8m26s, the 374-test main Worker suite, 230 multiplayer
+  tests, 25 game tests, and 6 analytics tests. It was deployed on 2026-08-14
+  as Worker version `762ba50c-d05d-4f82-9f50-85d044ab96f9`; no migration was
+  required and Cloudflare uploaded no asset changes. The production verifier
+  retained `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Public Ping, Version, game-mode, and Conquest
+  reward probes passed. The read-only reward-readiness audit reported core
+  rewards live, SkyPass `1/1` active, and all policy-gated reward tracks
+  dormant; Cloudflare reported the new version at 100% traffic.
 - Card-library searches now use the source `[id, mana_weight]` keyset cursor by
   default, preserving explicit sort metadata, the one-column unique-key
   direction rule, PostgreSQL null ordering, first/last response cursors, and
