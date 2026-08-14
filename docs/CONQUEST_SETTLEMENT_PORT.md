@@ -123,10 +123,11 @@ run only after that task settles.
   remain false. Setting the operator mode flag to false is still an immediate
   emergency stop for queued tickets and accepted proposals.
 - Player entry uses those same two authorities inside the atomic ticket-spend
-  batch. A disabled mode, missing verification, or exact pool expiry creates no
-  run and leaves the off-chain ticket untouched. An already-active run remains
-  idempotently readable/re-enterable after switch-off, matching the source
-  state-manager contract without stranding another ticket.
+  batch. A disabled mode, missing verification, or the first instant after the
+  inclusive pool end creates no run and leaves the off-chain ticket untouched.
+  An already-active run remains idempotently readable/re-enterable after
+  switch-off, matching the source state-manager contract without stranding
+  another ticket.
 - The original player screen consumes the public source game-mode status RPC
   on the match service's ten-second cadence. Its existing Start and optional
   ticket-purchase controls remain locked until constructed Conquest is
@@ -148,6 +149,26 @@ zero `IN_PROGRESS` Conquest runs, and wrote zero rows. The public
 `GetGameModesStatus` RPC independently reported both `conquestConstructed` and
 `conquestDiscovery` as false. The drain implementation is therefore live, but
 does not create a queue, pool, run, or reward authority by deployment alone.
+
+## Inclusive-boundary rollout proof — 2026-08-13
+
+Commit `eb6f8e56` is deployed as match-service version
+`de1ec737-1892-48dd-8038-f48ac9f27a96`, game-server version
+`f2a7302f-74c0-4d62-9198-c66dcb9dc65a`, and main Worker version
+`ce52d733-0e12-4ac6-8a53-2311f980d9eb`. The unchanged matchmaker remains at
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Deployment verification resolved the
+exact web entry `/assets/index-d976a081.js` and game entry
+`/game/cloudflare/assets/index-79a70ba2.js` with release-safe cache policy.
+
+Migration `0103_conquest_inclusive_pool_end.sql` is the only migration applied
+for this milestone. Read-only `sqlite_master` probes verified that readiness,
+mode-enablement, and settlement guards all use the source-inclusive end
+(`<= pool.ends_at` or `pool.ends_at >= ...` as appropriate), with zero rows
+written. A separate read-only state probe found zero approved queue pools, zero
+`IN_PROGRESS` runs, zero readiness receipts, and zero enabled Conquest modes.
+The public `GetGameModesStatus` RPC independently reported both Conquest modes
+false, and the reward-readiness audit classified the original Conquest reward
+track as `dormant-policy` with zero verified active pools.
 
 ## Remaining authoritative input
 
