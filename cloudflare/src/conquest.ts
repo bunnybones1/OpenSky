@@ -77,6 +77,23 @@ const rewardsForWins = (wins: number) => ({
   gold: wins === 3 ? 1 : 0
 })
 
+const conquestStatsResults = (value: string): unknown[] => {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error('Conquest match progress is malformed')
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Conquest match progress is malformed')
+  }
+
+  // ConquestStats uses PostgreSQL jsonb_object_keys/jsonb_each directly in
+  // the source. It counts every raw object key and only the exact JSON string
+  // "WIN" as a win; unlike ConquestStatus, it never decodes map[uint64].
+  return Object.values(parsed)
+}
+
 export const conquestTreasureProgress = (
   currentPoints: number
 ): ConquestV2TreasureProgress => {
@@ -299,9 +316,7 @@ export class ConquestRepository {
     let discoveryWins = 0
     let constructedWins = 0
     for (const row of rows.results) {
-      const progress = Object.values(
-        parseConquestMatchProgress(row.match_progress)
-      )
+      const progress = conquestStatsResults(row.match_progress)
       const wins = progress.filter(
         value => value === ConquestMatchResult.WIN
       ).length

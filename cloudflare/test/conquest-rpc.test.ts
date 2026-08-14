@@ -444,6 +444,42 @@ describe('source conquest RPC foundation', () => {
     expect(await response.text()).toContain('"constructedWinRate":33.333336')
   })
 
+  it('uses source raw JSONB object semantics for conquest statistics', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at)
+       VALUES ('raw-jsonb-stats', ?, 'COMPLETED', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR', ?, ?, ?)`
+    )
+      .bind(
+        userId,
+        JSON.stringify({
+          'not-a-match-id': 'WIN',
+          '+01': 'WIN',
+          '1': 'LOSS',
+          future: 'FUTURE_VALUE',
+          nested: { result: 'WIN' },
+          nil: null,
+          number: 1
+        }),
+        now,
+        now
+      )
+      .run()
+
+    expect(await (await rpc('ConquestStats', {})).json()).toMatchObject({
+      stats: {
+        constructedTicketsUsed: 1,
+        constructedMatchesPlayed: 7,
+        constructedWinRate: 28.57143,
+        constructedSilverCardsWon: 2,
+        constructedGoldCardsWon: 0
+      }
+    })
+  })
+
   it('matches source typed-map decoding and fails malformed rows closed', async () => {
     const now = new Date().toISOString()
     await expect(
