@@ -684,6 +684,23 @@ and progress are not migrated.
   `/assets/index-d976a081.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
   the release-safe cache policy.
+- Staff match listing now uses the source `[matches.id, ...sort_values]`
+  keyset cursor with `matches.started_at DESC` by default, 20-row default,
+  200-row cap, supported started/ended-time aliases, the source unique-ID
+  direction rule, and PostgreSQL-compatible null ordering. Forward pages remain
+  stable when a match is inserted ahead of the cursor, backward traversal uses
+  the source boundary, and malformed or dual-direction cursors fail closed.
+  Milestone `0b2502ec` passed exact-head release-contract run `31797723483`,
+  the 370-test main Worker suite, and the complete cross-service release
+  contract before deployment on 2026-08-14 as Worker version
+  `a7f73787-bc33-4bea-8fcc-f436439e0d69`. No migration was required. The public
+  Version RPC reported that exact version, and an anonymous `GMListMatches`
+  probe returned `401`. Read-only production D1 checks before and after
+  deployment found 12 matches, all 12 ended, and zero match reviews, with
+  `changed_db: false` and no rows written. Cloudflare reused
+  `/assets/index-a7dda17c.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
