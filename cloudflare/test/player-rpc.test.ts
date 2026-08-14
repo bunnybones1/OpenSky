@@ -1638,6 +1638,48 @@ describe('legacy player RPC compatibility', () => {
     })
   })
 
+  it('lists deck classes from owned heroes with source ordering and fallback semantics', async () => {
+    expect((await rpc('ListUnlockedDeckClasses', {}, false)).status).toBe(401)
+
+    const initial = await rpc('ListUnlockedDeckClasses', {})
+    expect(initial.status).toBe(200)
+    expect(await initial.json()).toEqual({ deckClass: [DeckClass.STR] })
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES
+         (?, 'SW_HERO', 11, 1, 1, 'test', ?, ?),
+         (?, 'SW_HERO', 2, 1, 1, 'test', ?, ?),
+         (?, 'SW_HERO', 99, 1, 1, 'test', ?, ?)`
+    )
+      .bind(
+        userId,
+        now,
+        now,
+        userId,
+        now,
+        now,
+        userId,
+        now,
+        now
+      )
+      .run()
+
+    const unlocked = await rpc('ListUnlockedDeckClasses', {})
+    expect(unlocked.status).toBe(200)
+    expect(await unlocked.json()).toEqual({
+      deckClass: [
+        DeckClass.STR,
+        DeckClass.INT,
+        DeckClass.AGY,
+        DeckClass.UNKNOWN_CLASS
+      ]
+    })
+  })
+
   it('searches private decks with source filters and cursor pagination', async () => {
     const filtered = await rpc('SearchDecks', {
       req: { name: 'STARTER', class: 'STR' }

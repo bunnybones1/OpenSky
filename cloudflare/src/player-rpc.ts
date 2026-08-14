@@ -15,6 +15,7 @@ import type {
   SkypassReward,
   SortBy
 } from '@opensky/proto'
+import { DeckClass } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { allLibraryCards } from './card-library'
@@ -129,22 +130,22 @@ const SUPPLY_ITEM_TYPES = new Set<ItemType>([
   'SW_CARD_BACKS' as ItemType
 ])
 
-const HERO_DECK_CLASS: Record<number, string> = {
-  1: 'STR',
-  2: 'AGY',
-  3: 'STA',
-  4: 'WIS',
-  5: 'STW',
-  6: 'AGW',
-  7: 'HRT',
-  8: 'STH',
-  9: 'HRA',
-  10: 'HRW',
-  11: 'INT',
-  12: 'STI',
-  13: 'AGI',
-  14: 'INW',
-  15: 'HRI'
+const HERO_DECK_CLASS: Record<number, DeckClass> = {
+  1: DeckClass.STR,
+  2: DeckClass.AGY,
+  3: DeckClass.STA,
+  4: DeckClass.WIS,
+  5: DeckClass.STW,
+  6: DeckClass.AGW,
+  7: DeckClass.HRT,
+  8: DeckClass.STH,
+  9: DeckClass.HRA,
+  10: DeckClass.HRW,
+  11: DeckClass.INT,
+  12: DeckClass.STI,
+  13: DeckClass.AGI,
+  14: DeckClass.INW,
+  15: DeckClass.HRI
 }
 
 const HERO_BY_ID: Record<number, string> = {
@@ -1717,6 +1718,30 @@ export class PlayerRpcRepository {
       .bind(new Date().toISOString(), userId, uuid)
       .run()
     return true
+  }
+
+  async unlockedDeckClasses(userId: string): Promise<DeckClass[]> {
+    const heroes = await this.database
+      .prepare(
+        `SELECT token_id FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_HERO'
+         ORDER BY id ASC`
+      )
+      .bind(userId)
+      .all<{ token_id: number }>()
+
+    // The source always includes Ada manually because its legacy inventory did
+    // not persist her. Cloud Weasel does persist Ada, so skip that row to retain
+    // the exact response shape without returning STR twice.
+    return [
+      DeckClass.STR,
+      ...heroes.results
+        .filter(hero => hero.token_id !== 1)
+        .map(
+          hero =>
+            HERO_DECK_CLASS[hero.token_id] || DeckClass.UNKNOWN_CLASS
+        )
+    ]
   }
 
   private async applyDeferredItemUpdates(userId: string): Promise<void> {

@@ -2397,8 +2397,10 @@ export const handleApiRequest = async (
       }
 
       case 'ListUnlockedDeckClasses': {
-        await identityPrincipal(request, env)
-        return json(request, env, { deckClass: ['STR'] })
+        const principal = await identityPrincipal(request, env)
+        return json(request, env, {
+          deckClass: await playerRpc.unlockedDeckClasses(principal.userId)
+        })
       }
 
       case 'DeckClassUnlockLevels': {
