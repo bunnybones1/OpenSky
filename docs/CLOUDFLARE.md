@@ -535,6 +535,22 @@ and progress are not migrated.
   `/assets/index-d976a081.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- Public and authenticated deck-rank reads now use the source
+  `[deck_string, ...sort_values]` keyset cursor, including the historical
+  cards-revision sort metadata, one-column unique-key direction rule, custom
+  market sorts, stable forward pages, and backward traversal. Malformed and
+  dual-direction cursors fail closed. Milestone `1004d38f` passed exact-head
+  release-contract run `31784381998`, the 362-test main Worker suite, and the
+  complete cross-service release contract before deployment on 2026-08-14 as
+  Worker version `1b4a2223-9184-4dba-bdf7-54dab07f92e9`. No migration was
+  required. The public Version and `ListDeckRanks` RPCs reported that exact
+  version and source sort metadata; a read-only production D1 aggregate found
+  zero deck-rank rows and zero applied match receipts, with `changed_db: false`
+  and no rows written. The build emitted `/assets/index-a7dda17c.js` while the
+  exact milestone diff contained no webapp, game, shared, or proto source
+  changes; the game bundle remained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verification covered all six
+  locales and the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
