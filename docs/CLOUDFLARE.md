@@ -600,6 +600,22 @@ and progress are not migrated.
   `/assets/index-d976a081.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- Game-mode status history now preserves the source `[created_at]` ascending
+  keyset cursor, empty default response-sort metadata, 200-row omitted-page
+  limit, 20-row explicit-empty-page default, supported custom sorts, and the
+  one-column unique-key direction rule. Forward pages remain stable when a row
+  is inserted ahead of the cursor, backward traversal uses the source cursor
+  boundary, and malformed or dual-direction requests fail closed. Milestone
+  `94f69bcc` passed exact-head release-contract run `31790546682`, the 365-test
+  main Worker suite, and the complete cross-service release contract before
+  deployment on 2026-08-14 as Worker version
+  `32300393-f712-482e-a68d-3a4f8412bb95`. No migration was required. The public
+  Version RPC reported that exact version, and an anonymous history probe
+  returned `401`. A read-only production D1 aggregate found zero history rows
+  and zero represented modes, with `changed_db: false` and no rows written. The
+  verified deployment emitted `/assets/index-b6aa1ef3.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and covered all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
