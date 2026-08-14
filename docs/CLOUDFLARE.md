@@ -376,6 +376,22 @@ and progress are not migrated.
   projection. Before switching the runtime contract, it advances progress only
   where needed to preserve an existing immutable claim at that reward's source
   level; it never removes a claim or inventory item.
+  Milestones `561c3615` and `1c3cbf30` passed exact-head release-contract runs
+  `31829323330` and `31830328589`; the latter completed in 8m35s after the full
+  380-test main Worker, 230-test multiplayer, 25-test game, and 6-test analytics
+  gates. Migration `0107` advanced exactly one production season-stat row,
+  after which no claim required correction; the one SkyPass claim and 63 item
+  rows were unchanged. Tutorial, match-start, match-XP, and rank-up reward
+  payloads now use the same season-relative level as the source while lifetime
+  XP settlement remains unchanged. The game Worker was deployed as
+  `0a1eab84-8563-4bb3-bc66-5a1a6727af6d`, the match service as
+  `bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the main Worker as
+  `f998dc5d-a854-4d84-870a-d0fb8fc8caf4`, at 100% traffic on 2026-08-14.
+  Public Ping and game health returned 200 with `no-store`, game protocol 3;
+  the deployment verifier retained `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Reward readiness remained SkyPass `1/1` active
+  with every policy-gated track dormant, and D1 reported no pending migrations.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
