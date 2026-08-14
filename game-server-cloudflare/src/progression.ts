@@ -1130,6 +1130,7 @@ export const applyMatchStats = async (
   proposalId: string,
   season: number,
   winner: 0 | 1 | undefined,
+  status: MatchStatus,
   processedAt: string
 ): Promise<MatchStatsReceipt> => {
   const match = await database
@@ -1221,6 +1222,10 @@ export const applyMatchStats = async (
     const won = winner === player ? 1 : 0
     const tied = winner === undefined ? 1 : 0
     const lost = winner !== undefined && winner !== player ? 1 : 0
+    // The source counts a terminal abandonment/forfeit in addition to the
+    // ordinary loss, and only against the losing ranked account.
+    const abandoned = status === MatchStatus.ABANDONED && lost === 1 ? 1 : 0
+    const forfeited = status === MatchStatus.FORFEITED && lost === 1 ? 1 : 0
     const opponent = player === 0 ? 1 : 0
     const canUpdateRank =
       ranked(stats.player_rank) &&
@@ -1328,6 +1333,8 @@ export const applyMatchStats = async (
            SET win_count = win_count + ?,
                loss_count = loss_count + ?,
                tie_count = tie_count + ?,
+               forfeit_count = forfeit_count + ?,
+               abandon_count = abandon_count + ?,
                win_streak = CASE WHEN ? = 1 THEN win_streak + 1 ELSE 0 END,
                loss_streak = CASE WHEN ? = 1 THEN loss_streak + 1 ELSE 0 END,
                score = ?,
@@ -1345,6 +1352,8 @@ export const applyMatchStats = async (
           won,
           lost,
           tied,
+          forfeited,
+          abandoned,
           won,
           lost,
           score,

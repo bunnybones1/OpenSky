@@ -544,6 +544,7 @@ export class DeckRankCoordinator implements DurableObject {
         body.proposalId,
         body.season,
         body.winner as 0 | 1 | undefined,
+        body.status as MatchStatus,
         body.processedAt
       )
       const deckRanks = await applyDeckRanks(

@@ -873,6 +873,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       proposalId,
       126,
       0,
+      MatchStatus.COMPLETED,
       processedAt
     )
     expect(stats.rewards[0]).toEqual([
@@ -928,6 +929,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         proposalId,
         126,
         1,
+        MatchStatus.COMPLETED,
         new Date(Date.now() + 1_000).toISOString()
       )
     ).toMatchObject({ applied: false, rewards: stats.rewards })
@@ -946,6 +948,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       secondProposalId,
       126,
       0,
+      MatchStatus.COMPLETED,
       new Date(Date.now() + 2_000).toISOString()
     )
     expect(repeatedStage.rewards[0].map(reward => reward.type)).toEqual([
@@ -988,6 +991,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       proposalId,
       126,
       0,
+      MatchStatus.COMPLETED,
       processedAt
     )
     expect(result.rewards[0]).toEqual([])
@@ -1013,6 +1017,72 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         .bind(USER_ID_2)
         .first()
     ).toEqual({ win_count: 0, loss_count: 1 })
+  })
+
+  it('tracks source loser abandon and forfeit counters exactly once', async () => {
+    await insertExperiencePlayers()
+    const processedAt = new Date().toISOString()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        1,
+        MatchStatus.ABANDONED,
+        processedAt
+      )
+    ).toMatchObject({ applied: true })
+    // A conflicting alarm retry must return the stored settlement without
+    // reclassifying or incrementing the original loser.
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        0,
+        MatchStatus.FORFEITED,
+        new Date(Date.parse(processedAt) + 1_000).toISOString()
+      )
+    ).toMatchObject({ applied: false })
+
+    const forfeitProposalId = `${proposalId}-forfeit`
+    await insertActiveLedgerRow(forfeitProposalId, [USER_ID_1, USER_ID_2])
+    await applyMatchStats(
+      env.AUTH_DB,
+      forfeitProposalId,
+      126,
+      0,
+      MatchStatus.FORFEITED,
+      new Date(Date.parse(processedAt) + 2_000).toISOString()
+    )
+
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, win_count, loss_count, abandon_count, forfeit_count
+           FROM player_account_stats
+           WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126
+           ORDER BY user_id`
+        ).all()
+      ).results
+    ).toEqual([
+      {
+        user_id: USER_ID_1,
+        win_count: 1,
+        loss_count: 1,
+        abandon_count: 1,
+        forfeit_count: 0
+      },
+      {
+        user_id: USER_ID_2,
+        win_count: 1,
+        loss_count: 1,
+        abandon_count: 0,
+        forfeit_count: 1
+      }
+    ])
   })
 
   it('enforces public gateway and request-boundary safeties', async () => {
@@ -2237,9 +2307,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toBe(1)
 
     const stats = await env.AUTH_DB.prepare(
-      `SELECT user_id, win_count, loss_count, tie_count, win_streak,
-              loss_streak, season, score, player_rank, player_rank_stage,
-              player_rank_state
+      `SELECT user_id, win_count, loss_count, tie_count, forfeit_count,
+              abandon_count, win_streak, loss_streak, season, score,
+              player_rank, player_rank_stage, player_rank_state
        FROM player_account_stats
        WHERE game_mode = 'RANKED_CONSTRUCTED'
        ORDER BY user_id`
@@ -2248,6 +2318,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       win_count: number
       loss_count: number
       tie_count: number
+      forfeit_count: number
+      abandon_count: number
       win_streak: number
       loss_streak: number
       season: number
@@ -2262,6 +2334,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         win_count: 0,
         loss_count: 1,
         tie_count: 0,
+        forfeit_count: 0,
+        abandon_count: 1,
         win_streak: 0,
         loss_streak: 1,
         season: 126,
@@ -2275,6 +2349,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         win_count: 1,
         loss_count: 0,
         tie_count: 0,
+        forfeit_count: 0,
+        abandon_count: 0,
         win_streak: 1,
         loss_streak: 0,
         season: 126,
@@ -2290,6 +2366,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         proposalId,
         126,
         0,
+        MatchStatus.FORFEITED,
         new Date(Date.now() + 1_000).toISOString()
       )
     ).toMatchObject({
