@@ -18,8 +18,8 @@ const MAX_PAGE_SIZE = 200
 const COMPLETE_DECK_SIZE = 30
 const activeCardIds = new Set(cardLibrary.cards.map(card => card.id))
 const SORT_COLUMNS: Record<string, keyof DeckRankRow | undefined> = {
-  cards_revision: undefined,
-  cardsRevision: undefined,
+  cards_revision: 'library_revision',
+  cardsRevision: 'library_revision',
   deck_string: 'deck_string',
   deckString: 'deck_string',
   class: 'deck_class',
@@ -41,6 +41,7 @@ const SORT_COLUMNS: Record<string, keyof DeckRankRow | undefined> = {
 }
 
 interface DeckRankRow {
+  library_revision: string
   deck_string: string
   deck_class: DeckClass
   card_ids_json: string
@@ -69,39 +70,37 @@ const pageSize = (page?: Page) =>
       : DEFAULT_PAGE_SIZE
   )
 
-const cursor = (offset: number) => btoa(JSON.stringify({ offset }))
-
-const cursorOffset = (value?: string) => {
-  if (!value) return 0
-  try {
-    const parsed = JSON.parse(atob(value)) as { offset?: unknown }
-    if (Number.isSafeInteger(parsed.offset) && (parsed.offset as number) >= 0) {
-      return parsed.offset as number
-    }
-  } catch {
-    // Fall through to the source-compatible invalid page response.
-  }
-  throw invalidArgument('page cursor is invalid')
-}
-
 const compareValue = (left: unknown, right: unknown) => {
   if (typeof left === 'number' && typeof right === 'number') return left - right
   return String(left).localeCompare(String(right))
 }
 
-const requestedSort = (page: Page | undefined, search: boolean): SortBy[] => {
-  const sort = page?.sort?.length
+interface DeckRankSortConfig {
+  sort: SortBy[]
+  uniqueOrder: SortBy['order']
+}
+
+interface DeckRankCursor {
+  deckString: string
+  values: string[]
+}
+
+const requestedSort = (
+  page: Page | undefined,
+  search: boolean
+): DeckRankSortConfig => {
+  const requested = page?.sort?.length
     ? page.sort
     : [
         { column: 'score', order: 'DESC' as SortBy['order'] },
-        // cards_revision is constant because reads are scoped to the generated
-        // library SHA; keeping the historical direction has no visible effect.
         {
-          column: 'deck_string',
-          order: 'DESC' as SortBy['order']
+          column: 'cards_revision',
+          order: (search ? 'ASC' : 'DESC') as SortBy['order']
         }
       ]
-  for (const item of sort) {
+  const sort: SortBy[] = []
+  let uniqueOrder = 'DESC' as SortBy['order']
+  for (const item of requested) {
     if (!(item.column in SORT_COLUMNS)) {
       throw invalidArgument(
         `unsupported deck-rank sort column '${item.column}'`
@@ -110,33 +109,99 @@ const requestedSort = (page: Page | undefined, search: boolean): SortBy[] => {
     if (!['ASC', 'DESC'].includes(item.order)) {
       throw invalidArgument('deck-rank sort order is invalid')
     }
+    if (SORT_COLUMNS[item.column] === 'deck_string') {
+      uniqueOrder = item.order
+    } else {
+      sort.push(item)
+    }
   }
-  return sort
+  if (sort.length === 1) uniqueOrder = sort[0].order
+  return { sort, uniqueOrder }
 }
 
-const sortRows = (
-  rows: DeckRankRow[],
-  page: Page | undefined,
-  search: boolean
-) => {
-  const sort = requestedSort(page, search)
-  const uniqueOrder =
-    sort.find(item => SORT_COLUMNS[item.column] === 'deck_string')?.order ??
-    (page?.sort?.length === 1 ? page.sort[0].order : 'DESC')
+const sortRows = (rows: DeckRankRow[], config: DeckRankSortConfig) => {
   return rows.sort((left, right) => {
-    for (const item of sort) {
+    for (const item of config.sort) {
       const column = SORT_COLUMNS[item.column]
       if (!column) continue
       const compared = compareValue(left[column], right[column])
       if (compared) return item.order === 'DESC' ? -compared : compared
     }
-    const deckStringSort = sort.find(
-      item => SORT_COLUMNS[item.column] === 'deck_string'
-    )
-    return (deckStringSort?.order ?? uniqueOrder) === 'ASC'
+    return config.uniqueOrder === 'ASC'
       ? left.deck_string.localeCompare(right.deck_string)
       : right.deck_string.localeCompare(left.deck_string)
   })
+}
+
+const encodeCursor = (row: DeckRankRow, config: DeckRankSortConfig): string =>
+  btoa(
+    JSON.stringify([
+      row.deck_string,
+      ...config.sort.map(item => String(row[SORT_COLUMNS[item.column]!]))
+    ])
+  )
+
+const decodeCursor = (
+  value: string,
+  config: DeckRankSortConfig
+): DeckRankCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== config.sort.length + 1 ||
+      values.some(item => typeof item !== 'string') ||
+      !values[0]
+    ) {
+      throw new Error('cursor shape')
+    }
+    return {
+      deckString: values[0] as string,
+      values: values.slice(1) as string[]
+    }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const cursorValue = (value: string, column: keyof DeckRankRow) => {
+  if (
+    [
+      'score',
+      'win_count',
+      'loss_count',
+      'forfeit_count',
+      'abandon_count',
+      'tie_count',
+      'games_played',
+      'win_ratio'
+    ].includes(column)
+  ) {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed))
+      throw invalidArgument('page cursor is invalid')
+    return parsed
+  }
+  return value
+}
+
+const compareCursor = (
+  row: DeckRankRow,
+  cursor: DeckRankCursor,
+  config: DeckRankSortConfig
+) => {
+  for (const [index, item] of config.sort.entries()) {
+    const column = SORT_COLUMNS[item.column]
+    if (!column) continue
+    const compared = compareValue(
+      row[column],
+      cursorValue(cursor.values[index], column)
+    )
+    if (compared) return item.order === 'DESC' ? -compared : compared
+  }
+  return config.uniqueOrder === 'ASC'
+    ? row.deck_string.localeCompare(cursor.deckString)
+    : cursor.deckString.localeCompare(row.deck_string)
 }
 
 const deckRank = (row: DeckRankRow): DeckRank => ({
@@ -200,7 +265,8 @@ export class DeckRanksRepository {
   ): Promise<DeckRankResult> {
     const result = await this.database
       .prepare(
-        `SELECT ranks.deck_string, ranks.deck_class, ranks.card_ids_json,
+        `SELECT ranks.library_revision, ranks.deck_string, ranks.deck_class,
+                ranks.card_ids_json,
                 ranks.score, ranks.highest_player_user_id,
                 account.id AS highest_player_account_id,
                 ranks.win_count, ranks.loss_count, ranks.forfeit_count,
@@ -217,20 +283,40 @@ export class DeckRanksRepository {
       )
       .bind(CURRENT_DECK_RANK_LIBRARY_REVISION)
       .all<DeckRankRow>()
-    const rows = sortRows(result.results.filter(filter), page, search)
+    if (page?.before && page.after) {
+      throw invalidArgument('before and after cannot be used together')
+    }
+    const config = requestedSort(page, search)
+    const rows = sortRows(result.results.filter(filter), config)
     const size = pageSize(page)
-    // Existing Cloud Weasel list RPCs use before as the forward cursor. Accept
-    // after as well so generated source clients can walk either direction.
-    const offset = cursorOffset(page?.before ?? page?.after)
-    const slice = rows.slice(offset, offset + size)
-    const next = offset + slice.length
+    let start = 0
+    let end = Math.min(rows.length, size)
+    if (page?.before) {
+      const requested = decodeCursor(page.before, config)
+      const next = rows.findIndex(
+        row => compareCursor(row, requested, config) > 0
+      )
+      start = next < 0 ? rows.length : next
+      end = Math.min(rows.length, start + size)
+    } else if (page?.after) {
+      const requested = decodeCursor(page.after, config)
+      const previousEnd = rows.findIndex(
+        row => compareCursor(row, requested, config) >= 0
+      )
+      end = previousEnd < 0 ? rows.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const slice = rows.slice(start, end)
     return {
       page: {
         pageSize: size,
-        before: slice.length ? cursor(offset) : undefined,
-        after: slice.length ? cursor(next) : undefined,
-        hasBefore: next < rows.length,
-        hasAfter: offset > 0
+        hasBefore: end < rows.length,
+        hasAfter: start > 0,
+        sort: config.sort,
+        before: slice.length ? encodeCursor(slice[0], config) : undefined,
+        after: slice.length
+          ? encodeCursor(slice[slice.length - 1], config)
+          : undefined
       },
       rows: slice
     }

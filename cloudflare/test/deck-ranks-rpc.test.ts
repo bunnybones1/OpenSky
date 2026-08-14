@@ -121,15 +121,56 @@ describe('deck-rank RPC compatibility', () => {
     ])
     expect(page1.res[0].highestPlayer.settings).toBeUndefined()
     expect(page1.page.hasBefore).toBe(true)
+    expect(JSON.parse(atob(page1.page.after!))).toEqual([
+      string3,
+      '120',
+      CURRENT_DECK_RANK_LIBRARY_REVISION
+    ])
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_deck_ranks SET score = 150 WHERE library_revision = ? AND deck_string = ?`
+    )
+      .bind(CURRENT_DECK_RANK_LIBRARY_REVISION, string2)
+      .run()
 
     const second = await rpc('ListDeckRanks', {
       page: { pageSize: 1, before: page1.page.after },
       req: {}
     })
-    expect(await second.json()).toMatchObject({
+    const page2 = (await second.json()) as {
+      page: { before: string; hasBefore: boolean; hasAfter: boolean }
+      res: Array<{ deckRank: { deckString: string } }>
+    }
+    expect(page2).toMatchObject({
       page: { hasBefore: false, hasAfter: true },
       res: [{ deckRank: { deckString: string1, score: 80 } }]
     })
+
+    expect(
+      await (
+        await rpc('ListDeckRanks', {
+          page: { pageSize: 1, after: page2.page.before },
+          req: {}
+        })
+      ).json()
+    ).toMatchObject({ res: [{ deckRank: { deckString: string3 } }] })
+
+    expect(
+      (
+        await rpc('ListDeckRanks', {
+          page: { before: page1.page.after, after: page1.page.after },
+          req: {}
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc('ListDeckRanks', {
+          page: { before: 'not-a-cursor' },
+          req: {}
+        })
+      ).status
+    ).toBe(400)
   })
 
   it('preserves source class filtering and excludes zero-score list rows', async () => {
@@ -161,6 +202,30 @@ describe('deck-rank RPC compatibility', () => {
       highestPlayerID: expect.stringMatching(/^\d+$/),
       highestPlayerAddress: `identity:${USER_2}`
     })
+
+    const custom = await rpc(
+      'SearchDeckRanks',
+      {
+        req: {},
+        page: {
+          pageSize: 2,
+          sort: [{ column: 'games_played', order: 'DESC' }]
+        }
+      },
+      true
+    )
+    const customBody = (await custom.json()) as {
+      page: { after: string; sort: Array<{ column: string; order: string }> }
+      res: Array<{ deckString: string; gamesPlayed: number }>
+    }
+    expect(customBody.res.map(rank => rank.deckString)).toEqual([
+      string3,
+      string1
+    ])
+    expect(customBody.page.sort).toEqual([
+      { column: 'games_played', order: 'DESC' }
+    ])
+    expect(JSON.parse(atob(customBody.page.after))).toEqual([string1, '4'])
   })
 
   it('supports exact deck, class, and card-containment searches', async () => {
