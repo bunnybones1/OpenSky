@@ -39,8 +39,9 @@ product description or Cloudflare runtime.
 
 - Enable R2, create `cloud-weasel-game-analytics`, deploy the analytics consumer,
   verify it, and only then deploy the game-server replay producer.
-  The account still returned Cloudflare `10042` on 2026-08-13; the two queues
-  exist, but no producer, consumer, bucket, or analytics Worker is active.
+  A fresh read-only check still returned Cloudflare `10042` on 2026-08-13; the
+  two queues exist with zero producers and zero consumers, but no bucket or
+  analytics Worker is active.
 - External device push has a disabled-by-default OneSignal adapter. Activation
   needs a Cloud Weasel OneSignal app and key; in-app notification delivery stays
   authoritative and independent of the provider.

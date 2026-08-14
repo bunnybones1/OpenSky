@@ -77,6 +77,10 @@ itself.
   drain view admits only canonical `IN_PROGRESS` runs whose pin and complete
   drill/readiness receipts still agree. An explicit mode disable overrides
   draining for emergency shutdown.
+  The 2026-08-13 production rollout deployed that drain path to the match
+  service, matchmaker, and main Worker. Read-only D1 verification found the
+  approval view present with zero approved queue pools and zero in-progress
+  runs, while the public mode RPC kept both Conquest modes false.
   Reviewed staff adapters now perform proposal, approval, and retirement
   without direct SQL, while production retains zero capability grants and zero
   pools until the fork owner supplies and reviews the contents. A separate

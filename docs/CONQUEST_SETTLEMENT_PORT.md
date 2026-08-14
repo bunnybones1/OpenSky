@@ -132,6 +132,22 @@ run only after that task settles.
   explicitly true; loading and status failures are fail-closed without
   replacing the legacy interface.
 
+## Production rollout proof — 2026-08-13
+
+Commit `9a52d001` is deployed as match-service version
+`30ae35dd-c556-4059-9e32-c3e90982a9fb`, matchmaker version
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`, and main Worker version
+`7708d5e6-427f-4a7a-9537-8ab0cf69bd01`. Deployment verification resolved the
+exact web entry `/assets/index-b1769b84.js` and game entry
+`/game/cloudflare/assets/index-79a70ba2.js` with release-safe cache policy.
+
+A read-only production D1 probe confirmed that
+`conquest_approved_queue_pools` is a view, found zero approved queue pools and
+zero `IN_PROGRESS` Conquest runs, and wrote zero rows. The public
+`GetGameModesStatus` RPC independently reported both `conquestConstructed` and
+`conquestDiscovery` as false. The drain implementation is therefore live, but
+does not create a queue, pool, run, or reward authority by deployment alone.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
