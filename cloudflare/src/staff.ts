@@ -23,7 +23,26 @@ interface StatusCountRow {
 
 interface StaffAccountRow {
   user_id: string
+  account_id: number
+  account_name: string
+  created_at: string
   conquests_unlocked: number
+}
+
+type StaffAccountSortValue = string | number
+
+interface AccountSortConfig {
+  sort: Array<{
+    response: SortBy
+    sql: string
+    value: (row: StaffAccountRow) => StaffAccountSortValue
+  }>
+  uniqueOrder: SortBy['order']
+}
+
+interface AccountCursor {
+  accountId: number
+  values: string[]
 }
 
 interface SignalRow {
@@ -110,11 +129,19 @@ const ACCOUNT_STATUSES = new Set<AccountStatus>([
   'TO_DELETE' as AccountStatus,
   'DELETED' as AccountStatus
 ])
-const ACCOUNT_SORT_COLUMNS: Record<string, string> = {
-  id: 'game.id',
-  name: 'settings.name',
-  created_at: 'users.created_at',
-  createdAt: 'users.created_at'
+const ACCOUNT_SORT_COLUMNS: Record<
+  string,
+  | {
+      sql: string
+      value: (row: StaffAccountRow) => StaffAccountSortValue
+      unique?: boolean
+    }
+  | undefined
+> = {
+  id: { sql: 'game.id', value: row => row.account_id, unique: true },
+  name: { sql: 'settings.name', value: row => row.account_name },
+  created_at: { sql: 'users.created_at', value: row => row.created_at },
+  createdAt: { sql: 'users.created_at', value: row => row.created_at }
 }
 const SIGNAL_SORT_COLUMNS: Record<string, string> = {
   score: 'score',
@@ -447,23 +474,102 @@ const sortConquestProgressRows = (
     )
   })
 
-const accountSort = (page?: Page): SortBy[] => {
-  const sort = page?.sort?.length
+const accountSort = (page?: Page): AccountSortConfig => {
+  const requested = page?.sort?.length
     ? page.sort
-    : [
-        { column: 'id', order: 'ASC' as SortBy['order'] },
-        { column: 'name', order: 'ASC' as SortBy['order'] }
-      ]
-  for (const item of sort) {
-    if (!ACCOUNT_SORT_COLUMNS[item.column]) {
-      throw invalidArgument(`unsupported account sort column '${item.column}'`)
+    : [{ column: 'name', order: 'ASC' as SortBy['order'] }]
+  const sort: AccountSortConfig['sort'] = []
+  let uniqueOrder = 'ASC' as SortBy['order']
+  for (const item of requested) {
+    const column = ACCOUNT_SORT_COLUMNS[item.column]
+    if (!column || !['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('account sort is invalid')
     }
-    if (!['ASC', 'DESC'].includes(item.order)) {
-      throw invalidArgument('account sort order is invalid')
+    if (column.unique) {
+      uniqueOrder = item.order
+    } else {
+      sort.push({ response: item, sql: column.sql, value: column.value })
     }
   }
-  return sort
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
 }
+
+const encodeAccountCursor = (row: StaffAccountRow, config: AccountSortConfig) =>
+  btoa(
+    JSON.stringify([
+      String(row.account_id),
+      ...config.sort.map(item => String(item.value(row)))
+    ])
+  )
+
+const decodeAccountCursor = (
+  value: string,
+  config: AccountSortConfig
+): AccountCursor => {
+  try {
+    const raw = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== config.sort.length + 1 ||
+      raw.some(item => typeof item !== 'string') ||
+      !/^[1-9]\d*$/.test(raw[0] as string)
+    ) {
+      throw new Error('cursor shape')
+    }
+    const accountId = Number(raw[0])
+    if (!Number.isSafeInteger(accountId)) throw new Error('cursor value')
+    return { accountId, values: raw.slice(1) as string[] }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const invertOrder = (order: SortBy['order']): SortBy['order'] =>
+  order === 'ASC' ? ('DESC' as SortBy['order']) : ('ASC' as SortBy['order'])
+
+const accountCursorCondition = (
+  cursor: AccountCursor,
+  config: AccountSortConfig,
+  reverse: boolean
+): { sql: string; bindings: Array<string | number> } => {
+  const clauses: string[] = []
+  const bindings: Array<string | number> = []
+  for (let index = 0; index <= config.sort.length; index += 1) {
+    const terms: string[] = []
+    for (let equal = 0; equal < index; equal += 1) {
+      terms.push(`${config.sort[equal].sql} = ?`)
+      bindings.push(cursor.values[equal])
+    }
+    if (index < config.sort.length) {
+      const item = config.sort[index]
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      terms.push(`${item.sql} ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.values[index])
+    } else {
+      const order = reverse
+        ? invertOrder(config.uniqueOrder)
+        : config.uniqueOrder
+      terms.push(`game.id ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.accountId)
+    }
+    clauses.push(`(${terms.join(' AND ')})`)
+  }
+  return { sql: `(${clauses.join(' OR ')})`, bindings }
+}
+
+const accountOrder = (config: AccountSortConfig, reverse: boolean) =>
+  [
+    ...config.sort.map(item => {
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      return `${item.sql} ${order}`
+    }),
+    `game.id ${reverse ? invertOrder(config.uniqueOrder) : config.uniqueOrder}`
+  ].join(', ')
 
 const signalSort = (page?: Page): SortBy[] => {
   const sort = page?.sort?.length
@@ -898,6 +1004,9 @@ export class StaffRepository {
     createdAfter?: string
     conquestsUnlocked?: boolean
   }): Promise<{ page: Page; rows: StaffAccountRow[] }> {
+    if (input.page?.before !== undefined && input.page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
+    }
     const statuses = input.accountStatus ?? []
     if (statuses.some(status => !ACCOUNT_STATUSES.has(status))) {
       throw invalidArgument('accountStatus is invalid')
@@ -955,37 +1064,54 @@ export class StaffRepository {
       }
     }
 
-    const size = pageSize(input.page)
-    const offset = cursorOffset(input.page?.before ?? input.page?.after)
+    const size = Math.min(
+      200,
+      Number.isSafeInteger(input.page?.pageSize) &&
+        (input.page?.pageSize ?? 0) > 0
+        ? input.page!.pageSize!
+        : 20
+    )
     const sort = accountSort(input.page)
-    const order = [
-      ...sort.map(item => `${ACCOUNT_SORT_COLUMNS[item.column]} ${item.order}`),
-      'game.id ASC'
-    ].join(', ')
+    const reverse = input.page?.after !== undefined
+    const cursorValue = reverse ? input.page?.after : input.page?.before
+    if (cursorValue !== undefined) {
+      const condition = accountCursorCondition(
+        decodeAccountCursor(cursorValue, sort),
+        sort,
+        reverse
+      )
+      filters.push(condition.sql)
+      bindings.push(...condition.bindings)
+    }
+    const order = accountOrder(sort, reverse)
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
     const result = await this.database
       .prepare(
-        `SELECT settings.user_id,
+        `SELECT settings.user_id, game.id AS account_id,
+                settings.name AS account_name, users.created_at,
                 ${conquestExpression} AS conquests_unlocked
          FROM player_account_settings settings
          JOIN users ON users.id = settings.user_id
          JOIN game_accounts game ON game.user_id = settings.user_id
          ${where}
          ORDER BY ${order}
-         LIMIT ? OFFSET ?`
+         LIMIT ?`
       )
-      .bind(...bindings, size + 1, offset)
+      .bind(...bindings, size + 1)
       .all<StaffAccountRow>()
+    const hasExtra = result.results.length > size
     const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    if (reverse) rows.reverse()
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort
+        before: rows.length ? encodeAccountCursor(rows[0], sort) : undefined,
+        after: rows.length
+          ? encodeAccountCursor(rows[rows.length - 1], sort)
+          : undefined,
+        hasBefore: reverse ? cursorValue !== undefined : hasExtra,
+        hasAfter: reverse ? hasExtra : cursorValue !== undefined,
+        sort: sort.sort.map(item => item.response)
       },
       rows
     }
