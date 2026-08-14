@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers'
 import {
   ConquestStatus,
+  DeckClass,
   GameMode,
   Hero,
   PlayerRank,
@@ -304,6 +305,37 @@ describe('source conquest RPC foundation', () => {
         .bind(userId)
         .first('count')
     ).toBe(1)
+  })
+
+  it('derives status deck class from the locked hero like the source RPC', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at)
+       VALUES ('derived-deck-class', ?, 'IN_PROGRESS', 1,
+               'CONQUEST_CONSTRUCTED', 'SAMYA', 'STR', '{}', ?)`
+    )
+      .bind(userId, now)
+      .run()
+
+    expect(await (await rpc('ConquestStatus', {})).json()).toMatchObject({
+      conquest: {
+        hero: Hero.SAMYA,
+        deckClass: DeckClass.AGY
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests SET hero = 'UNKNOWN'
+       WHERE entry_key = 'derived-deck-class'`
+    ).run()
+    expect(await (await rpc('ConquestStatus', {})).json()).toMatchObject({
+      conquest: {
+        hero: Hero.UNKNOWN,
+        deckClass: DeckClass.UNKNOWN_CLASS
+      }
+    })
   })
 
   it('serializes concurrent entry without double-spending a ticket', async () => {

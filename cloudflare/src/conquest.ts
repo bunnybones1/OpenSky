@@ -46,7 +46,6 @@ interface ConquestRow {
   nonce: number
   mode: GameMode
   hero: Hero
-  deck_class: DeckClass
   match_progress: string
   created_at: string
   ended_at: string | null
@@ -65,7 +64,9 @@ const conquest = (row: ConquestRow): Conquest => ({
   nonce: row.nonce,
   mode: row.mode,
   hero: row.hero,
-  deckClass: row.deck_class,
+  // The source ConquestStatus RPC never reads a persisted deck class. It
+  // derives the optional projection from the locked hero on every response.
+  deckClass: HERO_DECK_CLASS[row.hero] ?? DeckClass.UNKNOWN_CLASS,
   matchProgress: parseConquestMatchProgress(row.match_progress),
   createdAt: row.created_at,
   ...(row.ended_at ? { endedAt: row.ended_at } : {})
@@ -257,7 +258,7 @@ export class ConquestRepository {
   async status(userId: string): Promise<Conquest | null> {
     const row = await this.database
       .prepare(
-        `SELECT id, user_id, status, nonce, mode, hero, deck_class,
+        `SELECT id, user_id, status, nonce, mode, hero,
                 match_progress, created_at, ended_at
          FROM player_conquests
          WHERE user_id = ? AND status = 'IN_PROGRESS'
@@ -275,7 +276,7 @@ export class ConquestRepository {
   > {
     const rows = await this.database
       .prepare(
-        `SELECT id, user_id, status, nonce, mode, hero, deck_class,
+        `SELECT id, user_id, status, nonce, mode, hero,
                 match_progress, created_at, ended_at
          FROM player_conquests WHERE user_id = ?
          ORDER BY id ASC`
