@@ -2035,7 +2035,7 @@ describe('fail-closed Google identity staff authorization', () => {
     await grantAdmin()
     const response = await rpcAs(ADMIN, 'GMAccountSignalSummaries', {
       accountStatus: [],
-      createdBefore: '2026-08-14T00:00:00Z',
+      createdBefore: '2100-01-01T00:00:00Z',
       page: {
         pageSize: 50,
         sort: [{ column: 'score', order: 'DESC' }]
