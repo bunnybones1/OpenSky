@@ -701,6 +701,24 @@ and progress are not migrated.
   `/assets/index-a7dda17c.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
   the release-safe cache policy.
+- Staff payment listing now uses the source's single `[created_at]` timestamp
+  keyset cursor, `created_at DESC` default, empty response-sort metadata,
+  20-row default, and 200-row cap. The identity adapter also accepts the
+  `createdAt` spelling. Forward pages remain stable when a newer payment is
+  inserted, backward traversal uses the source boundary, and malformed,
+  unsupported-sort, or dual-direction requests fail closed. No secondary ID
+  was invented because the Go service deliberately treats `created_at` as its
+  unique cursor key. Milestone `4f25ffb6` passed exact-head release-contract
+  run `31799130521`, the 370-test main Worker suite, and the complete
+  cross-service release contract before deployment on 2026-08-14 as Worker
+  version `be33f833-c374-41d6-93d6-65baaa8776d3`. No migration was required.
+  The public Version RPC reported that exact version, and an anonymous
+  `GMListPayments` probe returned `401`. Read-only production D1 checks before
+  and after deployment found zero payments and zero immutable payment logs,
+  with `changed_db: false` and no rows written. Cloudflare reused
+  `/assets/index-b6aa1ef3.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
