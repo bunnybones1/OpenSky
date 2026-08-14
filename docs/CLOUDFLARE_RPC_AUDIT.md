@@ -114,6 +114,53 @@ the release-safe cache policy. A public probe kept `Ping` healthy, while an
 unauthenticated `MarkDeckNotNew` request returned `401` and
 `Cache-Control: no-store` without mutating production player data.
 
+### Countdown and direct browser-contract proof — 2026-08-14
+
+Milestone `468293bc` pins the source season calendar and reroll boundaries in
+deterministic Worker tests. The contract covers the exact season anchor,
+season 62, the source's one-second current-season offset, the next-season
+boundary, and daily, weekly, and seasonal quest reroll times. It changes no
+runtime behavior; its purpose is to prevent a plausible-looking replacement
+calendar from drifting away from the original product.
+
+Milestone `e2c49e01` strengthens the browser-consumer gate further. Every one
+of the 103 Worker-backed RPC calls made by the preserved webapp and game must
+now have an exact method literal or endpoint URL in the Worker contract tests;
+comments and descriptive strings do not count. Together with the five guarded
+legacy-wallet non-ports, all 108 original browser calls now have a fail-closed
+implementation disposition. Exact-head GitHub Actions run `31848249281`
+passed the complete release contract in 9m02s. Both milestones are
+release-safety-only and required no production deployment.
+
+### Public account-read access fidelity — 2026-08-14
+
+The browser access audit found three authentication-boundary regressions.
+`GetCardOwnership` ignored its source `accountAddress` argument and returned
+the signed-in viewer's collection even while viewing someone else's account.
+`AccountLeaderboard` required a login although the source allows a public,
+explicit account target. Conversely, `GetStickers` and
+`GetStickersBySeason` had become public even though the source access map
+requires an authenticated player.
+
+Milestone `de1a2322` restores those source contracts. Public targeted account
+reads validate that the requested identity exists and return that identity's
+inventory; a signed-in request without a target still falls back to the
+current player. Missing or unknown targets fail with `400`, and sticker
+metadata again rejects unauthenticated calls with `401`. The release gate now
+compares the source and Worker public/authenticated boundary for every one of
+the 103 Worker-backed browser RPCs, including fall-through aliases.
+
+All 391 main-Worker tests, 231 multiplayer tests, 25 browser/game tests, six
+analytics tests, every source/off-chain audit, and both production builds
+passed. Exact-head GitHub Actions run `31848909429` passed in 9m06s. Worker
+version `1b4e12ed-6dc4-44e4-a76a-49ee08b7032b` was then deployed; the
+fail-closed verifier matched web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy. Read-only production probes returned healthy
+`Ping`, `400` for public collection and leaderboard reads without a target,
+and `401` for an unauthenticated sticker read, all with
+`Cache-Control: no-store`.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
