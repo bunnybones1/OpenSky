@@ -35,8 +35,9 @@ wire messages. It is a separate service from `matchmaker-ts`.
   with Apprentice eligibility, match-status counters, per-season highest-player
   wins, atomic D1 batches, and retry receipts; and
 - retry-safe Conquest progress, points, exact source reward bundles, versioned
-  card selection, immediate Silver settlement, and persisted 24-hour Gold
-  delivery tasks consumed by the API Worker's scheduler.
+  card selection pinned at ticket admission, immediate Silver settlement after
+  the admission window closes, and persisted 24-hour Gold delivery tasks
+  consumed by the API Worker's scheduler.
 
 The gateway, not the browser, is the identity authority. It validates a Google
 session and maps the user to the stable 20-byte game principal for player and

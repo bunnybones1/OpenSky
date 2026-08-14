@@ -401,9 +401,12 @@ and progress are not migrated.
 - The authoritative game Worker records Conquest win/loss/draw results by
   durable match ID and performs the source first-loss/third-win transition with
   a per-proposal retry receipt. Zero-win losses complete immediately. Earned
-  runs draw the exact source bundle from an active versioned pool, grant Silver
-  immediately, persist source-shaped feed receipts, and complete through an
-  immutable settlement receipt.
+  runs draw the exact source bundle from the versioned pool pinned atomically
+  at ticket spend, grant Silver immediately, persist source-shaped feed
+  receipts, and complete through an immutable settlement receipt. The pin
+  remains valid after its admission window closes or the pool retires, so a
+  match crossing that boundary cannot strand the run; unpinned or forged pins
+  fail closed.
 - Authoritative practice completion now advances the source account warm-up
   counter from zero through three. A per-proposal D1 receipt makes Durable
   Object alarm retries idempotent; practice-bot only credits a human win, while

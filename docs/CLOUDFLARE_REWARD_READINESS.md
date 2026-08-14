@@ -70,6 +70,9 @@ itself.
   on inherited ambiguity, and operator plus database guards reject competing
   active windows before they can reach settlement or player reads. Disjoint
   successors can still be approved before the current window is retired.
+  Each ticket spend pins that exact approved version, so an admitted match may
+  safely finish after the window and settle from the immutable reviewed
+  manifest; no successor pool is inferred from the eventual result.
   Reviewed staff adapters now perform proposal, approval, and retirement
   without direct SQL, while production retains zero capability grants and zero
   pools until the fork owner supplies and reviews the contents. A separate

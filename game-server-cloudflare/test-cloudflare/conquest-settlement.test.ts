@@ -24,15 +24,27 @@ const setup = async (
     startsAt?: string
     endsAt?: string
     createdAt?: string
+    runCreatedAt?: string
+    pinPool?: boolean
   } = {}
 ) => {
-  const now = '2026-08-12T11:00:00.000Z'
+  const now = options.runCreatedAt ?? '2026-08-12T11:00:00.000Z'
   const progress: Record<number, ConquestMatchResult> = {}
   for (let index = 0; index < wins; index++) {
     progress[index + 1] = ConquestMatchResult.WIN
   }
   if (wins < 3) progress[wins + 1] = ConquestMatchResult.LOSS
   const statements = [
+    ...(options.pool === false
+      ? []
+      : approvedConquestPoolStatements(env.AUTH_DB, {
+          version: poolVersion,
+          startsAt: options.startsAt ?? '2026-08-12T00:00:00.000Z',
+          endsAt: options.endsAt ?? '2026-08-13T00:00:00.000Z',
+          createdAt: options.createdAt ?? now,
+          silver: options.silver ?? [6, 68],
+          gold: options.gold ?? [136]
+        })),
     env.AUTH_DB.prepare(
       `INSERT INTO users
          (id, display_name, primary_email, created_at, updated_at)
@@ -44,23 +56,17 @@ const setup = async (
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
-          match_progress, created_at, ended_at)
+          match_progress, created_at, ended_at, reward_pool_version)
        VALUES ('settlement-entry', ?, 'REWARDS_PENDING', 1,
-               'CONQUEST_CONSTRUCTED', 'ADA', 'STR', ?, ?, ?)`
-    ).bind(USER_ID, JSON.stringify(progress), now, now)
-  ]
-  if (options.pool !== false) {
-    statements.push(
-      ...approvedConquestPoolStatements(env.AUTH_DB, {
-        version: poolVersion,
-        startsAt: options.startsAt ?? '2026-08-12T00:00:00.000Z',
-        endsAt: options.endsAt ?? '2026-08-13T00:00:00.000Z',
-        createdAt: options.createdAt ?? now,
-        silver: options.silver ?? [6, 68],
-        gold: options.gold ?? [136]
-      })
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR', ?, ?, ?, ?)`
+    ).bind(
+      USER_ID,
+      JSON.stringify(progress),
+      now,
+      now,
+      options.pool === false || options.pinPool === false ? null : poolVersion
     )
-  }
+  ]
   await env.AUTH_DB.batch(statements)
   return env.AUTH_DB.prepare(
     `SELECT id FROM player_conquests WHERE entry_key = 'settlement-entry'`
@@ -681,7 +687,7 @@ describe('source Conquest reward settlement', () => {
     ).run()
   })
 
-  it('fails closed with no active or usable reward pool', async () => {
+  it('fails closed instead of inferring a pool for an unpinned run', async () => {
     const missingPool = await setup(1, { pool: false })
     await expect(
       settlePendingConquest(
@@ -690,7 +696,7 @@ describe('source Conquest reward settlement', () => {
         SETTLED_AT,
         sequenceDraw(0)
       )
-    ).rejects.toThrow('no active Conquest reward pool')
+    ).rejects.toThrow('Conquest run has no pinned reward pool')
     expect((await inventory()).results).toEqual([])
     expect(
       await env.AUTH_DB.prepare(
@@ -734,8 +740,34 @@ describe('source Conquest reward settlement', () => {
     })
   })
 
-  it('fails closed for an expired approved pool', async () => {
-    const expired = await setup(1, {
+  it('settles from the immutable admission pool after its window closes', async () => {
+    const admitted = await setup(1, {
+      startsAt: '2026-08-10T00:00:00.000Z',
+      endsAt: '2026-08-11T00:00:00.000Z',
+      createdAt: '2026-08-10T01:00:00.000Z',
+      runCreatedAt: '2026-08-10T12:00:00.000Z'
+    })
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED' WHERE version = ?`
+    )
+      .bind(poolVersion)
+      .run()
+    await expect(
+      settlePendingConquest(
+        env.AUTH_DB,
+        admitted!.id,
+        SETTLED_AT,
+        sequenceDraw(0)
+      )
+    ).resolves.toMatchObject({
+      applied: true,
+      poolVersion,
+      silverCardIds: [6]
+    })
+  })
+
+  it('rejects a pool pin whose window never admitted the run', async () => {
+    const invalidPin = await setup(1, {
       startsAt: '2026-08-10T00:00:00.000Z',
       endsAt: '2026-08-11T00:00:00.000Z',
       createdAt: '2026-08-10T01:00:00.000Z'
@@ -743,11 +775,25 @@ describe('source Conquest reward settlement', () => {
     await expect(
       settlePendingConquest(
         env.AUTH_DB,
-        expired!.id,
+        invalidPin!.id,
         SETTLED_AT,
         sequenceDraw(0)
       )
-    ).rejects.toThrow('no active Conquest reward pool')
+    ).rejects.toThrow(
+      'Conquest run was not admitted by its pinned reward pool'
+    )
+    expect((await inventory()).results).toEqual([])
+  })
+
+  it('prevents changing the reward promise after ticket admission', async () => {
+    const conquest = await setup(1)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquests SET reward_pool_version = NULL WHERE id = ?`
+      )
+        .bind(conquest!.id)
+        .run()
+    ).rejects.toThrow('Conquest reward pool pin is immutable')
   })
 
   it('rejects an invalid card before a pool can be approved', async () => {

@@ -245,12 +245,19 @@ describe('source conquest RPC foundation', () => {
     })
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT balance FROM player_items
-         WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET' AND token_id = 2`
+        `SELECT
+           (SELECT balance FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+              AND token_id = 2) AS balance,
+           (SELECT reward_pool_version FROM player_conquests
+            WHERE user_id = ? AND status = 'IN_PROGRESS') AS reward_pool_version`
       )
-        .bind(userId)
-        .first('balance')
-    ).toBe(1)
+        .bind(userId, userId)
+        .first()
+    ).toEqual({
+      balance: 1,
+      reward_pool_version: readiness.poolVersion
+    })
 
     await env.AUTH_DB.prepare(
       `UPDATE game_mode_status SET enabled = 0

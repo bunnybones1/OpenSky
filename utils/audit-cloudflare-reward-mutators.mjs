@@ -62,11 +62,16 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
   'cloudflare/src/conquest.ts': {
     count: 1,
     disposition: 'atomic-conquest-entry-spend',
-    evidenceFiles: ['cloudflare/migrations/0024_conquest_foundation.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0024_conquest_foundation.sql',
+      'cloudflare/migrations/0101_conquest_entry_reward_pool_pin.sql'
+    ],
     evidence: [
       'player_conquests',
       'entry_key TEXT NOT NULL UNIQUE',
       'player_conquests_active_user_idx',
+      'ADD COLUMN reward_pool_version TEXT',
+      'Conquest reward pool pin is immutable',
       'database.batch'
     ]
   },
@@ -291,7 +296,8 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     disposition: 'receipt-backed-conquest-settlement',
     evidenceFiles: [
       'cloudflare/migrations/0027_conquest_reward_settlement.sql',
-      'cloudflare/migrations/0075_conquest_settlement_receipts.sql'
+      'cloudflare/migrations/0075_conquest_settlement_receipts.sql',
+      'cloudflare/migrations/0101_conquest_entry_reward_pool_pin.sql'
     ],
     evidence: [
       'player_conquest_settlements',
@@ -301,6 +307,8 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       'Conquest settlement receipts are immutable',
       'Used Conquest reward pool cards are immutable',
       'Conquest Gold delivery entitlements are immutable',
+      'CREATE VIEW conquest_approved_reward_pools',
+      'conquest.reward_pool_version = NEW.pool_version',
       'database.batch'
     ]
   },

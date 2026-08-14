@@ -326,11 +326,11 @@ const provisionReceiptBackedConquestReadiness = async () => {
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
-          match_progress, created_at, ended_at)
+          match_progress, created_at, ended_at, reward_pool_version)
        VALUES ('readiness-drill:match-service-test', ?, 'REWARDS_PENDING', 1,
                'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
-               '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
-    ).bind(READINESS_USER_ID, settledAt, settledAt)
+               '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?, ?)`
+    ).bind(READINESS_USER_ID, settledAt, settledAt, readinessPoolVersion)
   ])
   const conquest = await env.AUTH_DB.prepare(
     `SELECT id FROM player_conquests

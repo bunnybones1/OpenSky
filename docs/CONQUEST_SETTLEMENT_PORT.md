@@ -40,8 +40,8 @@ run only after that task settles.
 - Event-2 treasure points and their retry receipt are independent of card
   settlement.
 - Production Conquest modes are false in both the match service and API status.
-- Versioned Silver/Gold pool storage fails closed for missing, expired, or
-  malformed pools.
+- Versioned Silver/Gold pool storage fails closed for missing, unapproved, or
+  malformed pools and for new admission at the exact expiry boundary.
 - A pool must start as `DRAFT`, freeze the exact ordered Silver/Gold card
   manifest and counts in an immutable proposal receipt, receive independent
   second-actor approval, and only then transition to `ACTIVE`. Settlement,
@@ -54,6 +54,12 @@ run only after that task settles.
   This permits independently reviewed, disjoint successors to be scheduled
   before the current window is retired. Deterministic read ordering is defense
   in depth, not permission to schedule competing active pools.
+- Ticket spend atomically pins the exact verified pool version that authorized
+  the run. That immutable reward promise lets an authoritative match cross the
+  queue-expiry boundary and still settle from the reviewed manifest, even
+  after the pool is retired. An unpinned pre-migration row or a pin whose
+  window did not admit the run fails closed; settlement never chooses a later
+  pool after seeing the result.
 - Cloudflare-only staff adapters list, atomically propose, independently
   activate, and retire those pools without direct production SQL. Proposal,
   activation, and retirement use separate dormant capabilities, idempotency
@@ -159,7 +165,8 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Differential bundle counts for 0, 1, 2, and 3 wins.
 - Independent Silver draws, sorted settlement token IDs, and weekly-Gold-only
   selection.
-- Empty, expired, or malformed pools fail closed without changing the run.
+- Missing, unapproved, malformed, or invalidly pinned pools fail closed without
+  changing the run; a valid admission pin remains settleable after expiry.
 - Malformed persisted progress fails before player state, receipts, inventory,
   feed events, or delayed deliveries can change.
 - Concurrent and alarm-retry settlement grants exactly one bundle.

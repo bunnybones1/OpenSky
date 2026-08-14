@@ -141,16 +141,30 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'staff_conquest_v2_reward_schedule_permissions'
     ].join('\n'),
     settlement: [
-      'FROM conquest_approved_active_reward_pools',
-      'SELECT 1 FROM conquest_approved_active_reward_pools',
-      'ORDER BY starts_at DESC, version DESC'
+      'FROM conquest_approved_reward_pools',
+      'conquest.reward_pool_version',
+      'Conquest run has no pinned reward pool',
+      'Date.parse(pool.ends_at) <= admittedAt',
+      'AND reward_pool_version = ?'
+    ].join('\n'),
+    settlementPinning: [
+      'ADD COLUMN reward_pool_version TEXT',
+      'CREATE VIEW conquest_approved_reward_pools',
+      "pool.status IN ('ACTIVE', 'RETIRED')",
+      'CREATE TRIGGER player_conquests_reward_pool_pin_no_update',
+      'conquest.reward_pool_version = NEW.pool_version',
+      "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
+      'pool.ends_at > conquest.created_at',
+      'Conquest reward pool pin is immutable'
     ].join('\n'),
     api: [
       'FROM conquest_approved_active_reward_pools',
       'FROM game_mode_status',
       "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
       'FROM conquest_verified_queue_pools verified',
-      'verified.starts_at <= ? AND verified.ends_at > ?'
+      'verified.starts_at <= ? AND verified.ends_at > ?',
+      'reward_pool_version',
+      'verified.pool_version'
     ].join('\n'),
     playerConquest: [
       'useGameModesStatus()',
@@ -194,6 +208,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'v2ScheduleOperations',
     'staff',
     'settlement',
+    'settlementPinning',
     'api',
     'playerConquest',
     'playerConquestButton',

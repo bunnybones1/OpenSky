@@ -55,11 +55,11 @@ export const provisionVerifiedConquestDrill = async (
       .prepare(
         `INSERT INTO player_conquests
            (entry_key, user_id, status, nonce, mode, hero, deck_class,
-            match_progress, created_at, ended_at)
+            match_progress, created_at, ended_at, reward_pool_version)
          VALUES (?, ?, 'REWARDS_PENDING', 1, 'CONQUEST_CONSTRUCTED', 'ADA',
-                 'STR', '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
+                 'STR', '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?, ?)`
       )
-      .bind(entryKey, drillUserId, settledAt, settledAt)
+      .bind(entryKey, drillUserId, settledAt, settledAt, poolVersion)
   ])
 
   const conquest = await database

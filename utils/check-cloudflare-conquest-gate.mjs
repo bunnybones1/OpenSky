@@ -286,12 +286,30 @@ export const conquestGateErrors = (config, evidence = {}) => {
   }
   if (evidence.settlement !== undefined) {
     for (const token of [
-      'FROM conquest_approved_active_reward_pools',
-      'SELECT 1 FROM conquest_approved_active_reward_pools',
-      'ORDER BY starts_at DESC, version DESC'
+      'FROM conquest_approved_reward_pools',
+      'conquest.reward_pool_version',
+      'Conquest run has no pinned reward pool',
+      'Date.parse(pool.ends_at) <= admittedAt',
+      'AND reward_pool_version = ?'
     ]) {
       if (!evidence.settlement.includes(token)) {
         errors.push(`Conquest settlement lost approved-pool gate: ${token}`)
+      }
+    }
+  }
+  if (evidence.settlementPinning !== undefined) {
+    for (const token of [
+      'ADD COLUMN reward_pool_version TEXT',
+      'CREATE VIEW conquest_approved_reward_pools',
+      "pool.status IN ('ACTIVE', 'RETIRED')",
+      'CREATE TRIGGER player_conquests_reward_pool_pin_no_update',
+      'conquest.reward_pool_version = NEW.pool_version',
+      "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
+      'pool.ends_at > conquest.created_at',
+      'Conquest reward pool pin is immutable'
+    ]) {
+      if (!evidence.settlementPinning.includes(token)) {
+        errors.push(`Conquest settlement pinning is missing: ${token}`)
       }
     }
   }
@@ -301,7 +319,9 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'FROM game_mode_status',
       "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
       'FROM conquest_verified_queue_pools verified',
-      'verified.starts_at <= ? AND verified.ends_at > ?'
+      'verified.starts_at <= ? AND verified.ends_at > ?',
+      'reward_pool_version',
+      'verified.pool_version'
     ]) {
       if (!evidence.api.includes(token)) {
         errors.push(`Conquest player API lost admission gate: ${token}`)
@@ -401,6 +421,7 @@ const main = async () => {
     staff,
     cardLibrary,
     settlement,
+    settlementPinning,
     api,
     playerConquest,
     playerConquestButton,
@@ -511,6 +532,15 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0101_conquest_entry_reward_pool_pin.sql'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
     readFile(
       path.join(root, 'webapp', 'src', 'PlayPage', 'Conquest', 'Conquest.tsx'),
@@ -561,6 +591,7 @@ const main = async () => {
     staff,
     cardLibrary,
     settlement,
+    settlementPinning,
     api,
     playerConquest,
     playerConquestButton,

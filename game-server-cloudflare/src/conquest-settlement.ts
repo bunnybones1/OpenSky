@@ -28,6 +28,8 @@ interface PendingConquestRow {
   status: ConquestStatus
   match_progress: string
   account_id: number | null
+  reward_pool_version: string | null
+  created_at: string
 }
 
 interface ConquestMatchRow {
@@ -221,27 +223,25 @@ const existingReceipt = async (
     : undefined
 }
 
-const activePool = async (
+const pinnedPool = async (
   database: D1Database,
-  at: string
+  version: string
 ): Promise<{ pool: PoolRow; silver: number[]; gold: number[] }> => {
   const pool = await database
     .prepare(
       `SELECT version, starts_at, ends_at
-       FROM conquest_approved_active_reward_pools
-       WHERE starts_at <= ? AND ends_at >= ?
-       ORDER BY starts_at DESC, version DESC
-       LIMIT 1`
+       FROM conquest_approved_reward_pools
+       WHERE version = ?`
     )
-    .bind(at, at)
+    .bind(version)
     .first<PoolRow>()
-  if (!pool) throw new Error('no active Conquest reward pool')
+  if (!pool) throw new Error('pinned Conquest reward pool is not approved')
   if (
     !Number.isFinite(Date.parse(pool.starts_at)) ||
     !Number.isFinite(Date.parse(pool.ends_at)) ||
     Date.parse(pool.starts_at) >= Date.parse(pool.ends_at)
   ) {
-    throw new Error('active Conquest reward pool is malformed')
+    throw new Error('pinned Conquest reward pool is malformed')
   }
   const rows = await database
     .prepare(
@@ -263,7 +263,7 @@ const activePool = async (
       rows.results.filter(row => row.item_type === ItemType.SW_GOLD_CARDS)
         .length
   ) {
-    throw new Error('active Conquest reward pool contains an invalid card')
+    throw new Error('pinned Conquest reward pool contains an invalid card')
   }
   return {
     pool,
@@ -291,7 +291,8 @@ export const settlePendingConquest = async (
   const conquest = await database
     .prepare(
       `SELECT conquest.id, conquest.user_id, conquest.status,
-              conquest.match_progress, account.id AS account_id
+              conquest.match_progress, conquest.reward_pool_version,
+              conquest.created_at, account.id AS account_id
        FROM player_conquests conquest
        LEFT JOIN game_accounts account ON account.user_id = conquest.user_id
        WHERE conquest.id = ?`
@@ -307,7 +308,21 @@ export const settlePendingConquest = async (
   if (bundle.silver < 1) {
     throw new Error('Conquest run has no settleable reward bundle')
   }
-  const { pool, silver, gold } = await activePool(database, settledAt)
+  if (!conquest.reward_pool_version) {
+    throw new Error('Conquest run has no pinned reward pool')
+  }
+  const { pool, silver, gold } = await pinnedPool(
+    database,
+    conquest.reward_pool_version
+  )
+  const admittedAt = Date.parse(conquest.created_at)
+  if (
+    !Number.isFinite(admittedAt) ||
+    Date.parse(pool.starts_at) > admittedAt ||
+    Date.parse(pool.ends_at) <= admittedAt
+  ) {
+    throw new Error('Conquest run was not admitted by its pinned reward pool')
+  }
   if (silver.length < 1) throw new Error('Conquest Silver reward pool is empty')
   if (bundle.gold > 0 && gold.length < 1) {
     throw new Error('Conquest Gold reward pool is empty')
@@ -362,13 +377,16 @@ export const settlePendingConquest = async (
                 'PREPARING', NULL
          FROM player_conquests
          WHERE id = ? AND status = 'REWARDS_PENDING'
+           AND reward_pool_version = ?
            AND NOT EXISTS (
              SELECT 1 FROM player_conquest_settlements WHERE conquest_id = ?
            )
            AND EXISTS (
-             SELECT 1 FROM conquest_approved_active_reward_pools
-             WHERE version = ?
-               AND starts_at <= ? AND ends_at >= ?
+             SELECT 1 FROM conquest_approved_reward_pools
+             WHERE conquest_approved_reward_pools.version =
+                   player_conquests.reward_pool_version
+               AND starts_at <= player_conquests.created_at
+               AND ends_at > player_conquests.created_at
            )`
       )
       .bind(
@@ -382,10 +400,8 @@ export const settlePendingConquest = async (
         JSON.stringify(goldTokenIds),
         settledAt,
         conquestId,
-        conquestId,
         pool.version,
-        settledAt,
-        settledAt
+        conquestId
       )
   ]
   for (const grant of grants.values()) {

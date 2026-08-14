@@ -144,9 +144,14 @@ export class ConquestRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_conquests
              (entry_key, user_id, status, nonce, mode, hero, deck_class,
-              match_progress, created_at)
-           SELECT ?, ?, 'IN_PROGRESS', ?, 'CONQUEST_CONSTRUCTED', ?, ?, '{}', ?
-           WHERE EXISTS (
+              match_progress, created_at, reward_pool_version)
+           SELECT ?, ?, 'IN_PROGRESS', ?, 'CONQUEST_CONSTRUCTED', ?, ?, '{}',
+                  ?, verified.pool_version
+           FROM conquest_verified_queue_pools verified
+           JOIN conquest_approved_active_reward_pools approved
+             ON approved.version = verified.pool_version
+           WHERE verified.starts_at <= ? AND verified.ends_at > ?
+             AND EXISTS (
              SELECT 1 FROM player_account_stats
              WHERE user_id = ?
                AND player_rank IN (
@@ -159,13 +164,9 @@ export class ConquestRepository {
            ) AND EXISTS (
              SELECT 1 FROM game_mode_status
              WHERE game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1
-           ) AND EXISTS (
-             SELECT 1
-             FROM conquest_verified_queue_pools verified
-             JOIN conquest_approved_active_reward_pools approved
-               ON approved.version = verified.pool_version
-             WHERE verified.starts_at <= ? AND verified.ends_at > ?
-           )`
+           )
+           ORDER BY verified.starts_at DESC, verified.pool_version DESC
+           LIMIT 1`
         )
         .bind(
           entryKey,
@@ -174,10 +175,10 @@ export class ConquestRepository {
           hero,
           deckClass,
           createdAt,
-          userId,
-          userId,
           createdAt,
-          createdAt
+          createdAt,
+          userId,
+          userId
         ),
       this.database
         .prepare(
