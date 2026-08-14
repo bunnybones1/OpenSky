@@ -196,6 +196,47 @@ export const extractBrowserRpcCalls = (
 export const browserMethodToRpc = method =>
   method.length > 0 ? `${method[0].toUpperCase()}${method.slice(1)}` : method
 
+/**
+ * Finds reviewed RPC names used as exact test literals or complete WebRPC
+ * endpoint URLs. Comments and descriptive strings cannot satisfy the gate.
+ */
+export const extractRpcTestReferences = (source, knownRpcs) => {
+  const file = ts.createSourceFile(
+    'contract.test.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  )
+  const known = new Set(knownRpcs)
+  const methods = new Set()
+  const visit = node => {
+    if (ts.isStringLiteralLike(node)) {
+      if (known.has(node.text)) methods.add(node.text)
+      const endpoint = node.text.match(
+        /\/rpc\/SkyWeaverAPI\/([A-Za-z][A-Za-z0-9]*)(?:[?#].*)?$/
+      )?.[1]
+      if (endpoint && known.has(endpoint)) methods.add(endpoint)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return [...methods].sort()
+}
+
+export const browserRpcTestAuditErrors = ({
+  browserMethods,
+  testedRpcs,
+  reviewedNonPorts = REVIEWED_BROWSER_RPC_NON_PORTS
+}) => {
+  const tested = new Set(testedRpcs)
+  const nonPorts = new Set(Object.keys(reviewedNonPorts))
+  return browserMethods
+    .map(browserMethodToRpc)
+    .filter(rpc => !nonPorts.has(rpc) && !tested.has(rpc))
+    .map(rpc => `browser Worker RPC has no direct contract-test reference: ${rpc}`)
+}
+
 export const browserRpcAuditErrors = ({
   browserMethods,
   sourceMethods,
@@ -260,7 +301,7 @@ const main = async () => {
     path.dirname(new URL(import.meta.url).pathname),
     '..'
   )
-  const [browserFiles, rpcFiles, gateway] = await Promise.all([
+  const [browserFiles, rpcFiles, gateway, testFiles] = await Promise.all([
     Promise.all([
       sourceFiles(path.join(root, 'webapp/src')),
       sourceFiles(path.join(root, 'game/src'))
@@ -270,7 +311,8 @@ const main = async () => {
         .filter(file => file.endsWith('.go') && !file.endsWith('_test.go'))
         .sort()
     ),
-    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
+    sourceFiles(path.join(root, 'cloudflare/test'))
   ])
   const browserMethods = new Set()
   for (const file of browserFiles) {
@@ -294,11 +336,27 @@ const main = async () => {
     )
   }
   const methods = [...browserMethods].sort()
-  const errors = browserRpcAuditErrors({
-    browserMethods: methods,
-    sourceMethods,
-    workerMethods: extractTsRpcCases(gateway)
-  })
+  const rpcMethods = methods.map(browserMethodToRpc)
+  const testedRpcs = new Set()
+  for (const file of testFiles) {
+    for (const rpc of extractRpcTestReferences(
+      await readFile(file, 'utf8'),
+      rpcMethods
+    )) {
+      testedRpcs.add(rpc)
+    }
+  }
+  const errors = [
+    ...browserRpcAuditErrors({
+      browserMethods: methods,
+      sourceMethods,
+      workerMethods: extractTsRpcCases(gateway)
+    }),
+    ...browserRpcTestAuditErrors({
+      browserMethods: methods,
+      testedRpcs
+    })
+  ]
   if (errors.length) {
     for (const error of errors) {
       process.stderr.write(`Browser RPC audit: ${error}\n`)
@@ -317,8 +375,9 @@ const main = async () => {
       `${JSON.stringify(
         {
           browserMethods: methods,
-          rpcMethods: methods.map(browserMethodToRpc),
-          reviewedNonPorts: nonPorts.map(browserMethodToRpc)
+          rpcMethods,
+          reviewedNonPorts: nonPorts.map(browserMethodToRpc),
+          testedWorkerRpcs: [...testedRpcs].sort()
         },
         null,
         2
@@ -327,7 +386,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    `All ${methods.length} browser RPC calls have Worker handlers or reviewed identity dispositions; ${nonPorts.length} legacy calls are guarded non-ports\n`
+    `All ${methods.length} browser RPC calls have Worker handlers or reviewed identity dispositions; ${methods.length - nonPorts.length} Worker-backed calls have direct contract-test references and ${nonPorts.length} legacy calls are guarded non-ports\n`
   )
 }
 

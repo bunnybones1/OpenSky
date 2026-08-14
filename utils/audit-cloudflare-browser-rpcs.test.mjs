@@ -4,7 +4,9 @@ import test from 'node:test'
 import {
   browserMethodToRpc,
   browserRpcAuditErrors,
-  extractBrowserRpcCalls
+  browserRpcTestAuditErrors,
+  extractBrowserRpcCalls,
+  extractRpcTestReferences
 } from './audit-cloudflare-browser-rpcs.mjs'
 
 test('extracts real webapp and game RPC calls without comments or properties', () => {
@@ -40,6 +42,34 @@ test('fails when a preserved browser call has no Worker handler', () => {
       reviewedBrowserRpcs: new Set(['GetAccount', 'ListQuests'])
     }),
     ['browser source RPC has no Worker handler: ListQuests']
+  )
+})
+
+test('extracts exact method and endpoint test references without comment noise', () => {
+  assert.deepEqual(
+    extractRpcTestReferences(
+      `
+        rpc('GetAccount')
+        new Request('https://example.test/api/rpc/SkyWeaverAPI/ListQuests')
+        const description = 'GetFeed returns the source page'
+        // rpc('GetSession')
+      `,
+      new Set(['GetAccount', 'GetFeed', 'GetSession', 'ListQuests'])
+    ),
+    ['GetAccount', 'ListQuests']
+  )
+})
+
+test('requires a direct contract-test reference for every Worker-backed browser call', () => {
+  assert.deepEqual(
+    browserRpcTestAuditErrors({
+      browserMethods: ['getAccount', 'listQuests', 'requestAccountDeletion'],
+      testedRpcs: ['GetAccount'],
+      reviewedNonPorts: {
+        RequestAccountDeletion: 'Google OIDC step-up deletion flow'
+      }
+    }),
+    ['browser Worker RPC has no direct contract-test reference: ListQuests']
   )
 })
 
