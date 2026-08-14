@@ -32,7 +32,8 @@ export const conquestPoolCatalogErrors = (poolActivation, cardLibrary) => {
   } catch {
     return ['generated Conquest card catalog is not valid JSON']
   }
-  if (!Array.isArray(cards)) return ['generated Conquest card catalog is missing']
+  if (!Array.isArray(cards))
+    return ['generated Conquest card catalog is missing']
   const generated = cards
     .map(card => card?.id)
     .filter(cardId => Number.isSafeInteger(cardId))
@@ -143,10 +144,46 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'createdByUserId === actorUserId',
       'cardManifest does not match proposal',
       "'x-cloud-weasel-operation-key'",
-      "operation_key, operation, pool_version, actor_user_id"
+      'operation_key, operation, pool_version, actor_user_id'
     ]) {
       if (!evidence.poolOperations.includes(token)) {
         errors.push(`Conquest pool operations adapter is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.readinessOperationsMigration !== undefined) {
+    for (const token of [
+      'CREATE TABLE staff_conquest_readiness_permissions',
+      "permission = 'VERIFY'",
+      'CREATE TABLE staff_conquest_readiness_operations',
+      'DROP VIEW conquest_verified_queue_pools',
+      "operation.status = 'APPLIED'",
+      'CREATE TRIGGER conquest_queue_readiness_operation_guard',
+      'reviewed Conquest readiness operation required',
+      'CREATE TRIGGER staff_conquest_readiness_operation_apply_guard',
+      'CREATE TABLE staff_conquest_readiness_audit',
+      'staff Conquest readiness audit rows are immutable'
+    ]) {
+      if (!evidence.readinessOperationsMigration.includes(token)) {
+        errors.push(
+          `Conquest readiness operations migration is missing: ${token}`
+        )
+      }
+    }
+  }
+  if (evidence.readinessOperations !== undefined) {
+    for (const token of [
+      'FROM conquest_verified_drill_receipts drill',
+      'LEFT JOIN conquest_approved_active_reward_pools approved',
+      'Conquest readiness receipt confirmation does not match',
+      'active verified Conquest drill evidence required',
+      'INSERT INTO conquest_queue_readiness',
+      "'x-cloud-weasel-operation-key'"
+    ]) {
+      if (!evidence.readinessOperations.includes(token)) {
+        errors.push(
+          `Conquest readiness operations adapter is missing: ${token}`
+        )
       }
     }
   }
@@ -211,6 +248,14 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
     for (const token of [
+      'requireConquestReadinessWrite(',
+      'staff_conquest_readiness_permissions'
+    ]) {
+      if (!evidence.staff.includes(token)) {
+        errors.push(`Conquest readiness staff authority is missing: ${token}`)
+      }
+    }
+    for (const token of [
       'requireConquestV2RewardScheduleWrite(',
       'staff_conquest_v2_reward_schedule_permissions'
     ]) {
@@ -236,6 +281,14 @@ export const conquestGateErrors = (config, evidence = {}) => {
   }
   if (evidence.gateway !== undefined) {
     for (const token of [
+      "case 'GMListConquestReadiness'",
+      "case 'GMVerifyConquestReadiness'"
+    ]) {
+      if (!evidence.gateway.includes(token)) {
+        errors.push(`Conquest readiness RPC surface is missing: ${token}`)
+      }
+    }
+    for (const token of [
       "case 'GMListConquestV2RewardSchedules'",
       "case 'GMProposeConquestV2RewardSchedule'",
       "case 'GMActivateConquestV2RewardSchedule'",
@@ -259,7 +312,10 @@ export const conquestGateErrors = (config, evidence = {}) => {
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const configPath = path.join(
     root,
     'match-service-cloudflare',
@@ -272,6 +328,8 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    readinessOperationsMigration,
+    readinessOperations,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
@@ -327,6 +385,19 @@ const main = async () => {
         root,
         'cloudflare',
         'migrations',
+        '0099_conquest_readiness_operations.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-readiness-operations.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
         '0089_conquest_v2_reward_policy_activation.sql'
       ),
       'utf8'
@@ -355,7 +426,12 @@ const main = async () => {
       'utf8'
     ),
     readFile(
-      path.join(root, 'game-server-cloudflare', 'src', 'conquest-settlement.ts'),
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'src',
+        'conquest-settlement.ts'
+      ),
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
@@ -371,6 +447,8 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    readinessOperationsMigration,
+    readinessOperations,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
@@ -382,7 +460,8 @@ const main = async () => {
     readiness
   })
   if (errors.length) {
-    for (const error of errors) process.stderr.write(`Conquest gate: ${error}\n`)
+    for (const error of errors)
+      process.stderr.write(`Conquest gate: ${error}\n`)
     process.exitCode = 1
     return
   }
@@ -391,6 +470,9 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

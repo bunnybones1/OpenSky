@@ -310,6 +310,20 @@ export class StaffRepository {
     }
   }
 
+  async requireConquestReadinessWrite(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_conquest_readiness_permissions
+         WHERE user_id = ? AND permission = 'VERIFY'`
+      )
+      .bind(userId)
+      .first()
+    if (!row) {
+      throw permissionDenied('Conquest readiness verify access required')
+    }
+  }
+
   async requireConquestV2RewardScheduleWrite(
     userId: string,
     permission: ConquestV2RewardScheduleOperation
@@ -381,7 +395,9 @@ export class StaffRepository {
   async requireSkypassRewardWrite(userId: string): Promise<void> {
     await this.requireAdmin(userId)
     const permission = await this.database
-      .prepare(`SELECT 1 FROM staff_skypass_reward_permissions WHERE user_id = ?`)
+      .prepare(
+        `SELECT 1 FROM staff_skypass_reward_permissions WHERE user_id = ?`
+      )
       .bind(userId)
       .first()
     if (!permission) {

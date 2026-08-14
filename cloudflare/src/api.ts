@@ -50,6 +50,10 @@ import {
 import { CompetitiveRepository } from './competitive'
 import { ConquestRepository, conquestTreasureProgress } from './conquest'
 import {
+  CONQUEST_READINESS_OPERATION_HEADER,
+  ConquestReadinessOperationsRepository
+} from './conquest-readiness-operations'
+import {
   CONQUEST_REWARD_POOL_OPERATION_HEADER,
   ConquestRewardPoolOperationsRepository
 } from './conquest-reward-pool-operations'
@@ -293,6 +297,9 @@ export const handleApiRequest = async (
   const competitive = new CompetitiveRepository(env.AUTH_DB)
   const conquest = new ConquestRepository(env.AUTH_DB)
   const conquestRewardPools = new ConquestRewardPoolOperationsRepository(
+    env.AUTH_DB
+  )
+  const conquestReadiness = new ConquestReadinessOperationsRepository(
     env.AUTH_DB
   )
   const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
@@ -1270,6 +1277,34 @@ export const handleApiRequest = async (
         const body = await requestBody<{ version?: unknown }>(request)
         return json(request, env, {
           pools: await conquestRewardPools.list(body.version)
+        })
+      }
+
+      case 'GMListConquestReadiness': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ poolVersion?: unknown }>(request)
+        return json(request, env, {
+          evidence: await conquestReadiness.list(body.poolVersion)
+        })
+      }
+
+      case 'GMVerifyConquestReadiness': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestReadinessWrite(principal.userId)
+        const body = await requestBody<{
+          poolVersion?: unknown
+          conquestId?: unknown
+          settlementKey?: unknown
+          deliveryKey?: unknown
+          drillReference?: unknown
+        }>(request)
+        return json(request, env, {
+          evidence: await conquestReadiness.verify(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_READINESS_OPERATION_HEADER)
+          )
         })
       }
 

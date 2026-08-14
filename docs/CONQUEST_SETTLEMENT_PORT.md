@@ -9,12 +9,12 @@ gate. Reward pools are never inferred from UI copy or old assets.
 When a run reaches its first loss or third win, the source counts wins and
 creates this bundle:
 
-| Wins | Silver cards | Gold cards | Terminal state |
-| ---: | ---: | ---: | --- |
-| 0 | 0 | 0 | `COMPLETED` |
-| 1 | 1 | 0 | `REWARDS_PENDING` |
-| 2 | 2 | 0 | `REWARDS_PENDING` |
-| 3 | 1 | 1 | `REWARDS_PENDING` |
+| Wins | Silver cards | Gold cards | Terminal state    |
+| ---: | -----------: | ---------: | ----------------- |
+|    0 |            0 |          0 | `COMPLETED`       |
+|    1 |            1 |          0 | `REWARDS_PENDING` |
+|    2 |            2 |          0 | `REWARDS_PENDING` |
+|    3 |            1 |          1 | `REWARDS_PENDING` |
 
 Silver selection uses the active card index after excluding the configured card
 sets and cards invalid for the current season. Each Silver draw is independent,
@@ -53,7 +53,11 @@ run only after that task settles.
   activation, and retirement use separate dormant capabilities, idempotency
   keys, exact request/effect guards, and immutable before/after audits. They
   never select card IDs, create a production pool, write readiness evidence,
-  or enable a queue on their own.
+  or enable a queue on their own. Separate readiness adapters list only
+  database-verified drill evidence and bind an exact settlement/delivery tuple
+  to readiness through another dormant `VERIFY` capability and immutable
+  idempotent audit. They cannot create the drill, mutate its rewards, or change
+  either Conquest mode switch.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
@@ -87,6 +91,10 @@ run only after that task settles.
   paths. D1 validates both `APPLIED` keys, all three source-shaped feed events,
   the exact Silver/Gold inventory transitions, and the pool version before it
   accepts readiness.
+- A valid drill can no longer be admitted with a bare readiness `INSERT`.
+  The operation wrapper echoes both immutable receipt keys, keeps the drill
+  identity and both pool reviewers distinct from the readiness verifier, and
+  records the exact applied decision before the pool can become queue-ready.
 - Match-service admission re-evaluates that proof and the pool time window on
   every read. An enabled operator flag therefore fails closed at the exact pool
   expiry boundary without waiting for another write or deployment.
@@ -149,8 +157,8 @@ Before enabling either mode, authorized operations must supply a bounded draft
 pool to `GMProposeConquestRewardPool`, independently echo its exact manifest to
 `GMActivateConquestRewardPool`,
 then exercise one isolated three-win settlement through delayed delivery and
-insert the resulting settlement/delivery keys into
-`conquest_queue_readiness`. The database now verifies inventory/feed/receipt
+echo the resulting settlement/delivery keys to `GMVerifyConquestReadiness`.
+The database now verifies inventory/feed/receipt
 agreement itself; free-form readiness rows cannot open a queue. Production
 currently has zero active pool rows and zero Conquest settlement/delivery rows.
 

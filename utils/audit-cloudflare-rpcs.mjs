@@ -11,9 +11,7 @@ export const extractTsRpcCases = source =>
   [...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)].map(match => match[1])
 
 const rpcCaseBodies = source => {
-  const matches = [
-    ...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)
-  ]
+  const matches = [...source.matchAll(/\bcase\s+'([A-Z]\w*)'\s*:/g)]
   const bodies = new Map()
   let groupedMethods = []
   for (let index = 0; index < matches.length; index++) {
@@ -56,10 +54,7 @@ export const REVIEWED_TS_RPC_TOMBSTONES = {
   },
   JoinEarlyAccessList: {
     disposition: 'retired',
-    evidence: [
-      'throw unimplemented(',
-      'Cloud Weasel early access is retired'
-    ]
+    evidence: ['throw unimplemented(', 'Cloud Weasel early access is retired']
   },
   AdminListAccounts: {
     disposition: 'source-faithful',
@@ -72,7 +67,7 @@ export const REVIEWED_TS_RPC_TOMBSTONES = {
   GetMatchLiveRecordsURI: {
     disposition: 'source-faithful',
     evidence: [
-      "await requestBody<{ matchID?: number }>(request)",
+      'await requestBody<{ matchID?: number }>(request)',
       'throw unimplemented()'
     ]
   }
@@ -83,9 +78,7 @@ export const tsRpcTombstoneAuditErrors = source => {
   const bodies = rpcCaseBodies(source)
   const reviewed = new Set(Object.keys(REVIEWED_TS_RPC_TOMBSTONES))
 
-  for (const [method, review] of Object.entries(
-    REVIEWED_TS_RPC_TOMBSTONES
-  )) {
+  for (const [method, review] of Object.entries(REVIEWED_TS_RPC_TOMBSTONES)) {
     const body = bodies.get(method)
     if (!body) {
       errors.push(`reviewed TypeScript RPC tombstone disappeared: ${method}`)
@@ -93,7 +86,9 @@ export const tsRpcTombstoneAuditErrors = source => {
     }
     for (const token of review.evidence) {
       if (!body.includes(token)) {
-        errors.push(`${method} lost ${review.disposition} tombstone evidence: ${token}`)
+        errors.push(
+          `${method} lost ${review.disposition} tombstone evidence: ${token}`
+        )
       }
     }
   }
@@ -241,6 +236,7 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMListLeaderboardRewardSchedules',
   'GMProposeLeaderboardRewardSchedule',
   'GMListConquestRewardPools',
+  'GMListConquestReadiness',
   'GMProposeConquestRewardPool',
   'GMRetireConquestRewardPool',
   'GMActivateConquestV2RewardSchedule',
@@ -249,7 +245,8 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMProposeConquestV2RewardSchedule',
   'GMActivateReferralStickerSchedule',
   'GMListReferralStickerSchedules',
-  'GMProposeReferralStickerSchedule'
+  'GMProposeReferralStickerSchedule',
+  'GMVerifyConquestReadiness'
 ])
 
 export const partitionRpcGaps = methods => ({
@@ -260,8 +257,7 @@ export const partitionRpcGaps = methods => ({
   actionable: methods
     .filter(
       method =>
-        !RETIRED_SOURCE_RPCS.has(method) &&
-        !SUPERSEDED_SOURCE_RPCS.has(method)
+        !RETIRED_SOURCE_RPCS.has(method) && !SUPERSEDED_SOURCE_RPCS.has(method)
     )
     .sort()
 })
@@ -329,7 +325,9 @@ export const rpcPortCategory = method => {
   ) {
     return 'migration-identity'
   }
-  if (/(Card|Deck|Search|HeroUnlock|GameModes|XPBonus|RewardsTime)/.test(method)) {
+  if (
+    /(Card|Deck|Search|HeroUnlock|GameModes|XPBonus|RewardsTime)/.test(method)
+  ) {
     return 'content-discovery'
   }
   return 'other-product'
@@ -337,11 +335,13 @@ export const rpcPortCategory = method => {
 
 export const summarizeRpcCategories = methods =>
   Object.fromEntries(
-    [...methods.reduce((counts, method) => {
-      const category = rpcPortCategory(method)
-      counts.set(category, (counts.get(category) ?? 0) + 1)
-      return counts
-    }, new Map())].sort(([left], [right]) => left.localeCompare(right))
+    [
+      ...methods.reduce((counts, method) => {
+        const category = rpcPortCategory(method)
+        counts.set(category, (counts.get(category) ?? 0) + 1)
+        return counts
+      }, new Map())
+    ].sort(([left], [right]) => left.localeCompare(right))
   )
 
 const loadAudit = async root => {
@@ -352,10 +352,15 @@ const loadAudit = async root => {
   const methods = []
   for (const file of files) {
     methods.push(
-      ...extractGoRpcMethods(await readFile(path.join(rpcDirectory, file), 'utf8'))
+      ...extractGoRpcMethods(
+        await readFile(path.join(rpcDirectory, file), 'utf8')
+      )
     )
   }
-  const gateway = await readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
+  const gateway = await readFile(
+    path.join(root, 'cloudflare/src/api.ts'),
+    'utf8'
+  )
   return {
     audit: auditRpcCoverage(methods, extractTsRpcCases(gateway)),
     tombstoneErrors: tsRpcTombstoneAuditErrors(gateway)
@@ -363,7 +368,10 @@ const loadAudit = async root => {
 }
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const { audit, tombstoneErrors } = await loadAudit(root)
   const errors = [...checkRpcCoverage(audit), ...tombstoneErrors]
   const fulfillment = rpcFulfillmentSummary(audit)
@@ -404,6 +412,9 @@ const main = async () => {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

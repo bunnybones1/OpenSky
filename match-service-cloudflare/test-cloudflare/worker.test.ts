@@ -14,6 +14,7 @@ import { currentEnabledGameModes } from '../src/worker'
 import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
 import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
+import { ConquestReadinessOperationsRepository } from '../../cloudflare/src/conquest-readiness-operations'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
@@ -196,7 +197,10 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM player_progression'),
     env.AUTH_DB.prepare('DELETE FROM player_profiles'),
     env.AUTH_DB.prepare('DELETE FROM auth_identities'),
-    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare(
+      `DELETE FROM users
+       WHERE id NOT LIKE 'system:conquest-readiness-drill:%'`
+    ),
     env.AUTH_DB.prepare(
       `UPDATE game_mode_status
        SET enabled = CASE
@@ -332,12 +336,7 @@ const provisionReceiptBackedConquestReadiness = async () => {
     `SELECT id FROM player_conquests
      WHERE entry_key = 'readiness-drill:match-service-test'`
   ).first<{ id: number }>()
-  await settlePendingConquest(
-    env.AUTH_DB,
-    conquest!.id,
-    settledAt,
-    () => 0
-  )
+  await settlePendingConquest(env.AUTH_DB, conquest!.id, settledAt, () => 0)
   const settlement = await env.AUTH_DB.prepare(
     `SELECT settlement_key FROM player_conquest_settlements
      WHERE conquest_id = ?`
@@ -375,20 +374,40 @@ const provisionReceiptBackedConquestReadiness = async () => {
     .bind(conquest!.id)
     .first<{ settlement_key: string; delivery_key: string }>()
   const verifiedAt = new Date(now).toISOString()
-  await env.AUTH_DB.prepare(
-    `INSERT INTO conquest_queue_readiness
-       (pool_version, conquest_id, settlement_key, delivery_key,
-        verified_by_user_id, drill_reference, verified_at)
-     VALUES (?, ?, ?, ?, 'system:test', 'receipt-backed-e2e', ?)`
-  )
-    .bind(
-      readinessPoolVersion,
-      conquest!.id,
-      evidence!.settlement_key,
-      evidence!.delivery_key,
+  const verifierId = `readiness-verifier-${crypto.randomUUID()}`
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Readiness Verifier', ?, ?, ?)`
+    ).bind(
+      verifierId,
+      `${crypto.randomUUID()}@example.com`,
+      verifiedAt,
       verifiedAt
-    )
-    .run()
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO staff_roles
+         (user_id, role, granted_by_user_id, reason, created_at)
+       VALUES (?, 'ADMIN', NULL, 'test readiness verifier', ?)`
+    ).bind(verifierId, verifiedAt),
+    env.AUTH_DB.prepare(
+      `INSERT INTO staff_conquest_readiness_permissions
+         (user_id, permission, granted_by_user_id, reason, created_at)
+       VALUES (?, 'VERIFY', NULL, 'test readiness verifier', ?)`
+    ).bind(verifierId, verifiedAt)
+  ])
+  await new ConquestReadinessOperationsRepository(env.AUTH_DB).verify(
+    verifierId,
+    {
+      poolVersion: readinessPoolVersion,
+      conquestId: conquest!.id,
+      settlementKey: evidence!.settlement_key,
+      deliveryKey: evidence!.delivery_key,
+      drillReference: 'receipt-backed-e2e'
+    },
+    crypto.randomUUID()
+  )
   return { endsAt, verifiedAt }
 }
 
@@ -1103,7 +1122,9 @@ describe('Cloud Weasel accepted-match service', () => {
     empty.participants[0].request!.versionHash = ''
     const rejected = await create(empty)
     expect(rejected.status).toBe(400)
-    expect(await rejected.json()).toEqual({ error: 'invalid matchmaker player' })
+    expect(await rejected.json()).toEqual({
+      error: 'invalid matchmaker player'
+    })
   })
 
   it('limits bot placeholders to source bot-capable modes', async () => {

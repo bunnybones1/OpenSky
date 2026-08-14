@@ -15,15 +15,15 @@ The audit discovers exported Go `*Server` methods from `api/rpc`, compares them
 with the TypeScript cases in `cloudflare/src/api.ts`, and fails if the ported
 count or the critical player-facing compatibility set regresses.
 
-| Surface                         | Methods |
-| ------------------------------- | ------: |
-| Source Go RPCs                  |     172 |
-| Functional TypeScript RPCs      |     148 |
-| Source-faithful tombstones      |       4 |
-| Cloudflare-superseded RPCs      |      17 |
-| Deliberately retired RPCs       |       3 |
-| Actionable source RPC gaps      |       0 |
-| Cloudflare-only RPC adapters    |      18 |
+| Surface                      | Methods |
+| ---------------------------- | ------: |
+| Source Go RPCs               |     172 |
+| Functional TypeScript RPCs   |     148 |
+| Source-faithful tombstones   |       4 |
+| Cloudflare-superseded RPCs   |      17 |
+| Deliberately retired RPCs    |       3 |
+| Actionable source RPC gaps   |       0 |
+| Cloudflare-only RPC adapters |      20 |
 
 Together, 172/172 source contracts (100%) are functionally implemented,
 preserved as an already-disabled source endpoint, replaced by a reviewed Cloud
@@ -73,6 +73,12 @@ use separate dormant capabilities, exact-manifest confirmation, immutable
 idempotency receipts, and audits; none writes queue readiness or game-mode
 status. The RPC audit allowlists every reviewed adapter by name and rejects a new
 or missing Cloudflare-only method.
+
+Two additional Conquest-readiness adapters list only the database-verified
+three-win drill tuples and bind one exact settlement/delivery pair through a
+separate dormant verifier capability. The write cannot fabricate the drill,
+change reward inventory, or enable a mode; it replaces the last hand-written
+readiness row with an idempotent immutable audit.
 
 Four reviewed leaderboard adapters similarly list, propose, independently
 activate, and disable immutable weekly schedule versions around the already

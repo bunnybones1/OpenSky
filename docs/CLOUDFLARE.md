@@ -376,7 +376,8 @@ and progress are not migrated.
   `GAME_MODE_WRITE` permission; every successful source-compatible invocation
   enters immutable history. Conquest enablement additionally requires a draft
   pool whose exact card manifest receives independent second-actor approval,
-  activation, and an out-of-band readiness record for the completed drill, so
+  activation, and a capability-gated immutable readiness operation for the
+  completed drill, so
   it remains disabled. D1-backed Ping, server Clock, current
   SkyPass hero-unlock levels, and the authenticated source XP-bonus read are
   also ported. The source Version RPC derives schema fields from the generated

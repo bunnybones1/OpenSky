@@ -17,7 +17,9 @@ test('production keeps both Conquest queues behind the settlement gate', async (
 test('fails closed if either Conquest mode is configured', () => {
   for (const mode of ['CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY']) {
     assert.match(
-      conquestGateErrors({ vars: { ENABLED_GAME_MODES: `PRACTICE_BOT,${mode}` } })[0],
+      conquestGateErrors({
+        vars: { ENABLED_GAME_MODES: `PRACTICE_BOT,${mode}` }
+      })[0],
       new RegExp(mode)
     )
   }
@@ -67,6 +69,26 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "'x-cloud-weasel-operation-key'",
       'operation_key, operation, pool_version, actor_user_id'
     ].join('\n'),
+    readinessOperationsMigration: [
+      'CREATE TABLE staff_conquest_readiness_permissions',
+      "permission = 'VERIFY'",
+      'CREATE TABLE staff_conquest_readiness_operations',
+      'DROP VIEW conquest_verified_queue_pools',
+      "operation.status = 'APPLIED'",
+      'CREATE TRIGGER conquest_queue_readiness_operation_guard',
+      'reviewed Conquest readiness operation required',
+      'CREATE TRIGGER staff_conquest_readiness_operation_apply_guard',
+      'CREATE TABLE staff_conquest_readiness_audit',
+      'staff Conquest readiness audit rows are immutable'
+    ].join('\n'),
+    readinessOperations: [
+      'FROM conquest_verified_drill_receipts drill',
+      'LEFT JOIN conquest_approved_active_reward_pools approved',
+      'Conquest readiness receipt confirmation does not match',
+      'active verified Conquest drill evidence required',
+      'INSERT INTO conquest_queue_readiness',
+      "'x-cloud-weasel-operation-key'"
+    ].join('\n'),
     v2ScheduleActivation: [
       'CREATE TABLE conquest_v2_reward_schedule_activations',
       'activated_by_user_id <> created_by_user_id',
@@ -99,6 +121,8 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     staff: [
       'requireConquestRewardPoolWrite(',
       'staff_conquest_reward_pool_permissions',
+      'requireConquestReadinessWrite(',
+      'staff_conquest_readiness_permissions',
       'requireConquestV2RewardScheduleWrite(',
       'staff_conquest_v2_reward_schedule_permissions'
     ].join('\n'),
@@ -108,6 +132,8 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     ].join('\n'),
     api: 'FROM conquest_approved_active_reward_pools',
     gateway: [
+      "case 'GMListConquestReadiness'",
+      "case 'GMVerifyConquestReadiness'",
       "case 'GMListConquestV2RewardSchedules'",
       "case 'GMProposeConquestV2RewardSchedule'",
       "case 'GMActivateConquestV2RewardSchedule'",
@@ -122,6 +148,8 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'poolActivation',
     'poolOperationsMigration',
     'poolOperations',
+    'readinessOperationsMigration',
+    'readinessOperations',
     'v2ScheduleActivation',
     'v2ScheduleOperationsMigration',
     'v2ScheduleOperations',
@@ -149,7 +177,10 @@ test('binds the reviewed Conquest card ranges to the generated catalog', () => {
   })
   assert.deepEqual(conquestPoolCatalogErrors(migration, catalog), [])
   assert.match(
-    conquestPoolCatalogErrors(migration, JSON.stringify({ cards: [{ id: 1 }] }))[0],
+    conquestPoolCatalogErrors(
+      migration,
+      JSON.stringify({ cards: [{ id: 1 }] })
+    )[0],
     /differ/
   )
   assert.match(conquestPoolCatalogErrors('', catalog)[0], /missing/)
