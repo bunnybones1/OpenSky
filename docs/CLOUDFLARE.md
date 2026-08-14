@@ -666,6 +666,24 @@ and progress are not migrated.
   Cloudflare reused `/assets/index-d976a081.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
   the release-safe cache policy.
+- The pending-Gold staff table now uses the source `[id, run_at]` ascending
+  keyset cursor over the off-chain Conquest delivery ledger. Omitted pages
+  retain the source's effective 200-row limit, explicit empty pages use 20,
+  the original admin UI's `mint_at` alias remains supported, and custom sorts
+  preserve the unique-ID direction rule. Forward pages remain stable when a
+  delivery is queued ahead of the cursor, backward traversal uses the source
+  boundary, and malformed or dual-direction cursors fail closed. Milestone
+  `c725caaa` passed exact-head release-contract run `31796291383`, the 369-test
+  main Worker suite, and the complete cross-service release contract before
+  deployment on 2026-08-14 as Worker version
+  `dfb4134b-8f68-4c59-8c35-efd8e49c90fb`. No migration was required. The
+  public Version RPC reported that exact version, and an anonymous
+  `GMListPendingCards` probe returned `401`. Read-only production D1 checks
+  before and after deployment found zero Gold delivery rows and zero pending
+  rows, with `changed_db: false` and no rows written. Cloudflare reused
+  `/assets/index-d976a081.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
