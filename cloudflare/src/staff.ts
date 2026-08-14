@@ -58,8 +58,27 @@ interface SignalRow {
 
 interface SignalSummaryRow {
   user_id: string
+  account_id: number
   updated_at: string
+  account_created_at: string
   score: number
+}
+
+type SignalSummarySortValue = string | number
+
+interface SignalSortConfig {
+  sort: Array<{
+    response: SortBy
+    sql: string
+    value: (row: SignalSummaryRow) => SignalSummarySortValue
+    numeric: boolean
+  }>
+  uniqueOrder: SortBy['order']
+}
+
+interface SignalCursor {
+  accountId: number
+  values: Array<string | number>
 }
 
 interface PendingGoldRow {
@@ -143,15 +162,27 @@ const ACCOUNT_SORT_COLUMNS: Record<
   created_at: { sql: 'users.created_at', value: row => row.created_at },
   createdAt: { sql: 'users.created_at', value: row => row.created_at }
 }
-const SIGNAL_SORT_COLUMNS: Record<string, string> = {
-  score: 'score',
-  updated_at: 'updated_at',
-  updatedAt: 'updated_at',
-  created_at: 'account_created_at',
-  createdAt: 'account_created_at'
+const SIGNAL_SORT_COLUMNS: Record<
+  string,
+  | {
+      sql: string
+      value: (row: SignalSummaryRow) => SignalSummarySortValue
+      numeric?: boolean
+    }
+  | undefined
+> = {
+  score: { sql: 'score', value: row => row.score, numeric: true },
+  updated_at: { sql: 'updated_at', value: row => row.updated_at },
+  updatedAt: { sql: 'updated_at', value: row => row.updated_at },
+  created_at: {
+    sql: 'account_created_at',
+    value: row => row.account_created_at
+  },
+  createdAt: {
+    sql: 'account_created_at',
+    value: row => row.account_created_at
+  }
 }
-const DEFAULT_PAGE_SIZE = 20
-const MAX_PAGE_SIZE = 100
 const GAME_MODES = new Set<GameMode>([
   'RANKED_CONSTRUCTED' as GameMode,
   'CHALLENGE_CONSTRUCTED' as GameMode,
@@ -233,14 +264,6 @@ const cursorOffset = (value?: string) => {
   }
   throw invalidArgument('page cursor is invalid')
 }
-
-const pageSize = (page?: Page) =>
-  Math.min(
-    MAX_PAGE_SIZE,
-    Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
-      ? page!.pageSize!
-      : DEFAULT_PAGE_SIZE
-  )
 
 const compareGameModeHistoryValues = (
   left: GameModeHistorySortValue,
@@ -571,20 +594,107 @@ const accountOrder = (config: AccountSortConfig, reverse: boolean) =>
     `game.id ${reverse ? invertOrder(config.uniqueOrder) : config.uniqueOrder}`
   ].join(', ')
 
-const signalSort = (page?: Page): SortBy[] => {
-  const sort = page?.sort?.length
+const signalSort = (page?: Page): SignalSortConfig => {
+  const requested = page?.sort?.length
     ? page.sort
     : [{ column: 'score', order: 'DESC' as SortBy['order'] }]
-  for (const item of sort) {
-    if (!SIGNAL_SORT_COLUMNS[item.column]) {
-      throw invalidArgument(`unsupported signal sort column '${item.column}'`)
+  const sort: SignalSortConfig['sort'] = []
+  let uniqueOrder = 'DESC' as SortBy['order']
+  for (const item of requested) {
+    const column = SIGNAL_SORT_COLUMNS[item.column]
+    if (!column || !['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('signal sort is invalid')
     }
-    if (!['ASC', 'DESC'].includes(item.order)) {
-      throw invalidArgument('signal sort order is invalid')
-    }
+    sort.push({
+      response: item,
+      sql: column.sql,
+      value: column.value,
+      numeric: column.numeric === true
+    })
   }
-  return sort
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
 }
+
+const encodeSignalCursor = (row: SignalSummaryRow, config: SignalSortConfig) =>
+  btoa(
+    JSON.stringify([
+      String(row.account_id),
+      ...config.sort.map(item => String(item.value(row)))
+    ])
+  )
+
+const decodeSignalCursor = (
+  value: string,
+  config: SignalSortConfig
+): SignalCursor => {
+  try {
+    const raw = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== config.sort.length + 1 ||
+      raw.some(item => typeof item !== 'string') ||
+      !/^[1-9]\d*$/.test(raw[0] as string)
+    ) {
+      throw new Error('cursor shape')
+    }
+    const accountId = Number(raw[0])
+    if (!Number.isSafeInteger(accountId)) throw new Error('cursor value')
+    const values = config.sort.map((item, index) => {
+      const cursorValue = raw[index + 1] as string
+      if (!item.numeric) return cursorValue
+      const parsed = Number(cursorValue)
+      if (!Number.isFinite(parsed)) throw new Error('cursor value')
+      return parsed
+    })
+    return { accountId, values }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const signalCursorCondition = (
+  cursor: SignalCursor,
+  config: SignalSortConfig,
+  reverse: boolean
+): { sql: string; bindings: Array<string | number> } => {
+  const clauses: string[] = []
+  const bindings: Array<string | number> = []
+  for (let index = 0; index <= config.sort.length; index += 1) {
+    const terms: string[] = []
+    for (let equal = 0; equal < index; equal += 1) {
+      terms.push(`${config.sort[equal].sql} = ?`)
+      bindings.push(cursor.values[equal])
+    }
+    if (index < config.sort.length) {
+      const item = config.sort[index]
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      terms.push(`${item.sql} ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.values[index])
+    } else {
+      const order = reverse
+        ? invertOrder(config.uniqueOrder)
+        : config.uniqueOrder
+      terms.push(`account_id ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.accountId)
+    }
+    clauses.push(`(${terms.join(' AND ')})`)
+  }
+  return { sql: `(${clauses.join(' OR ')})`, bindings }
+}
+
+const signalOrder = (config: SignalSortConfig, reverse: boolean) =>
+  [
+    ...config.sort.map(item => {
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      return `${item.sql} ${order}`
+    }),
+    `account_id ${reverse ? invertOrder(config.uniqueOrder) : config.uniqueOrder}`
+  ].join(', ')
 
 const emptyStats = (): GMStatsResponse => ({
   total_active_users: 0,
@@ -1165,6 +1275,9 @@ export class StaffRepository {
     createdAfter?: string
     accountAddress?: string
   }): Promise<{ page: Page; rows: SignalSummaryRow[] }> {
+    if (input.page?.before !== undefined && input.page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
+    }
     const filters: string[] = []
     const bindings: unknown[] = []
     if (input.accountAddress?.startsWith('identity:')) {
@@ -1195,12 +1308,27 @@ export class StaffRepository {
     }
 
     const sort = signalSort(input.page)
-    const size = pageSize(input.page)
-    const offset = cursorOffset(input.page?.before ?? input.page?.after)
-    const order = [
-      ...sort.map(item => `${SIGNAL_SORT_COLUMNS[item.column]} ${item.order}`),
-      'game.id DESC'
-    ].join(', ')
+    const size = Math.min(
+      200,
+      Number.isSafeInteger(input.page?.pageSize) &&
+        (input.page?.pageSize ?? 0) > 0
+        ? input.page!.pageSize!
+        : 20
+    )
+    const reverse = input.page?.after !== undefined
+    const cursorValue = reverse ? input.page?.after : input.page?.before
+    let cursorWhere = ''
+    const cursorBindings: Array<string | number> = []
+    if (cursorValue !== undefined) {
+      const condition = signalCursorCondition(
+        decodeSignalCursor(cursorValue, sort),
+        sort,
+        reverse
+      )
+      cursorWhere = `WHERE ${condition.sql}`
+      cursorBindings.push(...condition.bindings)
+    }
+    const order = signalOrder(sort, reverse)
     const result = await this.database
       .prepare(
         `WITH all_signals AS (
@@ -1209,33 +1337,40 @@ export class StaffRepository {
            UNION ALL
            SELECT account_user_id AS user_id, updated_at
            FROM staff_account_action_signals
+         ), summaries AS (
+           SELECT signals.user_id, game.id AS account_id,
+                  MAX(signals.updated_at) AS updated_at,
+                  users.created_at AS account_created_at,
+                  0.0 AS score
+           FROM all_signals signals
+           JOIN users ON users.id = signals.user_id
+           JOIN player_account_settings settings
+             ON settings.user_id = signals.user_id
+           JOIN game_accounts game ON game.user_id = signals.user_id
+           WHERE ${filters.join(' AND ')}
+           GROUP BY signals.user_id, users.created_at, game.id
          )
-         SELECT signals.user_id,
-                MAX(signals.updated_at) AS updated_at,
-                users.created_at AS account_created_at,
-                0.0 AS score
-         FROM all_signals signals
-         JOIN users ON users.id = signals.user_id
-         JOIN player_account_settings settings
-           ON settings.user_id = signals.user_id
-         JOIN game_accounts game ON game.user_id = signals.user_id
-         WHERE ${filters.join(' AND ')}
-         GROUP BY signals.user_id, users.created_at, game.id
+         SELECT user_id, account_id, updated_at, account_created_at, score
+         FROM summaries
+         ${cursorWhere}
          ORDER BY ${order}
-         LIMIT ? OFFSET ?`
+         LIMIT ?`
       )
-      .bind(...bindings, size + 1, offset)
+      .bind(...bindings, ...cursorBindings, size + 1)
       .all<SignalSummaryRow>()
+    const hasExtra = result.results.length > size
     const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    if (reverse) rows.reverse()
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort
+        before: rows.length ? encodeSignalCursor(rows[0], sort) : undefined,
+        after: rows.length
+          ? encodeSignalCursor(rows[rows.length - 1], sort)
+          : undefined,
+        hasBefore: reverse ? cursorValue !== undefined : hasExtra,
+        hasAfter: reverse ? hasExtra : cursorValue !== undefined,
+        sort: sort.sort.map(item => item.response)
       },
       rows
     }
