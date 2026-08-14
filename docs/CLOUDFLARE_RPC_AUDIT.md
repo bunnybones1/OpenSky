@@ -32,6 +32,32 @@ it is not a claim that a TypeScript `case` label is an implementation. The
 release gate parses fall-through case bodies and rejects any new
 `unimplemented` or deprecated terminal case without an explicit disposition.
 
+## Browser consumer proof — 2026-08-14
+
+The source-method inventory is now paired with an independent consumer-side
+gate, `pnpm check:cloudflare:browser-rpcs`. It parses actual TypeScript call
+expressions in the preserved webapp and game rather than relying on text
+search, so comments and `authToken` property access do not count as backend
+contracts. It also follows the game client's `this.searchCards` wrapper, which
+would otherwise be easy to omit from a direct `APIClient.opensky` search.
+
+The checked-in consumer inventory contains exactly 108 source RPC calls. Of
+those, 103 have TypeScript Worker handlers. The five remaining calls are
+preserved only for the legacy wallet build and have explicit identity-product
+dispositions: `MigrateFromBurner`, both `PrepareOnChainIn*Transaction` calls,
+`PrepareTransferAssetsFromBurnerTransaction`, and `RequestAccountDeletion`.
+The separate auth-mode, browser-transaction, route, and off-chain gates prove
+that Google mode replaces those paths before invocation. A new browser call,
+a removed original call, a missing Worker handler, or an unreviewed non-port
+now fails the complete Cloudflare build.
+
+Milestone `64dce51d` added the AST audit and five mutation tests. The complete
+local release gate passed 382 main-Worker tests, 231 multiplayer tests, 25
+browser/game tests, six analytics tests, every source/off-chain audit, and the
+original production webapp/game builds. Exact-head GitHub Actions run
+`31843339808` passed in 8m15s. This was a release-safety-only milestone: it
+changed no runtime artifact, schema, Cloudflare binding, or production data.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
