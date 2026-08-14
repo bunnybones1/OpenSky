@@ -63,6 +63,7 @@ const RANK_ORDER: Record<string, number> = {
   GRANDWEAVER: 7
 }
 const MAX_PAGE_SIZE = 100
+const MAX_MATCH_PAGE_SIZE = 200
 const DEFAULT_PAGE_SIZE = 20
 
 interface StatRow {
@@ -157,6 +158,136 @@ const pageSize = (page?: Page): number =>
       ? page!.pageSize!
       : DEFAULT_PAGE_SIZE
   )
+
+const matchPageSize = (page?: Page): number =>
+  Math.min(
+    MAX_MATCH_PAGE_SIZE,
+    Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+      ? page!.pageSize!
+      : DEFAULT_PAGE_SIZE
+  )
+
+type MatchSortField = 'created_at' | 'id'
+type MatchSortOrder = 'ASC' | 'DESC'
+
+interface MatchSortKey {
+  field: MatchSortField
+  order: MatchSortOrder
+}
+
+interface MatchCursor {
+  id: number
+  created_at?: string
+}
+
+const matchSort = (page?: Page) => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [
+        {
+          column: 'matches.started_at',
+          order: 'DESC' as SortBy['order']
+        }
+      ]
+  const keys: MatchSortKey[] = []
+  const returnedSort: SortBy[] = []
+  const seen = new Set<MatchSortField>()
+  let idOrder: MatchSortOrder = 'DESC'
+
+  for (const item of requested) {
+    const order = (item.order ?? 'DESC') as MatchSortOrder
+    if (order !== 'ASC' && order !== 'DESC') {
+      throw invalidArgument('match sort order is invalid')
+    }
+    const field =
+      item.column === 'matches.id' || item.column === 'id'
+        ? 'id'
+        : item.column === 'matches.started_at' || item.column === 'started_at'
+          ? 'created_at'
+          : undefined
+    if (!field) {
+      throw invalidArgument(`unsupported match sort column '${item.column}'`)
+    }
+    if (seen.has(field)) {
+      throw invalidArgument(`duplicate match sort column '${item.column}'`)
+    }
+    seen.add(field)
+    if (field === 'id') {
+      idOrder = order
+    } else {
+      keys.push({ field, order })
+      returnedSort.push({ column: item.column, order: item.order ?? 'DESC' })
+    }
+  }
+
+  // The source paginator aligns the unique ID key with a sole requested sort,
+  // while a multi-column request retains the ID's explicit/default direction.
+  if (requested.length === 1) {
+    idOrder = (requested[0].order ?? 'DESC') as MatchSortOrder
+  }
+  keys.push({ field: 'id', order: idOrder })
+  return { keys, returnedSort }
+}
+
+const compareMatchValue = (
+  left: string | number,
+  right: string | number
+): number =>
+  typeof left === 'number' && typeof right === 'number'
+    ? left - right
+    : String(left).localeCompare(String(right))
+
+const compareMatchKey = (
+  left: Pick<MatchRow, 'id' | 'created_at'>,
+  right: MatchCursor | Pick<MatchRow, 'id' | 'created_at'>,
+  keys: MatchSortKey[]
+): number => {
+  for (const key of keys) {
+    const leftValue = left[key.field]
+    const rightValue = right[key.field]
+    if (rightValue === undefined) continue
+    const compared = compareMatchValue(leftValue, rightValue)
+    if (compared !== 0) return key.order === 'DESC' ? -compared : compared
+  }
+  return 0
+}
+
+const encodeMatchCursor = (
+  row: Pick<MatchRow, 'id' | 'created_at'>,
+  includesStartedAt: boolean
+): string =>
+  btoa(
+    JSON.stringify([
+      String(row.id),
+      ...(includesStartedAt ? [row.created_at] : [])
+    ])
+  )
+
+const decodeMatchCursor = (
+  cursor: string,
+  includesStartedAt: boolean
+): MatchCursor => {
+  try {
+    const values = JSON.parse(atob(cursor)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== (includesStartedAt ? 2 : 1)
+    ) {
+      throw new Error('cursor shape')
+    }
+    const id = Number(values[0])
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('cursor id')
+    if (includesStartedAt && typeof values[1] !== 'string') {
+      throw new Error('cursor start')
+    }
+    return {
+      id,
+      ...(includesStartedAt ? { created_at: values[1] as string } : {})
+    }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
 
 const encodeCursor = (offset: number): string =>
   btoa(JSON.stringify({ offset }))
@@ -628,28 +759,60 @@ export class CompetitiveRepository {
                 result_json, created_at, updated_at, ended_at
          FROM multiplayer_matches
          WHERE status = 'ended'
-           AND (player1_user_id = ? OR player2_user_id = ?)
-         ORDER BY created_at DESC, id DESC`
+           AND (player1_user_id = ? OR player2_user_id = ?)`
       )
       .bind(userId, userId)
       .all<MatchRow>()
     const rows = result.results.filter(row =>
       storedMatchModes(row).some(mode => HISTORY_MODES.has(mode))
     )
-    const size = pageSize(page)
-    const offset = decodeCursor(page?.before)
-    const slice = rows.slice(offset, offset + size)
-    const nextOffset = offset + slice.length
+    if (page?.before && page?.after) {
+      throw invalidArgument('using before and after together is invalid')
+    }
+    const { keys, returnedSort } = matchSort(page)
+    rows.sort((left, right) => compareMatchKey(left, right, keys))
+    const size = matchPageSize(page)
+    const includesStartedAt = keys.some(key => key.field === 'created_at')
+    const cursorValue = page?.before ?? page?.after
+    const cursor = cursorValue
+      ? decodeMatchCursor(cursorValue, includesStartedAt)
+      : undefined
+    let candidates = rows
+    let slice: MatchRow[]
+    let hasBefore = false
+    let hasAfter = false
+    if (cursor && page?.before) {
+      candidates = rows.filter(row => compareMatchKey(row, cursor, keys) > 0)
+      slice = candidates.slice(0, size)
+      hasBefore = candidates.length > size
+      hasAfter = true
+    } else if (cursor && page?.after) {
+      candidates = rows.filter(row => compareMatchKey(row, cursor, keys) < 0)
+      slice = candidates.slice(Math.max(0, candidates.length - size))
+      hasBefore = true
+      hasAfter = candidates.length > size
+    } else {
+      slice = rows.slice(0, size)
+      hasBefore = rows.length > size
+    }
     const matches = slice
       .map(matchFromRow)
       .filter((match): match is Match => match !== null)
     return {
       page: {
         pageSize: size,
-        ...(nextOffset < rows.length
-          ? { hasBefore: true, after: encodeCursor(nextOffset) }
-          : { hasBefore: false }),
-        ...(offset > 0 ? { hasAfter: true } : { hasAfter: false })
+        hasBefore,
+        hasAfter,
+        sort: returnedSort,
+        ...(slice.length
+          ? {
+              before: encodeMatchCursor(slice[0], includesStartedAt),
+              after: encodeMatchCursor(
+                slice[slice.length - 1],
+                includesStartedAt
+              )
+            }
+          : {})
       } satisfies Page,
       res: matches
     }

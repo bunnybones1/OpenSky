@@ -601,11 +601,12 @@ describe('legacy player RPC compatibility', () => {
         }
       }
     })
-    for (const [proposal, mode] of [
-      ['ranked-history', 'RANKED_CONSTRUCTED'],
-      ['practice-hidden', 'PRACTICE_BOT']
-    ]) {
-      await env.AUTH_DB.prepare(
+    const insertHistoryMatch = async (
+      proposal: string,
+      mode: string,
+      createdAt = now
+    ) =>
+      env.AUTH_DB.prepare(
         `INSERT INTO multiplayer_matches
            (proposal_id, replay_id, mode, version, player1_principal,
             player2_principal, player1_user_id, player2_user_id,
@@ -622,12 +623,17 @@ describe('legacy player RPC compatibility', () => {
           userId,
           otherUserId,
           payload,
-          now,
-          now,
+          createdAt,
+          createdAt,
           JSON.stringify({ winner: 0, turnCount: 4, moveCount: 8 }),
-          now
+          createdAt
         )
         .run()
+    for (const [proposal, mode] of [
+      ['ranked-history', 'RANKED_CONSTRUCTED'],
+      ['practice-hidden', 'PRACTICE_BOT']
+    ]) {
+      await insertHistoryMatch(proposal, mode)
     }
 
     await env.AUTH_DB.prepare(
@@ -671,6 +677,88 @@ describe('legacy player RPC compatibility', () => {
         })
       ).status
     ).toBe(403)
+
+    const older = new Date(Date.parse(now) - 1_000).toISOString()
+    await insertHistoryMatch(
+      'ranked-history-older',
+      'RANKED_CONSTRUCTED',
+      older
+    )
+    const firstPage = await (
+      await rpc('ListMatches', {
+        page: { pageSize: 1 },
+        req: { accountAddress: identityReference }
+      })
+    ).json<{
+      page: {
+        before?: string
+        after?: string
+        hasBefore?: boolean
+        hasAfter?: boolean
+      }
+      res: Array<{ replayID: string }>
+    }>()
+    expect(firstPage.res.map(match => match.replayID)).toEqual([
+      'ranked-history-replay'
+    ])
+    expect(firstPage.page).toMatchObject({
+      hasBefore: true,
+      hasAfter: false
+    })
+    expect(firstPage.page.before).toBeTruthy()
+    expect(firstPage.page.after).toBeTruthy()
+
+    // A new head row must not shift the next page or duplicate the old head.
+    const newer = new Date(Date.parse(now) + 1_000).toISOString()
+    await insertHistoryMatch(
+      'ranked-history-newer',
+      'RANKED_CONSTRUCTED',
+      newer
+    )
+    const secondPage = await (
+      await rpc('ListMatches', {
+        page: { pageSize: 1, before: firstPage.page.after },
+        req: { accountAddress: identityReference }
+      })
+    ).json<{
+      page: {
+        before?: string
+        hasBefore?: boolean
+        hasAfter?: boolean
+      }
+      res: Array<{ replayID: string }>
+    }>()
+    expect(secondPage.res.map(match => match.replayID)).toEqual([
+      'ranked-history-older-replay'
+    ])
+    expect(secondPage.page).toMatchObject({
+      hasBefore: false,
+      hasAfter: true
+    })
+
+    const previousPage = await (
+      await rpc('ListMatches', {
+        page: { pageSize: 1, after: secondPage.page.before },
+        req: { accountAddress: identityReference }
+      })
+    ).json<{ res: Array<{ replayID: string }> }>()
+    expect(previousPage.res.map(match => match.replayID)).toEqual([
+      'ranked-history-replay'
+    ])
+
+    const ascending = await (
+      await rpc('ListMatches', {
+        page: {
+          pageSize: 2,
+          sort: [{ column: 'matches.id', order: 'ASC' }]
+        },
+        req: { accountAddress: identityReference }
+      })
+    ).json<{ res: Array<{ replayID: string }> }>()
+    expect(ascending.res.map(match => match.replayID)).toEqual([
+      'ranked-history-replay',
+      'ranked-history-older-replay'
+    ])
 
     const rankedRow = await env.AUTH_DB.prepare(
       `SELECT id FROM multiplayer_matches WHERE proposal_id = 'ranked-history'`

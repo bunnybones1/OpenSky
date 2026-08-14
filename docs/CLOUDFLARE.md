@@ -430,6 +430,11 @@ and progress are not migrated.
   replay capabilities for their matches, while other signed-in users can only
   inspect ranked/Conquest records with the replay ID redacted. Practice and
   challenge records remain private.
+- Player match history preserves the source completed-mode filter, default
+  start-time/ID ordering, optional start-time or ID sorting, and 200-row page
+  cap. Source-shaped keyset cursors remain stable when a newer match completes
+  between page requests, so the original infinite list cannot duplicate or
+  skip an older row because its numeric offset shifted.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
