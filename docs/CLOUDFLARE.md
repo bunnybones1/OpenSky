@@ -632,6 +632,22 @@ and progress are not migrated.
   written. Cloudflare reused `/assets/index-b1769b84.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
   the release-safe cache policy.
+- Staff account listing now uses the source `[id, name]` ascending keyset
+  cursor, `name ASC` default response-sort metadata, 20-row default, 200-row
+  cap, supported identity-safe sorts, and the unique-key direction rule. The
+  bounded D1 query keeps forward pages stable when an account is inserted ahead
+  of the cursor, supports backward traversal, and rejects malformed or
+  dual-direction cursors. Milestone `1f26e2d5` passed exact-head
+  release-contract run `31793458208`, the 367-test main Worker suite, and the
+  complete cross-service release contract before deployment on 2026-08-14 as
+  Worker version `15468604-8360-4e95-9b74-98813c91d1b4`. No migration was
+  required. The public Version RPC reported that exact version, and an
+  anonymous `GMListAccounts` probe returned `401`. Read-only production D1
+  checks before and after deployment found two users and two game accounts,
+  with `changed_db: false` and no rows written. Cloudflare reused
+  `/assets/index-d976a081.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
