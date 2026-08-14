@@ -430,6 +430,15 @@ and progress are not migrated.
   replay capabilities for their matches, while other signed-in users can only
   inspect ranked/Conquest records with the replay ID redacted. Practice and
   challenge records remain private.
+- Replay records now pass through the source game-state parser before the WASM
+  player-secret decoder runs, restoring JSON-serialized `Map` values instead
+  of presenting plain objects to enum-keyed engine state. Milestone
+  `24e9c8e4` includes a regression for the serialized secret-map boundary. It
+  remained green in the 25-test game suite and complete release contract for
+  Worker `be33f833-c374-41d6-93d6-65baaa8776d3`. A production browser replay
+  of the original failing practice-PvP match 12 loaded through the engine into
+  its replay/result scene with no enum or map-decoding exception, using exact
+  game asset `/game/cloudflare/assets/index-79a70ba2.js`.
 - Player match history preserves the source completed-mode filter, default
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes
