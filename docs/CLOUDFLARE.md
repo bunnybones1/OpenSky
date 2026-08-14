@@ -322,6 +322,13 @@ and progress are not migrated.
   reward-readiness audit reported core rewards live, SkyPass `1/1` active, and
   every policy-gated reward track dormant; the rollout changed no inventory,
   policy, or reward-queue state.
+  Beyond the final configured level, listing also preserves the source
+  `progress + 1` infinite-reward materialization. Runtime instances receive
+  stable positive reward IDs and reuse the existing claim and fulfillment
+  receipts, but a D1 trigger accepts them only as field-for-field copies of the
+  one infinite seed in the active reviewed policy. Occupied levels are skipped,
+  concurrent reads cannot duplicate an instance, and derived rows are excluded
+  from policy definition counts and review hashes.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

@@ -73,7 +73,7 @@ beforeEach(async () => {
     'DROP TRIGGER IF EXISTS reject_skypass_claim_completion'
   ).run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
-  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613, 614])
+  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613, 614, 615])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -3000,7 +3000,7 @@ describe('legacy player RPC compatibility', () => {
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
         `UPDATE player_progression
-         SET basic_skypass_level = 6 WHERE user_id = ?`
+         SET basic_skypass_level = 5 WHERE user_id = ?`
       ).bind(userId),
       env.AUTH_DB.prepare(
         `INSERT INTO player_items
@@ -3074,6 +3074,201 @@ describe('legacy player RPC compatibility', () => {
         .bind(userId)
         .first()
     ).toEqual({ deck_type: 'UNLOCKED_STARTER' })
+  })
+
+  it('materializes exact infinite SkyPass rewards through progress plus one', async () => {
+    const season = 615
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      {
+        level: 51,
+        tier: 1,
+        itemType: 403,
+        amount: 1,
+        isInfinite: 1
+      },
+      {
+        level: 54,
+        tier: 1,
+        itemType: 403,
+        amount: 9,
+        isInfinite: 0
+      }
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 55 WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+
+    const [first, concurrent] = await Promise.all([
+      rpc('ListSkypassRewards', { season }),
+      rpc('ListSkypassRewards', { season })
+    ])
+    expect(first.status).toBe(200)
+    expect(concurrent.status).toBe(200)
+
+    const listed = await first.json<{
+      res: {
+        levels: Array<{
+          level: number
+          earned: boolean
+          rewards: Array<{
+            id: number
+            amount: number
+            isInfinite: boolean
+            claimed: boolean
+          }>
+        }>
+      }
+    }>()
+    expect(listed.res.levels.map(level => level.level)).toEqual([
+      51, 52, 53, 54, 55, 56
+    ])
+    expect(listed.res.levels.find(level => level.level === 56)).toMatchObject({
+      earned: false,
+      rewards: [expect.objectContaining({ amount: 1, isInfinite: true })]
+    })
+
+    const instances = await env.AUTH_DB.prepare(
+      `SELECT id, level, season, tier, item_type, amount, is_starter,
+              attributes, updated_at, updated_by, is_infinite, policy_version,
+              policy_ordinal, infinite_source_reward_id
+       FROM skypass_rewards
+       WHERE infinite_source_reward_id = ?
+       ORDER BY level`
+    )
+      .bind(policy.rows[0].id)
+      .all<{
+        id: number
+        level: number
+        season: number
+        tier: number
+        item_type: number
+        amount: number
+        is_starter: number
+        attributes: string | null
+        updated_at: string | null
+        updated_by: number | null
+        is_infinite: number
+        policy_version: number
+        policy_ordinal: number | null
+        infinite_source_reward_id: number
+      }>()
+    expect(instances.results.map(row => row.level)).toEqual([52, 53, 55, 56])
+    expect(
+      instances.results.every(
+        row =>
+          row.season === season &&
+          row.tier === 1 &&
+          row.item_type === 403 &&
+          row.amount === 1 &&
+          row.is_starter === 0 &&
+          row.attributes === null &&
+          row.updated_at === null &&
+          row.is_infinite === 1 &&
+          row.policy_version === policy.version &&
+          row.policy_ordinal === null &&
+          row.infinite_source_reward_id === policy.rows[0].id
+      )
+    ).toBe(true)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT policy.reward_count,
+                COUNT(reward.id) AS definition_count
+         FROM skypass_reward_policy_versions policy
+         JOIN skypass_rewards reward
+           ON reward.season = policy.season
+          AND reward.policy_version = policy.version
+          AND reward.policy_ordinal IS NOT NULL
+         WHERE policy.season = ? AND policy.version = ?`
+      )
+        .bind(season, policy.version)
+        .first()
+    ).toEqual({ reward_count: 2, definition_count: 2 })
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO skypass_rewards
+           (level, season, tier, item_type, amount, is_starter, attributes,
+            updated_at, updated_by, is_infinite, policy_version,
+            policy_ordinal, infinite_source_reward_id)
+         SELECT 57, season, tier, item_type, amount + 1, is_starter,
+                attributes, NULL, updated_by, is_infinite, policy_version,
+                NULL, id
+         FROM skypass_rewards WHERE id = ?`
+      )
+        .bind(policy.rows[0].id)
+        .run()
+    ).rejects.toThrow('exact active infinite source')
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO skypass_rewards
+           (level, season, tier, item_type, amount, is_starter, attributes,
+            updated_at, updated_by, is_infinite, policy_version,
+            policy_ordinal, infinite_source_reward_id)
+         SELECT 999, season, tier, item_type, amount, is_starter,
+                attributes, NULL, updated_by, is_infinite, policy_version,
+                NULL, id
+         FROM skypass_rewards WHERE id = ?`
+      )
+        .bind(policy.rows[0].id)
+        .run()
+    ).rejects.toThrow('next empty level')
+
+    const level55 = listed.res.levels.find(level => level.level === 55)!
+    const claimed = await rpc('ClaimSkypassRewards', {
+      ids: [level55.rewards[0].id]
+    })
+    expect(await claimed.json()).toMatchObject({
+      rewards: [expect.objectContaining({ type: 'CONQUEST_TICKET' })]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT reward_policy_version, reward_policy_hash
+         FROM player_skypass_claims
+         WHERE user_id = ? AND reward_id = ?`
+      )
+        .bind(userId, level55.rewards[0].id)
+        .first()
+    ).toEqual({
+      reward_policy_version: policy.version,
+      reward_policy_hash: policy.policyHash
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 57 WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+    const extended = await (
+      await rpc('ListSkypassRewards', { season })
+    ).json<{
+      res: {
+        levels: Array<{
+          level: number
+          rewards: Array<{ id: number; claimed: boolean }>
+        }>
+      }
+    }>()
+    expect(extended.res.levels.map(level => level.level)).toEqual([
+      51, 52, 53, 54, 55, 56, 57, 58
+    ])
+    expect(
+      extended.res.levels
+        .find(level => level.level === 55)!
+        .rewards.find(reward => reward.id === level55.rewards[0].id)
+    ).toMatchObject({ claimed: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM skypass_rewards
+         WHERE infinite_source_reward_id = ?`
+      )
+        .bind(policy.rows[0].id)
+        .first()
+    ).toEqual({ count: 6 })
   })
 
   it('delivers every remaining source SkyPass reward into off-chain inventory', async () => {

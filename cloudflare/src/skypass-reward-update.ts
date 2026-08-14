@@ -510,7 +510,7 @@ export class SkypassRewardUpdateRepository {
         `SELECT id, level, season, tier, item_type, amount, is_starter,
                 attributes, is_infinite
          FROM ${version === undefined ? 'skypass_reward_active_rewards' : 'skypass_rewards'}
-         WHERE season = ?${version === undefined ? '' : ' AND policy_version = ?'}
+         WHERE season = ? AND policy_ordinal IS NOT NULL${version === undefined ? '' : ' AND policy_version = ?'}
          ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
       )
       .bind(...(version === undefined ? [season] : [season, version]))

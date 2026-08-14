@@ -3196,9 +3196,17 @@ export class PlayerRpcRepository {
     userId: string,
     season: number
   ): Promise<{ levels: SkypassLevel[]; hasPremium: boolean }> {
+    const progression = await this.database
+      .prepare(
+        `SELECT basic_skypass_level FROM player_progression WHERE user_id = ?`
+      )
+      .bind(userId)
+      .first<ProgressionRow>()
+    const progress = progression?.basic_skypass_level || 0
+    await this.materializeSkypassInfiniteRewards(season, progress + 1)
+
     const [
       rewardsResult,
-      progression,
       seasonStats,
       heroItems,
       titleItems,
@@ -3220,12 +3228,6 @@ export class PlayerRpcRepository {
         )
         .bind(userId, season)
         .all<SkypassRewardRow>(),
-      this.database
-        .prepare(
-          `SELECT basic_skypass_level FROM player_progression WHERE user_id = ?`
-        )
-        .bind(userId)
-        .first<ProgressionRow>(),
       this.database
         .prepare(
           `SELECT has_premium FROM player_skypass_season_stats
@@ -3255,7 +3257,6 @@ export class PlayerRpcRepository {
         .bind(userId)
         .all<{ deck_class: string }>()
     ])
-    const progress = progression?.basic_skypass_level || 0
     const hasPremium = seasonStats?.has_premium === 1
     const ownedHeroes = new Set(heroItems.results.map(row => row.token_id))
     const ownedTitles = new Set(titleItems.results.map(row => row.token_id))
@@ -3335,13 +3336,60 @@ export class PlayerRpcRepository {
     }
   }
 
+  private async materializeSkypassInfiniteRewards(
+    season: number,
+    expectedMaxInfiniteLevel: number
+  ): Promise<void> {
+    await this.database
+      .prepare(
+        `WITH RECURSIVE
+           source AS (
+             SELECT id, season, tier, item_type, amount, is_starter,
+                    attributes, updated_by, is_infinite, policy_version
+             FROM skypass_reward_active_rewards
+             WHERE season = ? AND is_infinite = 1
+               AND infinite_source_reward_id IS NULL
+             ORDER BY tier ASC, id ASC
+             LIMIT 1
+           ),
+           bounds AS (
+             SELECT MAX(level) AS found_max
+             FROM skypass_reward_active_rewards
+             WHERE season = ? AND is_infinite = 1
+           ),
+           levels(level) AS (
+             SELECT COALESCE(found_max, 0) + 1 FROM bounds
+             UNION ALL
+             SELECT level + 1 FROM levels
+             WHERE level < ?
+           )
+         INSERT OR IGNORE INTO skypass_rewards
+           (level, season, tier, item_type, amount, is_starter, attributes,
+            updated_at, updated_by, is_infinite, policy_version,
+            policy_ordinal, infinite_source_reward_id)
+         SELECT levels.level, source.season, source.tier, source.item_type,
+                source.amount, source.is_starter, source.attributes, NULL,
+                source.updated_by, source.is_infinite, source.policy_version,
+                NULL, source.id
+         FROM levels CROSS JOIN source
+         WHERE levels.level <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM skypass_reward_active_rewards existing
+             WHERE existing.season = source.season
+               AND existing.level = levels.level
+           )`
+      )
+      .bind(season, season, expectedMaxInfiniteLevel, expectedMaxInfiniteLevel)
+      .run()
+  }
+
   async listSkypassRewardDefinitions(season: number): Promise<SkypassReward[]> {
     const rows = await this.database
       .prepare(
         `SELECT id, level, season, tier, item_type, amount, is_starter,
                 attributes, is_infinite
          FROM skypass_reward_active_rewards
-         WHERE season = ?
+         WHERE season = ? AND policy_ordinal IS NOT NULL
          ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
       )
       .bind(season)
