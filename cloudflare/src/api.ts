@@ -1798,7 +1798,6 @@ export const handleApiRequest = async (
       }
 
       case 'AccountLeaderboard': {
-        const principal = await identityPrincipal(request, env)
         const body = await requestBody<{
           page?: import('@opensky/proto').Page
           req?: import('./competitive').LeaderboardRequest & {
@@ -1806,8 +1805,12 @@ export const handleApiRequest = async (
           }
         }>(request)
         if (!body.req) throw invalidArgument('req is required')
+        const principal = await optionalRpcPrincipal(request, env)
         const accountAddress =
-          body.req.accountAddress || identityReferenceFor(principal.userId)
+          body.req.accountAddress || principal?.reference
+        if (!accountAddress) {
+          throw invalidArgument('accountAddress is required')
+        }
         return json(
           request,
           env,
@@ -2117,9 +2120,22 @@ export const handleApiRequest = async (
       }
 
       case 'GetCardOwnership': {
-        const principal = await identityPrincipal(request, env)
+        const body = await requestBody<{
+          accountAddress?: string
+          contractQuery?: boolean
+        }>(request)
+        const principal = await optionalRpcPrincipal(request, env)
+        const accountAddress = body.accountAddress || principal?.reference
+        if (
+          !accountAddress?.startsWith('identity:') ||
+          !(await playerRpc.accountReferenceExists(accountAddress))
+        ) {
+          throw invalidArgument('accountAddress is invalid')
+        }
         return json(request, env, {
-          res: await playerRpc.cardOwnership(principal.userId)
+          res: await playerRpc.cardOwnership(
+            accountAddress.slice('identity:'.length)
+          )
         })
       }
 
@@ -2149,12 +2165,14 @@ export const handleApiRequest = async (
       }
 
       case 'GetStickers': {
+        await identityPrincipal(request, env)
         return json(request, env, {
           stickers: await content.listStickers(seasonFromDate())
         })
       }
 
       case 'GetStickersBySeason': {
+        await identityPrincipal(request, env)
         const body = await requestBody<{ season?: number }>(request)
         if (
           !Number.isSafeInteger(body.season) ||

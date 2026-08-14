@@ -237,6 +237,86 @@ export const browserRpcTestAuditErrors = ({
     .map(rpc => `browser Worker RPC has no direct contract-test reference: ${rpc}`)
 }
 
+export const extractSourcePublicRpcs = source =>
+  [...source.matchAll(/"([A-Za-z][A-Za-z0-9]*)"\s*:\s*\{([^}]*)\}/g)]
+    .filter(([, , sessions]) => sessions.includes('SessionTypePublic'))
+    .map(([, method]) => method)
+    .sort()
+
+/**
+ * Extracts Worker RPCs that unconditionally authenticate through the shared
+ * principal boundary. Empty case clauses inherit the next clause's body so
+ * source-compatible aliases such as FavoriteDeck/UnfavoriteDeck are covered.
+ */
+export const extractWorkerAuthenticatedRpcs = source => {
+  const file = ts.createSourceFile(
+    'api.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
+  const methods = new Set()
+  const authenticators = new Set([
+    'identityPrincipal',
+    'rpcPrincipal',
+    'walletPrincipal'
+  ])
+  const visit = node => {
+    if (ts.isSwitchStatement(node)) {
+      let pending = []
+      for (const clause of node.caseBlock.clauses) {
+        if (!ts.isCaseClause(clause) || !ts.isStringLiteral(clause.expression)) {
+          pending = []
+          continue
+        }
+        pending.push(clause.expression.text)
+        if (clause.statements.length === 0) continue
+        let authenticated = false
+        const inspect = child => {
+          if (
+            ts.isCallExpression(child) &&
+            ts.isIdentifier(child.expression) &&
+            authenticators.has(child.expression.text)
+          ) {
+            authenticated = true
+          }
+          ts.forEachChild(child, inspect)
+        }
+        for (const statement of clause.statements) inspect(statement)
+        if (authenticated) pending.forEach(method => methods.add(method))
+        pending = []
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return [...methods].sort()
+}
+
+export const browserRpcAccessAuditErrors = ({
+  browserMethods,
+  sourcePublicRpcs,
+  workerAuthenticatedRpcs,
+  reviewedNonPorts = REVIEWED_BROWSER_RPC_NON_PORTS
+}) => {
+  const sourcePublic = new Set(sourcePublicRpcs)
+  const workerAuthenticated = new Set(workerAuthenticatedRpcs)
+  const nonPorts = new Set(Object.keys(reviewedNonPorts))
+  return browserMethods.map(browserMethodToRpc).flatMap(rpc => {
+    if (nonPorts.has(rpc)) return []
+    const sourceAccess = sourcePublic.has(rpc) ? 'public' : 'authenticated'
+    const workerAccess = workerAuthenticated.has(rpc)
+      ? 'authenticated'
+      : 'public'
+    return sourceAccess === workerAccess
+      ? []
+      : [
+          `browser RPC access drift: ${rpc} is ${sourceAccess} in source and ${workerAccess} in Worker`
+        ]
+  })
+}
+
 export const browserRpcAuditErrors = ({
   browserMethods,
   sourceMethods,
@@ -301,19 +381,24 @@ const main = async () => {
     path.dirname(new URL(import.meta.url).pathname),
     '..'
   )
-  const [browserFiles, rpcFiles, gateway, testFiles] = await Promise.all([
-    Promise.all([
-      sourceFiles(path.join(root, 'webapp/src')),
-      sourceFiles(path.join(root, 'game/src'))
-    ]).then(groups => groups.flat()),
-    readdir(path.join(root, 'api/rpc')).then(files =>
-      files
-        .filter(file => file.endsWith('.go') && !file.endsWith('_test.go'))
-        .sort()
-    ),
-    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
-    sourceFiles(path.join(root, 'cloudflare/test'))
-  ])
+  const [browserFiles, rpcFiles, gateway, testFiles, accessControl] =
+    await Promise.all([
+      Promise.all([
+        sourceFiles(path.join(root, 'webapp/src')),
+        sourceFiles(path.join(root, 'game/src'))
+      ]).then(groups => groups.flat()),
+      readdir(path.join(root, 'api/rpc')).then(files =>
+        files
+          .filter(file => file.endsWith('.go') && !file.endsWith('_test.go'))
+          .sort()
+      ),
+      readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
+      sourceFiles(path.join(root, 'cloudflare/test')),
+      readFile(
+        path.join(root, 'api/rpc/middleware/access_control.go'),
+        'utf8'
+      )
+    ])
   const browserMethods = new Set()
   for (const file of browserFiles) {
     const receiverPaths = [['APIClient', 'opensky'], ['apiClient']]
@@ -355,6 +440,11 @@ const main = async () => {
     ...browserRpcTestAuditErrors({
       browserMethods: methods,
       testedRpcs
+    }),
+    ...browserRpcAccessAuditErrors({
+      browserMethods: methods,
+      sourcePublicRpcs: extractSourcePublicRpcs(accessControl),
+      workerAuthenticatedRpcs: extractWorkerAuthenticatedRpcs(gateway)
     })
   ]
   if (errors.length) {
@@ -386,7 +476,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    `All ${methods.length} browser RPC calls have Worker handlers or reviewed identity dispositions; ${methods.length - nonPorts.length} Worker-backed calls have direct contract-test references and ${nonPorts.length} legacy calls are guarded non-ports\n`
+    `All ${methods.length} browser RPC calls have Worker handlers or reviewed identity dispositions; ${methods.length - nonPorts.length} Worker-backed calls preserve source public/auth boundaries and have direct contract-test references, while ${nonPorts.length} legacy calls are guarded non-ports\n`
   )
 }
 

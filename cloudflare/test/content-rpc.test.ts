@@ -189,7 +189,8 @@ describe('source content RPC compatibility', () => {
     ])
     await activateStickerSchedule(season, 77, 25)
 
-    expect(await (await rpc('GetStickers', {}, false)).json()).toEqual({
+    expect((await rpc('GetStickers', {}, false)).status).toBe(401)
+    expect(await (await rpc('GetStickers', {})).json()).toEqual({
       stickers: [
         {
           id: expect.any(Number),
@@ -203,17 +204,26 @@ describe('source content RPC compatibility', () => {
     })
     expect(
       await (
-        await rpc('GetStickersBySeason', { season: season + 1 }, false)
+        await rpc('GetStickersBySeason', { season: season + 1 })
       ).json()
     ).toEqual({ stickers: [] })
+    expect(
+      (
+        await rpc(
+          'GetStickersBySeason',
+          { season: season + 1 },
+          false
+        )
+      ).status
+    ).toBe(401)
     await activateStickerSchedule(season + 1, 88, 50)
     expect(
       await (
-        await rpc('GetStickersBySeason', { season: season + 1 }, false)
+        await rpc('GetStickersBySeason', { season: season + 1 })
       ).json()
     ).toMatchObject({ stickers: [{ tokenId: 88, requiredPoints: 50 }] })
     expect(
-      (await rpc('GetStickersBySeason', { season: -1 }, false)).status
+      (await rpc('GetStickersBySeason', { season: -1 })).status
     ).toBe(400)
 
     expect(

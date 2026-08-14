@@ -954,14 +954,18 @@ describe('legacy player RPC compatibility', () => {
     )
     expect(malformedCursor.status).toBe(400)
 
-    const centered = await rpc('AccountLeaderboard', {
-      page: { pageSize: 3 },
-      req: {
-        accountAddress: identityReference,
-        gameMode: 'RANKED_CONSTRUCTED',
-        season
-      }
-    })
+    const centered = await rpc(
+      'AccountLeaderboard',
+      {
+        page: { pageSize: 3 },
+        req: {
+          accountAddress: identityReference,
+          gameMode: 'RANKED_CONSTRUCTED',
+          season
+        }
+      },
+      false
+    )
     expect(centered.status).toBe(200)
     expect(
       (
@@ -1105,6 +1109,15 @@ describe('legacy player RPC compatibility', () => {
     expect(centeredBody.res.map(entry => entry.account.address)).toContain(
       identityReference
     )
+    expect(
+      (
+        await rpc(
+          'AccountLeaderboard',
+          { req: { gameMode: 'RANKED_CONSTRUCTED', season } },
+          false
+        )
+      ).status
+    ).toBe(400)
   })
 
   it('lists only the signed-in player source-visible match history', async () => {
@@ -2107,6 +2120,46 @@ describe('legacy player RPC compatibility', () => {
       SW_SILVER_CARDS: { balance: '0' },
       SW_GOLD_CARDS: { balance: '0' }
     })
+
+    const otherUserId = 'public-card-ownership-user'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Public Cards', 'public-cards@example.com', ?, ?)`
+    )
+      .bind(otherUserId, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(otherUserId)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_SILVER_CARDS', 6, 2, 0, 'test', ?, ?)`
+    )
+      .bind(otherUserId, now, now)
+      .run()
+
+    const publicOwnership = await rpc(
+      'GetCardOwnership',
+      { accountAddress: `identity:${otherUserId}`, contractQuery: false },
+      false
+    )
+    expect(publicOwnership.status).toBe(200)
+    expect(await publicOwnership.json()).toMatchObject({
+      res: {
+        cardBalances: { '6': { SW_SILVER_CARDS: { balance: '2' } } }
+      }
+    })
+    expect(
+      (
+        await rpc(
+          'GetCardOwnership',
+          { accountAddress: 'identity:missing' },
+          false
+        )
+      ).status
+    ).toBe(400)
+    expect((await rpc('GetCardOwnership', {}, false)).status).toBe(400)
   })
 
   it('summarizes identity inventory and public Cloud Weasel item supply', async () => {

@@ -3,10 +3,13 @@ import test from 'node:test'
 
 import {
   browserMethodToRpc,
+  browserRpcAccessAuditErrors,
   browserRpcAuditErrors,
   browserRpcTestAuditErrors,
   extractBrowserRpcCalls,
-  extractRpcTestReferences
+  extractRpcTestReferences,
+  extractSourcePublicRpcs,
+  extractWorkerAuthenticatedRpcs
 } from './audit-cloudflare-browser-rpcs.mjs'
 
 test('extracts real webapp and game RPC calls without comments or properties', () => {
@@ -70,6 +73,50 @@ test('requires a direct contract-test reference for every Worker-backed browser 
       }
     }),
     ['browser Worker RPC has no direct contract-test reference: ListQuests']
+  )
+})
+
+test('extracts source and Worker access boundaries including fallthrough aliases', () => {
+  assert.deepEqual(
+    extractSourcePublicRpcs(`
+      var accessMap = map[string][]SessionType{
+        "GetAccount": {SessionTypePublic, SessionTypeUser},
+        "ListDecks": {SessionTypeUser, SessionTypeAdmin},
+      }
+    `),
+    ['GetAccount']
+  )
+  assert.deepEqual(
+    extractWorkerAuthenticatedRpcs(`
+      switch (method) {
+        case 'GetAccount':
+          await optionalRpcPrincipal(request, env)
+          break
+        case 'FavoriteDeck':
+        case 'UnfavoriteDeck': {
+          await identityPrincipal(request, env)
+          break
+        }
+      }
+    `),
+    ['FavoriteDeck', 'UnfavoriteDeck']
+  )
+})
+
+test('fails closed on public or authenticated browser RPC access drift', () => {
+  assert.deepEqual(
+    browserRpcAccessAuditErrors({
+      browserMethods: ['getAccount', 'listDecks', 'requestAccountDeletion'],
+      sourcePublicRpcs: ['GetAccount'],
+      workerAuthenticatedRpcs: ['GetAccount'],
+      reviewedNonPorts: {
+        RequestAccountDeletion: 'Google OIDC step-up deletion flow'
+      }
+    }),
+    [
+      'browser RPC access drift: GetAccount is public in source and authenticated in Worker',
+      'browser RPC access drift: ListDecks is authenticated in source and public in Worker'
+    ]
   )
 })
 
