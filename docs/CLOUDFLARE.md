@@ -472,6 +472,22 @@ and progress are not migrated.
   receipts, with `changed_db: false` and no rows written. The API/web Worker and
   its entry artifacts remained unchanged at `/assets/index-b1769b84.js` and
   `/game/cloudflare/assets/index-79a70ba2.js`.
+- Current and historical account stats now include the source competitive rank
+  and `rankProgress` projections. Rank positions use score, update time, and
+  numeric game-account tie breaks within each rank; Master preserves the
+  source top-100 adjustment, while its progress denominator remains the exact
+  stored rank bucket. Unranked progress continues to use total account XP, and
+  banned, suspended, or deleted historical rows are replaced by the same clean
+  synthetic stats as the source. Milestone `088f5d82` passed exact-head
+  release-contract run `31777933164`, the 361-test main Worker suite, and the
+  complete cross-service release contract before deployment on 2026-08-14 as
+  Worker version `7624c874-9c99-483e-92e8-0d0d55f84a78`. No migration was
+  required. The public Version RPC reported that exact version; a read-only D1
+  projection found positions 1 through 2 for the two unranked players in each
+  ranked mode, zero total score, and zero settlement receipts, with
+  `changed_db: false` and no rows written. Cloudflare uploaded no asset changes,
+  retaining `/assets/index-b1769b84.js` and
+  `/game/cloudflare/assets/index-79a70ba2.js`.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
