@@ -30,6 +30,7 @@ import { CompetitiveRepository } from './competitive'
 import { completeDeckRankInsert } from './deck-ranks'
 import {
   alreadyExists,
+  failedPrecondition,
   invalidArgument,
   notFound,
   permissionDenied
@@ -1710,10 +1711,22 @@ export class PlayerRpcRepository {
   }
 
   async markDeckNotNew(userId: string, uuid: string): Promise<boolean> {
+    const deck = await this.database
+      .prepare(
+        `SELECT deck_type FROM player_decks
+         WHERE user_id = ? AND id = ?`
+      )
+      .bind(userId, uuid)
+      .first<{ deck_type: Deck['deckType'] }>()
+    if (!deck) throw notFound('deck not found')
+    if (deck.deck_type === ('LOCKED_STARTER' as Deck['deckType'])) {
+      throw failedPrecondition('deck not unlocked')
+    }
+
     await this.database
       .prepare(
         `UPDATE player_decks SET is_new = 0, updated_at = ?
-         WHERE user_id = ? AND id = ? AND deck_type != 'LOCKED_STARTER'`
+         WHERE user_id = ? AND id = ?`
       )
       .bind(new Date().toISOString(), userId, uuid)
       .run()
@@ -2130,10 +2143,13 @@ export class PlayerRpcRepository {
     const executeAt = new Date(now.getTime() + 5 * 60 * 1000).toISOString()
     const statements: D1PreparedStatement[] = []
     for (const tokenId of tokenIds) {
+      if (!Number.isSafeInteger(tokenId) || tokenId < 0) {
+        throw invalidArgument('Invalid card/token ID')
+      }
       const typeCode = (tokenId & 0xff0000) >> 16
       const itemType = ITEM_TYPE_BY_TOKEN_CODE[typeCode]
       const itemId = tokenId & 0x00ffff
-      if (!itemType) continue
+      if (!itemType) throw invalidArgument('Invalid card/token ID')
       if (immediately) {
         statements.push(
           this.database

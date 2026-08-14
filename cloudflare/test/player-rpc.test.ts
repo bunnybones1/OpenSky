@@ -1869,6 +1869,19 @@ describe('legacy player RPC compatibility', () => {
       res: { uuid: created.uuid, name: 'Practice Copy' }
     })
 
+    expect(
+      await (await rpc('FavoriteDeck', { uuid: created.uuid })).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
+    ).toMatchObject({ res: { isFavorite: true } })
+    expect(
+      await (await rpc('UnfavoriteDeck', { uuid: created.uuid })).json()
+    ).toEqual({ ok: true })
+    expect(
+      await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
+    ).toMatchObject({ res: { isFavorite: false } })
+
     const favorited = await rpc('ToggleDeckFavorite', { uuid: created.uuid })
     expect(await favorited.json()).toEqual({ isFavorite: true })
     expect(
@@ -1942,6 +1955,120 @@ describe('legacy player RPC compatibility', () => {
 
   it('requires a deck selector before deletion', async () => {
     expect((await rpc('DeleteDeck', { req: {} })).status).toBe(400)
+  })
+
+  it('marks only an existing unlocked deck as not new', async () => {
+    const decks = await rpc('ListDecks', {})
+    const listed = (
+      await decks.json<{
+        res: Array<{ uuid: string; class: string; isNew: boolean }>
+      }>()
+    ).res
+    const unlocked = listed.find(deck => deck.class === 'STR')!
+    const locked = listed.find(deck => deck.class === 'AGY')!
+    expect(unlocked.isNew).toBe(true)
+
+    const marked = await rpc('MarkDeckNotNew', { uuid: unlocked.uuid })
+    expect(marked.status).toBe(200)
+    expect(await marked.json()).toEqual({ ok: true })
+    expect(
+      await (await rpc('GetDeck', { req: { uuid: unlocked.uuid } })).json()
+    ).toMatchObject({ res: { isNew: false } })
+
+    const lockedResponse = await rpc('MarkDeckNotNew', { uuid: locked.uuid })
+    expect(lockedResponse.status).toBe(412)
+    expect(await lockedResponse.json()).toMatchObject({
+      code: 'webrpc.failed_precondition',
+      msg: 'deck not unlocked'
+    })
+    expect((await rpc('MarkDeckNotNew', { uuid: 'missing' })).status).toBe(404)
+    expect((await rpc('MarkDeckNotNew', {})).status).toBe(400)
+    expect((await rpc('MarkDeckNotNew', {}, false)).status).toBe(401)
+  })
+
+  it('marks encoded items immediately or later and rejects invalid IDs atomically', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKERS', 5, 1, 1, 'test', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_CARD_BACKS', 7, 1, 1, 'test', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+    const stickerTokenId = (5 << 16) + 5
+    const cardBackTokenId = (6 << 16) + 7
+
+    expect(
+      await (
+        await rpc('MarkItemsNotNew', {
+          tokenIDs: [stickerTokenId],
+          immediately: true
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT is_new FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKERS' AND token_id = 5`
+      )
+        .bind(userId)
+        .first<{ is_new: number }>()
+    ).toEqual({ is_new: 0 })
+
+    expect(
+      await (
+        await rpc('MarkItemsNotNew', {
+          tokenIDs: [cardBackTokenId],
+          immediately: false
+        })
+      ).json()
+    ).toEqual({ ok: true })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT execute_at FROM player_deferred_item_updates
+         WHERE user_id = ? AND item_type = 'SW_CARD_BACKS' AND token_id = 7`
+      )
+        .bind(userId)
+        .first<{ execute_at: string }>()
+    ).toEqual({ execute_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET is_new = 1
+       WHERE user_id = ? AND item_type = 'SW_STICKERS' AND token_id = 5`
+    )
+      .bind(userId)
+      .run()
+    const invalid = await rpc('MarkItemsNotNew', {
+      tokenIDs: [stickerTokenId, (11 << 16) + 1],
+      immediately: true
+    })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({
+      code: 'webrpc.invalid_argument',
+      msg: 'Invalid card/token ID'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT is_new FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_STICKERS' AND token_id = 5`
+      )
+        .bind(userId)
+        .first<{ is_new: number }>()
+    ).toEqual({ is_new: 1 })
+    expect((await rpc('MarkItemsNotNew', { tokenIDs: [-1] })).status).toBe(400)
+    expect((await rpc('MarkItemsNotNew', { tokenIDs: [1.5] })).status).toBe(400)
+    expect(
+      await (await rpc('MarkItemsNotNew', { tokenIDs: [] })).json()
+    ).toEqual({ ok: true })
+    expect((await rpc('MarkItemsNotNew', {})).status).toBe(400)
+    expect((await rpc('MarkItemsNotNew', {}, false)).status).toBe(401)
   })
 
   it('returns item and card ownership using legacy balance semantics', async () => {

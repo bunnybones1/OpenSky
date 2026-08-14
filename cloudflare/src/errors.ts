@@ -20,6 +20,9 @@ export const alreadyExists = (message: string) =>
 export const notFound = (message: string) =>
   new RpcError(404, 'webrpc.not_found', message)
 
+export const failedPrecondition = (message: string) =>
+  new RpcError(412, 'webrpc.failed_precondition', message)
+
 export const unauthenticated = (message = 'unauthorized') =>
   new RpcError(401, 'webrpc.unauthenticated', message)
 
