@@ -107,6 +107,11 @@ run only after that task settles.
 - Match-service admission re-evaluates that proof and the pool time window on
   every read. An enabled operator flag therefore fails closed at the exact pool
   expiry boundary without waiting for another write or deployment.
+- Player entry uses those same two authorities inside the atomic ticket-spend
+  batch. A disabled mode, missing verification, or exact pool expiry creates no
+  run and leaves the off-chain ticket untouched. An already-active run remains
+  idempotently readable/re-enterable after switch-off, matching the source
+  state-manager contract without stranding another ticket.
 
 ## Remaining authoritative input
 
@@ -157,6 +162,9 @@ Object alarm may partially grant inventory before the receipt is durable.
   payload with one settlement, one delayed delivery, and no duplicate feed or
   inventory writes.
 - D1 rollback coverage for failures at each statement in the batch.
+- Entry coverage proves disabled, unverified, and exact-expiry states cannot
+  consume a ticket; enabled receipt-backed entry remains concurrency-safe, and
+  retrying an active run after switch-off does not spend again.
 - Feed events, inventory balances, Conquest stats, and terminal status agree.
 - Production read-only probes show no pre-enable Conquest rows or grants.
 - Conquest mode flags remain false until all checks pass against the deployed

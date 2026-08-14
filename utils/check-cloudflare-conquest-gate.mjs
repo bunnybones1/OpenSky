@@ -296,8 +296,16 @@ export const conquestGateErrors = (config, evidence = {}) => {
     }
   }
   if (evidence.api !== undefined) {
-    if (!evidence.api.includes('FROM conquest_approved_active_reward_pools')) {
-      errors.push('Conquest rewards API lost approved-pool gate')
+    for (const token of [
+      'FROM conquest_approved_active_reward_pools',
+      'FROM game_mode_status',
+      "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
+      'FROM conquest_verified_queue_pools verified',
+      'verified.starts_at <= ? AND verified.ends_at > ?'
+    ]) {
+      if (!evidence.api.includes(token)) {
+        errors.push(`Conquest player API lost admission gate: ${token}`)
+      }
     }
   }
   if (evidence.gateway !== undefined) {

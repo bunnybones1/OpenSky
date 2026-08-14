@@ -156,6 +156,15 @@ export class ConquestRepository {
              SELECT 1 FROM player_items
              WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
                AND token_id = 2 AND balance > 0
+           ) AND EXISTS (
+             SELECT 1 FROM game_mode_status
+             WHERE game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1
+           ) AND EXISTS (
+             SELECT 1
+             FROM conquest_verified_queue_pools verified
+             JOIN conquest_approved_active_reward_pools approved
+               ON approved.version = verified.pool_version
+             WHERE verified.starts_at <= ? AND verified.ends_at > ?
            )`
         )
         .bind(
@@ -166,7 +175,9 @@ export class ConquestRepository {
           deckClass,
           createdAt,
           userId,
-          userId
+          userId,
+          createdAt,
+          createdAt
         ),
       this.database
         .prepare(

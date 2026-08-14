@@ -145,7 +145,13 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'SELECT 1 FROM conquest_approved_active_reward_pools',
       'ORDER BY starts_at DESC, version DESC'
     ].join('\n'),
-    api: 'FROM conquest_approved_active_reward_pools',
+    api: [
+      'FROM conquest_approved_active_reward_pools',
+      'FROM game_mode_status',
+      "game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1",
+      'FROM conquest_verified_queue_pools verified',
+      'verified.starts_at <= ? AND verified.ends_at > ?'
+    ].join('\n'),
     gateway: [
       "case 'GMListConquestReadiness'",
       "case 'GMVerifyConquestReadiness'",

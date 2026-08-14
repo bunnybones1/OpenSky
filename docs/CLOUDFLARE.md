@@ -389,6 +389,11 @@ and progress are not migrated.
 - D1 now also backs the source Conquest entry/status/statistics foundation. It
   spends the original non-tradable ticket atomically, enforces one active run,
   and exposes the original treasure thresholds without inventing a reward pool.
+  A new run can spend that ticket only while constructed Conquest is enabled
+  and the same independently approved, receipt-verified reward window used by
+  matchmaking is current. Both checks are inside the entry batch, including
+  the strict queue-expiry boundary. Retrying an already-active run remains
+  source-idempotent after a switch-off and never spends another ticket.
 - The authoritative game Worker records Conquest win/loss/draw results by
   durable match ID and performs the source first-loss/third-win transition with
   a per-proposal retry receipt. Zero-win losses complete immediately. Earned

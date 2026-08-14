@@ -1,9 +1,7 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 
-import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
 import { handleApiRequest } from '../src/api'
-import { deliverDueConquestGold } from '../src/conquest-delivery'
 import { isConquestQueueReady } from '../src/conquest-readiness'
 import type { Env } from '../src/env'
 import {
@@ -11,7 +9,7 @@ import {
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
 import { PlayerRepository } from '../src/player'
-import { approvedConquestPoolStatements } from './helpers/conquest-pool'
+import { provisionVerifiedConquestDrill } from './helpers/conquest-readiness'
 
 const testEnv = env as unknown as Env
 
@@ -75,74 +73,6 @@ const grantVerify = async (userId: string) => {
     .run()
 }
 
-const provisionVerifiedDrill = async () => {
-  const now = Date.now()
-  const startsAt = new Date(now - 26 * 60 * 60 * 1_000).toISOString()
-  const settledAt = new Date(now - 25 * 60 * 60 * 1_000).toISOString()
-  const deliveredAt = new Date(now - 60 * 60 * 1_000).toISOString()
-  const endsAt = new Date(now + 2 * 60 * 60 * 1_000).toISOString()
-  const poolVersion = `readiness-pool-${crypto.randomUUID()}`
-  const drillUserId = `system:conquest-readiness-drill:${crypto.randomUUID()}`
-  const entryKey = `readiness-drill:${crypto.randomUUID()}`
-  const createdAt = new Date(now - 27 * 60 * 60 * 1_000).toISOString()
-  await env.AUTH_DB.batch([
-    env.AUTH_DB.prepare(
-      `INSERT INTO users
-         (id, display_name, primary_email, created_at, updated_at)
-       VALUES (?, 'Conquest Readiness Drill', ?, ?, ?)`
-    ).bind(
-      drillUserId,
-      `${crypto.randomUUID()}@example.com`,
-      createdAt,
-      createdAt
-    ),
-    env.AUTH_DB.prepare(
-      `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
-    ).bind(drillUserId, createdAt),
-    ...approvedConquestPoolStatements(env.AUTH_DB, {
-      version: poolVersion,
-      startsAt,
-      endsAt,
-      createdAt,
-      activatedAt: startsAt,
-      silver: [6],
-      gold: [136]
-    }),
-    env.AUTH_DB.prepare(
-      `INSERT INTO player_conquests
-         (entry_key, user_id, status, nonce, mode, hero, deck_class,
-          match_progress, created_at, ended_at)
-       VALUES (?, ?, 'REWARDS_PENDING', 1, 'CONQUEST_CONSTRUCTED', 'ADA',
-               'STR', '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
-    ).bind(entryKey, drillUserId, settledAt, settledAt)
-  ])
-  const conquest = await env.AUTH_DB.prepare(
-    `SELECT id FROM player_conquests WHERE entry_key = ?`
-  )
-    .bind(entryKey)
-    .first<{ id: number }>()
-  await settlePendingConquest(env.AUTH_DB, conquest!.id, settledAt, () => 0)
-  expect(
-    await deliverDueConquestGold(env.AUTH_DB, new Date(deliveredAt))
-  ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
-  const receipts = await env.AUTH_DB.prepare(
-    `SELECT settlement.settlement_key, delivery.delivery_key
-     FROM player_conquest_settlements settlement
-     JOIN player_conquest_gold_deliveries delivery
-       ON delivery.conquest_id = settlement.conquest_id
-     WHERE settlement.conquest_id = ?`
-  )
-    .bind(conquest!.id)
-    .first<{ settlement_key: string; delivery_key: string }>()
-  return {
-    poolVersion,
-    conquestId: conquest!.id,
-    settlementKey: receipts!.settlement_key,
-    deliveryKey: receipts!.delivery_key,
-    drillUserId
-  }
-}
-
 describe('Conquest readiness operations', () => {
   it('wraps real drill receipts in a dormant, idempotent operator decision without enabling queues', async () => {
     expect(
@@ -157,7 +87,7 @@ describe('Conquest readiness operations', () => {
       ).first()
     ).toEqual({ permissions: 0, operations: 0, audits: 0, readiness: 0 })
 
-    const evidence = await provisionVerifiedDrill()
+    const evidence = await provisionVerifiedConquestDrill(env.AUTH_DB)
     const firstVerifier = await actor('readiness-verifier-one')
     const secondVerifier = await actor('readiness-verifier-two')
     const ordinaryPlayer = await actor('readiness-player')
@@ -352,7 +282,7 @@ describe('Conquest readiness operations', () => {
       `UPDATE conquest_reward_pools SET status = 'RETIRED'
        WHERE status = 'ACTIVE'`
     ).run()
-    const evidence = await provisionVerifiedDrill()
+    const evidence = await provisionVerifiedConquestDrill(env.AUTH_DB)
     const verifier = await actor('readiness-preparing-verifier')
     await grantAdmin(verifier)
     await grantVerify(verifier)

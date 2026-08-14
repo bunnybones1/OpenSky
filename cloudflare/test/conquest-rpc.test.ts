@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { approvedConquestPoolStatements } from './helpers/conquest-pool'
 import { handleApiRequest } from '../src/api'
+import { ConquestRepository } from '../src/conquest'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
@@ -17,6 +18,10 @@ import {
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
+import {
+  enableConstructedConquestForTest,
+  provisionVerifiedConquestReadiness
+} from './helpers/conquest-readiness'
 
 const testEnv = env as unknown as Env
 const userId = 'conquest-player-user-id'
@@ -46,7 +51,11 @@ beforeEach(async () => {
       `UPDATE conquest_reward_pools SET status = 'RETIRED'
        WHERE status = 'ACTIVE'`
     ),
-    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare(
+      `UPDATE game_mode_status SET enabled = 0
+       WHERE game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')`
+    ),
+    env.AUTH_DB.prepare('DELETE FROM users WHERE id = ?').bind(userId)
   ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
@@ -175,6 +184,52 @@ describe('source conquest RPC foundation', () => {
       .bind(userId, now, now)
       .run()
 
+    expect((await rpc('EnterConquest', { hero: Hero.ADA })).status).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT balance FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+              AND token_id = 2) balance,
+           (SELECT COUNT(*) FROM player_conquests
+            WHERE user_id = ?) conquests`
+      )
+        .bind(userId, userId)
+        .first()
+    ).toEqual({ balance: 2, conquests: 0 })
+
+    const readiness = await provisionVerifiedConquestReadiness(env.AUTH_DB)
+    expect((await rpc('EnterConquest', { hero: Hero.ADA })).status).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET' AND token_id = 2`
+      )
+        .bind(userId)
+        .first('balance')
+    ).toBe(2)
+
+    await enableConstructedConquestForTest(env.AUTH_DB)
+    await expect(
+      new ConquestRepository(env.AUTH_DB).enter(
+        userId,
+        Hero.ADA,
+        new Date(readiness.endsAt)
+      )
+    ).rejects.toThrow('enter conquest')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT balance FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+              AND token_id = 2) balance,
+           (SELECT COUNT(*) FROM player_conquests
+            WHERE user_id = ?) conquests`
+      )
+        .bind(userId, userId)
+        .first()
+    ).toEqual({ balance: 2, conquests: 0 })
+
     expect(
       await (await rpc('EnterConquest', { hero: Hero.ADA })).json()
     ).toEqual({ status: true })
@@ -197,6 +252,10 @@ describe('source conquest RPC foundation', () => {
         .first('balance')
     ).toBe(1)
 
+    await env.AUTH_DB.prepare(
+      `UPDATE game_mode_status SET enabled = 0
+       WHERE game_mode = 'CONQUEST_CONSTRUCTED'`
+    ).run()
     expect(
       await (await rpc('EnterConquest', { hero: Hero.SAMYA })).json()
     ).toEqual({ status: true })
@@ -233,6 +292,8 @@ describe('source conquest RPC foundation', () => {
          VALUES (?, 'SW_CONQUEST_TICKET', 2, 1, 0, 'test', ?, ?)`
       ).bind(userId, now, now)
     ])
+    await provisionVerifiedConquestReadiness(env.AUTH_DB)
+    await enableConstructedConquestForTest(env.AUTH_DB)
 
     const responses = await Promise.all([
       rpc('EnterConquest', { hero: Hero.ADA }),
