@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   REWARD_READINESS_QUERY,
   rewardReadiness,
+  rewardReadinessEnvironment,
   rewardReadinessRow
 } from './audit-cloudflare-reward-readiness.mjs'
 
@@ -45,6 +46,22 @@ test('uses one read-only scalar SELECT', () => {
   )
   assert.match(REWARD_READINESS_QUERY, /2021-11-22T14:00:00\.000Z/)
   assert.match(REWARD_READINESS_QUERY, /skypass_reward_active_policies/)
+})
+
+test('pins production evidence to the reviewed Cloudflare account', () => {
+  assert.deepEqual(
+    rewardReadinessEnvironment(
+      {
+        CLOUDFLARE_ACCOUNT_ID: 'stale-shell-account',
+        CLOUDFLARE_API_TOKEN: 'preserved-token'
+      },
+      'reviewed-repository-account'
+    ),
+    {
+      CLOUDFLARE_ACCOUNT_ID: 'reviewed-repository-account',
+      CLOUDFLARE_API_TOKEN: 'preserved-token'
+    }
+  )
 })
 
 test('classifies the observed production activation shape without treating schedulers as policy', () => {

@@ -231,6 +231,14 @@ export const rewardReadinessRow = output => {
   return rows[0]
 }
 
+export const rewardReadinessEnvironment = (environment, accountId) => ({
+  ...environment,
+  // Read-only production evidence must follow the same pinned account
+  // boundary as deployment and migrations. Never let a stale shell variable
+  // redirect this query to a different Cloudflare account.
+  CLOUDFLARE_ACCOUNT_ID: accountId
+})
+
 const printReport = ({ tracks }) => {
   const widths = {
     track: Math.max(
@@ -285,11 +293,7 @@ const main = async () => {
     {
       cwd: root,
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        CLOUDFLARE_ACCOUNT_ID:
-          process.env.CLOUDFLARE_ACCOUNT_ID || config.account_id
-      }
+      env: rewardReadinessEnvironment(process.env, config.account_id)
     }
   )
   if (command.status !== 0) {

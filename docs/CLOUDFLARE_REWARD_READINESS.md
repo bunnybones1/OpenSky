@@ -14,6 +14,10 @@ The command executes one read-only scalar `SELECT` through the repository's
 pinned Wrangler and classifies each reward track. It mirrors runtime admission:
 current UTC time and season, the latest started schedule, exact approval-policy
 digests, current Conquest V2 settings, and time-bounded Conquest drill receipts.
+The Wrangler child always uses the account ID pinned in `wrangler.jsonc`; a
+stale `CLOUDFLARE_ACCOUNT_ID` in the operator shell cannot redirect production
+readiness evidence to another account.
+
 `core-live` needs no economy schedule, `active` has its required policy
 authority, and a `dormant-*` status means the TypeScript/D1 engine is deployed
 but fails closed pending explicit content, activation, or a receipt-backed
