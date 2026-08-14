@@ -412,6 +412,43 @@ const feedCursor = (cursor?: string) => {
 
 const feedCursorFor = (offset: number) => btoa(JSON.stringify({ offset }))
 
+interface FeedEventCursor {
+  id: number
+  createdAt: string
+}
+
+const encodeFeedEventCursor = (event: FeedEvent): string =>
+  btoa(JSON.stringify([String(event.id), event.createdAt]))
+
+const decodeFeedEventCursor = (value: string): FeedEventCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== 2 ||
+      typeof values[0] !== 'string' ||
+      typeof values[1] !== 'string'
+    ) {
+      throw new Error('cursor shape')
+    }
+    const id = Number(values[0])
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('cursor id')
+    if (!values[1] || !Number.isFinite(Date.parse(values[1]))) {
+      throw new Error('cursor createdAt')
+    }
+    return { id, createdAt: values[1] }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const compareFeedEventCursor = (
+  event: FeedEvent,
+  cursor: FeedEventCursor
+): number =>
+  Date.parse(cursor.createdAt) - Date.parse(event.createdAt) ||
+  cursor.id - event.id
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -755,17 +792,38 @@ export class PlayerRpcRepository {
         return time || right.id - left.id
       })
     const size = feedPageSize(page)
-    const offset = feedCursor(page?.before)
-    const res = filtered.slice(offset, offset + size)
-    const nextOffset = offset + res.length
+    if (page?.before && page.after) {
+      throw invalidArgument('page cannot use before and after together')
+    }
+    let start = 0
+    let end = Math.min(filtered.length, size)
+    if (page?.before) {
+      const cursor = decodeFeedEventCursor(page.before)
+      const next = filtered.findIndex(
+        event => compareFeedEventCursor(event, cursor) > 0
+      )
+      start = next < 0 ? filtered.length : next
+      end = Math.min(filtered.length, start + size)
+    } else if (page?.after) {
+      const cursor = decodeFeedEventCursor(page.after)
+      const previousEnd = filtered.findIndex(
+        event => compareFeedEventCursor(event, cursor) >= 0
+      )
+      end = previousEnd < 0 ? filtered.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const res = filtered.slice(start, end)
     return {
       page: {
         pageSize: size,
-        hasBefore: nextOffset < filtered.length,
-        ...(nextOffset < filtered.length
-          ? { after: feedCursorFor(nextOffset) }
-          : {}),
-        hasAfter: offset > 0
+        hasBefore: end < filtered.length,
+        hasAfter: start > 0,
+        ...(res.length > 0
+          ? {
+              before: encodeFeedEventCursor(res[0]),
+              after: encodeFeedEventCursor(res[res.length - 1])
+            }
+          : {})
       },
       res
     }

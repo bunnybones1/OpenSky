@@ -1345,25 +1345,60 @@ describe('legacy player RPC compatibility', () => {
     expect(first.status).toBe(200)
     const firstPage = await first.json<{
       page: { hasBefore: boolean; after: string }
-      res: Array<{ type: string; tokenIds?: number[] }>
+      res: Array<{
+        id: number
+        type: string
+        createdAt: string
+        tokenIds?: number[]
+      }>
     }>()
     expect(firstPage).toMatchObject({
       page: { hasBefore: true },
       res: [{ type: 'DELAYED_REWARD', tokenIds: [131208] }]
     })
+    expect(JSON.parse(atob(firstPage.page.after))).toEqual([
+      String(firstPage.res[0].id),
+      firstPage.res[0].createdAt
+    ])
+
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquest_feed_events
+         (user_id, conquest_id, event_type, token_ids_json, created_at)
+       VALUES (?, ?, 'REWARD', '[131209]', ?)`
+    )
+      .bind(
+        userId,
+        conquest!.id,
+        new Date(Date.parse(newer) + 2_000).toISOString()
+      )
+      .run()
 
     const second = await rpc('GetFeed', {
       page: { pageSize: 1, before: firstPage.page.after },
       req: { accountAddress: identityReference }
     })
     const secondPage = await second.json<{
-      page: { hasAfter: boolean; hasBefore: boolean; after: string }
+      page: {
+        hasAfter: boolean
+        hasBefore: boolean
+        before: string
+        after: string
+      }
       res: Array<{ type: string; tokenIds?: number[] }>
     }>()
     expect(secondPage).toMatchObject({
       page: { hasAfter: true, hasBefore: true },
       res: [{ type: 'REWARD', tokenIds: [(0xff << 16) + 42] }]
     })
+
+    const previous = await rpc('GetFeed', {
+      page: { pageSize: 1, after: secondPage.page.before },
+      req: { accountAddress: identityReference }
+    })
+    expect(await previous.json()).toMatchObject({
+      res: [{ type: 'DELAYED_REWARD', tokenIds: [131208] }]
+    })
+
     const third = await rpc('GetFeed', {
       page: { pageSize: 1, before: secondPage.page.after },
       req: { accountAddress: identityReference }
@@ -1393,6 +1428,17 @@ describe('legacy player RPC compatibility', () => {
       (
         await rpc('GetFeed', {
           page: { before: 'not-a-cursor' },
+          req: { accountAddress: identityReference }
+        })
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpc('GetFeed', {
+          page: {
+            before: firstPage.page.after,
+            after: firstPage.page.after
+          },
           req: { accountAddress: identityReference }
         })
       ).status
