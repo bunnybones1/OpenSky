@@ -92,14 +92,19 @@ later mint happens in another worker.
 The TypeScript reward-mutator gate closes the other side of that boundary. It
 inventories all direct writes to the seven authoritative reward/progression
 ledgers across the main Worker, game server, and match service. The reviewed
-inventory currently contains 18 modules and 64 writes; any count drift or new
+inventory currently contains 18 modules and 68 writes; any count drift or new
 module requires an explicit off-chain safety disposition before release.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
 reward delivery paths rather than recreating the source mint queues. External
 device push is strictly optional: without complete OneSignal configuration the
 scheduled pass is a read-only no-op. In-app notifications and their off-chain
-rewards remain authoritative and do not depend on it.
+rewards remain authoritative and do not depend on it. Candidate discovery reads
+the durable player/season progress row only when its monotonic achieved source
+account level is greater than its immutable initial source account level. It
+does not infer current-season progress by scanning the player's lifetime
+progression, and match, quest, premium, purchase, and support writers update or
+initialize that row inside their existing atomic receipt boundary.
 
 Conquest V2 settlement is deployed dormant by design: migration `0068` seeds no
 schedule. Enabling it requires an immutable cadence, season/week anchor,

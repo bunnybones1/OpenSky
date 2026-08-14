@@ -344,6 +344,34 @@ and progress are not migrated.
   rewards live, SkyPass `1/1` active, and every policy-gated track dormant.
   Post-deployment D1 evidence again found exactly the same row counts, zero
   derived instances, zero writes, both guards, and no pending migrations.
+  SkyPass progress is now season-scoped like the source service instead of
+  reading the lifetime `basic_skypass_level` as every season's level. Migration
+  `0106_skypass_season_progress.sql` stores the immutable source account level
+  at first participation and the monotonic highest account level reached for
+  each player/season. The existing Cloud Weasel level-one presentation offset
+  remains intact, match and quest XP update the season row atomically with their
+  existing settlement receipts, and premium purchase/support paths initialize
+  the same row in their receipt-backed batches. Season-close discovery now
+  selects only durable season rows that advanced beyond their initial level;
+  starter Hero/Title adaptation and infinite reward materialization use that
+  same season-relative progress.
+  Milestone `3e2f38a4` passed exact-head release-contract run `31826265020` in
+  8m30s, the 380-test main Worker suite, 230 multiplayer tests, 25 game tests,
+  6 analytics tests, and the game server's 31 unit plus 90 Workers tests. A
+  fresh local D1 accepted all 106 migrations. Production migration backfilled
+  exactly two existing Season 62 players at source levels `0 -> 0`; reward,
+  policy, claim, and inventory counts remained 127, 1, 1, and 63, with zero
+  derived rewards. Both monotonicity guards and the progress index were present.
+  The game Worker was deployed as
+  `f1f33117-bd06-4d00-8b11-77bc5e22544f`, and the main Worker as
+  `dedf0f7e-a929-4e68-9256-5b8cfecdeafa`, at 100% traffic on 2026-08-14. The
+  production verifier matched `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Public Ping and game health returned 200 with
+  `no-store`; D1 reported no pending migrations; and the reward-readiness audit
+  kept Conquest, leaderboard, and referral issuance dormant while SkyPass
+  remained `1/1` active. The post-deployment snapshot wrote zero rows and
+  retained the exact migration-time counts.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

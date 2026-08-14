@@ -112,6 +112,15 @@ only after inventory, base-card unlocks, and starter-deck state agree. A failed
 mixed claim rolls back every reward and receipt together; retry and concurrent
 claim attempts cannot grant the same reward twice.
 
+SkyPass earning is scoped to the source season. Each player/season row records
+the immutable zero-based account level at first participation and the monotonic
+highest zero-based account level achieved; the UI keeps Cloud Weasel's existing
+one-based presentation. Match XP, quest XP, premium fulfillment, and staff
+support initialize or advance that row inside their existing atomic operation
+or settlement batch. Season-close auto-claim reads only rows whose achieved
+level exceeds their initial level, so lifetime account progress cannot leak
+into a later season and an absent season row cannot manufacture rewards.
+
 An imported SkyPass CSV is preparation, not reward authority. It creates an
 immutable, player-invisible draft containing the exact source digest and every
 definition row. A different `ADMIN` holding `SKYPASS_REWARD_WRITE` must inspect
@@ -148,8 +157,9 @@ Quest rewards preserve the source `SW_XP` contract as identity-owned
 progression; they never mint an item. Each completed assignment owns one
 immutable receipt keyed by identity and source quest. A D1 claim batch computes
 the before/after level and SkyPass XP snapshots from database state, applies all
-progression and epic-chain mutations atomically, and completes only when every
-requested assignment has a valid receipt. Concurrent different claims
+progression, season-scoped SkyPass progress, and epic-chain mutations atomically,
+and completes only when every requested assignment has a valid receipt.
+Concurrent different claims
 accumulate instead of overwriting one another, while a duplicate claim cannot
 credit XP or create another epic step. As in the source leveller, each level
 crossed also credits one off-chain sticker point to the player's inviter in the
