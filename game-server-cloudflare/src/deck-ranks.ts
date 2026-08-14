@@ -15,10 +15,8 @@ import {
   type RankState,
   type RankingOutcome
 } from './ranking'
-import {
-  applyMatchStats,
-  type MatchStatsReceipt
-} from './progression'
+import { applyMatchStats, type MatchStatsReceipt } from './progression'
+import { applyConquestScores } from './conquest-score'
 
 const LIBRARY_REVISION = cardLibrary.sourceSha256
 const COMPLETE_DECK_SIZE = 30
@@ -556,7 +554,24 @@ export class DeckRankCoordinator implements DurableObject {
         body.status as MatchStatus,
         body.processedAt
       )
-      return Response.json({ stats, deckRanks } satisfies RankedSettlementReceipt)
+      // The source recalculates this rolling matchmaking score after saving
+      // the match and deliberately treats a score failure as non-fatal.
+      try {
+        await applyConquestScores(
+          this.env.AUTH_DB,
+          body.proposalId,
+          body.season,
+          body.winner as 0 | 1 | undefined,
+          body.status as MatchStatus,
+          body.processedAt
+        )
+      } catch (error) {
+        console.error('recalculate Conquest scores failed', error)
+      }
+      return Response.json({
+        stats,
+        deckRanks
+      } satisfies RankedSettlementReceipt)
     })
   }
 }

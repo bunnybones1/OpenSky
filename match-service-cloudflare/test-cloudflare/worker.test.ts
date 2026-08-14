@@ -912,10 +912,18 @@ describe('Cloud Weasel accepted-match service', () => {
     )
       .bind(USER_ID, now)
       .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_account_stats
+         (user_id, game_mode, season, score, created_at, updated_at)
+       VALUES (?, 'CONQUEST_CONSTRUCTED', 126, -7, ?, ?)`
+    )
+      .bind(USER_ID, now, now)
+      .run()
     const disabled = await profile(GameMode.CONQUEST_CONSTRUCTED, principal)
     expect(await disabled.json()).toMatchObject({
       gameModeEnabled: false,
       profile: {
+        score: -7,
         conquest: {
           id: expect.any(Number),
           status: 'IN_PROGRESS',
