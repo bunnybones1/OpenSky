@@ -174,6 +174,23 @@ The public `GetGameModesStatus` RPC independently reported both Conquest modes
 false, and the reward-readiness audit classified the original Conquest reward
 track as `dormant-policy` with zero verified active pools.
 
+## Player-read parity rollout proof — 2026-08-13
+
+Commit `1f0b06d1` is deployed as main Worker version
+`cef3625c-5551-4649-8ed2-8e0bb085369b`. No D1 migration or multiplayer-service
+deployment was required. Cloudflare uploaded no asset changes, and deployment
+verification again resolved web entry `/assets/index-d976a081.js` and game
+entry `/game/cloudflare/assets/index-79a70ba2.js` with release-safe caching.
+
+The source-differential tests seed an event-1 balance beside an independent
+event-2 balance and a later-inserted Conquest with an earlier timestamp. They
+prove that the legacy points RPC, V2 progress, and first-match statistic retain
+their separate source meanings. The complete local release contract and exact
+GitHub head passed before deployment. A post-deploy read-only D1 probe found no
+production Conquest point rows, wrote zero rows (`changed_db: false`), and
+confirmed there were no pending migrations. The public game-mode RPC continued
+to report both Conquest modes false.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
