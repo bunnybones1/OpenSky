@@ -58,9 +58,26 @@ interface ConquestTreasureProgressRow {
 
 interface GameModeStatusHistoryRow {
   id: number
+  actor_account_id?: number | null
   game_mode: GameMode
   enabled: number
   created_at: string
+}
+
+type GameModeHistorySortValue = string | number | null
+
+interface GameModeHistorySortConfig {
+  sort: Array<{
+    response: SortBy
+    value: (row: GameModeStatusHistoryRow) => GameModeHistorySortValue
+    numeric: boolean
+  }>
+  uniqueOrder: SortBy['order']
+}
+
+interface GameModeHistoryCursor {
+  createdAt: string
+  values: Array<string | null>
 }
 
 const ACCOUNT_STATUSES = new Set<AccountStatus>([
@@ -116,6 +133,30 @@ const ACTION_TYPES_BY_FILTER: Record<string, string[]> = {
   MOD_FLAG: ['MOD_FLAG'],
   MOD_VET: ['MOD_VET']
 }
+const GAME_MODE_HISTORY_SORT_COLUMNS: Record<
+  string,
+  | {
+      value: (row: GameModeStatusHistoryRow) => GameModeHistorySortValue
+      numeric?: boolean
+      unique?: boolean
+    }
+  | undefined
+> = {
+  id: { value: row => row.id, numeric: true },
+  account_id: {
+    value: row => row.actor_account_id ?? null,
+    numeric: true
+  },
+  accountID: {
+    value: row => row.actor_account_id ?? null,
+    numeric: true
+  },
+  game_mode: { value: row => row.game_mode },
+  gameMode: { value: row => row.game_mode },
+  enabled: { value: row => (row.enabled === 1 ? 'true' : 'false') },
+  created_at: { value: row => row.created_at, unique: true },
+  createdAt: { value: row => row.created_at, unique: true }
+}
 
 const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
 
@@ -139,6 +180,137 @@ const pageSize = (page?: Page) =>
       ? page!.pageSize!
       : DEFAULT_PAGE_SIZE
   )
+
+const compareGameModeHistoryValues = (
+  left: GameModeHistorySortValue,
+  right: GameModeHistorySortValue,
+  order: SortBy['order']
+): number => {
+  if (left === null || right === null) {
+    if (left === right) return 0
+    return left === null ? (order === 'ASC' ? 1 : -1) : order === 'ASC' ? -1 : 1
+  }
+  const compared =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left) < String(right)
+        ? -1
+        : String(left) > String(right)
+          ? 1
+          : 0
+  return order === 'ASC' ? compared : -compared
+}
+
+const gameModeHistorySort = (page?: Page): GameModeHistorySortConfig => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [{ column: 'created_at', order: 'ASC' as SortBy['order'] }]
+  const sort: GameModeHistorySortConfig['sort'] = []
+  let uniqueOrder = 'ASC' as SortBy['order']
+  for (const item of requested) {
+    const column = GAME_MODE_HISTORY_SORT_COLUMNS[item.column]
+    if (!column || !['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('game mode status history sort is invalid')
+    }
+    if (column.unique) {
+      uniqueOrder = item.order
+    } else {
+      sort.push({
+        response: item,
+        value: column.value,
+        numeric: column.numeric === true
+      })
+    }
+  }
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
+}
+
+const encodeGameModeHistoryCursor = (
+  row: GameModeStatusHistoryRow,
+  config: GameModeHistorySortConfig
+) =>
+  btoa(
+    JSON.stringify([
+      row.created_at,
+      ...config.sort.map(item => {
+        const value = item.value(row)
+        return value === null ? null : String(value)
+      })
+    ])
+  )
+
+const decodeGameModeHistoryCursor = (
+  value: string,
+  config: GameModeHistorySortConfig
+): GameModeHistoryCursor => {
+  try {
+    const values = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(values) ||
+      values.length !== config.sort.length + 1 ||
+      values.some(item => item !== null && typeof item !== 'string') ||
+      typeof values[0] !== 'string' ||
+      !values[0]
+    ) {
+      throw new Error('cursor shape')
+    }
+    return {
+      createdAt: values[0],
+      values: values.slice(1) as Array<string | null>
+    }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const compareGameModeHistoryCursor = (
+  row: GameModeStatusHistoryRow,
+  cursor: GameModeHistoryCursor,
+  config: GameModeHistorySortConfig
+): number => {
+  for (const [index, item] of config.sort.entries()) {
+    const raw = cursor.values[index]
+    let cursorValue: GameModeHistorySortValue = raw
+    if (raw !== null && item.numeric) {
+      const parsed = Number(raw)
+      if (!Number.isSafeInteger(parsed))
+        throw invalidArgument('page cursor is invalid')
+      cursorValue = parsed
+    }
+    const compared = compareGameModeHistoryValues(
+      item.value(row),
+      cursorValue,
+      item.response.order
+    )
+    if (compared) return compared
+  }
+  return compareGameModeHistoryValues(
+    row.created_at,
+    cursor.createdAt,
+    config.uniqueOrder
+  )
+}
+
+const sortGameModeHistoryRows = (
+  rows: GameModeStatusHistoryRow[],
+  config: GameModeHistorySortConfig
+) =>
+  rows.sort((left, right) => {
+    for (const item of config.sort) {
+      const compared = compareGameModeHistoryValues(
+        item.value(left),
+        item.value(right),
+        item.response.order
+      )
+      if (compared) return compared
+    }
+    return compareGameModeHistoryValues(
+      left.created_at,
+      right.created_at,
+      config.uniqueOrder
+    )
+  })
 
 const accountSort = (page?: Page): SortBy[] => {
   const sort = page?.sort?.length
@@ -471,32 +643,53 @@ export class StaffRepository {
           ? page.pageSize!
           : 20
     )
-    const offset = cursorOffset(page?.before ?? page?.after)
+    const sort = gameModeHistorySort(page)
     const filters = modes.length
-      ? `WHERE game_mode IN (${modes.map(() => '?').join(',')})`
+      ? `WHERE history.game_mode IN (${modes.map(() => '?').join(',')})`
       : ''
     const result = await this.database
       .prepare(
-        `SELECT id, game_mode, enabled, created_at
-         FROM game_mode_status_history
-         ${filters}
-         ORDER BY created_at ASC, id ASC
-         LIMIT ? OFFSET ?`
+        `SELECT history.id, actor.id AS actor_account_id,
+                history.game_mode, history.enabled, history.created_at
+         FROM game_mode_status_history history
+         LEFT JOIN game_accounts actor ON actor.user_id = history.actor_user_id
+         ${filters}`
       )
-      .bind(...modes, size + 1, offset)
+      .bind(...modes)
       .all<GameModeStatusHistoryRow>()
-    const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    const rows = sortGameModeHistoryRows(result.results, sort)
+    let start = 0
+    let end = Math.min(rows.length, size)
+    if (page?.before) {
+      const cursor = decodeGameModeHistoryCursor(page.before, sort)
+      const next = rows.findIndex(
+        row => compareGameModeHistoryCursor(row, cursor, sort) > 0
+      )
+      start = next < 0 ? rows.length : next
+      end = Math.min(rows.length, start + size)
+    } else if (page?.after) {
+      const cursor = decodeGameModeHistoryCursor(page.after, sort)
+      const previousEnd = rows.findIndex(
+        row => compareGameModeHistoryCursor(row, cursor, sort) >= 0
+      )
+      end = previousEnd < 0 ? rows.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const selected = rows.slice(start, end)
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort: [{ column: 'created_at', order: 'ASC' as SortBy['order'] }]
+        before: selected.length
+          ? encodeGameModeHistoryCursor(selected[0], sort)
+          : undefined,
+        after: selected.length
+          ? encodeGameModeHistoryCursor(selected[selected.length - 1], sort)
+          : undefined,
+        hasBefore: end < rows.length,
+        hasAfter: start > 0,
+        sort: sort.sort.map(item => item.response)
       },
-      rows: rows.map(row => ({
+      rows: selected.map(row => ({
         id: row.id,
         gameMode: row.game_mode,
         enabled: row.enabled === 1,
