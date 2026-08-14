@@ -13,7 +13,11 @@ import {
 const SEASON = 10
 const DUE = new Date(seasonStart(SEASON + 1).getTime() + 10_000)
 
-const setupPlayer = async (userId: string, premium = false) => {
+const setupPlayer = async (
+  userId: string,
+  premium = false,
+  achievedAccountLevel: number | null = 1
+) => {
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users
@@ -23,13 +27,14 @@ const setupPlayer = async (userId: string, premium = false) => {
     .bind(userId, userId, `${userId}@example.com`, now, now)
     .run()
   await new PlayerRepository(env.AUTH_DB).bootstrap(userId)
-  if (premium) {
+  if (achievedAccountLevel !== null) {
     await env.AUTH_DB.prepare(
       `INSERT INTO player_skypass_season_stats
-         (user_id, season, has_premium, created_at, updated_at)
-       VALUES (?, ?, 1, ?, ?)`
+         (user_id, season, has_premium, created_at, updated_at,
+          initial_account_level, achieved_account_level)
+       VALUES (?, ?, ?, ?, ?, 0, ?)`
     )
-      .bind(userId, SEASON, now, now)
+      .bind(userId, SEASON, premium ? 1 : 0, now, now, achievedAccountLevel)
       .run()
   }
 }
@@ -45,8 +50,9 @@ describe('SkyPass season auto-claim', () => {
     await setupPlayer('free-player')
     await setupPlayer('premium-player', true)
     const policy = await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
-      { level: 1, tier: 1, itemType: 303, amount: 5 },
-      { level: 1, tier: 2, itemType: 303, amount: 7 }
+      { level: 1, tier: 1, itemType: 303, amount: 5, isInfinite: 0 },
+      { level: 1, tier: 2, itemType: 303, amount: 7, isInfinite: 0 },
+      { level: 100, tier: 1, itemType: 403, amount: 1, isInfinite: 1 }
     ])
     const [freeReward, premiumReward] = policy.rows.map(row => row.id)
 
@@ -152,6 +158,13 @@ describe('SkyPass season auto-claim', () => {
       }))
     )
     await env.AUTH_DB.prepare(
+      `UPDATE player_skypass_season_stats SET achieved_account_level = 5
+       WHERE user_id = 'batch-player' AND season = ?`
+    )
+      .bind(SEASON)
+      .run()
+
+    await env.AUTH_DB.prepare(
       `UPDATE player_progression SET basic_skypass_level = 6
        WHERE user_id = 'batch-player'`
     ).run()
@@ -239,10 +252,32 @@ describe('SkyPass season auto-claim', () => {
     })
   })
 
+  it('does not enqueue absent or zero-progress season rows', async () => {
+    await setupPlayer('zero-progress-player', false, 0)
+    await setupPlayer('absent-progress-player', false, null)
+    await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
+      { level: 1, tier: 1, itemType: 303, amount: 5 }
+    ])
+
+    expect(await runDueSkypassAutoClaims(env.AUTH_DB, DUE)).toEqual({
+      cyclesCreated: 1,
+      seasonsCompleted: 1,
+      playersProcessed: 0,
+      rewardsClaimed: 0,
+      failures: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_skypass_auto_claims`
+      ).first()
+    ).toEqual({ count: 0 })
+  })
+
   it('keeps concurrent scheduled delivery idempotent', async () => {
     await setupPlayer('concurrent-player')
     await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
-      { level: 1, tier: 1, itemType: 303, amount: 9 }
+      { level: 1, tier: 1, itemType: 303, amount: 9, isInfinite: 0 },
+      { level: 100, tier: 1, itemType: 403, amount: 1, isInfinite: 1 }
     ])
 
     const runs = await Promise.all([

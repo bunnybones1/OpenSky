@@ -216,7 +216,8 @@ interface AccountRow {
   level: number
   xp: number
   next_level_xp: number
-  basic_skypass_level: number
+  initial_account_level: number | null
+  achieved_account_level: number | null
   inviter_user_id: string | null
 }
 
@@ -300,8 +301,21 @@ interface QuestEligibility {
   ownedCards: Set<number>
 }
 
-interface ProgressionRow {
-  basic_skypass_level: number
+interface SkypassSeasonStatRow {
+  has_premium: number
+  initial_account_level: number
+  achieved_account_level: number
+}
+
+const effectiveSkypassSeasonLevel = (
+  initialAccountLevel: number,
+  achievedAccountLevel: number
+): number => {
+  const level = achievedAccountLevel - initialAccountLevel + 1
+  if (!Number.isSafeInteger(level) || level < 1) {
+    throw new Error('invalid SkyPass season progress')
+  }
+  return level
 }
 
 interface SkypassRewardRow {
@@ -1106,6 +1120,7 @@ export class PlayerRpcRepository {
   ): Promise<Account | null> {
     const competitive = new CompetitiveRepository(this.database)
     const stats = await competitive.currentStats(userId)
+    const currentSeason = seasonFromDate()
     const row = await this.database
       .prepare(
         `SELECT u.display_name, game.id AS game_account_id,
@@ -1126,17 +1141,20 @@ export class PlayerRpcRepository {
                 p.level,
                 p.xp,
                 p.next_level_xp,
-                g.basic_skypass_level,
+                skypass.initial_account_level,
+                skypass.achieved_account_level,
                 invite.inviter_user_id
          FROM users u
          JOIN player_profiles p ON p.user_id = u.id
          JOIN player_progression g ON g.user_id = u.id
+         LEFT JOIN player_skypass_season_stats skypass
+           ON skypass.user_id = u.id AND skypass.season = ?
          LEFT JOIN player_account_settings account ON account.user_id = u.id
          LEFT JOIN game_accounts game ON game.user_id = u.id
          LEFT JOIN player_invites invite ON invite.invitee_user_id = u.id
          WHERE u.id = ?`
       )
-      .bind(userId)
+      .bind(currentSeason, userId)
       .first<AccountRow>()
     if (!row) return null
 
@@ -1150,7 +1168,14 @@ export class PlayerRpcRepository {
       experience: row.xp,
       warmUps: row.warm_ups,
       level: row.level,
-      seasonLevel: row.basic_skypass_level,
+      seasonLevel:
+        row.initial_account_level === null ||
+        row.achieved_account_level === null
+          ? 1
+          : effectiveSkypassSeasonLevel(
+              row.initial_account_level,
+              row.achieved_account_level
+            ),
       levelUpXP: row.next_level_xp,
       stats,
       isBurnerWallet: false,
@@ -2966,7 +2991,32 @@ export class PlayerRpcRepository {
              WHERE claim_token = ?
            )`
         )
-        .bind(claimToken, claimToken, now, userId, claimToken)
+        .bind(claimToken, claimToken, now, userId, claimToken),
+      this.database
+        .prepare(
+          `INSERT INTO player_skypass_season_stats
+             (user_id, season, has_premium, created_at, updated_at,
+              initial_account_level, achieved_account_level)
+           SELECT first_receipt.user_id, ?, 0, ?, ?,
+                  MAX(0, first_receipt.before_level - 1),
+                  MAX(0, last_receipt.after_level - 1)
+           FROM player_quest_claim_receipts first_receipt
+           JOIN player_quest_claim_receipts last_receipt
+             ON last_receipt.claim_token = first_receipt.claim_token
+            AND last_receipt.claim_order = (
+              SELECT MAX(claim_order) FROM player_quest_claim_receipts
+              WHERE claim_token = first_receipt.claim_token
+            )
+           WHERE first_receipt.claim_token = ?
+             AND first_receipt.claim_order = 0
+           ON CONFLICT(user_id, season) DO UPDATE SET
+             achieved_account_level = MAX(
+               player_skypass_season_stats.achieved_account_level,
+               excluded.achieved_account_level
+             ),
+             updated_at = excluded.updated_at`
+        )
+        .bind(currentSeason, now, now, claimToken)
     )
 
     const receiptSpan = `
@@ -3196,25 +3246,39 @@ export class PlayerRpcRepository {
     userId: string,
     season: number
   ): Promise<{ levels: SkypassLevel[]; hasPremium: boolean }> {
-    const progression = await this.database
-      .prepare(
-        `SELECT basic_skypass_level FROM player_progression WHERE user_id = ?`
-      )
-      .bind(userId)
-      .first<ProgressionRow>()
-    const progress = progression?.basic_skypass_level || 0
-    await this.materializeSkypassInfiniteRewards(season, progress + 1)
-
-    const [
-      rewardsResult,
-      seasonStats,
-      heroItems,
-      titleItems,
-      lockedStarterDecks
-    ] = await Promise.all([
+    const [profile, seasonStats] = await Promise.all([
+      this.database
+        .prepare(`SELECT level FROM player_profiles WHERE user_id = ?`)
+        .bind(userId)
+        .first<{ level: number }>(),
       this.database
         .prepare(
-          `SELECT reward.id, reward.level, reward.season, reward.tier,
+          `SELECT has_premium, initial_account_level, achieved_account_level
+           FROM player_skypass_season_stats
+           WHERE user_id = ? AND season = ?`
+        )
+        .bind(userId, season)
+        .first<SkypassSeasonStatRow>()
+    ])
+    const fallbackSourceLevel =
+      season === seasonFromDate() ? Math.max(0, (profile?.level ?? 1) - 1) : 0
+    const initialAccountLevel =
+      seasonStats?.initial_account_level ?? fallbackSourceLevel
+    const achievedAccountLevel =
+      seasonStats?.achieved_account_level ?? fallbackSourceLevel
+    // The Go account starts at level zero. Cloud Weasel's preserved UI starts
+    // at one, so source LevelProgress maps to the same visible value plus one.
+    const progress = effectiveSkypassSeasonLevel(
+      initialAccountLevel,
+      achievedAccountLevel
+    )
+    await this.materializeSkypassInfiniteRewards(season, progress + 1)
+
+    const [rewardsResult, heroItems, titleItems, lockedStarterDecks] =
+      await Promise.all([
+        this.database
+          .prepare(
+            `SELECT reward.id, reward.level, reward.season, reward.tier,
                   reward.item_type, reward.amount, reward.is_starter,
                   reward.attributes, reward.is_infinite,
                   CASE WHEN claim.reward_id IS NULL THEN 0 ELSE 1 END AS claimed,
@@ -3225,38 +3289,31 @@ export class PlayerRpcRepository {
            WHERE reward.season = ?
            ORDER BY reward.level ASC, reward.tier ASC, reward.is_starter DESC,
                     reward.id ASC`
-        )
-        .bind(userId, season)
-        .all<SkypassRewardRow>(),
-      this.database
-        .prepare(
-          `SELECT has_premium FROM player_skypass_season_stats
-           WHERE user_id = ? AND season = ?`
-        )
-        .bind(userId, season)
-        .first<{ has_premium: number }>(),
-      this.database
-        .prepare(
-          `SELECT token_id FROM player_items
+          )
+          .bind(userId, season)
+          .all<SkypassRewardRow>(),
+        this.database
+          .prepare(
+            `SELECT token_id FROM player_items
            WHERE user_id = ? AND item_type = 'SW_HERO'`
-        )
-        .bind(userId)
-        .all<{ token_id: number }>(),
-      this.database
-        .prepare(
-          `SELECT token_id FROM player_items
+          )
+          .bind(userId)
+          .all<{ token_id: number }>(),
+        this.database
+          .prepare(
+            `SELECT token_id FROM player_items
            WHERE user_id = ? AND item_type = 'SW_TITLES'`
-        )
-        .bind(userId)
-        .all<{ token_id: number }>(),
-      this.database
-        .prepare(
-          `SELECT deck_class FROM player_decks
+          )
+          .bind(userId)
+          .all<{ token_id: number }>(),
+        this.database
+          .prepare(
+            `SELECT deck_class FROM player_decks
            WHERE user_id = ? AND deck_type = 'LOCKED_STARTER'`
-        )
-        .bind(userId)
-        .all<{ deck_class: string }>()
-    ])
+          )
+          .bind(userId)
+          .all<{ deck_class: string }>()
+      ])
     const hasPremium = seasonStats?.has_premium === 1
     const ownedHeroes = new Set(heroItems.results.map(row => row.token_id))
     const ownedTitles = new Set(titleItems.results.map(row => row.token_id))
@@ -3289,22 +3346,38 @@ export class PlayerRpcRepository {
         }
         return true
       })
-      .map<SkypassReward>(row => ({
-        id: row.id,
-        level: row.level,
-        season: row.season,
-        tier: (row.tier === 2 ? 'PREMIUM' : 'FREE') as SkypassReward['tier'],
-        itemType: ITEM_TYPE_BY_ID[row.item_type] || ('UNKNOWN' as ItemType),
-        amount: row.amount,
-        isStarter: row.is_starter === 1,
-        isInfinite: row.is_infinite === 1,
-        attributes: parseAttributes(row.attributes),
-        claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
-        claimed: row.claimed === 1,
-        ...(row.gained_rewards
-          ? { gainedRewards: JSON.parse(row.gained_rewards) }
-          : {})
-      }))
+      .flatMap<SkypassReward>(row => {
+        let level = row.level
+        if (row.is_starter === 1) {
+          const adaptedLevel = row.level - initialAccountLevel
+          if (adaptedLevel <= 0) {
+            if (row.item_type !== 500 && row.item_type !== 302) return []
+            level = 0
+          } else {
+            level = adaptedLevel
+          }
+        }
+        return [
+          {
+            id: row.id,
+            level,
+            season: row.season,
+            tier: (row.tier === 2
+              ? 'PREMIUM'
+              : 'FREE') as SkypassReward['tier'],
+            itemType: ITEM_TYPE_BY_ID[row.item_type] || ('UNKNOWN' as ItemType),
+            amount: row.amount,
+            isStarter: row.is_starter === 1,
+            isInfinite: row.is_infinite === 1,
+            attributes: parseAttributes(row.attributes),
+            claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
+            claimed: row.claimed === 1,
+            ...(row.gained_rewards
+              ? { gainedRewards: JSON.parse(row.gained_rewards) }
+              : {})
+          }
+        ]
+      })
 
     const grouped = new Map<number, SkypassReward[]>()
     for (const reward of rewards) {

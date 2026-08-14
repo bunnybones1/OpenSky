@@ -12,6 +12,7 @@ import {
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
+import { PlayerRpcRepository } from '../src/player-rpc'
 import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
 import {
   clearTestSkypassPolicies,
@@ -68,12 +69,54 @@ const addInviter = async () => {
     .run()
 }
 
+const setSkypassSeasonProgress = async (
+  season: number,
+  effectiveLevel: number,
+  initialAccountLevel = 0
+) => {
+  const achievedAccountLevel = initialAccountLevel + effectiveLevel - 1
+  const accountLevel = achievedAccountLevel + 1
+  const now = new Date().toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE player_profiles SET level = MAX(level, ?), updated_at = ?
+       WHERE user_id = ?`
+    ).bind(accountLevel, now, userId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = MAX(basic_skypass_level, ?), updated_at = ?
+       WHERE user_id = ?`
+    ).bind(accountLevel, now, userId),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_skypass_season_stats
+         (user_id, season, has_premium, created_at, updated_at,
+          initial_account_level, achieved_account_level)
+       VALUES (?, ?, 0, ?, ?, ?, ?)
+       ON CONFLICT(user_id, season) DO UPDATE SET
+         achieved_account_level = MAX(
+           player_skypass_season_stats.achieved_account_level,
+           excluded.achieved_account_level
+         ),
+         updated_at = excluded.updated_at`
+    ).bind(
+      userId,
+      season,
+      now,
+      now,
+      initialAccountLevel,
+      achievedAccountLevel
+    )
+  ])
+}
+
 beforeEach(async () => {
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_skypass_claim_completion'
   ).run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
-  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613, 614, 615])
+  await clearTestSkypassPolicies(env.AUTH_DB, [
+    610, 611, 612, 613, 614, 615, 616, 617
+  ])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -2438,6 +2481,14 @@ describe('legacy player RPC compatibility', () => {
       after_level: 2,
       after_xp: 100
     })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT initial_account_level, achieved_account_level
+         FROM player_skypass_season_stats WHERE user_id = ? AND season = ?`
+      )
+        .bind(userId, seasonFromDate())
+        .first()
+    ).toEqual({ initial_account_level: 0, achieved_account_level: 1 })
   })
 
   it('rejects a duplicate concurrent claim without a second XP receipt', async () => {
@@ -2853,11 +2904,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('claims a source hero reward and unlocks its starter deck and cards', async () => {
-    await env.AUTH_DB.prepare(
-      `UPDATE player_progression SET basic_skypass_level = 6 WHERE user_id = ?`
-    )
-      .bind(userId)
-      .run()
+    await setSkypassSeasonProgress(62, 6)
 
     const listed = await rpc('ListSkypassRewards', { season: 62 })
     const levelSix = (
@@ -2997,11 +3044,8 @@ describe('legacy player RPC compatibility', () => {
       }
     ])
     const now = new Date().toISOString()
+    await setSkypassSeasonProgress(season, 5)
     await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `UPDATE player_progression
-         SET basic_skypass_level = 5 WHERE user_id = ?`
-      ).bind(userId),
       env.AUTH_DB.prepare(
         `INSERT INTO player_items
            (user_id, item_type, token_id, balance, is_new, unlock_source,
@@ -3076,6 +3120,129 @@ describe('legacy player RPC compatibility', () => {
     ).toEqual({ deck_type: 'UNLOCKED_STARTER' })
   })
 
+  it('isolates season progress and adapts starter rewards from its source level', async () => {
+    const season = 616
+    await createTestSkypassPolicy(env.AUTH_DB, season, [
+      {
+        level: 1,
+        tier: 1,
+        itemType: 403,
+        amount: 1,
+        isStarter: 1,
+        isInfinite: 0
+      },
+      {
+        level: 1,
+        tier: 1,
+        itemType: 303,
+        amount: 99,
+        isInfinite: 0
+      },
+      {
+        level: 2,
+        tier: 1,
+        itemType: 302,
+        amount: 0,
+        isStarter: 1,
+        attributes: { tokenIDs: [901] },
+        isInfinite: 0
+      },
+      {
+        level: 3,
+        tier: 1,
+        itemType: 303,
+        amount: 7,
+        isStarter: 1,
+        isInfinite: 0
+      },
+      {
+        level: 4,
+        tier: 1,
+        itemType: 403,
+        amount: 4,
+        isInfinite: 0
+      },
+      {
+        level: 100,
+        tier: 1,
+        itemType: 403,
+        amount: 1,
+        isInfinite: 1
+      }
+    ])
+    await setSkypassSeasonProgress(season, 2, 2)
+
+    const listed = await new PlayerRpcRepository(
+      env.AUTH_DB
+    ).listSkypassRewards(userId, season)
+    expect(listed.levels).toMatchObject([
+      {
+        level: 0,
+        earned: true,
+        rewards: [{ itemType: 'SW_TITLES', isStarter: true }]
+      },
+      {
+        level: 1,
+        earned: true,
+        rewards: [
+          { itemType: 'SW_STICKER_POINTS', amount: 7, isStarter: true }
+        ]
+      },
+      {
+        level: 4,
+        earned: false,
+        rewards: [{ itemType: 'SW_CONQUEST_TICKET', amount: 4 }]
+      }
+    ])
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 100, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 100, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId)
+    ])
+    const unchanged = await new PlayerRpcRepository(
+      env.AUTH_DB
+    ).listSkypassRewards(userId, season)
+    expect(unchanged.levels).toEqual(listed.levels)
+
+    await createTestSkypassPolicy(env.AUTH_DB, 617, [
+      { level: 1, tier: 1, itemType: 303, amount: 1, isInfinite: 0 },
+      { level: 2, tier: 1, itemType: 303, amount: 1, isInfinite: 1 }
+    ])
+    const freshSeason = await new PlayerRpcRepository(
+      env.AUTH_DB
+    ).listSkypassRewards(userId, 617)
+    expect(freshSeason.levels.map(level => level.earned)).toEqual([true, false])
+
+    const account = await rpc('GetAccount', { address: identityReference })
+    expect(
+      (await account.json<{ account: { seasonLevel: number } }>()).account
+    ).toMatchObject({ seasonLevel: 1 })
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_skypass_season_stats
+         SET initial_account_level = 1 WHERE user_id = ? AND season = ?`
+      )
+        .bind(userId, season)
+        .run()
+    ).rejects.toThrow('initial account level is immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_skypass_season_stats
+         SET achieved_account_level = 2 WHERE user_id = ? AND season = ?`
+      )
+        .bind(userId, season)
+        .run()
+    ).rejects.toThrow('season progress cannot decrease')
+  })
+
   it('materializes exact infinite SkyPass rewards through progress plus one', async () => {
     const season = 615
     const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
@@ -3094,12 +3261,7 @@ describe('legacy player RPC compatibility', () => {
         isInfinite: 0
       }
     ])
-    await env.AUTH_DB.prepare(
-      `UPDATE player_progression
-       SET basic_skypass_level = 55 WHERE user_id = ?`
-    )
-      .bind(userId)
-      .run()
+    await setSkypassSeasonProgress(season, 55)
 
     const [first, concurrent] = await Promise.all([
       rpc('ListSkypassRewards', { season }),
@@ -3237,12 +3399,7 @@ describe('legacy player RPC compatibility', () => {
       reward_policy_hash: policy.policyHash
     })
 
-    await env.AUTH_DB.prepare(
-      `UPDATE player_progression
-       SET basic_skypass_level = 57 WHERE user_id = ?`
-    )
-      .bind(userId)
-      .run()
+    await setSkypassSeasonProgress(season, 57)
     const extended = await (
       await rpc('ListSkypassRewards', { season })
     ).json<{
@@ -3311,12 +3468,7 @@ describe('legacy player RPC compatibility', () => {
         attributes: { tokenIDs: [12] }
       }
     ])
-    await env.AUTH_DB.prepare(
-      `UPDATE player_progression SET basic_skypass_level = 106
-       WHERE user_id = ?`
-    )
-      .bind(userId)
-      .run()
+    await setSkypassSeasonProgress(season, 106)
     const rows = { results: policy.rows }
 
     const claimed = await rpc('ClaimSkypassRewards', {
@@ -3481,11 +3633,7 @@ describe('legacy player RPC compatibility', () => {
     const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
       { level: 120, tier: 1, itemType: 303, amount: 9 }
     ])
-    await env.AUTH_DB.prepare(
-      `UPDATE player_progression SET basic_skypass_level = 120 WHERE user_id = ?`
-    )
-      .bind(userId)
-      .run()
+    await setSkypassSeasonProgress(season, 120)
     const reward = policy.rows[0]
 
     const responses = await Promise.all([
@@ -3515,11 +3663,8 @@ describe('legacy player RPC compatibility', () => {
       { level: 121, tier: 1, itemType: 303, amount: 9 }
     ])
     const rewardId = policy.rows[0].id
+    await setSkypassSeasonProgress(season, 121)
     await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `UPDATE player_progression SET basic_skypass_level = 121
-         WHERE user_id = ?`
-      ).bind(userId),
       env.AUTH_DB.prepare(
         `CREATE TRIGGER reject_skypass_claim_completion
          BEFORE UPDATE OF application_status ON player_skypass_claims

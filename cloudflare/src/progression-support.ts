@@ -266,6 +266,30 @@ export class ProgressionSupportRepository {
           targetUserId,
           requestedLevels
         ),
+      this.database
+        .prepare(
+          `INSERT INTO player_skypass_season_stats
+             (user_id, season, has_premium, created_at, updated_at,
+              initial_account_level, achieved_account_level)
+           SELECT target_user_id, season, 0, ?, ?,
+                  MAX(0, before_level - 1), MAX(0, after_level - 1)
+           FROM staff_progression_operations
+           WHERE ${pendingOperation}
+           ON CONFLICT(user_id, season) DO UPDATE SET
+             achieved_account_level = MAX(
+               player_skypass_season_stats.achieved_account_level,
+               excluded.achieved_account_level
+             ),
+             updated_at = excluded.updated_at`
+        )
+        .bind(
+          now,
+          now,
+          operationKey,
+          actorUserId,
+          targetUserId,
+          requestedLevels
+        ),
       ...RANKED_MODES.flatMap(mode => [
         this.database
           .prepare(
@@ -460,6 +484,20 @@ export class ProgressionSupportRepository {
       )
     }
     statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO player_skypass_season_stats
+             (user_id, season, has_premium, created_at, updated_at,
+              initial_account_level, achieved_account_level)
+           VALUES (?, ?, 0, ?, ?, MAX(0, ? - 1), MAX(0, ? - 1))
+           ON CONFLICT(user_id, season) DO UPDATE SET
+             achieved_account_level = MAX(
+               player_skypass_season_stats.achieved_account_level,
+               excluded.achieved_account_level
+             ),
+             updated_at = excluded.updated_at`
+        )
+        .bind(target.user_id, season, now, now, target.level, minimumLevel),
       this.database
         .prepare(
           `UPDATE player_profiles

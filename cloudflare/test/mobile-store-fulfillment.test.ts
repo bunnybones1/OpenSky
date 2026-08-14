@@ -181,12 +181,17 @@ describe('mobile store off-chain fulfillment authority', () => {
     ).toBe(1)
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT has_premium FROM player_skypass_season_stats
+        `SELECT has_premium, initial_account_level, achieved_account_level
+         FROM player_skypass_season_stats
          WHERE user_id = ? AND season = ?`
       )
         .bind(userId, season)
-        .first<number>('has_premium')
-    ).toBe(1)
+        .first()
+    ).toEqual({
+      has_premium: 1,
+      initial_account_level: 0,
+      achieved_account_level: 0
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT before_balance, after_balance, before_has_premium,

@@ -990,7 +990,26 @@ export const applyMatchExperience = async (
           proposalId,
           player,
           settlementToken
+        ),
+      database
+        .prepare(
+          `INSERT INTO player_skypass_season_stats
+             (user_id, season, has_premium, created_at, updated_at,
+              initial_account_level, achieved_account_level)
+           SELECT receipt.user_id, receipt.season, 0, ?, ?,
+                  MAX(0, receipt.before_level - 1),
+                  MAX(0, receipt.after_level - 1)
+           FROM multiplayer_match_experience_players receipt
+           WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+             AND receipt.settlement_token = ?
+           ON CONFLICT(user_id, season) DO UPDATE SET
+             achieved_account_level = MAX(
+               player_skypass_season_stats.achieved_account_level,
+               excluded.achieved_account_level
+             ),
+             updated_at = excluded.updated_at`
         )
+        .bind(processedAt, processedAt, proposalId, player, settlementToken)
     )
 
     statements.push(

@@ -612,6 +612,26 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       { user_id: USER_ID_2, level: 1, xp: 30 }
     ])
     expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, initial_account_level, achieved_account_level
+           FROM player_skypass_season_stats WHERE season = 126
+           ORDER BY user_id`
+        ).all()
+      ).results
+    ).toEqual([
+      {
+        user_id: USER_ID_1,
+        initial_account_level: 0,
+        achieved_account_level: 1
+      },
+      {
+        user_id: USER_ID_2,
+        initial_account_level: 0,
+        achieved_account_level: 0
+      }
+    ])
+    expect(
       await env.AUTH_DB.prepare(
         `SELECT levels FROM player_friend_points
          WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = 126`
@@ -849,6 +869,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       )
         .bind(proposalId)
         .first('count')
+    ).toBe(0)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_skypass_season_stats
+         WHERE season = 126`
+      ).first('count')
     ).toBe(0)
   })
 

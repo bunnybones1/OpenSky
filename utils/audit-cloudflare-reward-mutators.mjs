@@ -134,13 +134,14 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/player-rpc.ts': {
-    count: 11,
+    count: 12,
     disposition: 'receipt-backed-claims-and-player-owned-state',
     evidenceFiles: [
       'cloudflare/migrations/0069_quest_claim_receipts.sql',
       'cloudflare/migrations/0005_legacy_rpc_compatibility.sql',
       'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql',
-      'cloudflare/migrations/0090_skypass_reward_policy_activation.sql'
+      'cloudflare/migrations/0090_skypass_reward_policy_activation.sql',
+      'cloudflare/migrations/0106_skypass_season_progress.sql'
     ],
     evidence: [
       'player_quest_claim_receipts',
@@ -153,6 +154,8 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       'skypass_reward_active_rewards',
       'active SkyPass reward policy required',
       'SkyPass claim policy receipt is immutable',
+      'SkyPass season initial account level is immutable',
+      'SkyPass season progress cannot decrease',
       'player_deferred_item_updates',
       'delivery_key',
       'database.batch'
@@ -197,17 +200,20 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/progression-support.ts': {
-    count: 8,
+    count: 10,
     disposition: 'receipt-backed-staff-progression',
     evidenceFiles: [
       'cloudflare/migrations/0041_progression_operations.sql',
-      'cloudflare/migrations/0073_staff_progression_operation_receipts.sql'
+      'cloudflare/migrations/0073_staff_progression_operation_receipts.sql',
+      'cloudflare/migrations/0106_skypass_season_progress.sql'
     ],
     evidence: [
       'staff_progression_audit',
       'staff progression audit rows are immutable',
       'staff_progression_operations',
       'staff progression operation receipts are immutable',
+      'SkyPass season initial account level is immutable',
+      'SkyPass season progress cannot decrease',
       'x-cloud-weasel-operation-key',
       'friend-level',
       'database.batch'
@@ -316,13 +322,18 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'game-server-cloudflare/src/progression.ts': {
-    count: 4,
+    count: 5,
     disposition: 'receipt-backed-match-progression',
-    evidenceFiles: ['cloudflare/migrations/0070_match_experience_receipts.sql'],
+    evidenceFiles: [
+      'cloudflare/migrations/0070_match_experience_receipts.sql',
+      'cloudflare/migrations/0106_skypass_season_progress.sql'
+    ],
     evidence: [
       'multiplayer_match_experience_players',
       'settlement_token',
       'match experience player receipts are immutable',
+      'SkyPass season initial account level is immutable',
+      'SkyPass season progress cannot decrease',
       'database.batch'
     ]
   }

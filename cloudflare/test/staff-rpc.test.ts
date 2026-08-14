@@ -1390,6 +1390,14 @@ describe('fail-closed Google identity staff authorization', () => {
     const season = seasonFromDate()
     expect(
       await env.AUTH_DB.prepare(
+        `SELECT initial_account_level, achieved_account_level
+         FROM player_skypass_season_stats WHERE user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ initial_account_level: 0, achieved_account_level: 3 })
+    expect(
+      await env.AUTH_DB.prepare(
         `SELECT levels, points_carried, points_spent
          FROM player_friend_points
          WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
@@ -1770,6 +1778,14 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(PLAYER)
         .first()
     ).toEqual({ level: 16, xp: 0, skypass_level: 16 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT initial_account_level, achieved_account_level
+         FROM player_skypass_season_stats WHERE user_id = ? AND season = ?`
+      )
+        .bind(PLAYER, season)
+        .first()
+    ).toEqual({ initial_account_level: 0, achieved_account_level: 15 })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT levels FROM player_friend_points
@@ -2774,12 +2790,17 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(await duplicateGrant.json()).toEqual({ has: true })
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT has_premium FROM player_skypass_season_stats
+        `SELECT has_premium, initial_account_level, achieved_account_level
+         FROM player_skypass_season_stats
          WHERE user_id = ? AND season = ?`
       )
         .bind(PLAYER, season)
         .first()
-    ).toEqual({ has_premium: 1 })
+    ).toEqual({
+      has_premium: 1,
+      initial_account_level: 0,
+      achieved_account_level: 0
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT balance, unlock_source FROM player_items

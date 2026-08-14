@@ -183,9 +183,14 @@ export class SkypassSupportRepository {
         this.database
           .prepare(
             `INSERT INTO player_skypass_season_stats
-               (user_id, season, has_premium, created_at, updated_at)
-             SELECT target_user_id, season, after_has_premium, ?, ?
-             FROM staff_skypass_entitlement_operations
+               (user_id, season, has_premium, created_at, updated_at,
+                initial_account_level, achieved_account_level)
+             SELECT operation.target_user_id, operation.season,
+                    operation.after_has_premium, ?, ?,
+                    MAX(0, profile.level - 1), MAX(0, profile.level - 1)
+             FROM staff_skypass_entitlement_operations operation
+             JOIN player_profiles profile
+               ON profile.user_id = operation.target_user_id
              WHERE ${pendingOperation}
              ON CONFLICT(user_id, season)
              DO UPDATE SET has_premium = excluded.has_premium,

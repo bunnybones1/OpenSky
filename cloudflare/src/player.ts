@@ -1,4 +1,5 @@
 import { STARTER_DECKS } from './starter-decks'
+import { seasonFromDate } from './legacy-seasons'
 
 export { STRENGTH_STARTER_DECK } from './starter-decks'
 
@@ -74,6 +75,11 @@ interface ProgressionRow {
   basic_skypass_xp: number
   basic_skypass_next_xp: number
   tutorial_completed: number
+}
+
+interface SkypassSeasonProgressRow {
+  initial_account_level: number
+  achieved_account_level: number
 }
 
 interface QuestRow {
@@ -323,11 +329,17 @@ export class PlayerRepository {
   }
 
   async getState(userId: string): Promise<PlayerState | undefined> {
-    const [profile, progression, questsResult, cardsResult, decksResult] =
-      await Promise.all([
-        this.database
-          .prepare(
-            `SELECT account.name, account.locale, account.region,
+    const [
+      profile,
+      progression,
+      seasonProgress,
+      questsResult,
+      cardsResult,
+      decksResult
+    ] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT account.name, account.locale, account.region,
                   account.tag_art_id, account.title_id,
                   profile.level, profile.xp, profile.next_level_xp,
                   profile.created_at, account.updated_at
@@ -335,43 +347,51 @@ export class PlayerRepository {
            JOIN player_account_settings account
              ON account.user_id = profile.user_id
            WHERE profile.user_id = ?`
-          )
-          .bind(userId)
-          .first<ProfileRow>(),
-        this.database
-          .prepare(
-            `SELECT basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
+        )
+        .bind(userId)
+        .first<ProfileRow>(),
+      this.database
+        .prepare(
+          `SELECT basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
                   tutorial_completed
            FROM player_progression WHERE user_id = ?`
-          )
-          .bind(userId)
-          .first<ProgressionRow>(),
-        this.database
-          .prepare(
-            `SELECT quest_key, title, description, progress, target, reward_xp, status
+        )
+        .bind(userId)
+        .first<ProgressionRow>(),
+      this.database
+        .prepare(
+          `SELECT initial_account_level, achieved_account_level
+             FROM player_skypass_season_stats
+             WHERE user_id = ? AND season = ?`
+        )
+        .bind(userId, seasonFromDate())
+        .first<SkypassSeasonProgressRow>(),
+      this.database
+        .prepare(
+          `SELECT quest_key, title, description, progress, target, reward_xp, status
            FROM player_quests WHERE user_id = ?
            ORDER BY created_at ASC, quest_key ASC`
-          )
-          .bind(userId)
-          .all<QuestRow>(),
-        this.database
-          .prepare(
-            `SELECT card_id, card_name, prism, unlock_source, unlocked_at
+        )
+        .bind(userId)
+        .all<QuestRow>(),
+      this.database
+        .prepare(
+          `SELECT card_id, card_name, prism, unlock_source, unlocked_at
            FROM player_card_unlocks WHERE user_id = ?
            ORDER BY card_id ASC`
-          )
-          .bind(userId)
-          .all<CardRow>(),
-        this.database
-          .prepare(
-            `SELECT id, name, prism, deck_string, card_count, is_starter
+        )
+        .bind(userId)
+        .all<CardRow>(),
+      this.database
+        .prepare(
+          `SELECT id, name, prism, deck_string, card_count, is_starter
            FROM player_decks
            WHERE user_id = ? AND deck_type != 'LOCKED_STARTER'
            ORDER BY is_starter DESC, created_at ASC`
-          )
-          .bind(userId)
-          .all<DeckRow>()
-      ])
+        )
+        .bind(userId)
+        .all<DeckRow>()
+    ])
 
     if (!profile || !progression) return
     const basicCards = cardsResult.results.map(row => ({
@@ -396,7 +416,11 @@ export class PlayerRepository {
         updatedAt: profile.updated_at
       },
       basicSkyPass: {
-        level: progression.basic_skypass_level,
+        level: seasonProgress
+          ? seasonProgress.achieved_account_level -
+            seasonProgress.initial_account_level +
+            1
+          : 1,
         xp: progression.basic_skypass_xp,
         nextLevelXp: progression.basic_skypass_next_xp
       },

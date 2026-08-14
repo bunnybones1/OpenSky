@@ -186,8 +186,13 @@ export class MobileStoreFulfillmentRepository {
         this.database
           .prepare(
             `INSERT INTO player_skypass_season_stats
-               (user_id, season, has_premium, created_at, updated_at)
-             SELECT ?, ?, 1, ?, ?
+               (user_id, season, has_premium, created_at, updated_at,
+                initial_account_level, achieved_account_level)
+             SELECT ?, ?, 1, ?, ?, source_level, source_level
+             FROM (
+               SELECT MAX(0, level - 1) AS source_level
+               FROM player_profiles WHERE user_id = ?
+             )
              WHERE EXISTS (SELECT 1 ${receiptCondition})
              ON CONFLICT(user_id, season)
              DO UPDATE SET has_premium = 1, updated_at = excluded.updated_at`
@@ -197,6 +202,7 @@ export class MobileStoreFulfillmentRepository {
             fulfilledSeason,
             createdAt,
             createdAt,
+            userId,
             ...receiptBindings
           )
       )

@@ -70,34 +70,28 @@ const nextCycle = (database: D1Database) =>
 const pendingPlayers = (database: D1Database, season: number) =>
   database
     .prepare(
-      `SELECT progression.user_id
-       FROM player_progression progression
-       WHERE NOT EXISTS (
+      `SELECT stats.user_id
+       FROM player_skypass_season_stats stats
+       WHERE stats.season = ?
+         AND stats.achieved_account_level > stats.initial_account_level
+         AND NOT EXISTS (
            SELECT 1 FROM player_skypass_auto_claims receipt
-         WHERE receipt.user_id = progression.user_id
+         WHERE receipt.user_id = stats.user_id
              AND receipt.season = ?
          )
          AND NOT EXISTS (
            SELECT 1 FROM player_skypass_auto_claim_failures failure
-           WHERE failure.user_id = progression.user_id
+           WHERE failure.user_id = stats.user_id
              AND failure.season = ? AND failure.attempts >= 5
          )
          AND EXISTS (
            SELECT 1 FROM skypass_reward_active_rewards reward
-           LEFT JOIN player_skypass_season_stats stats
-             ON stats.user_id = progression.user_id
-            AND stats.season = reward.season
            WHERE reward.season = ?
-             AND reward.level <= progression.basic_skypass_level
-             AND (
-               reward.tier = 1 OR
-               (reward.tier = 2 AND COALESCE(stats.has_premium, 0) = 1)
-             )
          )
-       ORDER BY progression.user_id
+       ORDER BY stats.user_id
        LIMIT ?`
     )
-    .bind(season, season, season, PLAYER_BATCH_SIZE)
+    .bind(season, season, season, season, PLAYER_BATCH_SIZE)
     .all<PlayerRow>()
 
 const recordFailure = async (
