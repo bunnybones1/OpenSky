@@ -58,6 +58,34 @@ original production webapp/game builds. Exact-head GitHub Actions run
 `31843339808` passed in 8m15s. This was a release-safety-only milestone: it
 changed no runtime artifact, schema, Cloudflare binding, or production data.
 
+### Unlocked hero deck classes — 2026-08-14
+
+The consumer proof immediately exposed a real behavioral placeholder:
+`ListUnlockedDeckClasses` authenticated the request but always returned only
+`STR`. This meant a hero earned from the off-chain SkyPass inventory unlocked
+its starter deck in D1 while the preserved create-deck, deck viewer, collection,
+and queue UI continued to treat that hero's deck class as locked.
+
+Milestone `0ffdbdc3` now projects the response from identity-owned `SW_HERO`
+items through the source's complete 15-hero class table. It preserves the Go
+contract's manually first Ada/`STR` entry, skips the persisted Ada row so it is
+not duplicated, retains inventory order, and maps an invalid legacy hero ID to
+`UNKNOWN_CLASS`. The original SkyPass claim UI already invalidates this exact
+query after a hero reward, so no replacement UI or new cache behavior was
+introduced.
+
+The player RPC contract now covers authentication, the initial Ada-only shape,
+multiple owned hero classes, ordering, de-duplication, and the source fallback
+enum. All 47 player RPC tests, 383 main-Worker tests, 231 multiplayer tests, 25
+browser/game tests, six analytics tests, and both production builds passed.
+Exact-head GitHub Actions run `31844826757` passed in 8m47s. Worker version
+`908501c9-a639-4cf8-88af-2d7cc87ba0a9` was then deployed and the fail-closed
+verifier matched the exact web/game assets, six locales, and cache policy. A
+public smoke probe returned `401` and `Cache-Control: no-store` before inventory
+access, while `Ping` remained healthy. Production had no multi-hero account to
+probe without mutating player state, so the multi-hero response is proven by
+the isolated D1 Worker contract rather than a fabricated production grant.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
