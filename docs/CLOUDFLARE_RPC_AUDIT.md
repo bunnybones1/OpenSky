@@ -161,6 +161,50 @@ release-safe cache policy. Read-only production probes returned healthy
 and `401` for an unauthenticated sticker read, all with
 `Cache-Control: no-store`.
 
+### Complete source access proof — 2026-08-14
+
+Milestone `c55b6d55` extends the public/authenticated comparison from browser
+consumers to every functional source RPC. All 148 functional methods must now
+have a source access-map entry and an exact Worker access disposition. A
+missing source entry, a missing Worker case, or any public/authenticated drift
+fails the release audit. The browser audit reuses the same parser so the two
+gates cannot silently disagree.
+
+The full release contract passed with 391 main-Worker tests, 231 multiplayer
+tests, 25 browser/game tests, and six analytics tests. Exact-head GitHub
+Actions run `31850389303` passed in 8m52s. This was a release-safety milestone
+only and did not require a production deployment.
+
+### Replay and match-history fidelity — 2026-08-14
+
+The replay failure reported after the game engine loaded was caused by archive
+JSON decoding plain objects where the original engine expects `Map` values.
+Milestone `24e9c8e4` restores the tagged `Map` values before WASM enum decoding.
+The checked-in parser subsequently decoded every one of the 80 chunks in a
+real completed production practice-PvP replay; the initialization record
+revived both the card-instance and card-rarity maps and all 79 gameplay
+records decoded without the enum exception. This verification was read-only
+and performed no D1 writes.
+
+The same replay exposed two match-list projection regressions. Initial deck
+sizes were hardcoded to zero, and the global move count was duplicated for
+both players. Milestone `147d8992` derives the exact initial card counts from
+the authoritative private match seeds and records the source's separate
+per-player move metric, counting only `Attack` and `PlayCard`. Historical
+records retain the old aggregate-count fallback instead of becoming
+unreadable.
+
+All 391 main-Worker tests, 232 multiplayer tests, 25 browser/game tests, six
+analytics tests, source/off-chain audits, typechecks, and both production
+builds passed. Exact-head GitHub Actions run `31851123135` passed in 8m54s.
+Game Worker version `a88966dd-6e41-4d99-824c-1c273145f9b5` and main Worker
+version `d90edf60-f3b5-4ab5-9c84-5817f149604f` were deployed. The fail-closed
+verifier matched web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the release-
+safe cache policy. Read-only production probes returned healthy API and game
+workers with `Cache-Control: no-store`; the affected replay now reports both
+30-card initial decks and all 80 archive records.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
