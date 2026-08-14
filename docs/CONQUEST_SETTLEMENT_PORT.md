@@ -48,6 +48,12 @@ run only after that task settles.
   public weekly-Gold reads, readiness, and the database queue-enable guard all
   share the approved-pool view. Direct `ACTIVE` inserts and legacy unapproved
   active rows therefore have no authority.
+- Approved pool windows preserve the source's inclusive end-time behavior and
+  cannot overlap. The migration refuses inherited ambiguity, while operator
+  preflight and database activation/lifecycle guards reject future overlaps.
+  This permits independently reviewed, disjoint successors to be scheduled
+  before the current window is retired. Deterministic read ordering is defense
+  in depth, not permission to schedule competing active pools.
 - Cloudflare-only staff adapters list, atomically propose, independently
   activate, and retire those pools without direct production SQL. Proposal,
   activation, and retirement use separate dormant capabilities, idempotency

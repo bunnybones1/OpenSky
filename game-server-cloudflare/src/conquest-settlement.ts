@@ -230,6 +230,7 @@ const activePool = async (
       `SELECT version, starts_at, ends_at
        FROM conquest_approved_active_reward_pools
        WHERE starts_at <= ? AND ends_at >= ?
+       ORDER BY starts_at DESC, version DESC
        LIMIT 1`
     )
     .bind(at, at)

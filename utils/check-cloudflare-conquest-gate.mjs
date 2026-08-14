@@ -143,11 +143,28 @@ export const conquestGateErrors = (config, evidence = {}) => {
       "ConquestRewardPoolOperation = 'PROPOSE' | 'ACTIVATE' | 'RETIRE'",
       'createdByUserId === actorUserId',
       'cardManifest does not match proposal',
+      'overlappingActivePool(',
+      'Conquest pool window overlaps active pool',
       "'x-cloud-weasel-operation-key'",
       'operation_key, operation, pool_version, actor_user_id'
     ]) {
       if (!evidence.poolOperations.includes(token)) {
         errors.push(`Conquest pool operations adapter is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.poolWindowSafety !== undefined) {
+    for (const token of [
+      'conquest_reward_pool_window_migration_guard',
+      'first_pool.starts_at <= second_pool.ends_at',
+      'first_pool.ends_at >= second_pool.starts_at',
+      'CREATE TRIGGER conquest_reward_pool_activation_window_guard',
+      'CREATE TRIGGER conquest_reward_pool_lifecycle_window_guard',
+      'DROP INDEX conquest_reward_pools_one_active_idx',
+      'Conquest reward pool windows cannot overlap'
+    ]) {
+      if (!evidence.poolWindowSafety.includes(token)) {
+        errors.push(`Conquest pool window safety is missing: ${token}`)
       }
     }
   }
@@ -267,7 +284,8 @@ export const conquestGateErrors = (config, evidence = {}) => {
   if (evidence.settlement !== undefined) {
     for (const token of [
       'FROM conquest_approved_active_reward_pools',
-      'SELECT 1 FROM conquest_approved_active_reward_pools'
+      'SELECT 1 FROM conquest_approved_active_reward_pools',
+      'ORDER BY starts_at DESC, version DESC'
     ]) {
       if (!evidence.settlement.includes(token)) {
         errors.push(`Conquest settlement lost approved-pool gate: ${token}`)
@@ -328,6 +346,7 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    poolWindowSafety,
     readinessOperationsMigration,
     readinessOperations,
     v2ScheduleActivation,
@@ -377,6 +396,15 @@ const main = async () => {
         'cloudflare',
         'src',
         'conquest-reward-pool-operations.ts'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0100_conquest_reward_pool_windows.sql'
       ),
       'utf8'
     ),
@@ -447,6 +475,7 @@ const main = async () => {
     poolActivation,
     poolOperationsMigration,
     poolOperations,
+    poolWindowSafety,
     readinessOperationsMigration,
     readinessOperations,
     v2ScheduleActivation,

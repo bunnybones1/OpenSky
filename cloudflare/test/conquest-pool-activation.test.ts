@@ -12,13 +12,21 @@ const CREATED_AT = '2026-08-11T00:00:00.000Z'
 
 let version: string
 
-const draftPool = async (silver = [6, 68], gold = [136]) => {
+const draftPool = async (
+  silver = [6, 68],
+  gold = [136],
+  window = {
+    startsAt: STARTS_AT,
+    endsAt: ENDS_AT,
+    createdAt: CREATED_AT
+  }
+) => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
       `INSERT INTO conquest_reward_pools
          (version, status, starts_at, ends_at, created_at)
        VALUES (?, 'DRAFT', ?, ?, ?)`
-    ).bind(version, STARTS_AT, ENDS_AT, CREATED_AT),
+    ).bind(version, window.startsAt, window.endsAt, window.createdAt),
     ...silver.map(cardId =>
       env.AUTH_DB
         .prepare(
@@ -194,5 +202,80 @@ describe('Conquest reward-pool approval', () => {
         .bind(version)
         .first()
     ).toEqual({ count: 0 })
+  })
+
+  it('rejects overlapping inclusive windows while allowing a strictly later pool', async () => {
+    const firstVersion = version
+    await env.AUTH_DB.batch(
+      approvedConquestPoolStatements(env.AUTH_DB, {
+        version: firstVersion,
+        startsAt: STARTS_AT,
+        endsAt: ENDS_AT,
+        createdAt: CREATED_AT,
+        silver: [6, 68],
+        gold: [136]
+      })
+    )
+
+    version = `pool-overlap-${crypto.randomUUID()}`
+    await draftPool([6, 68], [136], {
+      startsAt: ENDS_AT,
+      endsAt: '2026-08-26T00:00:00.000Z',
+      createdAt: CREATED_AT
+    })
+    await propose()
+    await expect(
+      env.AUTH_DB.batch([
+        env.AUTH_DB.prepare(
+          `UPDATE conquest_reward_pool_activations
+           SET status = 'ACTIVE', activated_by_user_id = 'operator:reviewer',
+               activation_reason = 'boundary review', activated_at = ?
+           WHERE pool_version = ?`
+        ).bind(CREATED_AT, version),
+        env.AUTH_DB.prepare(
+          `UPDATE conquest_reward_pools SET status = 'ACTIVE'
+           WHERE version = ?`
+        ).bind(version)
+      ])
+    ).rejects.toThrow('Conquest reward pool windows cannot overlap')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT pool.status, activation.status AS activation_status
+         FROM conquest_reward_pools pool
+         JOIN conquest_reward_pool_activations activation
+           ON activation.pool_version = pool.version
+         WHERE pool.version = ?`
+      )
+        .bind(version)
+        .first()
+    ).toEqual({ status: 'DRAFT', activation_status: 'DRAFT' })
+
+    version = `pool-non-overlap-${crypto.randomUUID()}`
+    await draftPool([6, 68], [136], {
+      startsAt: '2026-08-19T00:00:00.001Z',
+      endsAt: '2026-08-26T00:00:00.000Z',
+      createdAt: CREATED_AT
+    })
+    await propose()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_reward_pool_activations
+         SET status = 'ACTIVE', activated_by_user_id = 'operator:reviewer',
+             activation_reason = 'non-overlapping review', activated_at = ?
+         WHERE pool_version = ?`
+      ).bind(CREATED_AT, version),
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_reward_pools SET status = 'ACTIVE'
+         WHERE version = ?`
+      ).bind(version)
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT version FROM conquest_approved_active_reward_pools
+         WHERE version IN (?, ?) ORDER BY version`
+      )
+        .bind(firstVersion, version)
+        .all()
+    ).toMatchObject({ results: [{ version: firstVersion }, { version }] })
   })
 })

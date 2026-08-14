@@ -416,4 +416,98 @@ describe('Conquest reward pool operations', () => {
         .first()
     ).toEqual({ operations: 1, audits: 1, approved: 1 })
   })
+
+  it('rejects an overlapping reviewed window without an activation receipt', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ).run()
+    const proposer = await actor('window-pool-proposer')
+    const approver = await actor('window-pool-approver')
+    await grantAdmin(proposer)
+    await grantPoolPermission(proposer, 'PROPOSE')
+    await grantAdmin(approver)
+    await grantPoolPermission(approver, 'ACTIVATE')
+    const window = futureWindow()
+
+    const proposePool = async (poolVersion: string) => {
+      const response = await rpcAs(
+        proposer,
+        'GMProposeConquestRewardPool',
+        {
+          version: poolVersion,
+          ...window,
+          silverCardIds: [1, 2],
+          goldCardIds: [1000],
+          reason: 'Reviewed pool-window test',
+          reviewReference: `review:${poolVersion}`
+        },
+        crypto.randomUUID()
+      )
+      expect(response.status).toBe(200)
+      return (await response.json()) as {
+        pool: { cardManifest: string[] }
+      }
+    }
+
+    const firstVersion = `window-first-${crypto.randomUUID()}`
+    const first = await proposePool(firstVersion)
+    expect(
+      (
+        await rpcAs(
+          approver,
+          'GMActivateConquestRewardPool',
+          {
+            version: firstVersion,
+            cardManifest: first.pool.cardManifest,
+            reason: 'First independent window review'
+          },
+          crypto.randomUUID()
+        )
+      ).status
+    ).toBe(200)
+
+    const overlapVersion = `window-overlap-${crypto.randomUUID()}`
+    const overlap = await proposePool(overlapVersion)
+    const rejected = await rpcAs(
+      approver,
+      'GMActivateConquestRewardPool',
+      {
+        version: overlapVersion,
+        cardManifest: overlap.pool.cardManifest,
+        reason: 'Overlapping independent window review'
+      },
+      crypto.randomUUID()
+    )
+    expect(rejected.status).toBe(409)
+    expect(await rejected.json()).toMatchObject({
+      msg: expect.stringContaining(
+        `Conquest pool window overlaps active pool ${firstVersion}`
+      )
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT pool.status, activation.status AS activation_status,
+                (SELECT COUNT(*)
+                 FROM staff_conquest_reward_pool_operations operation
+                 WHERE operation.pool_version = pool.version
+                   AND operation.operation = 'ACTIVATE') AS operations,
+                (SELECT COUNT(*)
+                 FROM staff_conquest_reward_pool_audit audit
+                 WHERE audit.pool_version = pool.version
+                   AND audit.operation = 'ACTIVATE') AS audits
+         FROM conquest_reward_pools pool
+         JOIN conquest_reward_pool_activations activation
+           ON activation.pool_version = pool.version
+         WHERE pool.version = ?`
+      )
+        .bind(overlapVersion)
+        .first()
+    ).toEqual({
+      status: 'DRAFT',
+      activation_status: 'DRAFT',
+      operations: 0,
+      audits: 0
+    })
+  })
 })

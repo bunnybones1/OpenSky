@@ -228,6 +228,20 @@ export class ConquestRewardPoolOperationsRepository {
     return present(row, await this.cards([poolVersion]))
   }
 
+  private async overlappingActivePool(
+    pool: Pick<ConquestRewardPoolView, 'version' | 'startsAt' | 'endsAt'>
+  ): Promise<string | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT version FROM conquest_approved_active_reward_pools
+         WHERE version <> ? AND starts_at <= ? AND ends_at >= ?
+         ORDER BY starts_at ASC, version ASC LIMIT 1`
+      )
+      .bind(pool.version, pool.endsAt, pool.startsAt)
+      .first<{ version: string }>()
+    return row?.version ?? null
+  }
+
   private async completedRetry(
     key: string,
     operation: ConquestRewardPoolOperation,
@@ -477,6 +491,12 @@ export class ConquestRewardPoolOperationsRepository {
     }
     if (JSON.stringify(cardManifest) !== JSON.stringify(before.cardManifest)) {
       throw invalidArgument('Conquest pool cardManifest does not match proposal')
+    }
+    const overlap = await this.overlappingActivePool(before)
+    if (overlap) {
+      throw alreadyExists(
+        `Conquest pool window overlaps active pool ${overlap}`
+      )
     }
     const now = new Date().toISOString()
     if (now >= before.endsAt) throw invalidArgument('Conquest pool has expired')

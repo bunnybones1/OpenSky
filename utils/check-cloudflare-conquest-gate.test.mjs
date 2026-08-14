@@ -66,8 +66,19 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "ConquestRewardPoolOperation = 'PROPOSE' | 'ACTIVATE' | 'RETIRE'",
       'createdByUserId === actorUserId',
       'cardManifest does not match proposal',
+      'overlappingActivePool(',
+      'Conquest pool window overlaps active pool',
       "'x-cloud-weasel-operation-key'",
       'operation_key, operation, pool_version, actor_user_id'
+    ].join('\n'),
+    poolWindowSafety: [
+      'conquest_reward_pool_window_migration_guard',
+      'first_pool.starts_at <= second_pool.ends_at',
+      'first_pool.ends_at >= second_pool.starts_at',
+      'CREATE TRIGGER conquest_reward_pool_activation_window_guard',
+      'CREATE TRIGGER conquest_reward_pool_lifecycle_window_guard',
+      'DROP INDEX conquest_reward_pools_one_active_idx',
+      'Conquest reward pool windows cannot overlap'
     ].join('\n'),
     readinessOperationsMigration: [
       'CREATE TABLE staff_conquest_readiness_permissions',
@@ -128,7 +139,8 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     ].join('\n'),
     settlement: [
       'FROM conquest_approved_active_reward_pools',
-      'SELECT 1 FROM conquest_approved_active_reward_pools'
+      'SELECT 1 FROM conquest_approved_active_reward_pools',
+      'ORDER BY starts_at DESC, version DESC'
     ].join('\n'),
     api: 'FROM conquest_approved_active_reward_pools',
     gateway: [
@@ -148,6 +160,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'poolActivation',
     'poolOperationsMigration',
     'poolOperations',
+    'poolWindowSafety',
     'readinessOperationsMigration',
     'readinessOperations',
     'v2ScheduleActivation',

@@ -66,6 +66,10 @@ itself.
 - Original Conquest requires a versioned draft Silver/Gold pool, an immutable
   exact-manifest proposal, independent activation approval, and the existing
   end-to-end receipt-backed drill before either queue becomes admissible.
+  Its source-faithful inclusive pool windows cannot overlap: migration fails
+  on inherited ambiguity, and operator plus database guards reject competing
+  active windows before they can reach settlement or player reads. Disjoint
+  successors can still be approved before the current window is retired.
   Reviewed staff adapters now perform proposal, approval, and retirement
   without direct SQL, while production retains zero capability grants and zero
   pools until the fork owner supplies and reviews the contents. A separate

@@ -604,6 +604,10 @@ and progress are not migrated.
   remains disabled until an
   explicitly approved pool and a pre-enable delivery drill pass. Direct SQL
   cannot make an unreviewed pool settlement or queue-enablement authority.
+  Approved Conquest windows use the source's inclusive endpoints and must not
+  overlap; migration, operator, and database guards reject ambiguous active
+  schedules while allowing a disjoint successor to be reviewed in advance.
+  Deterministic reads are retained only as defense in depth.
 - Existing Go/Postgres account data will not be migrated into D1. Cloud Weasel
   launches with zero users, so source burner/account migration is deliberately
   retired rather than carried into the new identity model.

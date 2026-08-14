@@ -297,7 +297,7 @@ export class ConquestRepository {
           AND items.token_id = cards.card_id AND items.balance > 0
          WHERE pool.starts_at <= ? AND pool.ends_at >= ?
          GROUP BY pool.version, pool.starts_at, pool.ends_at, cards.card_id
-         ORDER BY cards.card_id`
+         ORDER BY pool.starts_at DESC, pool.version DESC, cards.card_id`
       )
       .bind(timestamp, timestamp)
       .all<WeeklyGoldRow>()
