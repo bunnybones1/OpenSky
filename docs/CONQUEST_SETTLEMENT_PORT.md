@@ -215,6 +215,32 @@ game-server health endpoint reports protocol version 3, while the public
 score port is therefore live for future admitted matches but cannot open a
 queue or create a reward authority by deployment alone.
 
+## Win-rate precision rollout proof — 2026-08-14
+
+Commit `dd6b4bb3` is deployed as main Worker version
+`255e4024-9e79-4698-9a55-82aa16881cf6`. No migration or multiplayer-service
+deployment was required. The source computes both Conquest win-rate fields with
+`float32` division and multiplication, then `encoding/json` emits the shortest
+decimal that round-trips to that value. The TypeScript RPC now shares the
+existing Go-number projection helper instead of exposing JavaScript binary64
+precision; the differential wire test covers the non-exact one-win-in-three
+case as `33.333336`.
+
+The focused Conquest/V2 suites passed 13 tests, the complete main Worker suite
+passed 371 tests across 59 files, and the full production gate passed the game,
+multiplayer, analytics, off-chain, reward, RPC, type, and browser contracts.
+Exact-head GitHub run `31802504613` passed before deployment. The deployment
+verifier resolved web entry `/assets/index-d976a081.js`, replay-fixed game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy.
+
+Post-deploy public probes returned a healthy `Ping`, an empty `weeklyGolds`
+projection, and both Conquest modes false. The read-only production readiness
+audit still classified original Conquest as `dormant-policy` with zero verified
+active pools; leaderboard, Conquest V2, and referral rewards also remained
+dormant. This read-only parity rollout therefore created no pool, queue, run,
+schedule, inventory grant, or new economy authority.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
