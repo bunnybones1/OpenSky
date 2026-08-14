@@ -457,6 +457,21 @@ and progress are not migrated.
   no rows written. The API/web Worker and its entry artifacts remained
   unchanged at `/assets/index-b1769b84.js` and
   `/game/cloudflare/assets/index-79a70ba2.js`.
+- Ranked match rewards now preserve the source rank positions before and after
+  settlement, including deterministic same-rank ordering below Master, the
+  combined Master/Grandweaver top-100 boundary, neighboring scores, and the
+  source draw behavior. Completed wins recalculate exactly 100 active
+  Grandweavers in the same receipt-guarded D1 batch; banned accounts are
+  excluded, and a failed receipt rolls back both player updates and promotion.
+  Milestone `a63bc68f` passed exact-head release-contract run `31776523322`, 31
+  game-server unit tests, and 90 Worker tests before the isolated game-server
+  deploy on 2026-08-13 as version
+  `d21dbff6-6758-4178-8977-66fe1595faf6`. Production protocol-v3 health passed.
+  No migration was required; a read-only D1 aggregate found two unranked rows
+  in each ranked mode, zero total rank score, and zero ranked settlement
+  receipts, with `changed_db: false` and no rows written. The API/web Worker and
+  its entry artifacts remained unchanged at `/assets/index-b1769b84.js` and
+  `/game/cloudflare/assets/index-79a70ba2.js`.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
