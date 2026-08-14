@@ -21,6 +21,7 @@ import {
 
 import { encodeDeckString } from './deck-codec'
 import { invalidArgument, notFound, permissionDenied } from './errors'
+import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
@@ -529,12 +530,15 @@ const statFromRow = (row: StatRow, rank?: number): AccountStat => {
   const position = rank ?? projectedRank(row)
   let rankProgress: number | undefined
   if (row.player_rank === ('UNRANKED' as PlayerRank)) {
-    rankProgress = Math.min(1, Math.floor((experience / 200) * 100) / 100)
+    rankProgress = Math.min(1, goFloat32FloorHundredthsRatio(experience, 200))
   } else if (row.rank_count !== undefined) {
     const rankCount = row.rank_count ?? 0
-    const progress =
-      position !== undefined && rankCount > 0 ? position / rankCount : 0
-    rankProgress = Math.min(1, Math.floor(progress * 100) / 100)
+    rankProgress = Math.min(
+      1,
+      position !== undefined
+        ? goFloat32FloorHundredthsRatio(position, rankCount)
+        : 0
+    )
   }
   return {
     gameMode: row.game_mode,
@@ -543,7 +547,7 @@ const statFromRow = (row: StatRow, rank?: number): AccountStat => {
     tieCount: row.tie_count,
     forfeitCount: row.forfeit_count,
     abandonCount: row.abandon_count,
-    winRatio: gamesPlayed > 0 ? row.win_count / gamesPlayed : 0,
+    winRatio: goFloat32Ratio(row.win_count, gamesPlayed),
     gamesPlayed,
     experience,
     score: row.score,

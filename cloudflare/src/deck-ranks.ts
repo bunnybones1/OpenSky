@@ -10,6 +10,7 @@ import type {
 } from '@opensky/proto'
 
 import { invalidArgument, notFound } from './errors'
+import { goFloat32Ratio } from './go-numbers'
 import { identityReferenceFor } from './rpc-principal'
 
 export const CURRENT_DECK_RANK_LIBRARY_REVISION = cardLibrary.sourceSha256
@@ -287,7 +288,15 @@ export class DeckRanksRepository {
       throw invalidArgument('before and after cannot be used together')
     }
     const config = requestedSort(page, search)
-    const rows = sortRows(result.results.filter(filter), config)
+    const rows = sortRows(
+      result.results
+        .map(row => ({
+          ...row,
+          win_ratio: goFloat32Ratio(row.win_count, row.games_played)
+        }))
+        .filter(filter),
+      config
+    )
     const size = pageSize(page)
     let start = 0
     let end = Math.min(rows.length, size)

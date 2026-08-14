@@ -597,6 +597,30 @@ describe('legacy player RPC compatibility', () => {
     expect(moderatedBody.constructedStats[0]).not.toHaveProperty('rank')
   })
 
+  it('preserves source float32 account ratios and rank-progress flooring', async () => {
+    const season = seasonFromDate()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET xp = 116 WHERE user_id = ?`
+      ).bind(userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET win_count = 1, loss_count = 2
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      ).bind(userId, season)
+    ])
+
+    const response = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    const text = await response.text()
+    expect(text).toContain('"winRatio":0.33333334')
+    expect(text).toContain('"rankProgress":0.58')
+  })
+
   it('preserves the source Master top-100 rank adjustment and denominator', async () => {
     const season = seasonFromDate()
     const targetUpdatedAt = '2026-08-13T21:00:00.000Z'

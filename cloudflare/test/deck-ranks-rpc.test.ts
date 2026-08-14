@@ -228,6 +228,36 @@ describe('deck-rank RPC compatibility', () => {
     expect(JSON.parse(atob(customBody.page.after))).toEqual([string1, '4'])
   })
 
+  it('uses source float32 deck ratios in results, sorting, and cursors', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE player_deck_ranks
+       SET win_count = 1, loss_count = 2
+       WHERE library_revision = ? AND deck_string = ?`
+    )
+      .bind(CURRENT_DECK_RANK_LIBRARY_REVISION, string1)
+      .run()
+
+    const response = await rpc(
+      'SearchDeckRanks',
+      {
+        req: {},
+        page: {
+          pageSize: 2,
+          sort: [{ column: 'win_ratio', order: 'DESC' }]
+        }
+      },
+      true
+    )
+    const text = await response.text()
+    expect(text).toContain('"winRatio":0.33333334')
+    const body = JSON.parse(text) as {
+      page: { after: string }
+      res: Array<{ deckString: string }>
+    }
+    expect(body.res.map(rank => rank.deckString)).toEqual([string3, string1])
+    expect(JSON.parse(atob(body.page.after))).toEqual([string1, '0.33333334'])
+  })
+
   it('supports exact deck, class, and card-containment searches', async () => {
     expect(
       await (
