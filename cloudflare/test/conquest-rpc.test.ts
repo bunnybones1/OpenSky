@@ -117,6 +117,29 @@ describe('source conquest RPC foundation', () => {
         treasurePointsRequired: 600
       }
     })
+    expect(await (await rpc('ConquestPoints', {})).json()).toEqual({
+      points: 0,
+      nedeed: 30
+    })
+
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquest_points
+         (user_id, event_id, current_points, total_points, updated_at)
+       VALUES (?, 1, 29, 129, ?)`
+    )
+      .bind(userId, now)
+      .run()
+    expect(await (await rpc('ConquestPoints', {})).json()).toEqual({
+      points: 29,
+      nedeed: 30
+    })
+    expect(await (await rpc('ConquestV2Progress', {})).json()).toEqual({
+      progress: {
+        treasureLevel: 2,
+        treasurePoints: 150,
+        treasurePointsRequired: 600
+      }
+    })
   })
 
   it('returns only the active versioned weekly Gold pool and current supply', async () => {
@@ -327,7 +350,7 @@ describe('source conquest RPC foundation', () => {
     ).toBe(1)
   })
 
-  it('recreates source conquest statistics from durable progress', async () => {
+  it('recreates source conquest statistics in row insertion order', async () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
@@ -346,8 +369,8 @@ describe('source conquest RPC foundation', () => {
       ).bind(
         userId,
         JSON.stringify({ 3: 'WIN', 4: 'WIN', 5: 'WIN' }),
-        new Date(Date.now() + 1_000).toISOString(),
-        new Date(Date.now() + 1_000).toISOString()
+        new Date(Date.parse(now) - 1_000).toISOString(),
+        new Date(Date.parse(now) - 1_000).toISOString()
       )
     ])
 

@@ -28,6 +28,10 @@ run only after that task settles.
 
 - `applyConquestProgress` records both players and its per-proposal receipt in
   one D1 batch.
+- Player statistics preserve the source database-row ordering for the first
+  Conquest timestamp. The legacy `ConquestPoints` RPC reads event 1 and its
+  30-point threshold, while V2 treasure progress independently reads event 2;
+  neither player-facing ledger can leak into the other.
 - Player reads, authoritative progression, and settlement use one typed-map
   decoder matching the source JSONB scan into
   `map[uint64]ConquestMatchResult`. Source nil-map/key/enum normalization is

@@ -48,7 +48,12 @@ import {
   MAX_FEEDBACK_REQUEST_BYTES
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
-import { ConquestRepository, conquestTreasureProgress } from './conquest'
+import {
+  CONQUEST_V2_EVENT_ID,
+  ConquestRepository,
+  conquestTreasureProgress,
+  LEGACY_CONQUEST_EVENT_ID
+} from './conquest'
 import {
   CONQUEST_READINESS_OPERATION_HEADER,
   ConquestReadinessOperationsRepository
@@ -1737,7 +1742,10 @@ export const handleApiRequest = async (
       case 'ConquestPoints': {
         const principal = await identityPrincipal(request, env)
         await requestBody<Record<string, never>>(request)
-        const points = await conquest.points(principal.userId)
+        const points = await conquest.points(
+          principal.userId,
+          LEGACY_CONQUEST_EVENT_ID
+        )
         return json(request, env, { points: points.current, nedeed: 30 })
       }
 
@@ -1749,7 +1757,10 @@ export const handleApiRequest = async (
       case 'ConquestV2Progress': {
         const principal = await identityPrincipal(request, env)
         await requestBody<Record<string, never>>(request)
-        const points = await conquest.points(principal.userId)
+        const points = await conquest.points(
+          principal.userId,
+          CONQUEST_V2_EVENT_ID
+        )
         return json(request, env, {
           progress: conquestTreasureProgress(points.current)
         })

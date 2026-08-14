@@ -35,6 +35,9 @@ const TREASURE_TOTAL_POINTS = [
   0, 250, 750, 1_500, 2_500, 3_750, 5_250, 7_000, 9_000, 11_250, 13_750
 ] as const
 
+export const LEGACY_CONQUEST_EVENT_ID = 1
+export const CONQUEST_V2_EVENT_ID = 2
+
 interface ConquestRow {
   id: number
   user_id: string
@@ -274,7 +277,7 @@ export class ConquestRepository {
         `SELECT id, user_id, status, nonce, mode, hero, deck_class,
                 match_progress, created_at, ended_at
          FROM player_conquests WHERE user_id = ?
-         ORDER BY created_at ASC, id ASC`
+         ORDER BY id ASC`
       )
       .bind(userId)
       .all<ConquestRow>()
@@ -331,7 +334,7 @@ export class ConquestRepository {
     return result
   }
 
-  async points(userId: string, eventId = 2) {
+  async points(userId: string, eventId: number) {
     const row = await this.database
       .prepare(
         `SELECT current_points, total_points FROM player_conquest_points
