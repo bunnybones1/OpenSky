@@ -92,7 +92,15 @@ const evidenceQuery = `
          drill.delivery_key, drill.user_id, drill.settled_at,
          drill.delivered_at, pool.starts_at, pool.ends_at,
          CASE WHEN approved.version IS NULL THEN 0 ELSE 1 END AS approved,
-         ready.verified_by_user_id, ready.drill_reference, ready.verified_at
+         CASE WHEN applied.operation_key IS NULL
+              THEN NULL ELSE ready.verified_by_user_id
+          END AS verified_by_user_id,
+         CASE WHEN applied.operation_key IS NULL
+              THEN NULL ELSE ready.drill_reference
+          END AS drill_reference,
+         CASE WHEN applied.operation_key IS NULL
+              THEN NULL ELSE ready.verified_at
+          END AS verified_at
   FROM conquest_verified_drill_receipts drill
   JOIN conquest_reward_pools pool ON pool.version = drill.pool_version
   LEFT JOIN conquest_approved_active_reward_pools approved
@@ -101,7 +109,20 @@ const evidenceQuery = `
     ON ready.pool_version = drill.pool_version
    AND ready.conquest_id = drill.conquest_id
    AND ready.settlement_key = drill.settlement_key
-   AND ready.delivery_key = drill.delivery_key`
+   AND ready.delivery_key = drill.delivery_key
+  LEFT JOIN staff_conquest_readiness_operations applied
+    ON applied.operation = 'VERIFY'
+   AND applied.pool_version = ready.pool_version
+   AND applied.conquest_id = ready.conquest_id
+   AND applied.actor_user_id = ready.verified_by_user_id
+   AND applied.status = 'APPLIED'
+   AND applied.created_at = ready.verified_at
+   AND json_extract(applied.request_json, '$.settlementKey') =
+       ready.settlement_key
+   AND json_extract(applied.request_json, '$.deliveryKey') =
+       ready.delivery_key
+   AND json_extract(applied.request_json, '$.drillReference') =
+       ready.drill_reference`
 
 const present = (
   row: EvidenceRow,

@@ -101,6 +101,9 @@ run only after that task settles.
   The operation wrapper echoes both immutable receipt keys, keeps the drill
   identity and both pool reviewers distinct from the readiness verifier, and
   records the exact applied decision before the pool can become queue-ready.
+  Operator reads likewise project verification only through the matching
+  `APPLIED` operation; an abandoned `PREPARING` row stays visibly unverified
+  and cannot be mistaken for rollout authority.
 - Match-service admission re-evaluates that proof and the pool time window on
   every read. An enabled operator flag therefore fails closed at the exact pool
   expiry boundary without waiting for another write or deployment.

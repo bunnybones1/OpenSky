@@ -346,4 +346,82 @@ describe('Conquest readiness operations', () => {
       ).run()
     ).rejects.toThrow('operations are immutable')
   })
+
+  it('does not present an abandoned PREPARING readiness row as verified', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ).run()
+    const evidence = await provisionVerifiedDrill()
+    const verifier = await actor('readiness-preparing-verifier')
+    await grantAdmin(verifier)
+    await grantVerify(verifier)
+    const operationKey = crypto.randomUUID()
+    const drillReference = `review:preparing-drill:${crypto.randomUUID()}`
+    const createdAt = new Date().toISOString()
+    const requestJson = JSON.stringify({
+      poolVersion: evidence.poolVersion,
+      conquestId: evidence.conquestId,
+      settlementKey: evidence.settlementKey,
+      deliveryKey: evidence.deliveryKey,
+      drillReference
+    })
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_conquest_readiness_operations
+           (operation_key, operation, pool_version, conquest_id,
+            actor_user_id, request_json, status, created_at, completed_at)
+         VALUES (?, 'VERIFY', ?, ?, ?, ?, 'PREPARING', ?, NULL)`
+      ).bind(
+        operationKey,
+        evidence.poolVersion,
+        evidence.conquestId,
+        verifier,
+        requestJson,
+        createdAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO conquest_queue_readiness
+           (pool_version, conquest_id, settlement_key, delivery_key,
+            verified_by_user_id, drill_reference, verified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        evidence.poolVersion,
+        evidence.conquestId,
+        evidence.settlementKey,
+        evidence.deliveryKey,
+        verifier,
+        drillReference,
+        createdAt
+      )
+    ])
+
+    const listed = await rpcAs(verifier, 'GMListConquestReadiness', {
+      poolVersion: evidence.poolVersion
+    })
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toMatchObject({
+      evidence: [
+        {
+          poolVersion: evidence.poolVersion,
+          conquestId: evidence.conquestId,
+          eligibleNow: true,
+          verification: null
+        }
+      ]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM conquest_queue_readiness
+            WHERE pool_version = ?) readiness,
+           (SELECT COUNT(*) FROM staff_conquest_readiness_operations
+            WHERE pool_version = ? AND status = 'PREPARING') preparing,
+           (SELECT COUNT(*) FROM conquest_verified_queue_pools
+            WHERE pool_version = ?) admitted`
+      )
+        .bind(evidence.poolVersion, evidence.poolVersion, evidence.poolVersion)
+        .first()
+    ).toEqual({ readiness: 1, preparing: 1, admitted: 0 })
+  })
 })

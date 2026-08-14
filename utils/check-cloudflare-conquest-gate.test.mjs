@@ -95,6 +95,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     readinessOperations: [
       'FROM conquest_verified_drill_receipts drill',
       'LEFT JOIN conquest_approved_active_reward_pools approved',
+      'LEFT JOIN staff_conquest_readiness_operations applied',
+      "applied.status = 'APPLIED'",
+      'CASE WHEN applied.operation_key IS NULL',
       'Conquest readiness receipt confirmation does not match',
       'active verified Conquest drill evidence required',
       'INSERT INTO conquest_queue_readiness',
