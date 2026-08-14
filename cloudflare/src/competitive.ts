@@ -188,6 +188,24 @@ interface MatchCursor {
   created_at?: string
 }
 
+type AdminMatchSortField = 'created_at' | 'ended_at'
+
+interface AdminMatchSortKey {
+  field: AdminMatchSortField
+  order: MatchSortOrder
+  response: SortBy
+}
+
+interface AdminMatchSortConfig {
+  sort: AdminMatchSortKey[]
+  idOrder: MatchSortOrder
+}
+
+interface AdminMatchCursor {
+  id: number
+  values: Array<string | null>
+}
+
 const matchSort = (page?: Page) => {
   const requested = page?.sort?.length
     ? page.sort
@@ -297,16 +315,109 @@ const decodeMatchCursor = (
   }
 }
 
-const encodeCursor = (offset: number): string =>
-  btoa(JSON.stringify({ offset }))
+const adminMatchSort = (page?: Page): AdminMatchSortConfig => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [
+        {
+          column: 'matches.started_at',
+          order: 'DESC' as SortBy['order']
+        }
+      ]
+  const sort: AdminMatchSortKey[] = []
+  let idOrder: MatchSortOrder = 'DESC'
+  for (const item of requested) {
+    const order = item.order as MatchSortOrder
+    if (order !== 'ASC' && order !== 'DESC') {
+      throw invalidArgument('match sort is invalid')
+    }
+    if (item.column === 'matches.id' || item.column === 'id') {
+      idOrder = order
+      continue
+    }
+    const field = ['matches.started_at', 'started_at', 'startedAt'].includes(
+      item.column
+    )
+      ? 'created_at'
+      : ['matches.ended_at', 'ended_at', 'endedAt'].includes(item.column)
+        ? 'ended_at'
+        : undefined
+    if (!field) throw invalidArgument('match sort is invalid')
+    sort.push({ field, order, response: item })
+  }
+  if (sort.length === 1) idOrder = sort[0].order
+  return { sort, idOrder }
+}
 
-const decodeCursor = (cursor?: string): number => {
-  if (!cursor) return 0
+const adminMatchValue = (
+  row: Pick<MatchRow, 'created_at' | 'ended_at'>,
+  field: AdminMatchSortField
+) => row[field]
+
+const compareAdminMatchValue = (
+  left: string | null,
+  right: string | null,
+  order: MatchSortOrder
+) => {
+  if (left === null || right === null) {
+    if (left === right) return 0
+    // Match PostgreSQL's default: NULLS LAST for ASC and NULLS FIRST for DESC.
+    return left === null ? (order === 'ASC' ? 1 : -1) : order === 'ASC' ? -1 : 1
+  }
+  const compared = left.localeCompare(right)
+  return order === 'DESC' ? -compared : compared
+}
+
+const compareAdminMatchKey = (
+  row: Pick<MatchRow, 'id' | 'created_at' | 'ended_at'>,
+  cursorOrRow:
+    | AdminMatchCursor
+    | Pick<MatchRow, 'id' | 'created_at' | 'ended_at'>,
+  config: AdminMatchSortConfig
+) => {
+  for (let index = 0; index < config.sort.length; index += 1) {
+    const key = config.sort[index]
+    const left = adminMatchValue(row, key.field)
+    const right =
+      'values' in cursorOrRow
+        ? cursorOrRow.values[index]
+        : adminMatchValue(cursorOrRow, key.field)
+    const compared = compareAdminMatchValue(left, right, key.order)
+    if (compared !== 0) return compared
+  }
+  const compared = row.id - cursorOrRow.id
+  return config.idOrder === 'DESC' ? -compared : compared
+}
+
+const encodeAdminMatchCursor = (
+  row: Pick<MatchRow, 'id' | 'created_at' | 'ended_at'>,
+  config: AdminMatchSortConfig
+) =>
+  btoa(
+    JSON.stringify([
+      String(row.id),
+      ...config.sort.map(key => adminMatchValue(row, key.field))
+    ])
+  )
+
+const decodeAdminMatchCursor = (
+  value: string,
+  config: AdminMatchSortConfig
+): AdminMatchCursor => {
   try {
-    const value = JSON.parse(atob(cursor)) as { offset?: unknown }
-    return Number.isSafeInteger(value.offset) && (value.offset as number) >= 0
-      ? (value.offset as number)
-      : 0
+    const raw = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== config.sort.length + 1 ||
+      typeof raw[0] !== 'string' ||
+      !/^[1-9]\d*$/.test(raw[0]) ||
+      raw.slice(1).some(item => item !== null && typeof item !== 'string')
+    ) {
+      throw new Error('cursor shape')
+    }
+    const id = Number(raw[0])
+    if (!Number.isSafeInteger(id)) throw new Error('cursor id')
+    return { id, values: raw.slice(1) as Array<string | null> }
   } catch {
     throw invalidArgument('page cursor is invalid')
   }
@@ -1084,6 +1195,9 @@ export class CompetitiveRepository {
     page: Page | undefined,
     request: GMListMatchesRequest | undefined
   ): Promise<{ page: Page; res: GMMatch[] }> {
+    if (page?.before !== undefined && page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
+    }
     const req = request ?? ({} as GMListMatchesRequest)
     let requestedUserId: string | undefined
     if (req.accountAddress !== undefined) {
@@ -1169,50 +1283,49 @@ export class CompetitiveRepository {
             (value.row.reviewed === 1) === req.reviewed)
       )
 
-    const sort = page?.sort?.length
-      ? page.sort
-      : [{ column: 'started_at', order: 'DESC' as SortBy['order'] }]
-    for (const item of sort) {
-      if (
-        !['started_at', 'startedAt', 'ended_at', 'endedAt'].includes(
-          item.column
-        )
-      ) {
-        throw invalidArgument(`unsupported match sort column '${item.column}'`)
-      }
-      if (!['ASC', 'DESC'].includes(item.order)) {
-        throw invalidArgument('match sort order is invalid')
-      }
+    const sort = adminMatchSort(page)
+    mapped.sort((left, right) =>
+      compareAdminMatchKey(left.row, right.row, sort)
+    )
+    const size = matchPageSize(page)
+    const cursorValue = page?.before ?? page?.after
+    const cursor = cursorValue
+      ? decodeAdminMatchCursor(cursorValue, sort)
+      : undefined
+    let candidates = mapped
+    let slice: typeof mapped
+    let hasBefore = false
+    let hasAfter = false
+    if (cursor && page?.before !== undefined) {
+      candidates = mapped.filter(
+        value => compareAdminMatchKey(value.row, cursor, sort) > 0
+      )
+      slice = candidates.slice(0, size)
+      hasBefore = candidates.length > size
+      hasAfter = true
+    } else if (cursor && page?.after !== undefined) {
+      candidates = mapped.filter(
+        value => compareAdminMatchKey(value.row, cursor, sort) < 0
+      )
+      slice = candidates.slice(Math.max(0, candidates.length - size))
+      hasBefore = true
+      hasAfter = candidates.length > size
+    } else {
+      slice = mapped.slice(0, size)
+      hasBefore = mapped.length > size
     }
-    mapped.sort((left, right) => {
-      for (const item of sort) {
-        const ended = item.column === 'ended_at' || item.column === 'endedAt'
-        const leftValue = ended
-          ? (left.row.ended_at ?? '')
-          : left.row.created_at
-        const rightValue = ended
-          ? (right.row.ended_at ?? '')
-          : right.row.created_at
-        const compared = leftValue.localeCompare(rightValue)
-        if (compared) return item.order === 'DESC' ? -compared : compared
-      }
-      return right.row.id - left.row.id
-    })
-
-    const size = pageSize(page)
-    const offset = decodeCursor(page?.before ?? page?.after)
-    const slice = mapped.slice(offset, offset + size)
-    const nextOffset = offset + slice.length
     return {
       page: {
         pageSize: size,
         before: slice.length
-          ? encodeCursor(Math.max(0, offset - size))
+          ? encodeAdminMatchCursor(slice[0].row, sort)
           : undefined,
-        after: slice.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: nextOffset < mapped.length,
-        hasAfter: offset > 0,
-        sort
+        after: slice.length
+          ? encodeAdminMatchCursor(slice[slice.length - 1].row, sort)
+          : undefined,
+        hasBefore,
+        hasAfter,
+        sort: sort.sort.map(key => key.response)
       },
       res: slice.map(value => ({
         match: value.match,
