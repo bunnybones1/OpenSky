@@ -297,6 +297,38 @@ dormant; Cloudflare reported the new version at 100% traffic. This read-only
 parity fix therefore introduced no pool, queue, run, reward, schedule,
 inventory grant, or economy authority.
 
+## Points read-state rollout proof — 2026-08-14
+
+Commit `ec0040c0` is deployed as main Worker version
+`20d1ec82-7ce1-43b0-99a5-4048912f0f19`. No migration or multiplayer-service
+deployment was required. Both source `ConquestPoints` and
+`ConquestV2Progress` call `FindOrCreateByAddressAndEventID` before returning a
+zero-value projection. The TypeScript repository now preserves that state
+contract with an idempotent insert keyed by `(user_id, event_id)` instead of
+synthesizing zero for an absent row. The regression proves first reads create
+exactly the legacy event-1 and V2 event-2 rows at zero, then verifies later
+point updates continue to project through the original RPC shapes.
+
+The focused Conquest RPC suite passed 9 tests, the complete main Worker suite
+passed 376 tests across 59 files, and the full production gate passed 230
+multiplayer tests, 25 game tests, 6 analytics tests, and every off-chain,
+reward, RPC, type, browser, and deployment contract. The fail-closed reward
+mutator inventory now explicitly reviews both `conquest.ts` writes and all 64
+TypeScript ledger writes. Exact-head GitHub run `31815910440` passed in 8m33s
+before deployment. The production verifier resolved web entry
+`/assets/index-d976a081.js`, replay-fixed game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Post-deploy public probes returned a healthy `Ping`, the exact Worker version,
+both Practice modes enabled, both Conquest modes false, and an empty
+`weeklyGolds` projection. The read-only reward-readiness audit still reported
+core rewards live, SkyPass `1/1` active, and every policy-gated reward track
+dormant; Cloudflare reported the new version at 100% traffic. Verification did
+not invoke an authenticated points RPC against a real account merely to create
+state. This parity fix introduced no pool, queue, run, reward, schedule,
+inventory grant, or economy authority.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
