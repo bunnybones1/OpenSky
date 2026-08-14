@@ -392,6 +392,25 @@ and progress are not migrated.
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy. Reward readiness remained SkyPass `1/1` active
   with every policy-gated track dormant, and D1 reported no pending migrations.
+  Quest XP rewards now complete that source-level projection. Migration
+  `0108_quest_reward_season_progress.sql` snapshots the claim season and its
+  immutable pre-claim SkyPass baseline on each quest receipt, so every reward
+  in a multi-quest batch reports the source `LevelProgress` after that
+  individual reward instead of the lifetime account level. Milestone
+  `1ccf24a2` passed exact-head release-contract run `31832445883` in 8m29s,
+  the focused 46-test player RPC suite, the 381-test main Worker suite, 230
+  multiplayer tests, 25 game tests, and 6 analytics tests. Production
+  migration backfilled the one historical receipt to Season 62 with source
+  baseline `0 -> 0`; its before/after lifetime level remained `1 -> 1`, the
+  immutable receipt guard was restored, the one claim batch, one receipt, 63
+  item rows, and 10 quest rows were unchanged, and D1 reported no pending
+  migrations. The main Worker was deployed on 2026-08-14 as version
+  `a9c27cac-e523-4700-a61c-301f03b3a868`. The production verifier matched
+  `/assets/index-b1769b84.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy on its first attempt. Public Ping and game health
+  returned 200 with `no-store`, game protocol 3; reward readiness remained
+  SkyPass `1/1` active with every policy-gated track dormant.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
