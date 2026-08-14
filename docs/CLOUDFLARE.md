@@ -434,7 +434,16 @@ and progress are not migrated.
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes
   between page requests, so the original infinite list cannot duplicate or
-  skip an older row because its numeric offset shifted.
+  skip an older row because its numeric offset shifted. Milestone `9ba53af9`
+  passed the exact-head Cloudflare release contract and was deployed on
+  2026-08-13 as Worker version `2aa77b77-afa3-458e-8560-220f070ac883`.
+  Wrangler reported no updated asset files; the deployment verifier retained
+  web entry `/assets/index-b1769b84.js`, game entry
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+  release-safe cache policy. The public version RPC reported that same Worker
+  version, both Conquest modes remained disabled, and D1 had no migrations to
+  apply. A read-only production query observed 12 completed matches with
+  `changed_db: false` and zero rows written.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
