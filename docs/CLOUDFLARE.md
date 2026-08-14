@@ -569,6 +569,21 @@ and progress are not migrated.
   `/assets/index-b1769b84.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- App-developer-key administration now preserves the source 200-item limit,
+  `[id, name]` default keyset cursor, custom sorts, unique-key direction rule,
+  first/last cursors, and bidirectional traversal. Inserting a key ahead of an
+  existing cursor no longer shifts the following page, and malformed or
+  dual-direction cursors fail closed. Milestone `fa67dc35` passed exact-head
+  release-contract run `31787594829`, the 363-test main Worker suite, and the
+  complete cross-service release contract before deployment on 2026-08-14 as
+  Worker version `ce2ce41f-cae3-41c6-98df-29fdf28848c9`. No migration was
+  required. The public Version RPC reported that exact version, and an
+  anonymous management-RPC probe remained unauthorized. A read-only production
+  D1 aggregate found zero configured or enabled app keys, with
+  `changed_db: false` and no rows written. Cloudflare uploaded no asset changes,
+  retaining `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
