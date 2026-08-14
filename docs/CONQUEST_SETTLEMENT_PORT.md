@@ -241,6 +241,33 @@ active pools; leaderboard, Conquest V2, and referral rewards also remained
 dormant. This read-only parity rollout therefore created no pool, queue, run,
 schedule, inventory grant, or new economy authority.
 
+## Status deck-class projection rollout proof — 2026-08-14
+
+Commit `4a648c11` is deployed as main Worker version
+`1a6ea20f-ac4d-4078-9d0e-3d329a6bf732`. No migration or multiplayer-service
+deployment was required. The source `ConquestStatus` and
+`InternalConquestStatus` RPCs derive `deckClass` from the locked hero on every
+read instead of trusting a persisted value. The TypeScript repository now does
+the same, including the generated Go zero-value projection of `UNKNOWN_CLASS`
+for an unknown hero. The regression test deliberately stores a mismatched
+`SAMYA`/`STR` pair and proves the response remains `AGY`.
+
+The focused Conquest RPC suite passed 8 tests, the complete main Worker suite
+passed 375 tests across 59 files, and the full production gate passed 230
+multiplayer tests, 25 game tests, 6 analytics tests, and every off-chain,
+reward, RPC, type, browser, and deployment contract. Exact-head GitHub run
+`31811915998` passed in 8m45s before deployment. The production verifier
+resolved web entry `/assets/index-b1769b84.js`, replay-fixed game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Post-deploy public probes returned a healthy `Ping`, the exact Worker version,
+both Practice modes enabled, both Conquest modes false, and an empty
+`weeklyGolds` projection. The read-only reward-readiness audit still reported
+core rewards live, SkyPass `1/1` active, and every policy-gated reward track
+dormant; Cloudflare reported the new version at 100% traffic. This parity fix
+therefore introduced no pool, queue, reward, schedule, or economy authority.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
