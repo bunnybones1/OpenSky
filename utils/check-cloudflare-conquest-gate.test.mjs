@@ -30,7 +30,11 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     matchService: [
       'isConquestQueueReady(env.AUTH_DB, at)',
       'CONQUEST_GAME_MODES',
-      'modes.delete(mode as GameMode)'
+      'modes.delete(mode as GameMode)',
+      'currentMatchmakerGameModes',
+      "'/internal/matchmaker/game-modes'",
+      'participantModeEnabled',
+      'conquestRepository.isDrainable(identity.userId, mode)'
     ].join('\n'),
     migration: [
       'CREATE VIEW conquest_verified_drill_receipts',
@@ -157,6 +161,26 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'pool.ends_at > conquest.created_at',
       'Conquest reward pool pin is immutable'
     ].join('\n'),
+    drainMigration: [
+      'CREATE VIEW conquest_approved_queue_pools',
+      'FROM conquest_approved_reward_pools pool',
+      'JOIN conquest_verified_drill_receipts drill',
+      'JOIN staff_conquest_readiness_operations operation',
+      "operation.status = 'APPLIED'",
+      'ready.verified_at >= pool.starts_at',
+      'ready.verified_at < pool.ends_at'
+    ].join('\n'),
+    drainRepository: [
+      'isDrainable(userId: string, mode: GameMode)',
+      'drainingModes()',
+      'JOIN conquest_approved_queue_pools pool',
+      'mode.game_mode = conquest.mode AND mode.enabled = 1',
+      "conquest.status = 'IN_PROGRESS'",
+      "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
+      'pool.starts_at <= conquest.created_at',
+      'pool.ends_at > conquest.created_at'
+    ].join('\n'),
+    matchmaker: "'https://cloud-weasel-match/internal/matchmaker/game-modes'",
     api: [
       'FROM conquest_approved_active_reward_pools',
       'FROM game_mode_status',
@@ -209,6 +233,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'staff',
     'settlement',
     'settlementPinning',
+    'drainMigration',
+    'drainRepository',
+    'matchmaker',
     'api',
     'playerConquest',
     'playerConquestButton',

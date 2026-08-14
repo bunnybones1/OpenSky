@@ -97,6 +97,57 @@ export const conquestTreasureProgress = (
 export class ConquestRepository {
   constructor(private readonly database: D1Database) {}
 
+  async isDrainable(userId: string, mode: GameMode): Promise<boolean> {
+    if (
+      mode !== GameMode.CONQUEST_CONSTRUCTED &&
+      mode !== GameMode.CONQUEST_DISCOVERY
+    ) {
+      return false
+    }
+    const row = await this.database
+      .prepare(
+        `SELECT 1
+         FROM player_conquests conquest
+         JOIN conquest_approved_queue_pools pool
+           ON pool.version = conquest.reward_pool_version
+         JOIN game_mode_status mode
+           ON mode.game_mode = conquest.mode AND mode.enabled = 1
+         WHERE conquest.user_id = ?
+           AND conquest.status = 'IN_PROGRESS'
+           AND conquest.mode = ?
+           AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
+               IS conquest.created_at
+           AND pool.starts_at <= conquest.created_at
+           AND pool.ends_at > conquest.created_at
+         LIMIT 1`
+      )
+      .bind(userId, mode)
+      .first()
+    return Boolean(row)
+  }
+
+  async drainingModes(): Promise<Set<GameMode>> {
+    const rows = await this.database
+      .prepare(
+        `SELECT DISTINCT conquest.mode
+         FROM player_conquests conquest
+         JOIN conquest_approved_queue_pools pool
+           ON pool.version = conquest.reward_pool_version
+         JOIN game_mode_status mode
+           ON mode.game_mode = conquest.mode AND mode.enabled = 1
+         WHERE conquest.status = 'IN_PROGRESS'
+           AND conquest.mode IN (
+             'CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'
+           )
+           AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
+               IS conquest.created_at
+           AND pool.starts_at <= conquest.created_at
+           AND pool.ends_at > conquest.created_at`
+      )
+      .all<{ mode: GameMode }>()
+    return new Set(rows.results.map(row => row.mode))
+  }
+
   async enter(userId: string, hero: Hero, at = new Date()): Promise<boolean> {
     const deckClass = HERO_DECK_CLASS[hero]
     if (hero === Hero.UNKNOWN) throw new Error('hero is missing')

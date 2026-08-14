@@ -10,7 +10,7 @@ the client wire contract or combining it with the game server.
 | `src/criteria.ts`  | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators`                               |
 | `src/matcher.ts`   | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go`                         |
 | `src/protocol.ts`  | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts`                     |
-| `src/admission.ts` | `frontend/findmatch/validators/game_mode_data_consistency.go`                              |
+| `src/admission.ts` | `frontend/findmatch/validators/game_mode_data_consistency.go`                               |
 | `src/runtime.ts`   | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
 | `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go`                                                  |
 | `src/captcha.ts`   | `frontend/findmatch/validators/captcha.go`, `matching/matchers/player_validator.go`         |
@@ -75,6 +75,13 @@ ten-second cache interval even when only one player is waiting. Disabled queues
 are drained with `GAME_MODE_DISABLED`; accepted proposals are canceled with
 `SERVER_SHUTDOWN`. An unavailable or malformed switchboard pauses matching and
 dispatch while retaining durable state for the next alarm retry.
+The switchboard endpoint is matchmaker-specific for one narrow lifecycle
+reason: pool expiry closes public Conquest admission, but a receipt-backed run
+already admitted inside that pool window must still be able to finish. The
+match service exposes a Conquest mode to this projection only while at least one
+such canonical pinned run exists and the operator flag remains enabled. Player
+profile admission and final dispatch enforce the same condition per identity,
+so this projection cannot open Conquest to a new or unpinned player.
 Immediately before accepted dispatch, both participants receive the source
 director's randomized game-side assignment. Cloudflare derives the coin flip
 from the cryptographically random proposal UUID after canonicalizing addresses,

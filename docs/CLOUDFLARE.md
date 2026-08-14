@@ -397,7 +397,12 @@ and progress are not migrated.
   The preserved Conquest page polls the source game-mode status RPC every ten
   seconds and keeps its existing Start and ticket-purchase controls locked
   unless constructed Conquest is authoritatively available. A missing or
-  failed status read therefore cannot present a spendable action.
+  failed status read therefore cannot present a spendable action. Pool expiry
+  closes that public/new-entry surface but does not strand an admitted run:
+  the matchmaker uses a separate internal drain view, and both profile loading
+  and final dispatch require the run's immutable pin, canonical in-window
+  creation time, approved manifest, and applied drill/readiness receipts.
+  Explicitly disabling the mode remains an immediate operator stop.
 - The authoritative game Worker records Conquest win/loss/draw results by
   durable match ID and performs the source first-loss/third-win transition with
   a per-proposal retry receipt. Zero-win losses complete immediately. Earned

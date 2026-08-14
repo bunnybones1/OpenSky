@@ -53,7 +53,7 @@ export default defineConfig({
               gameModeStatus[body.field] = body.enabled
               return new Response(null, { status: 204 })
             }
-            if (url.pathname === '/internal/game-modes') {
+            if (url.pathname === '/internal/matchmaker/game-modes') {
               if (
                 request.method !== 'GET' ||
                 request.headers.get('x-cloud-weasel-internal-auth') !==

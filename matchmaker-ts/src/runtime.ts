@@ -1216,11 +1216,14 @@ export class MatchmakerPool implements DurableObject {
     if (!this.env.MATCH_SERVICE) return undefined
     try {
       const response = await this.env.MATCH_SERVICE.fetch(
-        new Request('https://cloud-weasel-match/internal/game-modes', {
-          headers: {
-            [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+        new Request(
+          'https://cloud-weasel-match/internal/matchmaker/game-modes',
+          {
+            headers: {
+              [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+            }
           }
-        })
+        )
       )
       const body: unknown = await response.json()
       if (!response.ok || !isRecord(body) || !isRecord(body.status)) {

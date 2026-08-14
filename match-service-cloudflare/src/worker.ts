@@ -17,6 +17,7 @@ import {
   MatchRepository
 } from './repository'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
+import { ConquestRepository } from '../../cloudflare/src/conquest'
 import {
   CONQUEST_GAME_MODES,
   isConquestQueueReady
@@ -109,6 +110,16 @@ export const currentEnabledGameModes = async (
   return modes
 }
 
+export const currentMatchmakerGameModes = async (
+  env: MatchServiceEnv,
+  at = new Date()
+) => {
+  const modes = await currentEnabledGameModes(env, at)
+  const draining = await new ConquestRepository(env.AUTH_DB).drainingModes()
+  for (const mode of draining) modes.add(mode)
+  return modes
+}
+
 const gameModesStatus = (modes: Set<GameMode>) => {
   return {
     tutorial: true,
@@ -187,9 +198,16 @@ const matchmakingProfile = async (
       GameMode.RANKED_DISCOVERY
     ].includes(body.mode as GameMode)
     const modes = await currentEnabledGameModes(env)
+    const requestedMode = body.mode as GameMode
+    const drainable =
+      !modes.has(requestedMode) &&
+      (await new ConquestRepository(env.AUTH_DB).isDrainable(
+        body.userId,
+        requestedMode
+      ))
     return json({
       gameModeEnabled:
-        modes.has(body.mode as GameMode) &&
+        (modes.has(requestedMode) || drainable) &&
         (!requiresRankedExperience || profile.rankedEligible),
       profile
     })
@@ -247,6 +265,15 @@ export default {
       if (!authorized(request, env)) return json({ error: 'not found' }, 404)
       return json({
         status: gameModesStatus(await currentEnabledGameModes(env))
+      })
+    }
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/internal/matchmaker/game-modes'
+    ) {
+      if (!authorized(request, env)) return json({ error: 'not found' }, 404)
+      return json({
+        status: gameModesStatus(await currentMatchmakerGameModes(env))
       })
     }
     if (
@@ -356,7 +383,21 @@ export default {
     }
 
     const enabledModes = await currentEnabledGameModes(env)
-    if (gameModes.some(mode => !enabledModes.has(mode))) {
+    const conquestRepository = new ConquestRepository(env.AUTH_DB)
+    const participantModeEnabled = await Promise.all(
+      dispatch.participants.map(async participant => {
+        const mode = participant.player.mode as GameMode
+        if (enabledModes.has(mode)) return true
+        if (!CONQUEST_GAME_MODES.some(conquestMode => conquestMode === mode)) {
+          return false
+        }
+        const identity = participant.identity
+        return identity
+          ? conquestRepository.isDrainable(identity.userId, mode)
+          : false
+      })
+    )
+    if (participantModeEnabled.some(value => !value)) {
       return json({ error: 'game mode is disabled' }, 409)
     }
 

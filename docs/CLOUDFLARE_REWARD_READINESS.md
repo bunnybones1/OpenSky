@@ -72,7 +72,11 @@ itself.
   successors can still be approved before the current window is retired.
   Each ticket spend pins that exact approved version, so an admitted match may
   safely finish after the window and settle from the immutable reviewed
-  manifest; no successor pool is inferred from the eventual result.
+  manifest; no successor pool is inferred from the eventual result. Public
+  admission remains closed after expiry, while a separate matchmaker-only
+  drain view admits only canonical `IN_PROGRESS` runs whose pin and complete
+  drill/readiness receipts still agree. An explicit mode disable overrides
+  draining for emergency shutdown.
   Reviewed staff adapters now perform proposal, approval, and retirement
   without direct SQL, while production retains zero capability grants and zero
   pools until the fork owner supplies and reviews the contents. A separate

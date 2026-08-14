@@ -113,6 +113,14 @@ run only after that task settles.
 - Match-service admission re-evaluates that proof and the pool time window on
   every read. An enabled operator flag therefore fails closed at the exact pool
   expiry boundary without waiting for another write or deployment.
+- Matchmaker draining is intentionally separate from public admission. After
+  expiry or pool retirement, only an `IN_PROGRESS` run whose immutable pin,
+  canonical creation time, approved manifest, drill receipts, and applied
+  readiness operation all agree can remain queued. The player profile and
+  final two-party dispatch repeat that check. A separate internal switchboard
+  keeps only those already-admitted queues alive; public status and new entry
+  remain false. Setting the operator mode flag to false is still an immediate
+  emergency stop for queued tickets and accepted proposals.
 - Player entry uses those same two authorities inside the atomic ticket-spend
   batch. A disabled mode, missing verification, or exact pool expiry creates no
   run and leaves the off-chain ticket untouched. An already-active run remains
@@ -177,6 +185,10 @@ Object alarm may partially grant inventory before the receipt is durable.
 - Entry coverage proves disabled, unverified, and exact-expiry states cannot
   consume a ticket; enabled receipt-backed entry remains concurrency-safe, and
   retrying an active run after switch-off does not spend again.
+- Drain coverage proves exact-expiry public admission is false while a valid
+  admitted run remains matchable, boundary-time or missing pins fail closed,
+  both dispatch identities must qualify, and an explicit operator disable
+  overrides the drain path.
 - Feed events, inventory balances, Conquest stats, and terminal status agree.
 - Production read-only probes show no pre-enable Conquest rows or grants.
 - Conquest mode flags remain false until all checks pass against the deployed

@@ -75,11 +75,57 @@ export const conquestGateErrors = (config, evidence = {}) => {
     for (const token of [
       'isConquestQueueReady(env.AUTH_DB, at)',
       'CONQUEST_GAME_MODES',
-      'modes.delete(mode as GameMode)'
+      'modes.delete(mode as GameMode)',
+      'currentMatchmakerGameModes',
+      "'/internal/matchmaker/game-modes'",
+      'participantModeEnabled',
+      'conquestRepository.isDrainable(identity.userId, mode)'
     ]) {
       if (!evidence.matchService.includes(token)) {
         errors.push(`match service lost dynamic Conquest clamp: ${token}`)
       }
+    }
+  }
+  if (evidence.drainMigration !== undefined) {
+    for (const token of [
+      'CREATE VIEW conquest_approved_queue_pools',
+      'FROM conquest_approved_reward_pools pool',
+      'JOIN conquest_verified_drill_receipts drill',
+      'JOIN staff_conquest_readiness_operations operation',
+      "operation.status = 'APPLIED'",
+      'ready.verified_at >= pool.starts_at',
+      'ready.verified_at < pool.ends_at'
+    ]) {
+      if (!evidence.drainMigration.includes(token)) {
+        errors.push(
+          `Conquest admitted-run drain migration is missing: ${token}`
+        )
+      }
+    }
+  }
+  if (evidence.drainRepository !== undefined) {
+    for (const token of [
+      'isDrainable(userId: string, mode: GameMode)',
+      'drainingModes()',
+      'JOIN conquest_approved_queue_pools pool',
+      'mode.game_mode = conquest.mode AND mode.enabled = 1',
+      "conquest.status = 'IN_PROGRESS'",
+      "strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)",
+      'pool.starts_at <= conquest.created_at',
+      'pool.ends_at > conquest.created_at'
+    ]) {
+      if (!evidence.drainRepository.includes(token)) {
+        errors.push(`Conquest admitted-run drain boundary is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.matchmaker !== undefined) {
+    if (
+      !evidence.matchmaker.includes(
+        "'https://cloud-weasel-match/internal/matchmaker/game-modes'"
+      )
+    ) {
+      errors.push('matchmaker is not using the admitted-run drain switchboard')
     }
   }
   if (evidence.migration !== undefined) {
@@ -422,6 +468,9 @@ const main = async () => {
     cardLibrary,
     settlement,
     settlementPinning,
+    drainMigration,
+    drainRepository,
+    matchmaker,
     api,
     playerConquest,
     playerConquestButton,
@@ -541,6 +590,17 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0102_conquest_admitted_run_drain.sql'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
+    readFile(path.join(root, 'matchmaker-ts', 'src', 'runtime.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
     readFile(
       path.join(root, 'webapp', 'src', 'PlayPage', 'Conquest', 'Conquest.tsx'),
@@ -592,6 +652,9 @@ const main = async () => {
     cardLibrary,
     settlement,
     settlementPinning,
+    drainMigration,
+    drainRepository,
+    matchmaker,
     api,
     playerConquest,
     playerConquestButton,

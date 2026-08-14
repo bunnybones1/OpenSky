@@ -36,7 +36,17 @@ ported, but its modes remain deliberately disabled until an approved production
 reward pool passes the end-to-end enablement drill and receives a separate
 readiness record.
 
-The endpoint is not public. `cloud-weasel-matchmaker` calls
+Conquest has separate admission and drain projections. Public status and new
+entry close at the pool boundary. The matchmaker-only projection may retain a
+mode solely for an existing `IN_PROGRESS` run whose immutable pool pin,
+canonical creation time, approved manifest, drill evidence, and applied
+readiness operation agree. Profile admission and final dispatch recheck that
+run per identity; a two-player dispatch fails if either side does not qualify.
+The D1 operator flag is required in every drain query, so explicitly disabling
+the mode still stops queued and accepted work immediately.
+
+These endpoints are not public. `cloud-weasel-matchmaker` calls the dedicated
+`GET /internal/matchmaker/game-modes` projection and
 `POST /internal/matches` over a Cloudflare service binding. Both Workers must
 have the same `INTERNAL_AUTH_SECRET` Wrangler secret (at least 16 characters),
 and the game server must use that secret as well.

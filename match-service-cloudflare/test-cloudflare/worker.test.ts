@@ -10,7 +10,10 @@ import {
   parseAcceptedMatchDispatch
 } from '../src/protocol'
 import { MatchRepository } from '../src/repository'
-import { currentEnabledGameModes } from '../src/worker'
+import {
+  currentEnabledGameModes,
+  currentMatchmakerGameModes
+} from '../src/worker'
 import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
 import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
@@ -306,9 +309,10 @@ const provisionReceiptBackedConquestReadiness = async () => {
   const settledAt = new Date(now - 25 * 60 * 60 * 1_000).toISOString()
   const deliveredAt = new Date(now - 60 * 60 * 1_000).toISOString()
   const endsAt = new Date(now + 2 * 60 * 60 * 1_000).toISOString()
+  const readinessEntryKey = `readiness-drill:${readinessPoolVersion}`
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
-      `INSERT INTO users
+      `INSERT OR IGNORE INTO users
          (id, display_name, primary_email, created_at, updated_at)
        VALUES (?, 'Readiness Drill', 'readiness-drill@example.com', ?, ?)`
     ).bind(READINESS_USER_ID, startsAt, startsAt),
@@ -327,15 +331,26 @@ const provisionReceiptBackedConquestReadiness = async () => {
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
           match_progress, created_at, ended_at, reward_pool_version)
-       VALUES ('readiness-drill:match-service-test', ?, 'REWARDS_PENDING', 1,
+       VALUES (?, ?, 'REWARDS_PENDING',
+               (SELECT COALESCE(MAX(nonce), 0) + 1
+                FROM player_conquests WHERE user_id = ?),
                'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
                '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?, ?)`
-    ).bind(READINESS_USER_ID, settledAt, settledAt, readinessPoolVersion)
+    ).bind(
+      readinessEntryKey,
+      READINESS_USER_ID,
+      READINESS_USER_ID,
+      settledAt,
+      settledAt,
+      readinessPoolVersion
+    )
   ])
   const conquest = await env.AUTH_DB.prepare(
     `SELECT id FROM player_conquests
-     WHERE entry_key = 'readiness-drill:match-service-test'`
-  ).first<{ id: number }>()
+     WHERE entry_key = ?`
+  )
+    .bind(readinessEntryKey)
+    .first<{ id: number }>()
   await settlePendingConquest(env.AUTH_DB, conquest!.id, settledAt, () => 0)
   const settlement = await env.AUTH_DB.prepare(
     `SELECT settlement_key FROM player_conquest_settlements
@@ -410,6 +425,27 @@ const provisionReceiptBackedConquestReadiness = async () => {
   )
   return { endsAt, verifiedAt }
 }
+
+const insertActiveConquest = (
+  userId: string,
+  entryKey: string,
+  createdAt: string,
+  rewardPoolVersion: string | null = readinessPoolVersion
+) =>
+  env.AUTH_DB.prepare(
+    `INSERT INTO player_conquests
+       (entry_key, user_id, status, nonce, mode, hero, deck_class,
+        match_progress, created_at, reward_pool_version)
+     VALUES (?, ?, 'IN_PROGRESS', 1, 'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+             '{}', ?, ?)`
+  ).bind(entryKey, userId, createdAt, rewardPoolVersion)
+
+const enableConstructedConquest = (at: string) =>
+  env.AUTH_DB.prepare(
+    `UPDATE game_mode_status
+     SET enabled = 1, updated_by_user_id = 'system:test', updated_at = ?
+     WHERE game_mode = 'CONQUEST_CONSTRUCTED'`
+  ).bind(at)
 
 describe('Cloud Weasel accepted-match service', () => {
   it('reports the authoritative deployment mode switches only to trusted services', async () => {
@@ -511,6 +547,188 @@ describe('Cloud Weasel accepted-match service', () => {
         .bind(readinessPoolVersion)
         .run()
     ).rejects.toThrow('Conquest queue readiness receipts are immutable')
+  })
+
+  it('keeps an exact receipt-backed run drainable after admission closes', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const { endsAt, verifiedAt } =
+      await provisionReceiptBackedConquestReadiness()
+    await env.AUTH_DB.batch([
+      enableConstructedConquest(verifiedAt),
+      insertActiveConquest(
+        USER_ID,
+        'match-service-drainable-conquest',
+        verifiedAt
+      )
+    ])
+
+    const publicModes = await currentEnabledGameModes(
+      env as unknown as Parameters<typeof currentEnabledGameModes>[0],
+      new Date(endsAt)
+    )
+    expect(publicModes.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(false)
+    const matchmakerModes = await currentMatchmakerGameModes(
+      env as unknown as Parameters<typeof currentMatchmakerGameModes>[0],
+      new Date(endsAt)
+    )
+    expect(matchmakerModes.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(true)
+    expect(matchmakerModes.has(GameMode.CONQUEST_DISCOVERY)).toBe(false)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE version = ?`
+    )
+      .bind(readinessPoolVersion)
+      .run()
+    const publicStatus = await SELF.fetch(
+      'https://match-service.example/internal/game-modes',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+      }
+    )
+    expect(await publicStatus.json()).toMatchObject({
+      status: { conquestConstructed: false }
+    })
+    const matchmakerStatus = await SELF.fetch(
+      'https://match-service.example/internal/matchmaker/game-modes',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+      }
+    )
+    expect(await matchmakerStatus.json()).toMatchObject({
+      status: {
+        conquestConstructed: true,
+        conquestDiscovery: false
+      }
+    })
+    expect(
+      await profile(GameMode.CONQUEST_CONSTRUCTED, principal).then(response =>
+        response.json()
+      )
+    ).toMatchObject({ gameModeEnabled: true })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE game_mode_status
+       SET enabled = 0, updated_by_user_id = 'system:emergency-stop',
+           updated_at = ?
+       WHERE game_mode = 'CONQUEST_CONSTRUCTED'`
+    )
+      .bind(new Date().toISOString())
+      .run()
+    expect(
+      await profile(GameMode.CONQUEST_CONSTRUCTED, principal).then(response =>
+        response.json()
+      )
+    ).toMatchObject({ gameModeEnabled: false })
+    expect(
+      await SELF.fetch(
+        'https://match-service.example/internal/matchmaker/game-modes',
+        {
+          headers: { [INTERNAL_AUTH_HEADER]: 'match-service-test-secret' }
+        }
+      ).then(response => response.json())
+    ).toMatchObject({ status: { conquestConstructed: false } })
+  })
+
+  it('rejects a pool pin whose run was not admitted inside its window', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const { endsAt, verifiedAt } =
+      await provisionReceiptBackedConquestReadiness()
+    await env.AUTH_DB.batch([
+      enableConstructedConquest(verifiedAt),
+      insertActiveConquest(
+        USER_ID,
+        'match-service-forged-conquest-window',
+        endsAt
+      )
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE version = ?`
+    )
+      .bind(readinessPoolVersion)
+      .run()
+
+    expect(
+      await profile(GameMode.CONQUEST_CONSTRUCTED, principal).then(response =>
+        response.json()
+      )
+    ).toMatchObject({ gameModeEnabled: false })
+    const matchmakerModes = await currentMatchmakerGameModes(
+      env as unknown as Parameters<typeof currentMatchmakerGameModes>[0]
+    )
+    expect(matchmakerModes.has(GameMode.CONQUEST_CONSTRUCTED)).toBe(false)
+  })
+
+  it('dispatches an expired-window Conquest match only for admitted identities', async () => {
+    const { verifiedAt } = await provisionReceiptBackedConquestReadiness()
+    await provisionSecondPlayer()
+    await env.AUTH_DB.batch([
+      enableConstructedConquest(verifiedAt),
+      insertActiveConquest(
+        USER_ID,
+        'match-service-drain-dispatch-one',
+        verifiedAt
+      ),
+      insertActiveConquest(
+        SECOND_USER_ID,
+        'match-service-drain-dispatch-two',
+        verifiedAt
+      )
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE version = ?`
+    )
+      .bind(readinessPoolVersion)
+      .run()
+    const { accepted } = mixedDispatch()
+    for (const participant of accepted.participants) {
+      participant.player.mode = GameMode.CONQUEST_CONSTRUCTED
+      participant.request!.mode = GameMode.CONQUEST_CONSTRUCTED
+    }
+
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      proposalId: PROPOSAL_ID,
+      matchId: expect.any(Number),
+      serverAddress: expect.stringMatching(/^wss:\/\//)
+    })
+  })
+
+  it('rejects final Conquest dispatch when either identity lacks an admission pin', async () => {
+    const { verifiedAt } = await provisionReceiptBackedConquestReadiness()
+    await provisionSecondPlayer()
+    await env.AUTH_DB.batch([
+      enableConstructedConquest(verifiedAt),
+      insertActiveConquest(
+        USER_ID,
+        'match-service-guarded-dispatch-one',
+        verifiedAt
+      ),
+      insertActiveConquest(
+        SECOND_USER_ID,
+        'match-service-guarded-dispatch-two',
+        verifiedAt,
+        null
+      )
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE version = ?`
+    )
+      .bind(readinessPoolVersion)
+      .run()
+    const { accepted } = mixedDispatch()
+    for (const participant of accepted.participants) {
+      participant.player.mode = GameMode.CONQUEST_CONSTRUCTED
+      participant.request!.mode = GameMode.CONQUEST_CONSTRUCTED
+    }
+
+    const response = await create(accepted)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: 'game mode is disabled' })
   })
 
   it('uses shared D1 queue switches for status, admission, and dispatch', async () => {
