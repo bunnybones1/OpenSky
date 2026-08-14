@@ -103,13 +103,27 @@ describe('source conquest RPC foundation', () => {
       Array.from({ length: 11 }, () => ({ amountSilver: 0, amountUSDC: 0 }))
     )
 
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT event_id, current_points, total_points
+           FROM player_conquest_points WHERE user_id = ? ORDER BY event_id`
+        )
+          .bind(userId)
+          .all()
+      ).results
+    ).toEqual([
+      { event_id: 1, current_points: 0, total_points: 0 },
+      { event_id: 2, current_points: 0, total_points: 0 }
+    ])
+
     const now = new Date().toISOString()
     await env.AUTH_DB.prepare(
-      `INSERT INTO player_conquest_points
-         (user_id, event_id, current_points, total_points, updated_at)
-       VALUES (?, 2, 900, 1400, ?)`
+      `UPDATE player_conquest_points
+       SET current_points = 900, total_points = 1400, updated_at = ?
+       WHERE user_id = ? AND event_id = 2`
     )
-      .bind(userId, now)
+      .bind(now, userId)
       .run()
     expect(await (await rpc('ConquestV2Progress', {})).json()).toEqual({
       progress: {
@@ -124,11 +138,11 @@ describe('source conquest RPC foundation', () => {
     })
 
     await env.AUTH_DB.prepare(
-      `INSERT INTO player_conquest_points
-         (user_id, event_id, current_points, total_points, updated_at)
-       VALUES (?, 1, 29, 129, ?)`
+      `UPDATE player_conquest_points
+       SET current_points = 29, total_points = 129, updated_at = ?
+       WHERE user_id = ? AND event_id = 1`
     )
-      .bind(userId, now)
+      .bind(now, userId)
       .run()
     expect(await (await rpc('ConquestPoints', {})).json()).toEqual({
       points: 29,

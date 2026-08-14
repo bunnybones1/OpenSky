@@ -355,7 +355,18 @@ export class ConquestRepository {
     return result
   }
 
-  async points(userId: string, eventId: number) {
+  async points(userId: string, eventId: number, at = new Date()) {
+    // Both source RPCs call FindOrCreateByAddressAndEventID before projecting
+    // zero points. Preserve that state contract instead of synthesizing a
+    // response for a row that does not exist.
+    await this.database
+      .prepare(
+        `INSERT OR IGNORE INTO player_conquest_points
+           (user_id, event_id, current_points, total_points, updated_at)
+         VALUES (?, ?, 0, 0, ?)`
+      )
+      .bind(userId, eventId, at.toISOString())
+      .run()
     const row = await this.database
       .prepare(
         `SELECT current_points, total_points FROM player_conquest_points
@@ -363,9 +374,10 @@ export class ConquestRepository {
       )
       .bind(userId, eventId)
       .first<{ current_points: number; total_points: number }>()
+    if (!row) throw new Error('Conquest points could not be created')
     return {
-      current: row?.current_points ?? 0,
-      total: row?.total_points ?? 0
+      current: row.current_points,
+      total: row.total_points
     }
   }
 

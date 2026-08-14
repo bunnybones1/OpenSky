@@ -60,13 +60,16 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     ]
   },
   'cloudflare/src/conquest.ts': {
-    count: 1,
-    disposition: 'atomic-conquest-entry-spend',
+    count: 2,
+    disposition: 'source-read-initialization-and-atomic-conquest-entry-spend',
     evidenceFiles: [
       'cloudflare/migrations/0024_conquest_foundation.sql',
       'cloudflare/migrations/0101_conquest_entry_reward_pool_pin.sql'
     ],
     evidence: [
+      'player_conquest_points',
+      'PRIMARY KEY (user_id, event_id)',
+      'INSERT OR IGNORE INTO player_conquest_points',
       'player_conquests',
       'entry_key TEXT NOT NULL UNIQUE',
       'player_conquests_active_user_idx',

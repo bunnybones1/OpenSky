@@ -32,11 +32,12 @@ test('counts authoritative reward-ledger writes but ignores comments', () => {
     rewardMutationCount(`
       database.prepare('INSERT INTO player_items (user_id) VALUES (?)')
       database.prepare('INSERT OR IGNORE INTO player_card_unlocks (user_id) VALUES (?)')
+      database.prepare('INSERT OR IGNORE INTO player_conquest_points (user_id) VALUES (?)')
       database.prepare('UPDATE player_profiles SET xp = xp + 10')
       database.prepare('UPDATE player_friend_points SET points_spent = 1')
       // database.prepare('UPDATE player_progression SET basic_skypass_xp = 10')
     `),
-    4
+    5
   )
 })
 
