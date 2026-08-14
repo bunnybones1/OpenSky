@@ -1095,6 +1095,13 @@ the authoritative notification inbox once per minute while mounted so a
 scheduled off-chain leaderboard or Conquest V2 award does not remain hidden by
 the legacy one-day browser cache.
 
+The source `LevelProgress()` consumer inventory and its account, reward, and
+SkyPass projection evidence live in
+[`CLOUDFLARE_SEASON_PROGRESS_AUDIT.md`](./CLOUDFLARE_SEASON_PROGRESS_AUDIT.md).
+`pnpm check:cloudflare:season-progress` also rejects direct lifetime-level
+substitution across every runtime TypeScript service and is mandatory in the
+complete, game-server, and match-service release paths.
+
 The mechanically verified source-method inventory and prioritization live in
 [`CLOUDFLARE_RPC_AUDIT.md`](./CLOUDFLARE_RPC_AUDIT.md). Run
 `pnpm check:cloudflare:rpcs` to reproduce it and guard the critical compatibility
