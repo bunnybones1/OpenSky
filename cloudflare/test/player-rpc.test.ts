@@ -2314,7 +2314,7 @@ describe('legacy player RPC compatibility', () => {
           exp: {
             amount: 300,
             reason: 'RankUp',
-            currentLevel: 2,
+            currentLevel: 1,
             requiredExp: 200,
             beforeMatchExp: 0
           }
@@ -2396,6 +2396,135 @@ describe('legacy player RPC compatibility', () => {
 
     const response = await rpc('ClaimQuestRewards', { ids: [road!.id] })
     expect(response.status).toBe(500)
+  })
+
+  it('reports quest XP relative to the immutable source season baseline', async () => {
+    const list = await rpc('ListQuests', {})
+    const welcome = (
+      await list.json<{
+        quests: Array<{ id: number; questType: string }>
+      }>()
+    ).quests.find(quest => quest.questType === 'WelcomeOpenSky')
+    expect(welcome).toBeDefined()
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles
+         SET level = 10, xp = 0, next_level_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 10, basic_skypass_xp = 0,
+             basic_skypass_next_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `DELETE FROM player_skypass_season_stats
+         WHERE user_id = ? AND season = ?`
+      ).bind(userId, seasonFromDate()),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_skypass_season_stats
+           (user_id, season, has_premium, created_at, updated_at,
+            initial_account_level, achieved_account_level)
+         VALUES (?, ?, 0, ?, ?, 9, 9)`
+      ).bind(userId, seasonFromDate(), now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_quests
+           (user_id, quest_key, title, description, progress, target,
+            reward_xp, status, created_at, updated_at, quest_type, position,
+            periodicity, is_rerollable, is_new, active, period, rerolls)
+         VALUES (?, 'season-baseline-quest', 'Season Baseline', 'Test', 1, 1,
+                 100, 'complete', ?, ?, 'WinGames', 2, 'WEEKLY',
+                 0, 1, 1, 1, 0)`
+      ).bind(userId, now, now)
+    ])
+    const secondQuest = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_key = 'season-baseline-quest'`
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(secondQuest).not.toBeNull()
+
+    const claimed = await rpc('ClaimQuestRewards', {
+      ids: [welcome!.id, secondQuest!.id]
+    })
+    expect(claimed.status).toBe(200)
+    expect(await claimed.json()).toMatchObject({
+      rewards: [
+        {
+          type: 'EXP',
+          exp: {
+            amount: 300,
+            currentLevel: 1,
+            requiredExp: 200,
+            beforeMatchExp: 0
+          }
+        },
+        {
+          type: 'EXP',
+          exp: {
+            amount: 100,
+            currentLevel: 2,
+            requiredExp: 200,
+            beforeMatchExp: 100
+          }
+        }
+      ]
+    })
+
+    const receipts = await env.AUTH_DB.prepare(
+      `SELECT quest_row_id, before_level, before_xp, after_level, after_xp,
+              season,
+              season_initial_account_level,
+              season_achieved_account_level_before
+       FROM player_quest_claim_receipts
+       WHERE user_id = ? AND quest_row_id IN (?, ?)
+       ORDER BY claim_order`
+    )
+      .bind(userId, welcome!.id, secondQuest!.id)
+      .all()
+    expect(receipts.results).toEqual([
+      {
+        quest_row_id: welcome!.id,
+        before_level: 10,
+        before_xp: 0,
+        after_level: 11,
+        after_xp: 100,
+        season: seasonFromDate(),
+        season_initial_account_level: 9,
+        season_achieved_account_level_before: 9
+      },
+      {
+        quest_row_id: secondQuest!.id,
+        before_level: 11,
+        before_xp: 100,
+        after_level: 12,
+        after_xp: 0,
+        season: seasonFromDate(),
+        season_initial_account_level: 9,
+        season_achieved_account_level_before: 9
+      }
+    ])
+
+    const stored = await env.AUTH_DB.prepare(
+      `SELECT rewards FROM player_quests WHERE user_id = ? AND rowid = ?`
+    )
+      .bind(userId, welcome!.id)
+      .first<{ rewards: string }>()
+    expect(JSON.parse(stored!.rewards)).toMatchObject([
+      { exp: { currentLevel: 1 } }
+    ])
+    const secondStored = await env.AUTH_DB.prepare(
+      `SELECT rewards FROM player_quests WHERE user_id = ? AND rowid = ?`
+    )
+      .bind(userId, secondQuest!.id)
+      .first<{ rewards: string }>()
+    expect(JSON.parse(secondStored!.rewards)).toMatchObject([
+      { exp: { currentLevel: 2 } }
+    ])
   })
 
   it('credits concurrent completed quest claims exactly once each', async () => {

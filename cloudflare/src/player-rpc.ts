@@ -289,6 +289,9 @@ interface QuestClaimReceiptRow {
   before_xp: number
   after_level: number
   after_xp: number
+  season: number
+  season_initial_account_level: number
+  season_achieved_account_level_before: number
 }
 
 interface QuestClaimBatchRow {
@@ -2806,7 +2809,9 @@ export class PlayerRpcRepository {
             `INSERT INTO player_quest_claim_receipts
                (user_id, quest_key, quest_row_id, claim_token, claim_order,
                 reward_item_type, reward_xp, before_level, before_xp,
-                after_level, after_xp, claimed_at)
+                after_level, after_xp, season,
+                season_initial_account_level,
+                season_achieved_account_level_before, claimed_at)
              SELECT quest.user_id, quest.quest_key, quest.rowid, ?, ?, 'SW_XP',
                     quest.reward_xp,
                     profile.level + CAST((profile.xp + COALESCE((
@@ -2825,11 +2830,18 @@ export class PlayerRpcRepository {
                       SELECT SUM(reward_xp) FROM player_quest_claim_receipts
                       WHERE claim_token = ? AND claim_order < ?
                     ), 0) + quest.reward_xp) % 200,
+                    ?,
+                    COALESCE(stats.initial_account_level,
+                      MAX(0, profile.level - 1)),
+                    COALESCE(stats.achieved_account_level,
+                      MAX(0, profile.level - 1)),
                     ?
              FROM player_quests quest
              JOIN player_profiles profile ON profile.user_id = quest.user_id
              JOIN player_progression progression
                ON progression.user_id = quest.user_id
+             LEFT JOIN player_skypass_season_stats stats
+               ON stats.user_id = quest.user_id AND stats.season = ?
              WHERE quest.user_id = ? AND quest.rowid = ?
                AND quest.status = 'complete'
                AND EXISTS (
@@ -2848,7 +2860,9 @@ export class PlayerRpcRepository {
             claimOrder,
             claimToken,
             claimOrder,
+            currentSeason,
             now,
+            currentSeason,
             userId,
             assignment.row_id,
             claimToken
@@ -3120,7 +3134,10 @@ export class PlayerRpcRepository {
                'exp', json_object(
                  'amount', receipt.reward_xp,
                  'reason', 'RankUp',
-                 'currentLevel', receipt.after_level,
+                 'currentLevel', MAX(
+                   receipt.season_achieved_account_level_before,
+                   MAX(0, receipt.after_level - 1)
+                 ) - receipt.season_initial_account_level,
                  'requiredExp', 200,
                  'beforeMatchExp', receipt.before_xp
                )
@@ -3157,7 +3174,9 @@ export class PlayerRpcRepository {
         .first<QuestClaimBatchRow>(),
       this.database
         .prepare(
-          `SELECT reward_xp, before_level, before_xp, after_level, after_xp
+          `SELECT reward_xp, before_level, before_xp, after_level, after_xp,
+                  season, season_initial_account_level,
+                  season_achieved_account_level_before
            FROM player_quest_claim_receipts
            WHERE claim_token = ? ORDER BY claim_order`
         )
@@ -3175,7 +3194,13 @@ export class PlayerRpcRepository {
         exp: {
           amount: receipt.reward_xp,
           reason: 'RankUp',
-          currentLevel: receipt.after_level,
+          currentLevel: effectiveSkypassSeasonLevel(
+            receipt.season_initial_account_level,
+            Math.max(
+              receipt.season_achieved_account_level_before,
+              Math.max(0, receipt.after_level - 1)
+            )
+          ),
           requiredExp: 200,
           beforeMatchExp: receipt.before_xp
         }

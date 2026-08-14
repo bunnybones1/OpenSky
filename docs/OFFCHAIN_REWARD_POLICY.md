@@ -315,6 +315,11 @@ profile, basic SkyPass, ranked unlock, and referral sticker points. Concurrent
 claims or different matches ending together therefore add every earned reward
 without either overwriting the other, while a retry returns the existing
 receipt without granting again.
+Quest receipts also snapshot the claim season and its immutable pre-claim
+SkyPass `initial`/`achieved` baseline. Each EXP reward in a multi-quest claim
+therefore reports the source `LevelProgress` after that individual reward,
+without substituting the lifetime account level or consulting mutable state
+after the receipt is committed.
 
 Ranked player and deck rating transitions are stateful rather than additive.
 The game server therefore serializes both through one global Durable Object in
