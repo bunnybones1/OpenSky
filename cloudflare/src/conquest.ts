@@ -12,6 +12,7 @@ import {
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
 import { invalidArgument } from './errors'
+import { goFloat32Percentage } from './go-numbers'
 
 const HERO_DECK_CLASS: Partial<Record<Hero, DeckClass>> = {
   [Hero.ADA]: DeckClass.STR,
@@ -324,12 +325,16 @@ export class ConquestRepository {
       }
     }
     if (result.discoveryMatchesPlayed > 0) {
-      result.discoveryWinRate =
-        (discoveryWins / result.discoveryMatchesPlayed) * 100
+      result.discoveryWinRate = goFloat32Percentage(
+        discoveryWins,
+        result.discoveryMatchesPlayed
+      )
     }
     if (result.constructedMatchesPlayed > 0) {
-      result.constructedWinRate =
-        (constructedWins / result.constructedMatchesPlayed) * 100
+      result.constructedWinRate = goFloat32Percentage(
+        constructedWins,
+        result.constructedMatchesPlayed
+      )
     }
     return result
   }

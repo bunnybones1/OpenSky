@@ -7,6 +7,7 @@ import type {
 } from '@opensky/proto'
 
 import { invalidArgument } from './errors'
+import { goFloat32 } from './go-numbers'
 
 const EVENT_ID = 2
 const MAX_INT32 = 2_147_483_647
@@ -82,18 +83,6 @@ const finalConfig = (
       ? settings.weightPerSilverCard
       : DEFAULT_CONFIG.weightPerSilverCard
 })
-
-const goFloat32 = (value: number) => {
-  const target = Math.fround(value)
-  // encoding/json emits the shortest decimal that round-trips to a float32.
-  // JS numbers are binary64, so JSON.stringify otherwise exposes expansions
-  // such as 3.190000057220459.
-  for (let precision = 1; precision <= 9; precision++) {
-    const candidate = Number(target.toPrecision(precision))
-    if (Object.is(Math.fround(candidate), target)) return candidate
-  }
-  return target
-}
 
 const validateUpdate = (
   name: keyof ConquestV2PoolConfigUpdate,

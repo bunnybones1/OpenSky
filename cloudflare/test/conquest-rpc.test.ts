@@ -391,6 +391,27 @@ describe('source conquest RPC foundation', () => {
     })
   })
 
+  it('preserves source float32 win-rate arithmetic and JSON precision', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at)
+       VALUES ('constructed-float32-stats', ?, 'COMPLETED', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR', ?, ?, ?)`
+    )
+      .bind(
+        userId,
+        JSON.stringify({ 1: 'WIN', 2: 'LOSS', 3: 'DRAW' }),
+        now,
+        now
+      )
+      .run()
+
+    const response = await rpc('ConquestStats', {})
+    expect(await response.text()).toContain('"constructedWinRate":33.333336')
+  })
+
   it('matches source typed-map decoding and fails malformed rows closed', async () => {
     const now = new Date().toISOString()
     await expect(
