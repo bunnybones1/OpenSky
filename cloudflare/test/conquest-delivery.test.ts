@@ -138,6 +138,15 @@ describe('delayed Conquest Gold delivery', () => {
       .bind(CREATED_AT, USER_ID)
       .run()
 
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_conquest_gold_deliveries
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({ status: 'DISABLED' })
+
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE player_conquest_gold_deliveries
@@ -148,13 +157,14 @@ describe('delayed Conquest Gold delivery', () => {
         .bind(conquestId)
         .run()
     ).rejects.toThrow('Conquest Gold delivery is blocked by account status')
-
-    await env.AUTH_DB.prepare(
-      `UPDATE player_conquest_gold_deliveries SET status = 'DISABLED'
-       WHERE conquest_id = ?`
-    )
-      .bind(conquestId)
-      .run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_deliveries SET status = 'PENDING'
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold moderation state is invalid')
     expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toMatchObject([
       { tokenIDs: [131_208], mintAt: DUE_AT }
     ])
@@ -173,16 +183,28 @@ describe('delayed Conquest Gold delivery', () => {
         .first()
     ).toEqual({ count: 0 })
 
-    await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `UPDATE player_account_settings
-         SET account_status = 'ACTIVE', updated_at = ? WHERE user_id = ?`
-      ).bind(DUE_AT, USER_ID),
-      env.AUTH_DB.prepare(
-        `UPDATE player_conquest_gold_deliveries SET status = 'PENDING'
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings
+       SET account_status = 'ACTIVE', updated_at = ? WHERE user_id = ?`
+    )
+      .bind(DUE_AT, USER_ID)
+      .run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_conquest_gold_deliveries
          WHERE conquest_id = ?`
-      ).bind(conquestId)
-    ])
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({ status: 'PENDING' })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_deliveries SET status = 'DISABLED'
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold moderation state is invalid')
     expect(
       await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
     ).toEqual({ delivered: 1, failed: 0, remaining: 0 })

@@ -207,7 +207,7 @@ const seedReport = async () => {
     .run()
 }
 
-const seedGoldDeliveries = async () => {
+const seedGoldDeliveries = async (userId = PLAYER) => {
   const createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   const deliverAt = new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString()
   const deliveredAt = new Date(Date.now() - 30 * 60 * 1000).toISOString()
@@ -220,7 +220,7 @@ const seedGoldDeliveries = async () => {
             (952, 'staff-gold-delivered', ?, 'COMPLETED', 2,
              'CONQUEST_CONSTRUCTED', 'ADA', 'STR', '{}', ?, ?)`
   )
-    .bind(PLAYER, createdAt, createdAt, PLAYER, createdAt, createdAt)
+    .bind(userId, createdAt, createdAt, userId, createdAt, createdAt)
     .run()
   await env.AUTH_DB.prepare(
     `INSERT INTO player_conquest_gold_deliveries
@@ -228,7 +228,7 @@ const seedGoldDeliveries = async () => {
         status, attempt_count, created_at)
      VALUES (951, ?, '[11,12]', '[1011,1012]', ?, 'PENDING', 0, ?)`
   )
-    .bind(PLAYER, deliverAt, createdAt)
+    .bind(userId, deliverAt, createdAt)
     .run()
   await env.AUTH_DB.prepare(
     `INSERT INTO player_conquest_gold_deliveries
@@ -237,7 +237,7 @@ const seedGoldDeliveries = async () => {
      VALUES (952, ?, '[13]', '[1013]', ?, 'DELIVERED',
              'staff-delivery-receipt', 1, ?, ?)`
   )
-    .bind(PLAYER, deliveredAt, createdAt, deliveredAt)
+    .bind(userId, deliveredAt, createdAt, deliveredAt)
     .run()
   return deliverAt
 }
@@ -2477,6 +2477,7 @@ describe('fail-closed Google identity staff authorization', () => {
       .bind(isolated, createdAt, createdAt)
       .run()
     await new PlayerRepository(env.AUTH_DB).bootstrap(isolated)
+    await seedGoldDeliveries(isolated)
     await grantAdmin()
     await grantAccountActionWrite()
     const repository = new AccountActionsRepository(testEnv.AUTH_DB)
@@ -2497,6 +2498,12 @@ describe('fail-closed Google identity staff authorization', () => {
         new Date('2026-08-13T00:00:00.500Z')
       )
     ).rejects.toThrow('account banned')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_conquest_gold_deliveries
+         WHERE conquest_id = 951`
+      ).first()
+    ).toEqual({ status: 'DISABLED' })
     await expect(
       repository.enforcePlayerAccess(
         isolated,
@@ -2510,6 +2517,12 @@ describe('fail-closed Google identity staff authorization', () => {
         .bind(isolated)
         .first()
     ).toEqual({ account_status: 'ACTIVE' })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_conquest_gold_deliveries
+         WHERE conquest_id = 951`
+      ).first()
+    ).toEqual({ status: 'PENDING' })
   })
 
   it('lists pending Gold while counting all recent delivered card quantities', async () => {

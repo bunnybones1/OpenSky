@@ -75,6 +75,34 @@ const begin = async (accountName = profile.displayName) =>
     await sessionCookie()
   )
 
+const seedPendingConquestGold = async () => {
+  const createdAt = '2026-08-11T00:00:00.000Z'
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_conquests
+       (entry_key, user_id, status, nonce, mode, hero, deck_class,
+        match_progress, created_at, ended_at)
+     VALUES (?, ?, 'COMPLETED', 1, 'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+             '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
+  )
+    .bind(`deletion-gold-${testSequence}`, userId, createdAt, createdAt)
+    .run()
+  const conquest = await env.AUTH_DB.prepare(
+    `SELECT id FROM player_conquests WHERE entry_key = ?`
+  )
+    .bind(`deletion-gold-${testSequence}`)
+    .first<{ id: number }>()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO player_conquest_gold_deliveries
+       (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+        status, attempt_count, created_at)
+     VALUES (?, ?, '[136]', '[131208]', '2026-08-13T00:00:00.000Z',
+             'PENDING', 0, ?)`
+  )
+    .bind(conquest!.id, userId, createdAt)
+    .run()
+  return conquest!.id
+}
+
 beforeEach(async () => {
   exchangeCode.mockClear()
   testSequence += 1
@@ -245,6 +273,7 @@ describe('identity-native account deletion', () => {
   })
 
   it('schedules once, clears the session, and blocks every stale-session boundary', async () => {
+    const conquestId = await seedPendingConquestGold()
     const start = await begin()
     const authorizationUrl = new URL(
       (await start.json<{ authorizationUrl: string }>()).authorizationUrl
@@ -289,6 +318,14 @@ describe('identity-native account deletion', () => {
         .bind(userId)
         .first()
     ).toEqual({ account_status: 'TO_DELETE', leaderboard_eligible: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_conquest_gold_deliveries
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({ status: 'DISABLED' })
     await expect(
       new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(userId)
     ).rejects.toThrow('account flagged for deletion')
