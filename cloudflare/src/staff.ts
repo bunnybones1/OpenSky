@@ -53,7 +53,28 @@ interface PendingGoldRow {
 interface ConquestTreasureProgressRow {
   account_id: number
   account_name: string
+  event_id: number
   current_points: number
+  total_points: number
+}
+
+type ConquestProgressSortColumn =
+  | 'account_id'
+  | 'event_id'
+  | 'current_points'
+  | 'total_points'
+
+interface ConquestProgressSortConfig {
+  sort: Array<{
+    response: SortBy
+    column: ConquestProgressSortColumn
+  }>
+  uniqueOrder: SortBy['order']
+}
+
+interface ConquestProgressCursor {
+  currentPoints: number
+  values: number[]
 }
 
 interface GameModeStatusHistoryRow {
@@ -156,6 +177,19 @@ const GAME_MODE_HISTORY_SORT_COLUMNS: Record<
   enabled: { value: row => (row.enabled === 1 ? 'true' : 'false') },
   created_at: { value: row => row.created_at, unique: true },
   createdAt: { value: row => row.created_at, unique: true }
+}
+const CONQUEST_PROGRESS_SORT_COLUMNS: Record<
+  string,
+  ConquestProgressSortColumn | undefined
+> = {
+  account_id: 'account_id',
+  accountID: 'account_id',
+  event_id: 'event_id',
+  eventID: 'event_id',
+  current_points: 'current_points',
+  currentPoints: 'current_points',
+  total_points: 'total_points',
+  totalPoints: 'total_points'
 }
 
 const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
@@ -308,6 +342,107 @@ const sortGameModeHistoryRows = (
     return compareGameModeHistoryValues(
       left.created_at,
       right.created_at,
+      config.uniqueOrder
+    )
+  })
+
+const conquestProgressSort = (page?: Page): ConquestProgressSortConfig => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [{ column: 'current_points', order: 'DESC' as SortBy['order'] }]
+  const sort: ConquestProgressSortConfig['sort'] = []
+  let uniqueOrder = 'DESC' as SortBy['order']
+  for (const item of requested) {
+    const column = CONQUEST_PROGRESS_SORT_COLUMNS[item.column]
+    if (!column || !['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('Conquest progress sort is invalid')
+    }
+    if (column === 'current_points') {
+      uniqueOrder = item.order
+    } else {
+      sort.push({ response: item, column })
+    }
+  }
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
+}
+
+const encodeConquestProgressCursor = (
+  row: ConquestTreasureProgressRow,
+  config: ConquestProgressSortConfig
+) =>
+  btoa(
+    JSON.stringify([
+      String(row.current_points),
+      ...config.sort.map(item => String(row[item.column]))
+    ])
+  )
+
+const decodeConquestProgressCursor = (
+  value: string,
+  config: ConquestProgressSortConfig
+): ConquestProgressCursor => {
+  try {
+    const raw = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== config.sort.length + 1 ||
+      raw.some(item => typeof item !== 'string' || !/^(0|[1-9]\d*)$/.test(item))
+    ) {
+      throw new Error('cursor shape')
+    }
+    const values = raw.map(Number)
+    if (values.some(item => !Number.isSafeInteger(item))) {
+      throw new Error('cursor value')
+    }
+    return { currentPoints: values[0], values: values.slice(1) }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const compareConquestProgressValues = (
+  left: number,
+  right: number,
+  order: SortBy['order']
+) => (order === 'ASC' ? left - right : right - left)
+
+const compareConquestProgressCursor = (
+  row: ConquestTreasureProgressRow,
+  cursor: ConquestProgressCursor,
+  config: ConquestProgressSortConfig
+) => {
+  for (const [index, item] of config.sort.entries()) {
+    const compared = compareConquestProgressValues(
+      row[item.column],
+      cursor.values[index],
+      item.response.order
+    )
+    if (compared) return compared
+  }
+  return compareConquestProgressValues(
+    row.current_points,
+    cursor.currentPoints,
+    config.uniqueOrder
+  )
+}
+
+const sortConquestProgressRows = (
+  rows: ConquestTreasureProgressRow[],
+  config: ConquestProgressSortConfig
+) =>
+  rows.sort((left, right) => {
+    for (const item of config.sort) {
+      const compared = compareConquestProgressValues(
+        left[item.column],
+        right[item.column],
+        item.response.order
+      )
+      if (compared) return compared
+    }
+    return compareConquestProgressValues(
+      left.current_points,
+      right.current_points,
       config.uniqueOrder
     )
   })
@@ -1063,47 +1198,60 @@ export class StaffRepository {
     page: Page
     rows: ConquestTreasureProgressRow[]
   }> {
-    const sort = page?.sort?.length
-      ? page.sort
-      : [{ column: 'current_points', order: 'DESC' as SortBy['order'] }]
-    if (
-      sort.length !== 1 ||
-      !['current_points', 'currentPoints'].includes(sort[0].column)
-    ) {
-      throw invalidArgument('unsupported Conquest progress sort')
+    if (page?.before !== undefined && page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
     }
-    if (!['ASC', 'DESC'].includes(sort[0].order)) {
-      throw invalidArgument('Conquest progress sort order is invalid')
-    }
-    const size = Math.min(200, pageSize(page))
-    const offset = cursorOffset(page?.before ?? page?.after)
-    const direction = sort[0].order
+    const size = Math.min(
+      200,
+      Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
+        ? page!.pageSize!
+        : 20
+    )
+    const sort = conquestProgressSort(page)
     const result = await this.database
       .prepare(
         `SELECT game.id AS account_id, settings.name AS account_name,
-                points.current_points
+                points.event_id, points.current_points, points.total_points
          FROM player_conquest_points points
          JOIN player_account_settings settings
            ON settings.user_id = points.user_id
          JOIN game_accounts game ON game.user_id = points.user_id
-         WHERE points.event_id = 2
-         ORDER BY points.current_points ${direction}, game.id ${direction}
-         LIMIT ? OFFSET ?`
+         WHERE points.event_id = 2`
       )
-      .bind(size + 1, offset)
       .all<ConquestTreasureProgressRow>()
-    const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    const rows = sortConquestProgressRows(result.results, sort)
+    let start = 0
+    let end = Math.min(rows.length, size)
+    if (page?.before) {
+      const cursor = decodeConquestProgressCursor(page.before, sort)
+      const next = rows.findIndex(
+        row => compareConquestProgressCursor(row, cursor, sort) > 0
+      )
+      start = next < 0 ? rows.length : next
+      end = Math.min(rows.length, start + size)
+    } else if (page?.after) {
+      const cursor = decodeConquestProgressCursor(page.after, sort)
+      const previousEnd = rows.findIndex(
+        row => compareConquestProgressCursor(row, cursor, sort) >= 0
+      )
+      end = previousEnd < 0 ? rows.length : previousEnd
+      start = Math.max(0, end - size)
+    }
+    const selected = rows.slice(start, end)
     return {
       page: {
         pageSize: size,
-        before: rows.length ? encodeCursor(offset) : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort
+        before: selected.length
+          ? encodeConquestProgressCursor(selected[0], sort)
+          : undefined,
+        after: selected.length
+          ? encodeConquestProgressCursor(selected[selected.length - 1], sort)
+          : undefined,
+        hasBefore: end < rows.length,
+        hasAfter: start > 0,
+        sort: sort.sort.map(item => item.response)
       },
-      rows
+      rows: selected
     }
   }
 }

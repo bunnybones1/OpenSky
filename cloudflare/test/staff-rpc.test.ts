@@ -3057,7 +3057,7 @@ describe('fail-closed Google identity staff authorization', () => {
     const second = await rpcAs(
       ADMIN,
       'GMListConquestV2AccountTreasureProgress',
-      { page: { pageSize: 1, after: firstBody.page.after } }
+      { page: { pageSize: 1, before: firstBody.page.after } }
     )
     expect(await second.json()).toMatchObject({
       page: { hasBefore: false, hasAfter: true },
