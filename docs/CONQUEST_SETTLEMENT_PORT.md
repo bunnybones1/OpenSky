@@ -268,6 +268,35 @@ core rewards live, SkyPass `1/1` active, and every policy-gated reward track
 dormant; Cloudflare reported the new version at 100% traffic. This parity fix
 therefore introduced no pool, queue, reward, schedule, or economy authority.
 
+## Stats raw-JSONB rollout proof — 2026-08-14
+
+Commit `d1d901b9` is deployed as main Worker version
+`51800205-851a-4f09-bda0-fa5f94e421ea`. No migration or multiplayer-service
+deployment was required. The source status RPCs decode `match_progress` into a
+typed match-ID map, but `ConquestStats` deliberately uses PostgreSQL JSONB
+object iteration directly. The TypeScript stats path now preserves that
+distinction: every raw object key counts as a match, and only an exact JSON
+string value of `"WIN"` counts as a win. The regression covers seven distinct
+raw keys—including non-numeric and numerically equivalent spellings—and two
+wins, producing the source-faithful Go `float32` wire value `28.57143`.
+
+The focused Conquest RPC suite passed 9 tests, the complete main Worker suite
+passed 376 tests across 59 files, and the full production gate passed 230
+multiplayer tests, 25 game tests, 6 analytics tests, and every off-chain,
+reward, RPC, type, browser, and deployment contract. Exact-head GitHub run
+`31813710387` passed in 8m30s before deployment. The production verifier
+resolved web entry `/assets/index-d976a081.js`, replay-fixed game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Post-deploy public probes returned a healthy `Ping`, the exact Worker version,
+both Practice modes enabled, both Conquest modes false, and an empty
+`weeklyGolds` projection. The read-only reward-readiness audit still reported
+core rewards live, SkyPass `1/1` active, and every policy-gated reward track
+dormant; Cloudflare reported the new version at 100% traffic. This read-only
+parity fix therefore introduced no pool, queue, run, reward, schedule,
+inventory grant, or economy authority.
+
 ## Remaining authoritative input
 
 Cloud Weasel still has no approved production values for:
