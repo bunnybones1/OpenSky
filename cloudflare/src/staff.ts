@@ -82,10 +82,25 @@ interface SignalCursor {
 }
 
 interface PendingGoldRow {
+  conquest_id: number
   user_id: string
   deliver_at: string
   cards_won_last_day: number
   cards_won_last_week: number
+}
+
+interface PendingGoldSortConfig {
+  sort: Array<{
+    response: SortBy
+    sql: string
+    value: (row: PendingGoldRow) => string
+  }>
+  uniqueOrder: SortBy['order']
+}
+
+interface PendingGoldCursor {
+  conquestId: number
+  values: string[]
 }
 
 interface ConquestTreasureProgressRow {
@@ -183,6 +198,19 @@ const SIGNAL_SORT_COLUMNS: Record<
     value: row => row.account_created_at
   }
 }
+const PENDING_GOLD_SORT_COLUMNS: Record<
+  string,
+  | {
+      sql: string
+      value: (row: PendingGoldRow) => string
+    }
+  | undefined
+> = {
+  mint_at: { sql: 'pending.deliver_at', value: row => row.deliver_at },
+  mintAt: { sql: 'pending.deliver_at', value: row => row.deliver_at },
+  run_at: { sql: 'pending.deliver_at', value: row => row.deliver_at },
+  deliver_at: { sql: 'pending.deliver_at', value: row => row.deliver_at }
+}
 const GAME_MODES = new Set<GameMode>([
   'RANKED_CONSTRUCTED' as GameMode,
   'CHALLENGE_CONSTRUCTED' as GameMode,
@@ -248,21 +276,6 @@ const CONQUEST_PROGRESS_SORT_COLUMNS: Record<
   currentPoints: 'current_points',
   total_points: 'total_points',
   totalPoints: 'total_points'
-}
-
-const encodeCursor = (offset: number) => btoa(JSON.stringify({ offset }))
-
-const cursorOffset = (value?: string) => {
-  if (!value) return 0
-  try {
-    const parsed = JSON.parse(atob(value)) as { offset?: unknown }
-    if (Number.isSafeInteger(parsed.offset) && (parsed.offset as number) >= 0) {
-      return parsed.offset as number
-    }
-  } catch {
-    // Fall through to the source-compatible invalid page response.
-  }
-  throw invalidArgument('page cursor is invalid')
 }
 
 const compareGameModeHistoryValues = (
@@ -694,6 +707,106 @@ const signalOrder = (config: SignalSortConfig, reverse: boolean) =>
       return `${item.sql} ${order}`
     }),
     `account_id ${reverse ? invertOrder(config.uniqueOrder) : config.uniqueOrder}`
+  ].join(', ')
+
+const pendingGoldSort = (page?: Page): PendingGoldSortConfig => {
+  const requested = page?.sort?.length
+    ? page.sort
+    : [{ column: 'run_at', order: 'ASC' as SortBy['order'] }]
+  const sort: PendingGoldSortConfig['sort'] = []
+  let uniqueOrder = 'ASC' as SortBy['order']
+  for (const item of requested) {
+    if (!['ASC', 'DESC'].includes(item.order)) {
+      throw invalidArgument('pending-card sort is invalid')
+    }
+    if (item.column === 'id' || item.column === 'conquest_id') {
+      uniqueOrder = item.order
+      continue
+    }
+    const column = PENDING_GOLD_SORT_COLUMNS[item.column]
+    if (!column) throw invalidArgument('pending-card sort is invalid')
+    sort.push({ response: item, sql: column.sql, value: column.value })
+  }
+  if (sort.length === 1) uniqueOrder = sort[0].response.order
+  return { sort, uniqueOrder }
+}
+
+const encodePendingGoldCursor = (
+  row: PendingGoldRow,
+  config: PendingGoldSortConfig
+) =>
+  btoa(
+    JSON.stringify([
+      String(row.conquest_id),
+      ...config.sort.map(item => item.value(row))
+    ])
+  )
+
+const decodePendingGoldCursor = (
+  value: string,
+  config: PendingGoldSortConfig
+): PendingGoldCursor => {
+  try {
+    const raw = JSON.parse(atob(value)) as unknown
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== config.sort.length + 1 ||
+      raw.some(item => typeof item !== 'string') ||
+      !/^[1-9]\d*$/.test(raw[0] as string)
+    ) {
+      throw new Error('cursor shape')
+    }
+    const conquestId = Number(raw[0])
+    if (!Number.isSafeInteger(conquestId)) throw new Error('cursor value')
+    return { conquestId, values: raw.slice(1) as string[] }
+  } catch {
+    throw invalidArgument('page cursor is invalid')
+  }
+}
+
+const pendingGoldCursorCondition = (
+  cursor: PendingGoldCursor,
+  config: PendingGoldSortConfig,
+  reverse: boolean
+): { sql: string; bindings: Array<string | number> } => {
+  const clauses: string[] = []
+  const bindings: Array<string | number> = []
+  for (let index = 0; index <= config.sort.length; index += 1) {
+    const terms: string[] = []
+    for (let equal = 0; equal < index; equal += 1) {
+      terms.push(`${config.sort[equal].sql} = ?`)
+      bindings.push(cursor.values[equal])
+    }
+    if (index < config.sort.length) {
+      const item = config.sort[index]
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      terms.push(`${item.sql} ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.values[index])
+    } else {
+      const order = reverse
+        ? invertOrder(config.uniqueOrder)
+        : config.uniqueOrder
+      terms.push(`pending.conquest_id ${order === 'ASC' ? '>' : '<'} ?`)
+      bindings.push(cursor.conquestId)
+    }
+    clauses.push(`(${terms.join(' AND ')})`)
+  }
+  return { sql: `(${clauses.join(' OR ')})`, bindings }
+}
+
+const pendingGoldOrder = (config: PendingGoldSortConfig, reverse: boolean) =>
+  [
+    ...config.sort.map(item => {
+      const order = reverse
+        ? invertOrder(item.response.order)
+        : item.response.order
+      return `${item.sql} ${order}`
+    }),
+    `pending.conquest_id ${
+      reverse ? invertOrder(config.uniqueOrder) : config.uniqueOrder
+    }`
   ].join(', ')
 
 const emptyStats = (): GMStatsResponse => ({
@@ -1387,35 +1500,37 @@ export class StaffRepository {
       }
     >
   }> {
-    const sort = page?.sort?.length
-      ? page.sort
-      : [{ column: 'mint_at', order: 'ASC' as SortBy['order'] }]
-    for (const item of sort) {
-      if (
-        !['mint_at', 'mintAt', 'run_at', 'deliver_at'].includes(item.column)
-      ) {
-        throw invalidArgument(
-          `unsupported pending-card sort column '${item.column}'`
-        )
-      }
-      if (!['ASC', 'DESC'].includes(item.order)) {
-        throw invalidArgument('pending-card sort order is invalid')
-      }
+    if (page?.before !== undefined && page.after !== undefined) {
+      throw invalidArgument('using before and after together is invalid')
     }
+    const sort = pendingGoldSort(page)
     const size = Math.min(
-      500,
+      200,
       Number.isSafeInteger(page?.pageSize) && (page?.pageSize ?? 0) > 0
         ? page!.pageSize!
-        : 500
+        : page === undefined
+          ? 200
+          : 20
     )
-    const offset = cursorOffset(page?.before ?? page?.after)
-    const direction = sort[0].order
+    const reverse = page?.after !== undefined
+    const cursorValue = reverse ? page?.after : page?.before
+    let cursorWhere = ''
+    const cursorBindings: Array<string | number> = []
+    if (cursorValue !== undefined) {
+      const condition = pendingGoldCursorCondition(
+        decodePendingGoldCursor(cursorValue, sort),
+        sort,
+        reverse
+      )
+      cursorWhere = `AND ${condition.sql}`
+      cursorBindings.push(...condition.bindings)
+    }
     const now = Date.now()
     const day = new Date(now - 24 * 60 * 60 * 1000).toISOString()
     const week = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
     const result = await this.database
       .prepare(
-        `SELECT pending.user_id, pending.deliver_at,
+        `SELECT pending.conquest_id, pending.user_id, pending.deliver_at,
                 COALESCE((
                   SELECT SUM(json_array_length(day.card_ids_json))
                   FROM player_conquest_gold_deliveries day
@@ -1428,23 +1543,27 @@ export class StaffRepository {
                 ), 0) AS cards_won_last_week
          FROM player_conquest_gold_deliveries pending
          WHERE pending.status = 'PENDING'
-         ORDER BY pending.deliver_at ${direction}, pending.conquest_id ${direction}
-         LIMIT ? OFFSET ?`
+         ${cursorWhere}
+         ORDER BY ${pendingGoldOrder(sort, reverse)}
+         LIMIT ?`
       )
-      .bind(day, week, size + 1, offset)
+      .bind(day, week, ...cursorBindings, size + 1)
       .all<PendingGoldRow>()
+    const hasExtra = result.results.length > size
     const rows = result.results.slice(0, size)
-    const nextOffset = offset + rows.length
+    if (reverse) rows.reverse()
     return {
       page: {
         pageSize: size,
         before: rows.length
-          ? encodeCursor(Math.max(0, offset - size))
+          ? encodePendingGoldCursor(rows[0], sort)
           : undefined,
-        after: rows.length ? encodeCursor(nextOffset) : undefined,
-        hasBefore: result.results.length > size,
-        hasAfter: offset > 0,
-        sort
+        after: rows.length
+          ? encodePendingGoldCursor(rows[rows.length - 1], sort)
+          : undefined,
+        hasBefore: reverse ? cursorValue !== undefined : hasExtra,
+        hasAfter: reverse ? hasExtra : cursorValue !== undefined,
+        sort: sort.sort.map(item => item.response)
       },
       rows: rows.map(row => ({
         userId: row.user_id,
