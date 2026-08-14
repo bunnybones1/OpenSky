@@ -584,6 +584,22 @@ and progress are not migrated.
   retaining `/assets/index-d976a081.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- Account-action history now uses the source `[id, created_at]` descending
+  keyset by default, including supported custom moderation sorts, the
+  unique-key direction rule, first/last cursors, and bidirectional traversal.
+  A newer sanction inserted ahead of a cursor no longer shifts the following
+  page, while malformed and dual-direction cursors fail closed. Milestone
+  `c3b600ff` passed exact-head release-contract run `31789142526`, the 364-test
+  main Worker suite, and the complete cross-service release contract before
+  deployment on 2026-08-14 as Worker version
+  `66142e40-dbc5-46ad-aa43-be9bf37087ff`. No migration was required. The public
+  Version RPC reported that exact version, and an anonymous moderation-history
+  probe remained unauthorized. A read-only production D1 aggregate found zero
+  action or deactivation rows, with `changed_db: false` and no rows written.
+  Cloudflare uploaded no asset changes, retaining
+  `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
