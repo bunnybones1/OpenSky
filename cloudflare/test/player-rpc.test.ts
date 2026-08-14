@@ -1133,7 +1133,7 @@ describe('legacy player RPC compatibility', () => {
     const payload = JSON.stringify({
       match: {
         player1: {
-          privateSeed: { cards: ['6'], prisms: ['str'] },
+          privateSeed: { cards: ['6', '7'], prisms: ['str'] },
           gameMode: 'RANKED_CONSTRUCTED',
           account: {
             id: 1,
@@ -1144,7 +1144,7 @@ describe('legacy player RPC compatibility', () => {
           botSubkey: false
         },
         player2: {
-          privateSeed: { cards: ['6'], prisms: ['str'] },
+          privateSeed: { cards: ['8', '9', '10'], prisms: ['str'] },
           gameMode: 'RANKED_CONSTRUCTED',
           account: {
             id: 2,
@@ -1180,7 +1180,13 @@ describe('legacy player RPC compatibility', () => {
           payload,
           createdAt,
           createdAt,
-          JSON.stringify({ winner: 0, turnCount: 4, moveCount: 8 }),
+          JSON.stringify({
+            winner: 0,
+            turnCount: 4,
+            moveCount: 8,
+            player1Moves: 3,
+            player2Moves: 5
+          }),
           createdAt
         )
         .run()
@@ -1220,7 +1226,11 @@ describe('legacy player RPC compatibility', () => {
           winningPlayer: 1,
           player1GameMode: 'PRACTICE_PVP',
           player2GameMode: 'RANKED_CONSTRUCTED',
+          initPlayer1DeckNumCards: 2,
+          initPlayer2DeckNumCards: 3,
           turnNonce: 4,
+          player1Moves: 3,
+          player2Moves: 5,
           replayID: 'ranked-history-replay'
         }
       ]

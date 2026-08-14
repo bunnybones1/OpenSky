@@ -2551,6 +2551,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(JSON.parse(ledger!.result_json)).toMatchObject({
       winner: 1,
       status: 'ABANDONED',
+      player1Moves: 0,
+      player2Moves: 0,
       rewards: [
         [expect.objectContaining({ type: 'RANK' })],
         [expect.objectContaining({ type: 'RANK' })]

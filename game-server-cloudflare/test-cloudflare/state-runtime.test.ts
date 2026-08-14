@@ -2,7 +2,10 @@ import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { GameServerEnv } from '../src/game-match'
-import { AuthoritativeMatchRuntime } from '../src/state-runtime'
+import {
+  AuthoritativeMatchRuntime,
+  isCountedPlayerMove
+} from '../src/state-runtime'
 import { createMatchFixture } from './fixture'
 
 const runtimes: AuthoritativeMatchRuntime[] = []
@@ -12,6 +15,14 @@ afterEach(() => {
 })
 
 describe('Cloudflare authoritative state runtime', () => {
+  it('preserves the source per-player move definition', () => {
+    expect(isCountedPlayerMove('Attack')).toBe(true)
+    expect(isCountedPlayerMove('PlayCard')).toBe(true)
+    expect(isCountedPlayerMove('EndTurn')).toBe(false)
+    expect(isCountedPlayerMove('CommitCardSelection')).toBe(false)
+    expect(isCountedPlayerMove('Timeout')).toBe(false)
+  })
+
   it('advances commit-reveal and serializes the resulting state', () => {
     const runtimeEnv = env as unknown as GameServerEnv
     const { match } = createMatchFixture()

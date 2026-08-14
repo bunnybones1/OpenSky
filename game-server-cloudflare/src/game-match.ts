@@ -162,6 +162,8 @@ interface MatchResult {
   winner?: Player
   turnCount?: number
   moveCount?: number
+  player1Moves?: number
+  player2Moves?: number
   status?: MatchStatus
 }
 
@@ -183,6 +185,7 @@ interface MatchTimers {
   turnAtMs?: number
   lastTurnCount?: number
   lastMoveCount?: number
+  playerMoves?: [number, number]
   botAtMs?: number
   botFailureCount?: number
   botActionCount?: number
@@ -192,6 +195,14 @@ interface MatchTimers {
 interface PendingGameplay {
   principal: string
   data: string[]
+}
+
+const addPlayerMoveDeltas = (
+  timers: MatchTimers,
+  deltas: [number, number]
+) => {
+  const current = timers.playerMoves ?? [0, 0]
+  timers.playerMoves = [current[0] + deltas[0], current[1] + deltas[1]]
 }
 
 interface SocketAttachment {
@@ -1179,10 +1190,12 @@ export class GameMatch implements DurableObject {
         data: result.senderDiffs
       })
     }
+    const timers = await this.timers()
+    addPlayerMoveDeltas(timers, result.playerMoveDeltas)
     await this.afterStateChange(
       metadata,
       players,
-      await this.timers(),
+      timers,
       Date.now()
     )
   }
@@ -1294,6 +1307,8 @@ export class GameMatch implements DurableObject {
         winner: info.winner,
         turnCount: info.turnCount,
         moveCount: info.moveCount,
+        player1Moves: timers.playerMoves?.[0] ?? 0,
+        player2Moves: timers.playerMoves?.[1] ?? 0,
         status:
           info.lastActionType === 'Abandon'
             ? MatchStatus.ABANDONED
@@ -1762,6 +1777,7 @@ export class GameMatch implements DurableObject {
       return
     }
     const applied = runtime.applyClientDiffs(result.diffs)
+    addPlayerMoveDeltas(timers, applied.playerMoveDeltas)
     timers.botFailureCount = 0
     this.sendToOpponent(metadata.match, bot.participant.account.address, {
       type: 'gameplay',

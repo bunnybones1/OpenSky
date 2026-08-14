@@ -744,6 +744,15 @@ const deckClassForPrisms = (value: unknown): DeckClass => {
   return classes[key] || ('STR' as DeckClass)
 }
 
+const participantCardIds = (
+  participant: MatchPayloadParticipant | undefined
+): number[] =>
+  Array.isArray(participant?.privateSeed?.cards)
+    ? participant.privateSeed.cards
+        .map(card => Number(card))
+        .filter(card => Number.isSafeInteger(card) && card > 0)
+    : []
+
 const matchPlayer = (
   participant: MatchPayloadParticipant | undefined,
   userId: string | null
@@ -751,11 +760,7 @@ const matchPlayer = (
   const account = participant?.account || {}
   const privateSeed = participant?.privateSeed || {}
   const deckClass = deckClassForPrisms(privateSeed.prisms)
-  const cardIds = Array.isArray(privateSeed.cards)
-    ? privateSeed.cards
-        .map(card => Number(card))
-        .filter(card => Number.isSafeInteger(card) && card > 0)
-    : []
+  const cardIds = participantCardIds(participant)
   const deckString = encodeDeckString(cardIds, deckClass)
   return {
     id: Number.isSafeInteger(account.id) ? account.id! : 0,
@@ -789,6 +794,8 @@ const matchFromRow = (row: MatchRow): Match | null => {
     status?: unknown
     turnCount?: unknown
     moveCount?: unknown
+    player1Moves?: unknown
+    player2Moves?: unknown
   }
   try {
     payload = JSON.parse(row.match_payload_json) as MatchPayload
@@ -820,8 +827,8 @@ const matchFromRow = (row: MatchRow): Match | null => {
     player2,
     player1GameMode: modes[0],
     player2GameMode: modes[1],
-    initPlayer1DeckNumCards: 0,
-    initPlayer2DeckNumCards: 0,
+    initPlayer1DeckNumCards: participantCardIds(payload.match?.player1).length,
+    initPlayer2DeckNumCards: participantCardIds(payload.match?.player2).length,
     player1DeckClass: player1.deckClass,
     player2DeckClass: player2.deckClass,
     ...(row.winner_player !== null
@@ -830,9 +837,17 @@ const matchFromRow = (row: MatchRow): Match | null => {
     turnNonce:
       typeof resultBody.turnCount === 'number' ? resultBody.turnCount : 0,
     player1Moves:
-      typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
+      typeof resultBody.player1Moves === 'number'
+        ? resultBody.player1Moves
+        : typeof resultBody.moveCount === 'number'
+          ? resultBody.moveCount
+          : 0,
     player2Moves:
-      typeof resultBody.moveCount === 'number' ? resultBody.moveCount : 0,
+      typeof resultBody.player2Moves === 'number'
+        ? resultBody.player2Moves
+        : typeof resultBody.moveCount === 'number'
+          ? resultBody.moveCount
+          : 0,
     metrics: {},
     startedAt: row.created_at,
     ...(row.ended_at ? { endedAt: row.ended_at } : {}),

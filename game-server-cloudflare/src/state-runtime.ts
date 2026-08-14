@@ -186,9 +186,20 @@ export interface RuntimeStateInfo {
 
 interface RuntimeCapture {
   diffs: string[]
+  playerMoveDeltas: [number, number]
   lastActionPlayer?: Player
   lastActionType?: string
 }
+
+// server/src/worker/match/Match.ts counts only these two player actions in the
+// source MatchEndRequest player1Moves/player2Moves fields.
+export const isCountedPlayerMove = (actionType: string): boolean =>
+  actionType === 'Attack' || actionType === 'PlayCard'
+
+const emptyRuntimeCapture = (): RuntimeCapture => ({
+  diffs: [],
+  playerMoveDeltas: [0, 0]
+})
 
 export interface BotPolicyState {
   actionCount: number
@@ -267,8 +278,12 @@ export class AuthoritativeMatchRuntime {
         event.type === 'GameEvent' &&
         event.payload.event.type === 'EnterPlayerAction'
       ) {
-        emitted.lastActionPlayer = event.payload.event.payload[0]
-        emitted.lastActionType = event.payload.event.payload[1].type
+        const [player, action] = event.payload.event.payload
+        emitted.lastActionPlayer = player
+        emitted.lastActionType = action.type
+        if (player !== undefined && isCountedPlayerMove(action.type)) {
+          emitted.playerMoveDeltas[player] += 1
+        }
       }
       for (const manager of questManagers) manager.onProcessEvent(event)
     }
@@ -287,7 +302,7 @@ export class AuthoritativeMatchRuntime {
       player1Seed,
       player2Seed
     )
-    const emitted = { diffs: [] as string[] }
+    const emitted = emptyRuntimeCapture()
     const storeSecrets = [
       createSecret(player1Seed, 0),
       createSecret(player2Seed, 1)
@@ -329,7 +344,7 @@ export class AuthoritativeMatchRuntime {
   ) {
     initializeStateWasm()
     const ownerSign = createOwnerSigner(ownerPrivateKey)
-    const emitted = { diffs: [] as string[] }
+    const emitted = emptyRuntimeCapture()
     const questManagers = this.questManagers(participants)
     const store = bindings.WasmMatch.deserialize(
       snapshot,
@@ -496,7 +511,11 @@ export class AuthoritativeMatchRuntime {
     const emitted = this.captureDiffs(() => {
       for (const diff of diffs) this.store.apply(hexToBytes(diff))
     })
-    return { opponentDiffs: [...diffs, ...emitted], senderDiffs: emitted }
+    return {
+      opponentDiffs: [...diffs, ...emitted],
+      senderDiffs: emitted,
+      playerMoveDeltas: [...this.emitted.playerMoveDeltas] as [number, number]
+    }
   }
 
   dispatchTimeout() {
@@ -523,6 +542,9 @@ export class AuthoritativeMatchRuntime {
 
   private captureDiffs(action: () => void) {
     this.emitted.diffs = []
+    this.emitted.playerMoveDeltas = [0, 0]
+    this.emitted.lastActionPlayer = undefined
+    this.emitted.lastActionType = undefined
     action()
     return [...this.emitted.diffs]
   }
