@@ -3196,7 +3196,14 @@ export class PlayerRpcRepository {
     userId: string,
     season: number
   ): Promise<{ levels: SkypassLevel[]; hasPremium: boolean }> {
-    const [rewardsResult, progression, seasonStats] = await Promise.all([
+    const [
+      rewardsResult,
+      progression,
+      seasonStats,
+      heroItems,
+      titleItems,
+      lockedStarterDecks
+    ] = await Promise.all([
       this.database
         .prepare(
           `SELECT reward.id, reward.level, reward.season, reward.tier,
@@ -3225,12 +3232,62 @@ export class PlayerRpcRepository {
            WHERE user_id = ? AND season = ?`
         )
         .bind(userId, season)
-        .first<{ has_premium: number }>()
+        .first<{ has_premium: number }>(),
+      this.database
+        .prepare(
+          `SELECT token_id FROM player_items
+           WHERE user_id = ? AND item_type = 'SW_HERO'`
+        )
+        .bind(userId)
+        .all<{ token_id: number }>(),
+      this.database
+        .prepare(
+          `SELECT token_id FROM player_items
+           WHERE user_id = ? AND item_type = 'SW_TITLES'`
+        )
+        .bind(userId)
+        .all<{ token_id: number }>(),
+      this.database
+        .prepare(
+          `SELECT deck_class FROM player_decks
+           WHERE user_id = ? AND deck_type = 'LOCKED_STARTER'`
+        )
+        .bind(userId)
+        .all<{ deck_class: string }>()
     ])
     const progress = progression?.basic_skypass_level || 0
     const hasPremium = seasonStats?.has_premium === 1
+    const ownedHeroes = new Set(heroItems.results.map(row => row.token_id))
+    const ownedTitles = new Set(titleItems.results.map(row => row.token_id))
+    const lockedDeckClasses = new Set(
+      lockedStarterDecks.results.map(row => row.deck_class)
+    )
     const rewards = rewardsResult.results
       .filter(row => !row.is_infinite || row.level <= progress + 1)
+      // Source SkyPass listing hides an unclaimed Hero or Title reward when
+      // its durable item already exists. A starter Hero remains visible while
+      // its source starter deck is still locked; claimed rows always remain in
+      // the season history even after their item/deck has been materialized.
+      .filter(row => {
+        if (row.claimed === 1) return true
+        const tokenIds = parseAttributes(row.attributes)
+          .tokenIDs.map(Number)
+          .filter(Number.isSafeInteger)
+        if (row.item_type === 500) {
+          return !tokenIds.some(heroId => {
+            if (!ownedHeroes.has(heroId)) return false
+            const starterDeck = STARTER_DECK_BY_HERO_ID.get(heroId)
+            return (
+              starterDeck === undefined ||
+              !lockedDeckClasses.has(starterDeck.deckClass)
+            )
+          })
+        }
+        if (row.item_type === 302) {
+          return !tokenIds.some(titleId => ownedTitles.has(titleId))
+        }
+        return true
+      })
       .map<SkypassReward>(row => ({
         id: row.id,
         level: row.level,

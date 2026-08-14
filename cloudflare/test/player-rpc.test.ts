@@ -73,7 +73,7 @@ beforeEach(async () => {
     'DROP TRIGGER IF EXISTS reject_skypass_claim_completion'
   ).run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
-  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613])
+  await clearTestSkypassPolicies(env.AUTH_DB, [610, 611, 612, 613, 614])
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -2943,6 +2943,137 @@ describe('legacy player RPC compatibility', () => {
       .bind(userId)
       .first<{ count: number }>()
     expect(heroCount?.count).toBe(2)
+  })
+
+  it('hides only source-owned unclaimed SkyPass Heroes and Titles', async () => {
+    const season = 614
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      {
+        level: 1,
+        tier: 1,
+        itemType: 500,
+        amount: 0,
+        attributes: { tokenIDs: [1] },
+        isInfinite: 0
+      },
+      {
+        level: 2,
+        tier: 1,
+        itemType: 500,
+        amount: 0,
+        attributes: { tokenIDs: [2] },
+        isInfinite: 0
+      },
+      {
+        level: 3,
+        tier: 1,
+        itemType: 500,
+        amount: 0,
+        attributes: { tokenIDs: [2] },
+        isInfinite: 0
+      },
+      {
+        level: 4,
+        tier: 1,
+        itemType: 500,
+        amount: 0,
+        attributes: { tokenIDs: [3] },
+        isInfinite: 0
+      },
+      {
+        level: 5,
+        tier: 1,
+        itemType: 302,
+        amount: 0,
+        attributes: { tokenIDs: [12] },
+        isInfinite: 0
+      },
+      {
+        level: 6,
+        tier: 1,
+        itemType: 403,
+        amount: 1,
+        isInfinite: 1
+      }
+    ])
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 6 WHERE user_id = ?`
+      ).bind(userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO', 2, 1, 0, 'test-owned', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO', 3, 1, 0, 'test-owned', ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_TITLES', 12, 1, 0, 'test-owned', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+
+    const listedBeforeClaim = await (
+      await rpc('ListSkypassRewards', { season })
+    ).json<{
+      res: {
+        levels: Array<{
+          rewards: Array<{ id: number; claimed: boolean }>
+        }>
+      }
+    }>()
+    const beforeIds = listedBeforeClaim.res.levels.flatMap(level =>
+      level.rewards.map(reward => reward.id)
+    )
+    expect(beforeIds).toEqual([
+      policy.rows[1].id,
+      policy.rows[2].id,
+      policy.rows[5].id
+    ])
+
+    expect(
+      await (
+        await rpc('ClaimSkypassRewards', { ids: [policy.rows[1].id] })
+      ).json()
+    ).toMatchObject({
+      rewards: [
+        expect.objectContaining({ type: 'DECK' }),
+        expect.objectContaining({ type: 'HERO' })
+      ]
+    })
+
+    const listedAfterClaim = await (
+      await rpc('ListSkypassRewards', { season })
+    ).json<{
+      res: {
+        levels: Array<{
+          rewards: Array<{ id: number; claimed: boolean }>
+        }>
+      }
+    }>()
+    expect(listedAfterClaim.res.levels.flatMap(level => level.rewards)).toEqual(
+      [
+        expect.objectContaining({ id: policy.rows[1].id, claimed: true }),
+        expect.objectContaining({ id: policy.rows[5].id, claimed: false })
+      ]
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT deck_type FROM player_decks
+         WHERE user_id = ? AND deck_class = 'AGY'`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ deck_type: 'UNLOCKED_STARTER' })
   })
 
   it('delivers every remaining source SkyPass reward into off-chain inventory', async () => {

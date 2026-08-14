@@ -303,6 +303,11 @@ and progress are not migrated.
   preserves the legacy staff response while each fulfillment continues to use
   its opaque UUID authority; intent, Checkout Session, and retrieved Stripe
   event logs are immutable. No production identity has the staff role.
+- SkyPass reward listing preserves the source's adaptive ownership rule:
+  unclaimed Hero and Title rewards already present in identity inventory are
+  hidden, except that an owned starter Hero remains visible until its matching
+  starter deck is actually unlocked. Claimed rows remain visible as season
+  history. This projection never changes inventory or claim authority.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
