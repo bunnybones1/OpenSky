@@ -86,6 +86,34 @@ access, while `Ping` remained healthy. Production had no multi-hero account to
 probe without mutating player state, so the multi-hero response is proven by
 the isolated D1 Worker contract rather than a fabricated production grant.
 
+### Seen-state and favorite mutation fidelity — 2026-08-14
+
+The browser-consumer review also found two source-semantic gaps in preserved
+inventory mutations. `MarkDeckNotNew` previously reported success for a
+missing deck and for a locked starter deck, while the Go API returns not found
+and failed precondition respectively. `MarkItemsNotNew` silently ignored an
+invalid encoded item type inside a batch, allowing the valid portion of the
+same request to be committed instead of rejecting the request atomically.
+
+Milestone `eb314f09` restores those contracts. Deck mutations now verify
+identity ownership and unlocked state before updating, with source-compatible
+`404` and `412` WebRPC errors. Item mutations validate every token ID and item
+type before building the D1 batch, so a mixed valid/invalid request produces no
+partial state change. The same contract suite now directly covers favorite and
+unfavorite deck persistence, unlocked/locked/missing deck seen state,
+immediate sticker and deferred card-back seen state, atomic invalid batches,
+numeric validation, authentication, and required arguments.
+
+All 49 player RPC tests, 385 main-Worker tests, 231 multiplayer tests, 25
+browser/game tests, six analytics tests, every source/off-chain audit, and both
+production builds passed. Exact-head GitHub Actions run `31846317892` passed in
+8m57s. Worker version `59bc4a28-ef2b-4bc9-89e7-61d5a1132708` was then deployed;
+the fail-closed verifier matched web asset `/assets/index-d976a081.js`, game
+asset `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and
+the release-safe cache policy. A public probe kept `Ping` healthy, while an
+unauthenticated `MarkDeckNotNew` request returned `401` and
+`Cache-Control: no-store` without mutating production player data.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
