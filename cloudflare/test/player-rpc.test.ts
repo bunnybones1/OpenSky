@@ -419,6 +419,9 @@ describe('legacy player RPC compatibility', () => {
           rankedConstructed: {
             gameMode: 'RANKED_CONSTRUCTED',
             gamesPlayed: 0,
+            experience: 0,
+            rank: 1,
+            rankProgress: 0,
             playerRank: 'UNRANKED',
             playerRankStage: 'STAGE_NONE',
             season
@@ -426,6 +429,9 @@ describe('legacy player RPC compatibility', () => {
           rankedDiscovery: {
             gameMode: 'RANKED_DISCOVERY',
             gamesPlayed: 0,
+            experience: 0,
+            rank: 1,
+            rankProgress: 0,
             season
           }
         }
@@ -453,6 +459,9 @@ describe('legacy player RPC compatibility', () => {
         gamesPlayed: number
         winRatio: number
         score: number
+        rank?: number
+        rankProgress: number
+        experience: number
       }>
       discoveryStats: Array<{ season: number; gamesPlayed: number }>
     }>()
@@ -461,13 +470,211 @@ describe('legacy player RPC compatibility', () => {
     expect(body.constructedStats[0]).toMatchObject({
       season: 1,
       gamesPlayed: 0,
-      score: 0
+      score: 0,
+      rankProgress: 0,
+      experience: 0
     })
+    expect(body.constructedStats[0]).not.toHaveProperty('rank')
     expect(body.constructedStats[1]).toMatchObject({
       season,
       gamesPlayed: 4,
       winRatio: 0.75,
-      score: 42
+      score: 42,
+      rank: 1,
+      rankProgress: 1,
+      experience: 0
+    })
+  })
+
+  it('projects source rank-bucket positions and excludes moderated accounts', async () => {
+    const season = seasonFromDate()
+    const targetUpdatedAt = '2026-08-13T20:00:00.000Z'
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 42, player_rank = 'WANDERER',
+           player_rank_stage = 'STAGE_I', updated_at = ?
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+         AND season = ?`
+    )
+      .bind(targetUpdatedAt, userId, season)
+      .run()
+
+    const peers = [
+      ['rank-peer-above', 'Rank.Peer.Above', 50, 'ACTIVE'],
+      ['rank-peer-tied', 'Rank.Peer.Tied', 42, 'ACTIVE'],
+      ['rank-peer-below', 'Rank.Peer.Below', 10, 'ACTIVE'],
+      ['rank-peer-banned', 'Rank.Peer.Banned', 9999, 'BANNED']
+    ] as const
+    const statements: D1PreparedStatement[] = []
+    for (const [peerId, name, score, status] of peers) {
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO users
+             (id, display_name, primary_email, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`
+        ).bind(
+          peerId,
+          name,
+          `${peerId}@example.com`,
+          targetUpdatedAt,
+          targetUpdatedAt
+        ),
+        env.AUTH_DB.prepare(
+          `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
+        ).bind(peerId, targetUpdatedAt),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_settings
+             (user_id, name, locale, account_status, created_at, updated_at)
+           VALUES (?, ?, 'en', ?, ?, ?)`
+        ).bind(peerId, name, status, targetUpdatedAt, targetUpdatedAt),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', ?, ?, 'WANDERER',
+                   'STAGE_I', ?, ?)`
+        ).bind(peerId, season, score, targetUpdatedAt, targetUpdatedAt)
+      )
+    }
+    await env.AUTH_DB.batch(statements)
+
+    const account = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    expect(await account.json()).toMatchObject({
+      account: {
+        stats: {
+          rankedConstructed: {
+            playerRank: 'WANDERER',
+            score: 42,
+            rank: 2,
+            rankProgress: 0.5
+          }
+        }
+      }
+    })
+
+    const history = await rpc(
+      'GetAccountStats',
+      { address: identityReference, seasons: [season] },
+      false
+    )
+    expect(await history.json()).toMatchObject({
+      constructedStats: [
+        {
+          playerRank: 'WANDERER',
+          score: 42,
+          rank: 2,
+          rankProgress: 0.5
+        }
+      ]
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings
+       SET account_status = 'BANNED', leaderboard_eligible = 0
+       WHERE user_id = ?`
+    )
+      .bind(userId)
+      .run()
+    const moderatedHistory = await rpc(
+      'GetAccountStats',
+      { address: identityReference, seasons: [season] },
+      false
+    )
+    const moderatedBody = await moderatedHistory.json<{
+      constructedStats: Array<Record<string, unknown>>
+    }>()
+    expect(moderatedBody.constructedStats).toEqual([
+      expect.objectContaining({
+        playerRank: 'UNRANKED',
+        score: 0,
+        rankProgress: 0
+      })
+    ])
+    expect(moderatedBody.constructedStats[0]).not.toHaveProperty('rank')
+  })
+
+  it('preserves the source Master top-100 rank adjustment and denominator', async () => {
+    const season = seasonFromDate()
+    const targetUpdatedAt = '2026-08-13T21:00:00.000Z'
+    const earlier = '2026-08-13T20:00:00.000Z'
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 1201, player_rank = 'MASTER',
+           player_rank_stage = 'STAGE_NONE', updated_at = ?
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+         AND season = ?`
+    )
+      .bind(targetUpdatedAt, userId, season)
+      .run()
+
+    const statements: D1PreparedStatement[] = []
+    for (let index = 0; index < 100; index += 1) {
+      const grandweaverId = `account-stat-grandweaver-${index}`
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO users
+             (id, display_name, primary_email, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`
+        ).bind(
+          grandweaverId,
+          `Account Grandweaver ${index}`,
+          `${grandweaverId}@example.com`,
+          earlier,
+          earlier
+        ),
+        env.AUTH_DB.prepare(
+          `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
+        ).bind(grandweaverId, earlier),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', ?, ?, 'GRANDWEAVER',
+                   'STAGE_NONE', ?, ?)`
+        ).bind(grandweaverId, season, 1400 + index, earlier, earlier)
+      )
+    }
+    const lowerMasterId = 'account-stat-lower-master'
+    statements.push(
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES (?, 'Account Lower Master', 'lower-master@example.com', ?, ?)`
+      ).bind(lowerMasterId, earlier, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
+      ).bind(lowerMasterId, earlier),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, created_at, updated_at)
+         VALUES (?, 'RANKED_CONSTRUCTED', ?, 1200, 'MASTER',
+                 'STAGE_NONE', ?, ?)`
+      ).bind(lowerMasterId, season, earlier, earlier)
+    )
+    for (let index = 0; index < statements.length; index += 75) {
+      await env.AUTH_DB.batch(statements.slice(index, index + 75))
+    }
+
+    const account = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    expect(await account.json()).toMatchObject({
+      account: {
+        stats: {
+          rankedConstructed: {
+            playerRank: 'MASTER',
+            rank: 1,
+            rankProgress: 0.5
+          }
+        }
+      }
     })
   })
 
@@ -2610,14 +2817,7 @@ describe('legacy player RPC compatibility', () => {
             WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
               AND unlock_source = ?) AS items`
       )
-        .bind(
-          userId,
-          rewardId,
-          userId,
-          rewardId,
-          userId,
-          `skypass:${rewardId}`
-        )
+        .bind(userId, rewardId, userId, rewardId, userId, `skypass:${rewardId}`)
         .first()
     ).toEqual({ claims: 0, grants: 0, items: 0 })
 

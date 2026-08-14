@@ -85,6 +85,8 @@ interface StatRow {
   updated_at: string
   level?: number
   xp?: number
+  rank_position?: number | null
+  rank_count?: number | null
 }
 
 interface LeaderboardRow extends StatRow {
@@ -319,13 +321,32 @@ const durationSeconds = (value: string, field: string): number => {
 const totalExperience = (level: number, xp: number): number =>
   Math.max(0, level - 1) * 200 + xp
 
+const GRANDWEAVER_COUNT = 100
+const MISSING_ACCOUNT_SORT_ID = Number.MAX_SAFE_INTEGER
+
+const projectedRank = (row: StatRow): number | undefined => {
+  if (row.rank_position === undefined || row.rank_position === null) {
+    return undefined
+  }
+  return ['MASTER', 'GRANDWEAVER'].includes(row.player_rank) &&
+    row.rank_position > GRANDWEAVER_COUNT
+    ? row.rank_position - GRANDWEAVER_COUNT
+    : row.rank_position
+}
+
 const statFromRow = (row: StatRow, rank?: number): AccountStat => {
   const gamesPlayed = row.win_count + row.loss_count + row.tie_count
   const experience = totalExperience(row.level ?? 1, row.xp ?? 0)
-  const rankProgress =
-    row.player_rank === ('UNRANKED' as PlayerRank)
-      ? Math.min(1, Math.floor((experience / 200) * 100) / 100)
-      : undefined
+  const position = rank ?? projectedRank(row)
+  let rankProgress: number | undefined
+  if (row.player_rank === ('UNRANKED' as PlayerRank)) {
+    rankProgress = Math.min(1, Math.floor((experience / 200) * 100) / 100)
+  } else if (row.rank_count !== undefined) {
+    const rankCount = row.rank_count ?? 0
+    const progress =
+      position !== undefined && rankCount > 0 ? position / rankCount : 0
+    rankProgress = Math.min(1, Math.floor(progress * 100) / 100)
+  }
   return {
     gameMode: row.game_mode,
     winCount: row.win_count,
@@ -338,7 +359,7 @@ const statFromRow = (row: StatRow, rank?: number): AccountStat => {
     experience,
     score: row.score,
     createdAt: row.created_at,
-    ...(rank !== undefined ? { rank } : {}),
+    ...(position !== undefined ? { rank: position } : {}),
     ...(rankProgress !== undefined ? { rankProgress } : {}),
     playerRank: row.player_rank,
     playerRankStage: row.player_rank_stage,
@@ -348,6 +369,67 @@ const statFromRow = (row: StatRow, rank?: number): AccountStat => {
     season: row.season
   }
 }
+
+const accountStatRowsQuery = (where: string): string => `
+  SELECT stats.*, profile.level, profile.xp,
+         CASE
+           WHEN COALESCE(settings.account_status, 'ACTIVE') IN (
+             'BANNED', 'SUSPENDED', 'DELETED'
+           ) THEN NULL
+           ELSE (
+             SELECT COUNT(*)
+             FROM player_account_stats above
+             LEFT JOIN player_account_settings above_settings
+               ON above_settings.user_id = above.user_id
+             LEFT JOIN game_accounts above_account
+               ON above_account.user_id = above.user_id
+             WHERE above.game_mode = stats.game_mode
+               AND above.season = stats.season
+               AND COALESCE(above_settings.account_status, 'ACTIVE') NOT IN (
+                 'BANNED', 'SUSPENDED', 'DELETED'
+               )
+               AND (
+                 (stats.player_rank NOT IN ('MASTER', 'GRANDWEAVER')
+                   AND above.player_rank = stats.player_rank)
+                 OR (stats.player_rank = 'MASTER'
+                   AND above.player_rank IN ('MASTER', 'GRANDWEAVER'))
+                 OR (stats.player_rank = 'GRANDWEAVER'
+                   AND above.player_rank = 'GRANDWEAVER')
+               )
+               AND (
+                 above.score > stats.score
+                 OR (above.score = stats.score
+                   AND above.updated_at < stats.updated_at)
+                 OR (above.score = stats.score
+                   AND above.updated_at = stats.updated_at
+                   AND COALESCE(above_account.id, ${MISSING_ACCOUNT_SORT_ID})
+                     < COALESCE(target_account.id, ${MISSING_ACCOUNT_SORT_ID}))
+                 OR (above.score = stats.score
+                   AND above.updated_at = stats.updated_at
+                   AND COALESCE(above_account.id, ${MISSING_ACCOUNT_SORT_ID})
+                     = COALESCE(target_account.id, ${MISSING_ACCOUNT_SORT_ID})
+                   AND above.user_id < stats.user_id)
+                 OR above.user_id = stats.user_id
+               )
+           )
+         END AS rank_position,
+         (
+           SELECT COUNT(*)
+           FROM player_account_stats peers
+           LEFT JOIN player_account_settings peer_settings
+             ON peer_settings.user_id = peers.user_id
+           WHERE peers.game_mode = stats.game_mode
+             AND peers.season = stats.season
+             AND peers.player_rank = stats.player_rank
+             AND COALESCE(peer_settings.account_status, 'ACTIVE') NOT IN (
+               'BANNED', 'SUSPENDED', 'DELETED'
+             )
+         ) AS rank_count
+  FROM player_account_stats stats
+  JOIN player_profiles profile ON profile.user_id = stats.user_id
+  LEFT JOIN player_account_settings settings ON settings.user_id = stats.user_id
+  LEFT JOIN game_accounts target_account ON target_account.user_id = stats.user_id
+  WHERE ${where}`
 
 const syntheticStat = (
   gameMode: GameMode,
@@ -545,11 +627,10 @@ export class CompetitiveRepository {
     const season = seasonFromDate()
     const rows = await this.database
       .prepare(
-        `SELECT stats.*, profile.level, profile.xp
-         FROM player_account_stats stats
-         JOIN player_profiles profile ON profile.user_id = stats.user_id
-         WHERE stats.user_id = ? AND stats.season = ?
+        accountStatRowsQuery(
+          `stats.user_id = ? AND stats.season = ?
            AND stats.game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
+        )
       )
       .bind(userId, season)
       .all<StatRow>()
@@ -589,11 +670,13 @@ export class CompetitiveRepository {
     const placeholders = requested.map(() => '?').join(',')
     const rows = await this.database
       .prepare(
-        `SELECT stats.*, profile.level, profile.xp
-         FROM player_account_stats stats
-         JOIN player_profiles profile ON profile.user_id = stats.user_id
-         WHERE stats.user_id = ? AND stats.season IN (${placeholders})
-           AND stats.game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
+        accountStatRowsQuery(
+          `stats.user_id = ? AND stats.season IN (${placeholders})
+           AND stats.game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
+           AND COALESCE(settings.account_status, 'ACTIVE') NOT IN (
+             'BANNED', 'SUSPENDED', 'DELETED'
+           )`
+        )
       )
       .bind(userId, ...requested)
       .all<StatRow>()
