@@ -348,13 +348,12 @@ and progress are not migrated.
   reading the lifetime `basic_skypass_level` as every season's level. Migration
   `0106_skypass_season_progress.sql` stores the immutable source account level
   at first participation and the monotonic highest account level reached for
-  each player/season. The existing Cloud Weasel level-one presentation offset
-  remains intact, match and quest XP update the season row atomically with their
-  existing settlement receipts, and premium purchase/support paths initialize
-  the same row in their receipt-backed batches. Season-close discovery now
-  selects only durable season rows that advanced beyond their initial level;
-  starter Hero/Title adaptation and infinite reward materialization use that
-  same season-relative progress.
+  each player/season. Match and quest XP update the season row atomically with
+  their existing settlement receipts, and premium purchase/support paths
+  initialize the same row in their receipt-backed batches. Season-close
+  discovery now selects only durable season rows that advanced beyond their
+  initial level; starter Hero/Title adaptation and infinite reward
+  materialization use that same season-relative progress.
   Milestone `3e2f38a4` passed exact-head release-contract run `31826265020` in
   8m30s, the 380-test main Worker suite, 230 multiplayer tests, 25 game tests,
   6 analytics tests, and the game server's 31 unit plus 90 Workers tests. A
@@ -372,6 +371,11 @@ and progress are not migrated.
   kept Conquest, leaderboard, and referral issuance dormant while SkyPass
   remained `1/1` active. The post-deployment snapshot wrote zero rows and
   retained the exact migration-time counts.
+  Follow-up migration `0107_skypass_source_level_progress.sql` restores the
+  source's exact zero-based `achieved - initial` account and reward-listing
+  projection. Before switching the runtime contract, it advances progress only
+  where needed to preserve an existing immutable claim at that reward's source
+  level; it never removes a claim or inventory item.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data

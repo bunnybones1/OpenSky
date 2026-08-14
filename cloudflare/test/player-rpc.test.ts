@@ -74,7 +74,7 @@ const setSkypassSeasonProgress = async (
   effectiveLevel: number,
   initialAccountLevel = 0
 ) => {
-  const achievedAccountLevel = initialAccountLevel + effectiveLevel - 1
+  const achievedAccountLevel = initialAccountLevel + effectiveLevel
   const accountLevel = achievedAccountLevel + 1
   const now = new Date().toISOString()
   await env.AUTH_DB.batch([
@@ -138,7 +138,7 @@ describe('legacy player RPC compatibility', () => {
         address: identityReference,
         name: 'Cloud Weasel Player',
         level: 1,
-        seasonLevel: 1,
+        seasonLevel: 0,
         isBurnerWallet: false
       }
     })
@@ -791,7 +791,7 @@ describe('legacy player RPC compatibility', () => {
     expect(await leaderboard.json()).toMatchObject({
       res: [
         {
-          account: { name: 'Cloud Weasel Player' },
+          account: { name: 'Cloud Weasel Player', seasonLevel: 0 },
           rank: 1,
           rankedSilverReward: 0,
           rankedTicketReward: 1
@@ -2360,7 +2360,7 @@ describe('legacy player RPC compatibility', () => {
         level: 2,
         experience: 100,
         levelUpXP: 200,
-        seasonLevel: 2,
+        seasonLevel: 1,
         stats: {
           rankedConstructed: {
             playerRank: 'WANDERER',
@@ -2799,7 +2799,7 @@ describe('legacy player RPC compatibility', () => {
       hasPremium: false
     })
     expect(body.res.levels.find(level => level.level === 1)).toMatchObject({
-      earned: true,
+      earned: false,
       rewards: [
         expect.objectContaining({
           tier: 'FREE',
@@ -2816,6 +2816,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('claims the listed and earned starter SkyPass card reward', async () => {
+    await setSkypassSeasonProgress(62, 1)
     const listed = await rpc('ListSkypassRewards', { season: 62 })
     const levels = (
       await listed.json<{
@@ -3218,12 +3219,12 @@ describe('legacy player RPC compatibility', () => {
     const freshSeason = await new PlayerRpcRepository(
       env.AUTH_DB
     ).listSkypassRewards(userId, 617)
-    expect(freshSeason.levels.map(level => level.earned)).toEqual([true, false])
+    expect(freshSeason.levels.map(level => level.earned)).toEqual([false])
 
     const account = await rpc('GetAccount', { address: identityReference })
     expect(
       (await account.json<{ account: { seasonLevel: number } }>()).account
-    ).toMatchObject({ seasonLevel: 1 })
+    ).toMatchObject({ seasonLevel: 0 })
 
     await expect(
       env.AUTH_DB.prepare(

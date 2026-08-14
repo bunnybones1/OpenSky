@@ -102,7 +102,6 @@ interface LeaderboardRow extends StatRow {
   level: number
   xp: number
   next_level_xp: number
-  basic_skypass_level: number
   warm_ups: number
 }
 
@@ -973,11 +972,10 @@ export class CompetitiveRepository {
                 users.created_at AS user_created_at,
                 profile.updated_at AS profile_updated_at,
                 profile.level, profile.xp, profile.next_level_xp,
-                progression.basic_skypass_level, account.warm_ups
+                account.warm_ups
          FROM player_account_stats stats
          JOIN users ON users.id = stats.user_id
          JOIN player_profiles profile ON profile.user_id = stats.user_id
-         JOIN player_progression progression ON progression.user_id = stats.user_id
          JOIN player_account_settings account ON account.user_id = stats.user_id
          JOIN game_accounts game ON game.user_id = stats.user_id
          WHERE stats.game_mode = ? AND stats.season = ?
@@ -1023,7 +1021,9 @@ export class CompetitiveRepository {
         experience: row.xp,
         warmUps: row.warm_ups,
         level: row.level,
-        seasonLevel: row.basic_skypass_level,
+        // The source leaderboard hydrates its Account directly from the data
+        // row, where SeasonLevel is a non-database projection and remains zero.
+        seasonLevel: 0,
         levelUpXP: row.next_level_xp,
         isBurnerWallet: false,
         ...(row.region ? { region: row.region } : {}),

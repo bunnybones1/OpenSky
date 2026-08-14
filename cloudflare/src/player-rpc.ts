@@ -311,8 +311,8 @@ const effectiveSkypassSeasonLevel = (
   initialAccountLevel: number,
   achievedAccountLevel: number
 ): number => {
-  const level = achievedAccountLevel - initialAccountLevel + 1
-  if (!Number.isSafeInteger(level) || level < 1) {
+  const level = achievedAccountLevel - initialAccountLevel
+  if (!Number.isSafeInteger(level) || level < 0) {
     throw new Error('invalid SkyPass season progress')
   }
   return level
@@ -1171,7 +1171,7 @@ export class PlayerRpcRepository {
       seasonLevel:
         row.initial_account_level === null ||
         row.achieved_account_level === null
-          ? 1
+          ? 0
           : effectiveSkypassSeasonLevel(
               row.initial_account_level,
               row.achieved_account_level
@@ -3266,8 +3266,7 @@ export class PlayerRpcRepository {
       seasonStats?.initial_account_level ?? fallbackSourceLevel
     const achievedAccountLevel =
       seasonStats?.achieved_account_level ?? fallbackSourceLevel
-    // The Go account starts at level zero. Cloud Weasel's preserved UI starts
-    // at one, so source LevelProgress maps to the same visible value plus one.
+    // Preserve SkypassSeasonStat.LevelProgress exactly: achieved - initial.
     const progress = effectiveSkypassSeasonLevel(
       initialAccountLevel,
       achievedAccountLevel

@@ -114,12 +114,13 @@ claim attempts cannot grant the same reward twice.
 
 SkyPass earning is scoped to the source season. Each player/season row records
 the immutable zero-based account level at first participation and the monotonic
-highest zero-based account level achieved; the UI keeps Cloud Weasel's existing
-one-based presentation. Match XP, quest XP, premium fulfillment, and staff
-support initialize or advance that row inside their existing atomic operation
-or settlement batch. Season-close auto-claim reads only rows whose achieved
-level exceeds their initial level, so lifetime account progress cannot leak
-into a later season and an absent season row cannot manufacture rewards.
+highest zero-based account level achieved. Account reads, reward earning, and
+infinite-reward previewing expose the source's exact `achieved - initial`
+progress. Match XP, quest XP, premium fulfillment, and staff support initialize
+or advance that row inside their existing atomic operation or settlement batch.
+Season-close auto-claim reads only rows whose achieved level exceeds their
+initial level, so lifetime account progress cannot leak into a later season and
+an absent season row cannot manufacture rewards.
 
 An imported SkyPass CSV is preparation, not reward authority. It creates an
 immutable, player-invisible draft containing the exact source digest and every

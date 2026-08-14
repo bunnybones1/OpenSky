@@ -158,7 +158,7 @@ describe('SkyPass season auto-claim', () => {
       }))
     )
     await env.AUTH_DB.prepare(
-      `UPDATE player_skypass_season_stats SET achieved_account_level = 5
+      `UPDATE player_skypass_season_stats SET achieved_account_level = 6
        WHERE user_id = 'batch-player' AND season = ?`
     )
       .bind(SEASON)

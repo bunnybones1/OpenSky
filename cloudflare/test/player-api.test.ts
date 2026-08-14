@@ -82,7 +82,7 @@ describe('Cloudflare player API', () => {
     }>()
     expect(body.created).toBe(true)
     expect(body.player.profile.level).toBe(1)
-    expect(body.player.basicSkyPass.level).toBe(1)
+    expect(body.player.basicSkyPass.level).toBe(0)
     expect(body.player.quests).toHaveLength(3)
     expect(body.player.collection.basicCardCount).toBe(30)
     expect(body.player.decks).toEqual([

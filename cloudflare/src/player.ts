@@ -418,9 +418,8 @@ export class PlayerRepository {
       basicSkyPass: {
         level: seasonProgress
           ? seasonProgress.achieved_account_level -
-            seasonProgress.initial_account_level +
-            1
-          : 1,
+            seasonProgress.initial_account_level
+          : 0,
         xp: progression.basic_skypass_xp,
         nextLevelXp: progression.basic_skypass_next_xp
       },
