@@ -616,6 +616,22 @@ and progress are not migrated.
   verified deployment emitted `/assets/index-b6aa1ef3.js`, retained
   `/game/cloudflare/assets/index-79a70ba2.js`, and covered all six locales and
   the release-safe cache policy.
+- Conquest V2 account treasure-progress administration now uses the source
+  `[current_points, ...sort_values]` keyset cursor, `current_points DESC`
+  default, empty default response-sort metadata, 20-row default, 200-row cap,
+  supported numeric source sorts, and the unique-key direction rule. Forward
+  pages remain stable when progress is inserted ahead of the cursor, backward
+  traversal uses the source boundary, and malformed or dual-direction cursors
+  fail closed. Milestone `713729d7` passed exact-head release-contract run
+  `31792080814`, the 366-test main Worker suite, and the complete cross-service
+  release contract before deployment on 2026-08-14 as Worker version
+  `1817b649-dea1-42ab-897b-e657c17254f6`. No migration was required. The public
+  Version RPC reported that exact version, and an anonymous progress probe
+  returned `401`. Read-only production D1 checks before and after deployment
+  found zero event-2 rows and zero players, with `changed_db: false` and no rows
+  written. Cloudflare reused `/assets/index-b1769b84.js`, retained
+  `/game/cloudflare/assets/index-79a70ba2.js`, and verified all six locales and
+  the release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
