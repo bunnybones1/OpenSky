@@ -328,7 +328,22 @@ and progress are not migrated.
   receipts, but a D1 trigger accepts them only as field-for-field copies of the
   one infinite seed in the active reviewed policy. Occupied levels are skipped,
   concurrent reads cannot duplicate an instance, and derived rows are excluded
-  from policy definition counts and review hashes.
+  from policy definition counts and review hashes. Migration
+  `0105_skypass_infinite_reward_materialization.sql` and milestone `d1d9e718`
+  passed exact-head release-contract run `31821633285` in 8m47s, the focused
+  44-test player RPC suite, the 378-test main Worker suite, 230 multiplayer
+  tests, 25 game tests, and 6 analytics tests. The migration preserved all 127
+  reward rows, one active policy, one claim, and 63 inventory rows while adding
+  the reviewed column, unique index, and two insert guards; it materialized no
+  runtime rewards. The exact head was deployed on 2026-08-14 as Worker version
+  `4e3be649-57ff-4452-a1fc-dff76a767b5a` at 100% traffic. The production
+  verifier matched `/assets/index-b1769b84.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy. Public Ping, Version, game-mode, and Conquest
+  reward probes passed, and the read-only reward-readiness audit retained core
+  rewards live, SkyPass `1/1` active, and every policy-gated track dormant.
+  Post-deployment D1 evidence again found exactly the same row counts, zero
+  derived instances, zero writes, both guards, and no pending migrations.
 - The public card-library and card-lookup RPCs now serve all 856 active cards
   from a stripped build artifact generated from the source API's latest card
   migration. `pnpm check:cloudflare:cards` detects source or generated-data
