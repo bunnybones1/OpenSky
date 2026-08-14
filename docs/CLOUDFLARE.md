@@ -505,6 +505,21 @@ and progress are not migrated.
   resolved `/assets/index-d976a081.js`,
   `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
   release-safe cache policy.
+- The account reward feed now uses the source `[id, created_at]` keyset cursor
+  across rank, SkyPass, Conquest, leaderboard, and Conquest V2 receipt-backed
+  events. Forward pages remain stable when a newer reward arrives between
+  requests, backward navigation preserves the source boundary, and malformed
+  or dual-direction cursors fail closed. Milestone `19ea8b17` passed exact-head
+  release-contract run `31781375047`, the 362-test main Worker suite, and the
+  complete cross-service release contract before deployment on 2026-08-14 as
+  Worker version `d8c47992-a0de-46f9-8880-f387f3c687bd`. No migration was
+  required. The public Version RPC reported that exact version; a read-only
+  production D1 projection found one SkyPass claim event and zero rank,
+  Conquest, leaderboard, or Conquest V2 feed events, with `changed_db: false`
+  and no rows written. Cloudflare uploaded no asset changes, retaining
+  `/assets/index-d976a081.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
