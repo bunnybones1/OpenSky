@@ -26,6 +26,13 @@ const setup = async (
     createdAt?: string
     runCreatedAt?: string
     pinPool?: boolean
+    accountStatus?:
+      | 'ACTIVE'
+      | 'BANNED'
+      | 'SUSPENDED'
+      | 'FLAGGED'
+      | 'TO_DELETE'
+      | 'DELETED'
   } = {}
 ) => {
   const now = options.runCreatedAt ?? '2026-08-12T11:00:00.000Z'
@@ -53,6 +60,11 @@ const setup = async (
     env.AUTH_DB.prepare(
       `INSERT INTO game_accounts (id, user_id, created_at) VALUES (91, ?, ?)`
     ).bind(USER_ID, now),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_account_settings
+         (user_id, name, account_status, created_at, updated_at)
+       VALUES (?, 'Settlement.Player', ?, ?, ?)`
+    ).bind(USER_ID, options.accountStatus ?? 'ACTIVE', now, now),
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
@@ -354,6 +366,46 @@ describe('source Conquest reward settlement', () => {
         .bind(conquest!.id)
         .run()
     ).rejects.toThrow('Conquest Gold delivery entitlements are immutable')
+  })
+
+  it('atomically disables delayed Gold when settlement observes a blocked account', async () => {
+    const conquest = await setup(3, { accountStatus: 'FLAGGED' })
+
+    await expect(
+      settlePendingConquest(
+        env.AUTH_DB,
+        conquest!.id,
+        SETTLED_AT,
+        sequenceDraw(0, 0)
+      )
+    ).resolves.toMatchObject({
+      applied: true,
+      silverCardIds: [6],
+      goldCardIds: [136]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, application_status, attempt_count
+         FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({
+      status: 'DISABLED',
+      application_status: 'READY',
+      attempt_count: 0
+    })
+    expect((await inventory()).results).toMatchObject([
+      { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 1 }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT application_status FROM player_conquest_settlements
+         WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({ application_status: 'APPLIED' })
   })
 
   it('settles only terminal runs and recovers their receipt on match retry', async () => {

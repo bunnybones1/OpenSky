@@ -40,7 +40,7 @@ export const pendingConquestCards = async (
       `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
               attempt_count
        FROM player_conquest_gold_deliveries
-       WHERE user_id = ? AND status = 'PENDING'
+       WHERE user_id = ? AND status IN ('PENDING', 'DISABLED')
          AND application_status = 'READY'
        ORDER BY deliver_at, conquest_id`
     )
@@ -126,7 +126,14 @@ export const deliverDueConquestGold = async (
              SET application_status = 'PREPARING', application_key = ?
              WHERE conquest_id = ? AND status = 'PENDING'
                AND application_status = 'READY'
-               AND deliver_at <= ?`
+               AND deliver_at <= ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM player_account_settings settings
+                 WHERE settings.user_id = player_conquest_gold_deliveries.user_id
+                   AND settings.account_status IN (
+                     'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'
+                   )
+               )`
           )
           .bind(deliveryKey, row.conquest_id, deliveredAt)
       ]
@@ -252,7 +259,14 @@ export const deliverDueConquestGold = async (
     .prepare(
       `SELECT COUNT(*) AS count FROM player_conquest_gold_deliveries
        WHERE status = 'PENDING' AND application_status = 'READY'
-         AND deliver_at <= ?`
+         AND deliver_at <= ?
+         AND NOT EXISTS (
+           SELECT 1 FROM player_account_settings settings
+           WHERE settings.user_id = player_conquest_gold_deliveries.user_id
+             AND settings.account_status IN (
+               'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'
+             )
+         )`
     )
     .bind(deliveredAt)
     .first<{ count: number }>()

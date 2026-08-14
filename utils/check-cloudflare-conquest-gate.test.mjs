@@ -150,7 +150,28 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'conquest.reward_pool_version',
       'Conquest run has no pinned reward pool',
       'Date.parse(pool.ends_at) < admittedAt',
-      'AND reward_pool_version = ?'
+      'AND reward_pool_version = ?',
+      'FROM player_account_settings settings',
+      "THEN 'DISABLED' ELSE 'PENDING' END"
+    ].join('\n'),
+    goldModerationMigration: [
+      "SET status = 'DISABLED'",
+      'CREATE TRIGGER player_conquest_gold_initial_moderation_guard',
+      'CREATE TRIGGER player_conquest_gold_claim_moderation_guard',
+      'Conquest Gold delivery is blocked by account status',
+      'delivery.status = CASE WHEN EXISTS',
+      "'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'"
+    ].join('\n'),
+    goldDelivery: [
+      "status IN ('PENDING', 'DISABLED')",
+      'player_conquest_gold_deliveries.user_id',
+      "'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'"
+    ].join('\n'),
+    sourceDelayedMinting: [
+      'proto.AccountStatus_BANNED',
+      'proto.AccountStatus_FLAGGED',
+      'proto.TaskStatus_DISABLED',
+      'db.In(proto.TaskStatus_PENDING, proto.TaskStatus_DISABLED)'
     ].join('\n'),
     settlementPinning: [
       'ADD COLUMN reward_pool_version TEXT',
@@ -248,6 +269,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'v2ScheduleOperations',
     'staff',
     'settlement',
+    'goldModerationMigration',
+    'goldDelivery',
+    'sourceDelayedMinting',
     'settlementPinning',
     'drainMigration',
     'drainRepository',

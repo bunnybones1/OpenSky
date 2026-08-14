@@ -440,11 +440,20 @@ export const settlePendingConquest = async (
           `INSERT INTO player_conquest_gold_deliveries
              (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
               status, attempt_count, created_at)
-           SELECT conquest_id, user_id, gold_card_ids_json,
-                  gold_token_ids_json, ?, 'PENDING', 0, settled_at
-           FROM player_conquest_settlements
-           WHERE conquest_id = ? AND settlement_key = ?
-             AND application_status = 'PREPARING'`
+           SELECT settlement.conquest_id, settlement.user_id,
+                  settlement.gold_card_ids_json,
+                  settlement.gold_token_ids_json, ?,
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM player_account_settings settings
+                    WHERE settings.user_id = settlement.user_id
+                      AND settings.account_status IN (
+                        'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'
+                      )
+                  ) THEN 'DISABLED' ELSE 'PENDING' END,
+                  0, settlement.settled_at
+           FROM player_conquest_settlements settlement
+           WHERE settlement.conquest_id = ? AND settlement.settlement_key = ?
+             AND settlement.application_status = 'PREPARING'`
         )
         .bind(goldDeliverAt, conquestId, settlementKey)
     )

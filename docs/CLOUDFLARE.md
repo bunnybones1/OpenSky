@@ -1026,6 +1026,12 @@ and progress are not migrated.
   release-scoped policy in D1 and are combined with matchmaker refusal and
   acceptance penalties. The production penalty map remains the source default
   of all zeroes until product policy explicitly enables it.
+- Conquest delayed Gold keeps the source pending-card visibility contract even
+  while moderation disables delivery. Settlement snapshots a blocked account
+  as `DISABLED`, later sanctions transition pending entitlements atomically,
+  and the delivery claim rechecks account status under database guards before
+  any inventory grant. Vetted/active accounts can resume the same immutable
+  entitlement without redrawing its card.
 - Optional EVM ownership proofs are deployed independently of Google login.
   EOA signatures are verified locally; Polygon smart-contract wallets use the
   chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.

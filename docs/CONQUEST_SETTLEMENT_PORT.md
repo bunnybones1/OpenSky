@@ -101,6 +101,13 @@ run only after that task settles.
   final transition validates that grant plus the source-shaped delivered feed
   event. Retries remain idempotent; malformed or repeatedly failing deliveries
   return to `READY` and dead-letter after five attempts.
+- Delayed Gold preserves the source moderation projection. Settlement creates
+  the entitlement as `DISABLED` when the current account state blocks delayed
+  rewards, and a later ban, suspension, or flag atomically disables an existing
+  pending row. Both pending and disabled entitlements remain visible through
+  the original `GetPendingCards` shape, while the delivery claim repeats the
+  account-status check. D1 insert, settlement-completion, and claim triggers
+  close the read-to-claim race and reject a mismatched moderation state.
 - Queue readiness is an immutable receipt link, not an operator assertion. A
   dedicated `system:conquest-readiness-drill:*` identity must complete one
   isolated three-win run through the real immediate Silver and 24-hour Gold

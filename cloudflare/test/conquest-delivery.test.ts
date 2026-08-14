@@ -129,6 +129,65 @@ describe('delayed Conquest Gold delivery', () => {
     expect(ownership.cardBalances[136].SW_GOLD_CARDS.balance).toBe('0')
   })
 
+  it('keeps moderated Gold visible while blocking a read-to-claim race', async () => {
+    const conquestId = await setupDelivery()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_settings
+       SET account_status = 'FLAGGED', updated_at = ? WHERE user_id = ?`
+    )
+      .bind(CREATED_AT, USER_ID)
+      .run()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_deliveries
+         SET application_status = 'PREPARING',
+             application_key = '00000000-0000-4000-8000-000000000001'
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('Conquest Gold delivery is blocked by account status')
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquest_gold_deliveries SET status = 'DISABLED'
+       WHERE conquest_id = ?`
+    )
+      .bind(conquestId)
+      .run()
+    expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toMatchObject([
+      { tokenIDs: [131_208], mintAt: DUE_AT }
+    ])
+    expect(await (await rpc('GetPendingCards')).json()).toMatchObject({
+      res: [{ tokenIDs: [131_208], mintAt: DUE_AT }]
+    })
+    expect(
+      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    ).toEqual({ delivered: 0, failed: 0, remaining: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_GOLD_CARDS'`
+      )
+        .bind(USER_ID)
+        .first()
+    ).toEqual({ count: 0 })
+
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings
+         SET account_status = 'ACTIVE', updated_at = ? WHERE user_id = ?`
+      ).bind(DUE_AT, USER_ID),
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_deliveries SET status = 'PENDING'
+         WHERE conquest_id = ?`
+      ).bind(conquestId)
+    ])
+    expect(
+      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+  })
+
   it('delivers only when due and makes retries idempotent', async () => {
     const conquestId = await setupDelivery()
     expect(

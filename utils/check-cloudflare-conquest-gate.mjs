@@ -336,10 +336,49 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'conquest.reward_pool_version',
       'Conquest run has no pinned reward pool',
       'Date.parse(pool.ends_at) < admittedAt',
-      'AND reward_pool_version = ?'
+      'AND reward_pool_version = ?',
+      'FROM player_account_settings settings',
+      "THEN 'DISABLED' ELSE 'PENDING' END"
     ]) {
       if (!evidence.settlement.includes(token)) {
         errors.push(`Conquest settlement lost approved-pool gate: ${token}`)
+      }
+    }
+  }
+  if (evidence.goldModerationMigration !== undefined) {
+    for (const token of [
+      "SET status = 'DISABLED'",
+      'CREATE TRIGGER player_conquest_gold_initial_moderation_guard',
+      'CREATE TRIGGER player_conquest_gold_claim_moderation_guard',
+      'Conquest Gold delivery is blocked by account status',
+      'delivery.status = CASE WHEN EXISTS',
+      "'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'"
+    ]) {
+      if (!evidence.goldModerationMigration.includes(token)) {
+        errors.push(`Conquest Gold moderation migration is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.goldDelivery !== undefined) {
+    for (const token of [
+      "status IN ('PENDING', 'DISABLED')",
+      'player_conquest_gold_deliveries.user_id',
+      "'BANNED', 'SUSPENDED', 'FLAGGED', 'TO_DELETE', 'DELETED'"
+    ]) {
+      if (!evidence.goldDelivery.includes(token)) {
+        errors.push(`Conquest Gold delivery boundary is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.sourceDelayedMinting !== undefined) {
+    for (const token of [
+      'proto.AccountStatus_BANNED',
+      'proto.AccountStatus_FLAGGED',
+      'proto.TaskStatus_DISABLED',
+      'db.In(proto.TaskStatus_PENDING, proto.TaskStatus_DISABLED)'
+    ]) {
+      if (!evidence.sourceDelayedMinting.includes(token)) {
+        errors.push(`source delayed Conquest Gold contract is missing: ${token}`)
       }
     }
   }
@@ -497,6 +536,9 @@ const main = async () => {
     staff,
     cardLibrary,
     settlement,
+    goldModerationMigration,
+    goldDelivery,
+    sourceDelayedMinting,
     settlementPinning,
     drainMigration,
     drainRepository,
@@ -618,6 +660,20 @@ const main = async () => {
         root,
         'cloudflare',
         'migrations',
+        '0109_conquest_gold_moderation.sql'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'conquest-delivery.ts'), 'utf8'),
+    Promise.all([
+      readFile(path.join(root, 'api', 'lib', 'jobqueue', 'delayed_minting.go'), 'utf8'),
+      readFile(path.join(root, 'api', 'rpc', 'cards.go'), 'utf8')
+    ]).then(sources => sources.join('\n')),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
         '0101_conquest_entry_reward_pool_pin.sql'
       ),
       'utf8'
@@ -693,6 +749,9 @@ const main = async () => {
     staff,
     cardLibrary,
     settlement,
+    goldModerationMigration,
+    goldDelivery,
+    sourceDelayedMinting,
     settlementPinning,
     drainMigration,
     drainRepository,
