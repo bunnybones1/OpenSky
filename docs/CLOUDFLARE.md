@@ -551,6 +551,24 @@ and progress are not migrated.
   changes; the game bundle remained
   `/game/cloudflare/assets/index-79a70ba2.js`, and verification covered all six
   locales and the release-safe cache policy.
+- Card-library searches now use the source `[id, mana_weight]` keyset cursor by
+  default, preserving explicit sort metadata, the one-column unique-key
+  direction rule, PostgreSQL null ordering, first/last response cursors, and
+  bidirectional traversal. This keeps the game client's 200-card owned-library
+  batches stable when inventory changes ahead of a cursor; malformed,
+  unsupported-sort, and dual-direction requests fail closed. Milestone
+  `4d7038ec` passed exact-head release-contract run `31786078552`, the 363-test
+  main Worker suite, and the complete cross-service release contract before
+  deployment on 2026-08-14 as Worker version
+  `8a042937-9e7a-404c-b2bc-d3dabf9d9109`. No migration was required. The
+  public Version and `SearchCards` RPCs reported that exact version and the
+  expected `mana_weight ASC` sort; the first production cursor decoded to
+  `["1","4"]`. A read-only production D1 aggregate found 63 inventory rows,
+  including 61 positive card rows, with `changed_db: false` and no rows
+  written. Cloudflare uploaded no asset changes, retaining
+  `/assets/index-b1769b84.js`,
+  `/game/cloudflare/assets/index-79a70ba2.js`, all six locales, and the
+  release-safe cache policy.
 - Match-scoped opponent reporting now preserves the source participant,
   opponent, self-report, sanitization, and 4,000-byte comment boundaries. The
   Google identity owns the report, while the principal-shaped address emitted
