@@ -308,6 +308,41 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (evidence.playerConquest !== undefined) {
+    for (const token of [
+      'useGameModesStatus()',
+      'gameModesStatus?.conquestConstructed === true',
+      'ALLOW_TICKET_SALES && isConquestAvailable',
+      'isConquestAvailable={isConquestAvailable}'
+    ]) {
+      if (!evidence.playerConquest.includes(token)) {
+        errors.push(`Conquest player screen lost availability gate: ${token}`)
+      }
+    }
+  }
+  if (evidence.playerConquestButton !== undefined) {
+    for (const token of [
+      'isConquestAvailable: boolean',
+      '!isConquestAvailable ||',
+      '!isConquestAvailable || isConquestLocked'
+    ]) {
+      if (!evidence.playerConquestButton.includes(token)) {
+        errors.push(`Conquest Start control lost availability gate: ${token}`)
+      }
+    }
+  }
+  if (evidence.gameModesQuery !== undefined) {
+    for (const token of [
+      'APIClient.opensky.getGameModesStatus()',
+      'GAME_MODES_STATUS',
+      'staleTime: 10000',
+      'refetchInterval: 10000'
+    ]) {
+      if (!evidence.gameModesQuery.includes(token)) {
+        errors.push(`player mode-status query is incomplete: ${token}`)
+      }
+    }
+  }
   if (evidence.gateway !== undefined) {
     for (const token of [
       "case 'GMListConquestReadiness'",
@@ -367,6 +402,9 @@ const main = async () => {
     cardLibrary,
     settlement,
     api,
+    playerConquest,
+    playerConquestButton,
+    gameModesQuery,
     gateway,
     readiness
   ] = await Promise.all([
@@ -474,6 +512,34 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'webapp', 'src', 'PlayPage', 'Conquest', 'Conquest.tsx'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp',
+        'src',
+        'PlayPage',
+        'Conquest',
+        'InactiveConquestButton',
+        'InactiveConquestButton.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp',
+        'src',
+        'shared',
+        'queries',
+        'play',
+        'useGameModesStatus.ts'
+      ),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare', 'src', 'conquest-readiness.ts'),
@@ -496,6 +562,9 @@ const main = async () => {
     cardLibrary,
     settlement,
     api,
+    playerConquest,
+    playerConquestButton,
+    gameModesQuery,
     gateway,
     readiness
   })

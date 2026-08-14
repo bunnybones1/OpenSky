@@ -394,6 +394,10 @@ and progress are not migrated.
   matchmaking is current. Both checks are inside the entry batch, including
   the strict queue-expiry boundary. Retrying an already-active run remains
   source-idempotent after a switch-off and never spends another ticket.
+  The preserved Conquest page polls the source game-mode status RPC every ten
+  seconds and keeps its existing Start and ticket-purchase controls locked
+  unless constructed Conquest is authoritatively available. A missing or
+  failed status read therefore cannot present a spendable action.
 - The authoritative game Worker records Conquest win/loss/draw results by
   durable match ID and performs the source first-loss/third-win transition with
   a per-proposal retry receipt. Zero-win losses complete immediately. Earned

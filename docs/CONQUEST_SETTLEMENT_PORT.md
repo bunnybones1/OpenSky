@@ -112,6 +112,11 @@ run only after that task settles.
   run and leaves the off-chain ticket untouched. An already-active run remains
   idempotently readable/re-enterable after switch-off, matching the source
   state-manager contract without stranding another ticket.
+- The original player screen consumes the public source game-mode status RPC
+  on the match service's ten-second cadence. Its existing Start and optional
+  ticket-purchase controls remain locked until constructed Conquest is
+  explicitly true; loading and status failures are fail-closed without
+  replacing the legacy interface.
 
 ## Remaining authoritative input
 

@@ -152,6 +152,23 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'FROM conquest_verified_queue_pools verified',
       'verified.starts_at <= ? AND verified.ends_at > ?'
     ].join('\n'),
+    playerConquest: [
+      'useGameModesStatus()',
+      'gameModesStatus?.conquestConstructed === true',
+      'ALLOW_TICKET_SALES && isConquestAvailable',
+      'isConquestAvailable={isConquestAvailable}'
+    ].join('\n'),
+    playerConquestButton: [
+      'isConquestAvailable: boolean',
+      '!isConquestAvailable ||',
+      '!isConquestAvailable || isConquestLocked'
+    ].join('\n'),
+    gameModesQuery: [
+      'APIClient.opensky.getGameModesStatus()',
+      'GAME_MODES_STATUS',
+      'staleTime: 10000',
+      'refetchInterval: 10000'
+    ].join('\n'),
     gateway: [
       "case 'GMListConquestReadiness'",
       "case 'GMVerifyConquestReadiness'",
@@ -178,6 +195,9 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'staff',
     'settlement',
     'api',
+    'playerConquest',
+    'playerConquestButton',
+    'gameModesQuery',
     'gateway',
     'readiness'
   ]) {

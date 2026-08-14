@@ -7,6 +7,7 @@ import { ALLOW_TICKET_SALES } from '~/shared/constants/flags'
 import { GameType } from '~/shared/constants/ranks'
 import { useIsInQueue } from '~/shared/hooks/useIsInQueue'
 import { useConquestStatus } from '~/shared/queries/play/useConquestStatus'
+import { useGameModesStatus } from '~/shared/queries/play/useGameModesStatus'
 import { useConquestAndUSDCBalances } from '~/shared/queries/useConquestAndUSDCBalances'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
@@ -43,6 +44,8 @@ export const Conquest = memo(() => {
   const { t } = useTranslation()
 
   const { data: conquestStatus, isLoading: isConquestLoading } = useConquestStatus()
+  const { data: gameModesStatus } = useGameModesStatus()
+  const isConquestAvailable = gameModesStatus?.conquestConstructed === true
 
   const isActiveConquest =
     !!conquestStatus && conquestStatus.status === ConquestStatus.IN_PROGRESS
@@ -96,7 +99,9 @@ export const Conquest = memo(() => {
           bgUrl={`webapp/backgrounds/${backgroundImage}`}
           isLoading={conquestStatus === undefined}
         >
-          {ALLOW_TICKET_SALES && <PurchaseConquestTicketsButton />}
+          {ALLOW_TICKET_SALES && isConquestAvailable && (
+            <PurchaseConquestTicketsButton />
+          )}
           {!!isActiveConquest && <ActiveConquestProgressChecks />}
           <div
             className={clsx(
@@ -153,6 +158,7 @@ export const Conquest = memo(() => {
                   isInQueue={isInQueue}
                   isPendingRewards={isPendingRewards}
                   isConquestLocked={isConquestLocked}
+                  isConquestAvailable={isConquestAvailable}
                   tradeableTickets={tokenBalances?.conquestTicketBalance.tradable}
                   untradeableTickets={
                     tokenBalances?.conquestTicketBalance.nonTradable
