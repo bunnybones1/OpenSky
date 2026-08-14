@@ -1031,7 +1031,14 @@ and progress are not migrated.
   as `DISABLED`, later sanctions transition pending entitlements atomically,
   and the delivery claim rechecks account status under database guards before
   any inventory grant. Vetted/active accounts can resume the same immutable
-  entitlement without redrawing its card.
+  entitlement without redrawing its card. Migration `0109` and milestone
+  `a6a4be06` were deployed on 2026-08-14 as game-server version
+  `555d5867-d7f5-4e73-8701-85d06509aeeb` and main Worker version
+  `8a631b0c-144e-48ea-bfc9-76a320330e19` after exact-head run `31837138772`.
+  The migration installed all three guards with zero rows to backfill;
+  post-deployment D1 evidence retained 63 inventory rows, zero Conquest rows or
+  blocked-pending violations, zero writes, and no pending migrations. Public
+  probes kept both Conquest modes disabled and `weeklyGolds` empty.
 - Optional EVM ownership proofs are deployed independently of Google login.
   EOA signatures are verified locally; Polygon smart-contract wallets use the
   chain-bound ERC-1271 verifier only when `WALLET_RPC_URL_137` is configured.

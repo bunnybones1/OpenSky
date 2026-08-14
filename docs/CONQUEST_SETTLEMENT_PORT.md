@@ -108,6 +108,17 @@ run only after that task settles.
   the original `GetPendingCards` shape, while the delivery claim repeats the
   account-status check. D1 insert, settlement-completion, and claim triggers
   close the read-to-claim race and reject a mismatched moderation state.
+  Milestone `a6a4be06` passed exact-head release-contract run `31837138772` in
+  8m25s, the 382-test main Worker suite, the game server's 31 unit plus 91
+  Workers tests, 109 match-service/matchmaker tests, 25 game tests, and 6
+  analytics tests. Migration `0109_conquest_gold_moderation.sql` was applied on
+  2026-08-14 with zero Conquest rows to backfill and installed all three
+  moderation guards. Game-server version
+  `555d5867-d7f5-4e73-8701-85d06509aeeb` and main Worker version
+  `8a631b0c-144e-48ea-bfc9-76a320330e19` were then deployed at 100% traffic.
+  Production retained 63 inventory rows, zero Conquest settlements/deliveries,
+  zero blocked-pending violations, and no pending migrations; both Conquest
+  queues and every Conquest reward policy remained dormant.
 - Queue readiness is an immutable receipt link, not an operator assertion. A
   dedicated `system:conquest-readiness-drill:*` identity must complete one
   isolated three-win run through the real immediate Silver and 24-hour Gold
