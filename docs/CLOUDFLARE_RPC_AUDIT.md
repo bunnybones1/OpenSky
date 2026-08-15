@@ -1262,6 +1262,59 @@ exact proof remains the isolated-D1 Worker integration test. Verification did
 not enable, disable, reveal, create, or otherwise mutate any production key,
 account, game, reward, payment, inventory, or wallet state.
 
+## Account action wire fidelity rollout — 2026-08-15
+
+The generated Go `AccountAction` model has eight public JSON fields and two
+private fields. `createdAt`, `updatedAt`, `expiresAt`, and `createdBy` are
+pointers without `omitempty`, so absent values serialize as explicit `null`;
+the private account ID and pagination cursor must never reach the wire. The
+source defines eleven `ActionType` values. Its top-level staff list starts from
+a nonnil empty slice and therefore serializes as `[]`, while action slices read
+from absent per-account map entries remain nil and serialize as `null` inside
+`GMAccount` and `AccountSignalSummary` results.
+
+`cloudflare/src/account-action-wire.ts` now owns the exact public projection,
+pointer boundary, privacy boundary, nonnil list result, and nullable nested-list
+result. Repository list, create, and active-action reads pass through the shared
+serializer, as do the nested account and signal-summary routes. This is a
+serialization-only change; it does not alter sanction decisions, expiration,
+staff authority, authentication, accounts, games, rewards, payments, or
+wallets.
+
+The source-derived gate parses the complete generated struct and JSON tags,
+all eleven enum values, the source list construction and active-action lookup,
+the nested nil-map behavior, the repository and API routes, and the build
+gate. Twelve mutations fail closed on field, enum, pointer, privacy, list,
+repository, route, or build-gate drift. Four direct wire tests plus isolated-D1
+staff integration coverage assert required nulls and zero values, populated
+projection, exact public keys, private-field exclusion, top-level `[]`, and
+nested `null` results.
+
+The complete release contract passed 440 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31890869649` passed in 8m59s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`e9b5e721-ae53-4eb4-b93b-a8e5c47acc08` to
+`782d9e39-c848-423d-8eed-85fb11797a68`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated `GMListAccountActions` request returned `401` with the same
+cache boundary before staff-data access. No production admin grant, account
+action, or signal was created merely to inspect a populated response; that
+exact proof remains the isolated-D1 Worker integration test. Verification did
+not create a sanction, account action, signal, game, reward, payment, inventory
+record, or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
