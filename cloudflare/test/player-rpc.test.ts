@@ -1837,15 +1837,45 @@ describe('legacy player RPC compatibility', () => {
     const body = await response.json<{
       page: { pageSize: number }
       res: Array<{
+        uuid: string
+        name: string
         class: string
         cardIds: number[]
         deckType: string
         deckString: string
+        art: string
+        createdAt: string | null
+        updatedAt: string | null
+        isFavorite: boolean
+        favoritedAt: string | null
+        isNew: boolean
+        conquestV2Points: number
       }>
     }>()
 
     expect(body.page.pageSize).toBe(200)
     expect(body.res).toHaveLength(5)
+    expect(Object.keys(body.res[0])).toEqual([
+      'uuid',
+      'name',
+      'class',
+      'deckString',
+      'cardIds',
+      'art',
+      'createdAt',
+      'updatedAt',
+      'isFavorite',
+      'favoritedAt',
+      'deckType',
+      'isNew',
+      'conquestV2Points'
+    ])
+    expect(body.res[0]).toMatchObject({
+      createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      isFavorite: false,
+      favoritedAt: null
+    })
     expect(body.res).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -2140,7 +2170,7 @@ describe('legacy player RPC compatibility', () => {
     expect(
       await (await rpc('GetDeck', { req: { uuid: created.uuid } })).json()
     ).toMatchObject({
-      res: { uuid: created.uuid, isFavorite: false, favoritedAt: '' }
+      res: { uuid: created.uuid, isFavorite: false, favoritedAt: null }
     })
 
     const concurrentToggles = await Promise.all([

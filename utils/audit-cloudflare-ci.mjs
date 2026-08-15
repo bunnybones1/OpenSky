@@ -70,6 +70,9 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go AccountStat wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:deck-wire')) {
+    errors.push('Cloudflare build must include the generated Go Deck wire gate')
+  }
   return errors
 }
 

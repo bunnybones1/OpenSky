@@ -28,6 +28,7 @@ import {
   forceValidDeckClass,
   validateDeckClass
 } from './deck-codec'
+import { sourceDeckWire } from './deck-wire'
 import { CompetitiveRepository } from './competitive'
 import { completeDeckRankInsert } from './deck-ranks'
 import {
@@ -1409,21 +1410,23 @@ export class PlayerRpcRepository {
       .bind(userId)
       .all<DeckRow>()
 
-    return result.results.map(row => ({
-      uuid: row.id,
-      name: row.name,
-      class: row.deck_class,
-      deckString: row.deck_string,
-      cardIds: parseNumberArray(row.card_ids),
-      art: row.art,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      isFavorite: row.favorited_at !== null,
-      favoritedAt: row.favorited_at || '',
-      deckType: row.deck_type,
-      isNew: row.is_new === 1,
-      conquestV2Points: row.conquest_v2_points
-    }))
+    return result.results.map(row =>
+      sourceDeckWire({
+        uuid: row.id,
+        name: row.name,
+        class: row.deck_class,
+        deckString: row.deck_string,
+        cardIds: parseNumberArray(row.card_ids),
+        art: row.art,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        isFavorite: row.favorited_at !== null,
+        favoritedAt: row.favorited_at,
+        deckType: row.deck_type,
+        isNew: row.is_new === 1,
+        conquestV2Points: row.conquest_v2_points
+      })
+    )
   }
 
   async listDeckPage(
