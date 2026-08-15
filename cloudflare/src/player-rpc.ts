@@ -11,6 +11,7 @@ import type {
   ItemType,
   Page,
   Quest,
+  Reward,
   SkypassLevel,
   SkypassReward,
   SortBy
@@ -68,6 +69,9 @@ const TOTAL_ACTIVE_CARDS = Object.values(CARD_CLASS_TOTALS).reduce(
 )
 const CARD_CLASS_BY_ID = new Map(
   allLibraryCards().map(card => [card.id, card.class])
+)
+const LIBRARY_CARD_BY_ID = new Map(
+  allLibraryCards().map(card => [card.id, card])
 )
 
 const ITEM_TYPE_BY_ID: Record<number, ItemType> = {
@@ -178,25 +182,6 @@ const EQUIPPABLE_ITEM_TYPES = new Set<ItemType>([
   'SW_STICKERS' as ItemType,
   'SW_CARD_BACKS' as ItemType
 ])
-
-const CARD_NAMES: Record<number, string> = {
-  30: 'Treefolk Goliath',
-  98: 'Mortal Blow',
-  125: 'Oreheart Brawler',
-  140: 'Stalwart Sentinel',
-  1047: 'Songrider',
-  1100: 'Disciple of Gusto',
-  1101: "Samya's Speed",
-  1125: 'Skyfire Master',
-  3004: 'Grimlord',
-  3101: "Bouran's Ethos",
-  3125: 'Eclipse Mummy',
-  3135: 'Royal Priestess',
-  4004: 'Frigid Blizzard',
-  4027: 'Mootichi',
-  4101: "Ari's Insight",
-  4124: 'Star Cetacean'
-}
 
 interface AccountRow {
   game_account_id: number | null
@@ -820,39 +805,54 @@ const parseAttributes = (value: string | null) => {
   }
 }
 
-const cardClassForId = (cardId: number): string => {
-  if (cardId >= 4000) return 'INT'
-  if (cardId >= 3000) return 'HRT'
-  if (cardId >= 2000) return 'WIS'
-  if (cardId >= 1000) return 'AGY'
-  return 'STR'
+const libraryCard = (cardId: number) => {
+  const card = LIBRARY_CARD_BY_ID.get(cardId)
+  if (!card) throw new Error(`card ${cardId} is missing from the card library`)
+  return card
 }
 
-const rewardCard = (cardId: number, itemType: ItemType) => ({
-  accountID: 0,
-  type: 'CARD',
-  card: {
-    amount: 1,
+const rewardCard = (cardId: number, itemType: ItemType) => {
+  const card = libraryCard(cardId)
+  return {
+    accountID: 0,
+    type: 'CARD',
     card: {
-      id: cardId,
-      name: CARD_NAMES[cardId] || `Card ${cardId}`,
-      description: '',
-      asset: '',
-      class: cardClassForId(cardId),
-      element: 'UNKNOWN',
-      type: 'UNKNOWN',
-      manaCost: 0,
-      power: 0,
-      health: 0,
-      keywords: [],
-      status: 'PLAY',
-      set: 'UNKNOWN',
-      imageURL: { small: '', medium: '', large: '' },
-      itemType,
-      isNew: true
+      amount: 1,
+      card: {
+        ...card,
+        itemType
+      }
     }
   }
-})
+}
+
+export const canonicalGainedRewards = (value: string): Reward[] => {
+  const parsed = JSON.parse(value) as unknown
+  if (!Array.isArray(parsed)) throw new Error('gained rewards are malformed')
+  return parsed.map(reward => {
+    if (!isRecord(reward) || reward.type !== 'CARD') return reward
+    const cardReward = reward.card
+    if (!isRecord(cardReward) || !isRecord(cardReward.card)) return reward
+    const cardId = cardReward.card.id
+    const itemType = cardReward.card.itemType
+    if (
+      !Number.isSafeInteger(cardId) ||
+      typeof itemType !== 'string' ||
+      !CARD_FRAMES.includes(itemType as (typeof CARD_FRAMES)[number]) ||
+      !LIBRARY_CARD_BY_ID.has(Number(cardId))
+    ) {
+      return reward
+    }
+    const canonical = rewardCard(Number(cardId), itemType as ItemType)
+    return {
+      ...reward,
+      card: {
+        ...cardReward,
+        card: canonical.card.card
+      }
+    }
+  }) as Reward[]
+}
 
 const stableRewardIndex = (value: string, length: number): number => {
   let hash = 2166136261
@@ -3438,7 +3438,7 @@ export class PlayerRpcRepository {
             claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
             claimed: row.claimed === 1,
             ...(row.gained_rewards
-              ? { gainedRewards: JSON.parse(row.gained_rewards) }
+              ? { gainedRewards: canonicalGainedRewards(row.gained_rewards) }
               : {})
           }
         ]
@@ -3642,6 +3642,7 @@ export class PlayerRpcRepository {
           : candidates.find(candidate => !owned.has(candidate))
       if (cardId === undefined) continue
 
+      const card = libraryCard(cardId)
       owned.add(cardId)
       granted.push(cardId)
       statements.push(
@@ -3659,8 +3660,8 @@ export class PlayerRpcRepository {
           .bind(
             userId,
             cardId,
-            CARD_NAMES[cardId] || `Card ${cardId}`,
-            cardClassForId(cardId),
+            card.name,
+            card.class,
             `skypass:${reward.id}`,
             new Date().toISOString(),
             userId,
@@ -3736,6 +3737,7 @@ export class PlayerRpcRepository {
         )
 
         for (const cardId of starterDeck.cardIds) {
+          const card = libraryCard(cardId)
           statements.push(
             this.database
               .prepare(
@@ -3751,7 +3753,7 @@ export class PlayerRpcRepository {
               .bind(
                 userId,
                 cardId,
-                CARD_NAMES[cardId] || `Card ${cardId}`,
+                card.name,
                 starterDeck.key,
                 `starter-deck:${starterDeck.deckClass}`,
                 now,

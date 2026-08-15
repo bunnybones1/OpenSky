@@ -12,7 +12,10 @@ import {
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
-import { PlayerRpcRepository } from '../src/player-rpc'
+import {
+  canonicalGainedRewards,
+  PlayerRpcRepository
+} from '../src/player-rpc'
 import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
 import {
   clearTestSkypassPolicies,
@@ -3248,8 +3251,26 @@ describe('legacy player RPC compatibility', () => {
             card: {
               id: 140,
               name: 'Stalwart Sentinel',
+              asset: 'unit-cho-05',
+              class: 'STR',
+              element: 'EARTH',
+              type: 'UNIT',
+              manaCost: 2,
+              power: 2,
+              health: 5,
+              keywords: ['GUARD'],
+              status: 'PLAY',
+              set: 'STARTER_EXPANSION',
+              imageURL: {
+                small:
+                  'https://assets.skyweaver.net/latest/full-cards/en/2x/140.webp',
+                medium:
+                  'https://assets.skyweaver.net/latest/full-cards/en/4x/140.webp',
+                large:
+                  'https://assets.skyweaver.net/latest/full-cards/en/6x/140.webp'
+              },
               itemType: 'SW_BASE_CARDS',
-              isNew: true
+              isNew: null
             }
           }
         }
@@ -3295,6 +3316,90 @@ describe('legacy player RPC compatibility', () => {
       (await ownershipAgain.json<{ res: { unlockedCards: number } }>()).res
         .unlockedCards
     ).toBe(31)
+  })
+
+  it('returns canonical source card metadata for an off-chain reward', async () => {
+    const season = 617
+    const policy = await createTestSkypassPolicy(env.AUTH_DB, season, [
+      {
+        level: 1,
+        tier: 1,
+        itemType: 300,
+        amount: 0,
+        attributes: { tokenIDs: [42] }
+      }
+    ])
+    await setSkypassSeasonProgress(season, 1)
+
+    const claimed = await (
+      await rpc('ClaimSkypassRewards', { ids: [policy.rows[0].id] })
+    ).json<{
+      rewards: Array<{
+        card?: { card: Record<string, unknown> }
+      }>
+    }>()
+    expect(claimed.rewards[0].card?.card).toMatchObject({
+      id: 42,
+      name: 'Engine Blade',
+      description: '{trigger:Sunrise:} Gain {+1pow}, {Lifesteal}, and {Wither}.',
+      asset: 'unit-patty-03',
+      class: 'STR',
+      element: 'METAL',
+      type: 'UNIT',
+      manaCost: 1,
+      power: 2,
+      health: 2,
+      keywords: [],
+      status: 'PLAY',
+      set: 'CORE_SET',
+      itemType: 'SW_BASE_CARDS',
+      isNew: null,
+      imageURL: {
+        small: 'https://assets.skyweaver.net/latest/full-cards/en/2x/42.webp',
+        medium: 'https://assets.skyweaver.net/latest/full-cards/en/4x/42.webp',
+        large: 'https://assets.skyweaver.net/latest/full-cards/en/6x/42.webp'
+      }
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT card_name, prism FROM player_card_unlocks
+         WHERE user_id = ? AND card_id = 42`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ card_name: 'Engine Blade', prism: 'STR' })
+
+    expect(
+      canonicalGainedRewards(
+        JSON.stringify([
+          {
+            accountID: 0,
+            type: 'CARD',
+            card: {
+              amount: 1,
+              card: {
+                id: 42,
+                name: 'Card 42',
+                description: '',
+                asset: '',
+                class: 'STR',
+                element: 'UNKNOWN',
+                type: 'UNKNOWN',
+                manaCost: 0,
+                power: 0,
+                health: 0,
+                keywords: [],
+                status: 'PLAY',
+                set: 'UNKNOWN',
+                imageURL: { small: '', medium: '', large: '' },
+                itemType: 'SW_BASE_CARDS',
+                isNew: true
+              }
+            }
+          }
+        ])
+      )
+    ).toEqual(claimed.rewards)
   })
 
   it('claims a source hero reward and unlocks its starter deck and cards', async () => {
