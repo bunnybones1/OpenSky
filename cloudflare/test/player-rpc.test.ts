@@ -2912,10 +2912,10 @@ describe('legacy player RPC compatibility', () => {
         periodicity: string
         reward: { itemType: string; amount: number }
       }>
-      rewards: unknown[]
+      rewards: unknown[] | null
     }>()
 
-    expect(body.rewards).toEqual([])
+    expect(body.rewards).toBeNull()
     expect(
       body.quests.map(({ questType, position }) => ({ questType, position }))
     ).toEqual([
@@ -2977,7 +2977,11 @@ describe('legacy player RPC compatibility', () => {
 
     const claimed = await rpc('ClaimQuestRewards', { ids: [welcome!.id] })
     expect(claimed.status).toBe(200)
-    expect(await claimed.json()).toMatchObject({
+    const claimedBody = await claimed.json<{
+      quest: unknown
+      rewards: Array<Record<string, unknown>>
+    }>()
+    expect(claimedBody).toMatchObject({
       quest: {
         questType: 'AnEnemyApproaches',
         epicType: 'starter2_test',
@@ -3018,6 +3022,45 @@ describe('legacy player RPC compatibility', () => {
           }
         }
       ]
+    })
+    expect(claimedBody.rewards.map(reward => Object.keys(reward))).toEqual([
+      [
+        'accountID',
+        'type',
+        'gameMode',
+        'rank',
+        'exp',
+        'card',
+        'hero',
+        'heroSkin',
+        'deck',
+        'conquestV2TreasureProgress',
+        'stickerPoints'
+      ],
+      [
+        'accountID',
+        'type',
+        'gameMode',
+        'rank',
+        'exp',
+        'card',
+        'hero',
+        'heroSkin',
+        'deck',
+        'conquestV2TreasureProgress',
+        'stickerPoints'
+      ]
+    ])
+    expect(claimedBody.rewards[0]).toMatchObject({
+      gameMode: null,
+      rank: null,
+      exp: { reasonExtraData: null },
+      card: null,
+      hero: null,
+      heroSkin: null,
+      deck: null,
+      conquestV2TreasureProgress: null,
+      stickerPoints: null
     })
 
     expect(
@@ -3473,7 +3516,7 @@ describe('legacy player RPC compatibility', () => {
         periodicity: string
         isRerollable: boolean
       }
-      rewards: unknown[]
+      rewards: unknown[] | null
     }>()
     expect(rerollBody).toMatchObject({
       quest: {
@@ -3481,7 +3524,7 @@ describe('legacy player RPC compatibility', () => {
         periodicity: 'DAILY',
         isRerollable: false
       },
-      rewards: []
+      rewards: null
     })
     expect(rerollBody.quest.questType).not.toBe(previous.questType)
 
@@ -3654,7 +3697,10 @@ describe('legacy player RPC compatibility', () => {
       ids: [starterReward.id]
     })
     expect(claimed.status).toBe(200)
-    expect(await claimed.json()).toMatchObject({
+    const claimedBody = await claimed.json<{
+      rewards: Array<Record<string, unknown>>
+    }>()
+    expect(claimedBody).toMatchObject({
       rewards: [
         {
           accountID: 0,
@@ -3688,6 +3734,30 @@ describe('legacy player RPC compatibility', () => {
           }
         }
       ]
+    })
+    expect(Object.keys(claimedBody.rewards[0])).toEqual([
+      'accountID',
+      'type',
+      'gameMode',
+      'rank',
+      'exp',
+      'card',
+      'hero',
+      'heroSkin',
+      'deck',
+      'conquestV2TreasureProgress',
+      'stickerPoints'
+    ])
+    expect(claimedBody.rewards[0]).toMatchObject({
+      gameMode: null,
+      rank: null,
+      exp: null,
+      card: { item: null },
+      hero: null,
+      heroSkin: null,
+      deck: null,
+      conquestV2TreasureProgress: null,
+      stickerPoints: null
     })
 
     const ownership = await rpc('GetCardOwnership', {})

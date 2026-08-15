@@ -36,6 +36,7 @@ import {
 import { sourceDeckWire } from './deck-wire'
 import { sourceFeedEventWire } from './feed-event-wire'
 import { sourceItemSummaryWire, sourceItemWire } from './item-wire'
+import { sourceRewardListWire, type SourceRewardInput } from './reward-wire'
 import { CompetitiveRepository } from './competitive'
 import { completeDeckRankInsert } from './deck-ranks'
 import {
@@ -866,7 +867,7 @@ const rewardCard = (cardId: number, itemType: ItemType) => {
 export const canonicalGainedRewards = (value: string): Reward[] => {
   const parsed = JSON.parse(value) as unknown
   if (!Array.isArray(parsed)) throw new Error('gained rewards are malformed')
-  return parsed.map(reward => {
+  const canonical = parsed.map(reward => {
     if (!isRecord(reward) || reward.type !== 'CARD') return reward
     const cardReward = reward.card
     if (!isRecord(cardReward) || !isRecord(cardReward.card)) return reward
@@ -888,7 +889,8 @@ export const canonicalGainedRewards = (value: string): Reward[] => {
         card: canonical.card.card
       }
     }
-  }) as Reward[]
+  })
+  return sourceRewardListWire(canonical as SourceRewardInput[])
 }
 
 const stableRewardIndex = (value: string, length: number): number => {
@@ -3477,9 +3479,11 @@ export class PlayerRpcRepository {
             attributes: parseAttributes(row.attributes),
             claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
             claimed: row.claimed === 1,
-            ...(row.gained_rewards
-              ? { gainedRewards: canonicalGainedRewards(row.gained_rewards) }
-              : {})
+            // The generated TS interface cannot express the Go nil slice,
+            // but encoding/json emits this required field as null.
+            gainedRewards: (row.gained_rewards
+              ? canonicalGainedRewards(row.gained_rewards)
+              : null) as unknown as Reward[]
           }
         ]
       })

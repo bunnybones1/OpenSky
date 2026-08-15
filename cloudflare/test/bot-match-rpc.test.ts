@@ -67,13 +67,22 @@ describe('legacy BotMatchEnd compatibility', () => {
         {
           accountID: 0,
           type: 'EXP',
+          gameMode: null,
+          rank: null,
           exp: {
             amount: 0,
             reason: 'TutorialCompleted',
+            reasonExtraData: null,
             currentLevel: 0,
             requiredExp: 200,
             beforeMatchExp: 0
-          }
+          },
+          card: null,
+          hero: null,
+          heroSkin: null,
+          deck: null,
+          conquestV2TreasureProgress: null,
+          stickerPoints: null
         }
       ]
     })
@@ -282,7 +291,7 @@ describe('legacy BotMatchEnd compatibility', () => {
     const response = await rpc({
       req: tutorialRequest({ winningPlayer: 2 })
     })
-    expect(await response.json()).toEqual({ rewards: [] })
+    expect(await response.json()).toEqual({ rewards: null })
     const progress = await env.AUTH_DB.prepare(
       'SELECT COUNT(*) AS count FROM player_tutorial_progress WHERE user_id = ?'
     )

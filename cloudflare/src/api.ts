@@ -73,6 +73,10 @@ import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
 import { sourcePendingCardsListWire } from './pending-card-wire'
 import { sourceResponsePageWire } from './page-wire'
+import {
+  sourceNullableRewardListWire,
+  type SourceRewardInput
+} from './reward-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -2441,7 +2445,7 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
           quests: await playerRpc.listQuests(principal.userId),
-          rewards: []
+          rewards: null
         })
       }
 
@@ -2458,11 +2462,16 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ ids?: number[] }>(request)
         if (!Array.isArray(body.ids)) throw invalidArgument('ids is required')
-        return json(
-          request,
-          env,
-          await playerRpc.claimQuestRewards(principal.userId, body.ids)
+        const result = await playerRpc.claimQuestRewards(
+          principal.userId,
+          body.ids
         )
+        return json(request, env, {
+          quest: result.quest,
+          rewards: sourceNullableRewardListWire(
+            result.rewards as SourceRewardInput[]
+          )
+        })
       }
 
       case 'ReRollQuest': {
@@ -2471,11 +2480,13 @@ export const handleApiRequest = async (
         if (!Number.isSafeInteger(body.id) || (body.id || 0) <= 0) {
           throw invalidArgument('id must be a positive integer')
         }
-        return json(
-          request,
-          env,
-          await playerRpc.rerollQuest(principal.userId, body.id!)
-        )
+        const result = await playerRpc.rerollQuest(principal.userId, body.id!)
+        return json(request, env, {
+          quest: result.quest,
+          rewards: sourceNullableRewardListWire(
+            result.rewards as SourceRewardInput[]
+          )
+        })
       }
 
       case 'GetQuestsAutoRerollTime': {
@@ -2665,11 +2676,12 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ ids?: number[] }>(request)
         if (!Array.isArray(body.ids)) throw invalidArgument('ids is required')
+        const rewards = await playerRpc.claimSkypassRewards(
+          principal.userId,
+          body.ids
+        )
         return json(request, env, {
-          rewards: await playerRpc.claimSkypassRewards(
-            principal.userId,
-            body.ids
-          )
+          rewards: sourceNullableRewardListWire(rewards as SourceRewardInput[])
         })
       }
 
@@ -2677,8 +2689,9 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         const body = await requestBody<{ req?: BotMatchEndRequest }>(request)
         if (!body.req) throw invalidArgument('req is required')
+        const rewards = await botMatches.endTutorial(principal.userId, body.req)
         return json(request, env, {
-          rewards: await botMatches.endTutorial(principal.userId, body.req)
+          rewards: sourceNullableRewardListWire(rewards as SourceRewardInput[])
         })
       }
 
