@@ -1160,6 +1160,58 @@ created merely to inspect an empty staff response. Verification did not change
 game-mode status, create history, start matchmaking, launch a game, or mutate
 any account, reward, or economy state.
 
+## Payment and payment-log wire fidelity rollout — 2026-08-15
+
+The generated Go `Payment` model has six required public JSON fields plus a
+private pagination cursor. Its `status`, `provider`, and `createdAt` pointers
+do not use `omitempty`, so absent values serialize as explicit `null` while the
+cursor never reaches the wire. `PaymentLog` likewise has four required fields;
+its data and timestamp pointers are explicit null when absent, and a nonnil
+`PaymentLogData` always emits both `type` and raw `data`. The exact source
+domains contain four payment statuses and six providers.
+
+Unlike several nil-backed list handlers, both source staff payment RPCs use
+`make` with the result length. Empty payments and logs therefore serialize as
+`[]`, not `null`. `cloudflare/src/payment-wire.ts` now owns the shared row,
+nested-data, and make-backed list projections. `GMListPayments` and
+`GMListPaymentLogs` pass every result through those projections without
+changing Stripe checkout, payment status, fulfillment, inventory, wallet,
+authentication, or staff authority.
+
+The source-derived gate parses the complete generated `Payment`, `PaymentLog`,
+and custom `PaymentLogData` structs, their JSON tags, the exact status/provider
+enums, both Go `make` constructions, both Worker routes, and the private cursor
+boundary. Fifteen mutations fail closed on enum, pointer, privacy, nested-data,
+empty-list, route, or build-gate drift. Four direct wire tests plus isolated-D1
+staff integration coverage assert required nulls and zero values, populated
+Stripe rows and logs, exact public keys, cursor exclusion, and both empty-array
+results through the real RPC boundary.
+
+The complete release contract passed 433 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31887805687` passed in 9m44s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`141a516e-5d31-409b-93c1-e1fa2114ed17` to
+`8b61df99-fd31-4099-b38d-c59cf2ea763c`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-b1769b84.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`.
+Unauthenticated `GMListPayments` and `GMListPaymentLogs` requests both returned
+`401` with the same cache boundary before staff-data access. No production
+admin grant or synthetic payment was created to inspect a populated response;
+that exact proof remains the isolated-D1 Worker integration test. Verification
+did not create a checkout, payment, log, fulfillment, reward, inventory record,
+or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
