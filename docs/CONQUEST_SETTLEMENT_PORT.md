@@ -523,3 +523,52 @@ disabled. The read-only reward-readiness audit still classified original
 Conquest as `dormant-policy` with zero verified active pools. No production
 match, pool, queue, receipt, reward, inventory row, or economy authority was
 created to manufacture rollout evidence.
+
+## Complete match reward-wire rollout proof — 2026-08-14
+
+Commit `a6f21ecc` extends the exact source wire contract from Conquest cards to
+every reward returned when a match ends. The Go `Reward` union does not use
+`omitempty`, so EXP, rank, Conquest-points, card, item, deck, and Conquest V2
+members that do not apply to a particular reward still serialize as explicit
+nulls. Nested source pointer fields such as EXP reason data, before/after rank,
+card/item, and Conquest V2 before/after progress likewise serialize as null.
+The TypeScript game server had emitted sparse EXP, rank, and Conquest-points
+objects, which could make the preserved client reject an otherwise valid
+completed match while decoding the reward enum union.
+
+A central source-shaped serializer now covers every reward constructor before
+storage or delivery. It is applied to EXP, rank unlocks, rank season rewards,
+Conquest points, and Conquest card settlement. Match finalization normalizes
+both players' complete reward lists before persisting the result, and the
+recent-match and reconnect paths normalize old stored receipts on read. This
+means already-finished sparse matches are repaired without rewriting their
+authoritative settlement rows.
+
+The source-derived fail-closed gate parses the Go JSON contract and rejects
+sparse union or nested-pointer mutations. Direct unit tests cover the complete
+EXP, rank, and Conquest-points shapes; producer tests assert exact EXP output;
+and a Workers match-finalization test verifies the entire returned union at the
+real Durable Object boundary. The complete local release contract passed 392
+main-Worker tests, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all typechecks, and both production
+builds. Exact-head GitHub Actions run `31859697805` passed in 9m28s before
+deployment.
+
+Only the game server was deployed, advancing it from version
+`3ad69eed-1041-4793-acac-aa525ebb7477` to
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`. The main Worker remained
+`0f94187f-9e42-42ad-84ec-c9525e73a3d0`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Public game health and mode probes
+returned `200` with `no-store`; protocol version remained 3, both Practice
+modes remained enabled, and both Conquest modes remained disabled. The
+unchanged web and game assets remained `/assets/index-b6aa1ef3.js` and
+`/game/cloudflare/assets/index-79a70ba2.js`, both served `200` with one-year
+immutable caching.
+
+The read-only reward-readiness audit retained the one active SkyPass policy
+and classified original Conquest, weekly leaderboard rewards, Conquest V2, and
+referral rewards as dormant with zero enabled schedules or verified active
+pools. This rollout required no D1 migration and created no synthetic match,
+reward, receipt, inventory row, reward pool, queue, or economy authority.
