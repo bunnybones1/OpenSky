@@ -1429,6 +1429,60 @@ Verification did not collect an IP address or mutate any production account,
 staff role, action, signal, report, sanction, game, reward, payment, inventory,
 or wallet state.
 
+## Account report request fidelity rollout — 2026-08-15
+
+The generated Go `Report` request has three non-pointer JSON fields:
+`reportedAddress`, `matchId`, and `reporterComment`. Consequently,
+`encoding/json` decodes an omitted or explicit-null comment as the empty-string
+zero value; only a nil outer report pointer is the source's "missing report
+data" case. The Worker previously required all three properties to be present
+and rejected the source-valid omitted-comment request.
+
+Milestone `1b195e23` introduces one request normalizer that recreates the Go
+zero values while rejecting malformed JavaScript types and unsafe numeric
+values. `ReportAccount` still requires the outer report object, resolves the
+reported account through the actual match participants, rejects self-reporting
+and nonparticipants, applies the source strict plain-text sanitizer, caps the
+stored comment at 4,000 UTF-8 bytes without splitting a code point, and keeps
+the D1 report receipt idempotent per match and reporter. Google identity
+references remain the Cloud Weasel account-address adaptation; WalletConnect
+is not required to submit or receive an account report.
+
+The source-derived gate parses the complete generated `Report` struct, the Go
+handler's lookup, participant, sanitizer, cap, pending-signal, and persistence
+rules, the Worker route, and the preserved game's exact three-field request.
+Fifteen mutations fail closed on generated fields, nil handling, source policy,
+Worker zero values, sanitization, opponent authorization, API routing, browser
+request shape, or build-gate drift. Direct and isolated-D1 integration tests
+prove that an omitted comment returns success and persists `comment: ""` while
+the existing authentication, participant, sanitization, byte-cap, and
+idempotency cases remain intact.
+
+The complete release contract passed 452 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31896469895` passed in 9m23s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`19a3dd90-d6b4-4c03-8f93-b79613bc558d` to
+`d975fa6f-305a-48ef-a109-bb0f0a9341b9`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-b1769b84.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Version` returned the new Worker ID and `Ping` returned
+`200`; both used `Cache-Control: no-store`. An unauthenticated omitted-comment
+`ReportAccount` request returned `401` with the same cache boundary before any
+match lookup or write. No production account, match, or report was fabricated
+to probe the authenticated positive path; exact proof remains in isolated-D1
+Worker integration tests. Verification did not mutate any production account,
+signal, report, sanction, game, reward, payment, inventory, or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
