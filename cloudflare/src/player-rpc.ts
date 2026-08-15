@@ -31,6 +31,7 @@ import {
 } from './deck-codec'
 import { sourceDeckWire } from './deck-wire'
 import { sourceFeedEventWire } from './feed-event-wire'
+import { sourceItemSummaryWire, sourceItemWire } from './item-wire'
 import { CompetitiveRepository } from './competitive'
 import { completeDeckRankInsert } from './deck-ranks'
 import {
@@ -1852,16 +1853,18 @@ export class PlayerRpcRepository {
     const requested = itemTypes?.length ? new Set(itemTypes) : undefined
     return result.results
       .filter(row => !requested || requested.has(row.item_type))
-      .map(row => ({
-        id: row.id,
-        itemType: row.item_type,
-        tokenID: row.token_id,
-        balance: String(row.balance),
-        lastUpdateID: 0,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        isNew: row.is_new === 1
-      }))
+      .map(row =>
+        sourceItemWire({
+          id: row.id,
+          itemType: row.item_type,
+          tokenID: row.token_id,
+          balance: String(row.balance),
+          lastUpdateID: 0,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          isNew: row.is_new === 1
+        })
+      )
   }
 
   async cardSearchInventory(userId: string): Promise<
@@ -1914,25 +1917,25 @@ export class PlayerRpcRepository {
     const summary: Record<string, ItemSummary> = {}
     for (const row of result.results) {
       if (!SUMMARY_ITEM_TYPES.has(row.item_type)) continue
-      summary[row.item_type] = {
+      summary[row.item_type] = sourceItemSummaryWire({
         id: row.id,
         itemType: row.item_type,
         totalBalance: String(row.total_balance),
         createdAt: row.created_at,
         updatedAt: row.updated_at
-      }
+      })
     }
 
     // Wallet balances are an optional future merge at this boundary. Preserve
     // the source key while reporting no connected-wallet USDC today.
     const now = new Date().toISOString()
-    summary.USDC = {
+    summary.USDC = sourceItemSummaryWire({
       id: 0,
       itemType: 'USDC' as ItemType,
       totalBalance: '0',
       createdAt: now,
       updatedAt: now
-    }
+    })
     return summary
   }
 
@@ -1955,7 +1958,7 @@ export class PlayerRpcRepository {
     const supply: Record<string, Item> = {}
     for (const row of result.results) {
       if (!SUPPLY_ITEM_TYPES.has(row.item_type)) continue
-      supply[row.item_type] = {
+      supply[row.item_type] = sourceItemWire({
         id: row.id,
         itemType: row.item_type,
         tokenID: tokenId,
@@ -1963,7 +1966,7 @@ export class PlayerRpcRepository {
         lastUpdateID: 0,
         createdAt: row.created_at,
         updatedAt: row.updated_at
-      }
+      })
     }
     return supply
   }
@@ -2046,7 +2049,7 @@ export class PlayerRpcRepository {
   }
 
   private itemFromRow(row: InventoryRow): Item {
-    return {
+    return sourceItemWire({
       id: row.id,
       itemType: row.item_type,
       tokenID: row.token_id,
@@ -2055,7 +2058,7 @@ export class PlayerRpcRepository {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       isNew: row.is_new === 1
-    }
+    })
   }
 
   async equipItem(

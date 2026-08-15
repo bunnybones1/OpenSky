@@ -81,6 +81,9 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go FeedEvent wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:item-wire')) {
+    errors.push('Cloudflare build must include the generated Go Item wire gate')
+  }
   return errors
 }
 

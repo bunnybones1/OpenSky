@@ -103,6 +103,24 @@ const SOURCE_CARD_FIELDS = [
   'silverCardTokenId',
   'goldCardTokenId'
 ]
+const SOURCE_ITEM_FIELDS = [
+  'id',
+  'contractAddress',
+  'itemType',
+  'tokenID',
+  'balance',
+  'lastUpdateID',
+  'updatedAt',
+  'createdAt',
+  'isNew'
+]
+const SOURCE_ITEM_SUMMARY_FIELDS = [
+  'id',
+  'itemType',
+  'totalBalance',
+  'updatedAt',
+  'createdAt'
+]
 
 const rpcAs = async (
   sessionUserId: string,
@@ -2436,12 +2454,17 @@ describe('legacy player RPC compatibility', () => {
       itemTypes: ['SW_BASE_CARDS']
     })
     const itemsBody = await itemsResponse.json<{
-      items: Array<{ itemType: string; tokenID: number; balance: string }>
+      items: Array<Record<string, unknown>>
     }>()
     expect(itemsBody.items).toHaveLength(30)
+    expect(Object.keys(itemsBody.items[0])).toEqual(SOURCE_ITEM_FIELDS)
     expect(itemsBody.items[0]).toMatchObject({
+      contractAddress: null,
       itemType: 'SW_BASE_CARDS',
-      balance: '1'
+      balance: '1',
+      updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      isNew: expect.any(Boolean)
     })
 
     const ownershipResponse = await rpc('GetCardOwnership', {
@@ -2548,7 +2571,10 @@ describe('legacy player RPC compatibility', () => {
     const summary = await rpc('GetItemSummary', {
       accountAddress: identityReference
     })
-    expect(await summary.json()).toMatchObject({
+    const summaryBody = await summary.json<{
+      summary: Record<string, Record<string, unknown>>
+    }>()
+    expect(summaryBody).toMatchObject({
       summary: {
         USDC: { itemType: 'USDC', totalBalance: '0' },
         SW_SILVER_CARDS: { totalBalance: '2' },
@@ -2556,6 +2582,13 @@ describe('legacy player RPC compatibility', () => {
         SW_CONQUEST_TICKET: { totalBalance: '4' }
       }
     })
+    for (const itemSummary of Object.values(summaryBody.summary)) {
+      expect(Object.keys(itemSummary)).toEqual(SOURCE_ITEM_SUMMARY_FIELDS)
+      expect(itemSummary).toMatchObject({
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
+      })
+    }
 
     const cardSearch = await rpc('SearchCards', {
       req: {
@@ -2583,18 +2616,31 @@ describe('legacy player RPC compatibility', () => {
 
     const supply = await rpc('GetItemSupply', { tokenID: 42 }, false)
     expect(supply.status).toBe(200)
-    expect(await supply.json()).toMatchObject({
+    const supplyBody = await supply.json<{
+      summary: Record<string, Record<string, unknown>>
+    }>()
+    expect(supplyBody).toMatchObject({
       summary: {
         SW_SILVER_CARDS: { tokenID: 42, balance: '7' },
         SW_GOLD_CARDS: { tokenID: 42, balance: '3' }
       }
     })
+    for (const item of Object.values(supplyBody.summary)) {
+      expect(Object.keys(item)).toEqual(SOURCE_ITEM_FIELDS)
+      expect(item).toMatchObject({
+        contractAddress: null,
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        isNew: null
+      })
+    }
 
-    expect(
-      await (
-        await rpc('GetBatchItemSupply', { tokenIDs: [42, 999, 42] }, false)
-      ).json()
-    ).toMatchObject({
+    const batchSupply = await (
+      await rpc('GetBatchItemSupply', { tokenIDs: [42, 999, 42] }, false)
+    ).json<{
+      summary: Record<string, Record<string, Record<string, unknown>>>
+    }>()
+    expect(batchSupply).toMatchObject({
       summary: {
         42: {
           SW_SILVER_CARDS: { tokenID: 42, balance: '7' },
@@ -2602,6 +2648,9 @@ describe('legacy player RPC compatibility', () => {
         }
       }
     })
+    expect(Object.keys(batchSupply.summary['42'].SW_SILVER_CARDS)).toEqual(
+      SOURCE_ITEM_FIELDS
+    )
     expect(
       (
         await rpc(
@@ -2688,8 +2737,16 @@ describe('legacy player RPC compatibility', () => {
       tokenID: 5
     })
     expect(sticker.status).toBe(200)
-    expect(await sticker.json()).toMatchObject({
+    const stickerBody = await sticker.json<{
+      item: Record<string, unknown>
+    }>()
+    expect(stickerBody).toMatchObject({
       item: { itemType: 'SW_STICKERS', tokenID: 5, balance: '1' }
+    })
+    expect(Object.keys(stickerBody.item)).toEqual(SOURCE_ITEM_FIELDS)
+    expect(stickerBody.item).toMatchObject({
+      contractAddress: null,
+      isNew: false
     })
     expect(
       (
@@ -2713,12 +2770,17 @@ describe('legacy player RPC compatibility', () => {
     const listed = await rpc('ListEquippedItems', {
       itemType: 'SW_CARD_BACKS'
     })
-    expect(await listed.json()).toMatchObject({
+    const listedBody = await listed.json<{
+      items: Array<Record<string, unknown>>
+    }>()
+    expect(listedBody).toMatchObject({
       items: [
         { itemType: 'SW_CARD_BACKS', tokenID: 7 },
         { itemType: 'SW_CARD_BACKS', tokenID: 8 }
       ]
     })
+    expect(Object.keys(listedBody.items[0])).toEqual(SOURCE_ITEM_FIELDS)
+    expect(listedBody.items[0]).toMatchObject({ contractAddress: null })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM player_items_equipped WHERE user_id = ?`
