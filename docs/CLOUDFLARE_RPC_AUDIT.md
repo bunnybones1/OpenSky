@@ -1812,6 +1812,76 @@ sticker inventory rows, with `changed_db: false` and zero rows written. No
 production content, schedule, identity, or reward state was fabricated for the
 probe, and production D1 reported no pending migrations.
 
+## Replay enum regression closure — 2026-08-15
+
+A production practice-versus-player replay launched from the preserved Account
+Matches list was reproduced through the exact player route. The reported
+`Enum variant not found` failure came from archived game states containing
+tagged JavaScript `Map` values for secret enum-keyed state. A raw JSON parser
+turned those maps into ordinary objects before the Rust/WASM constructor tried
+to decode them. The production game bundle already contained the tagged-map
+reviver from runtime fix `24e9c8e4`; replaying the affected historical match on
+the current deployment completed normally. No match identifier or player
+identity is retained in this evidence.
+
+Runtime regression commit `b0271620313c2279626cc20dc83f8fa8594e0d0c`
+adds the missing end-to-end boundary proof: an archive is serialized as JSON,
+revived through `gameStateParse`, passed into the real `StateBindings.WasmMatch`
+constructor, advanced with an authoritative `raw_apply` diff, and serialized
+again. The test explicitly proves that both secret collections remain maps.
+Game-server typecheck, 34 unit tests, 93 Workers tests, and all 25 game/browser
+tests passed. Exact-head GitHub Actions run `31909026508` passed before the test
+commit was accepted. This was a regression-evidence milestone only, so no
+runtime was redeployed for it.
+
+## Friend-points response fidelity rollout — 2026-08-15
+
+The source friend-points RPCs return deliberately partial Account values, not
+fully decorated account records. Friend rows select only the source fields and
+leave generated runtime/account decorators at their Go zero values; gifted
+inviter rows preserve the source database fields but likewise retain null/zero
+runtime fields. The generated wrappers always include `total`, `friends`, and
+`inviter`, with allocated empty friend lists and nullable inviter pointers.
+
+`cloudflare/src/friend-points-wire.ts` now owns those exact projections. The
+repository filters invitees to the source-visible active-status set, orders
+tied rows by numeric game-account ID, limits the list to five, and computes
+gifted levels across every season as the source does. The sticker-point balance
+uses only Cloud Weasel's canonical off-chain token `0`; fabricated balances for
+other token IDs cannot inflate the total. Source-derived mutation coverage pins
+the generated structs, Go zero/null semantics, source account/status queries,
+single-item sticker-point lookup, canonical token filter, route projections,
+and mandatory release gate.
+
+Runtime commits `f67806a3cec8d79d82944def32c861d600d6d7c4` and
+`2a5aa6911a6bca48875a2744d9d4cd7b88a4f639` passed the complete local release
+contract: 475 main-Worker tests across 81 files, 34 game-server unit tests, 93
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 25
+game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31910811391` passed in 9m48s for `2a5aa691` before deployment.
+
+Only the main Worker was deployed, advancing it from
+`106119ba-2662-4990-9e10-2a4fbacb25a4` to
+`3d804d4d-84a6-4eae-8ec8-c62015d76c40`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no new asset
+files. The verifier resolved web asset `/assets/index-b6aa1ef3.js`, unchanged
+game asset `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales,
+and the release-safe cache policy on its first attempt.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+Anonymous `GetFriendPoints` and `GetPointsGifted` requests both returned
+`401 webrpc.unauthenticated` with `Cache-Control: no-store`. Under the existing
+Google session, the preserved Invite Friends rewards page loaded friend/reward
+content without an auth prompt, generic failure, or enum error. An identity-free
+D1 aggregate found zero invite, friend-point, canonical point-balance, and
+noncanonical point-balance rows with `changed_db: false` and zero rows written.
+Production D1 reported no pending migrations. Verification changed no account,
+invite, reward, wallet, match, queue, content, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
