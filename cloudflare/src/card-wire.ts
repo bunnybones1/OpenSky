@@ -1,6 +1,6 @@
 import type { Card } from '@opensky/proto'
 
-type SourceCardInput = {
+export type SourceCardInput = {
   id: number
   name: string
   description: string

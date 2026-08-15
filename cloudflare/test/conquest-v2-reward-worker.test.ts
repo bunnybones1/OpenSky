@@ -620,7 +620,13 @@ describe('Conquest V2 off-chain weekly rewards', () => {
     expect(feed.res).toEqual([
       expect.objectContaining({
         type: 'REWARD',
-        tokenIds: expect.arrayContaining(cardIds.map(id => 65_536 + id))
+        tokenIds: expect.arrayContaining(cardIds.map(id => 65_536 + id)),
+        cards: expect.arrayContaining([
+          expect.objectContaining({
+            id: cardIds[0],
+            itemType: 'SW_SILVER_CARDS'
+          })
+        ])
       })
     ])
 

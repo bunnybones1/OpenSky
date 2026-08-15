@@ -21,6 +21,7 @@ import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
 import { allLibraryCards } from './card-library'
+import type { SourceCardInput } from './card-wire'
 import { pendingConquestCards } from './conquest-delivery'
 import {
   decodeDeckString,
@@ -29,6 +30,7 @@ import {
   validateDeckClass
 } from './deck-codec'
 import { sourceDeckWire } from './deck-wire'
+import { sourceFeedEventWire } from './feed-event-wire'
 import { CompetitiveRepository } from './competitive'
 import { completeDeckRankInsert } from './deck-ranks'
 import {
@@ -107,6 +109,16 @@ const ITEM_TYPE_BY_TOKEN_CODE: Record<number, ItemType> = {
   9: 'SW_STICKER_POINTS' as ItemType,
   10: 'SW_XP' as ItemType,
   254: 'SW_CONQUEST_TICKET' as ItemType
+}
+
+const FEED_CARD_FRAME_BY_TOKEN_CODE: Record<number, ItemType> = {
+  0: 'SW_BASE_CARDS' as ItemType,
+  1: 'SW_SILVER_CARDS' as ItemType,
+  2: 'SW_GOLD_CARDS' as ItemType,
+  // Cloud Weasel's established browser encoding reserves 0xff for an
+  // identity-owned base card. Treat it as the source base-card frame when
+  // hydrating the feed without changing the persisted token receipt.
+  0xff: 'SW_BASE_CARDS' as ItemType
 }
 
 const ITEM_TYPE_ID = Object.fromEntries(
@@ -438,6 +450,23 @@ const compareFeedEventCursor = (
 ): number =>
   Date.parse(cursor.createdAt) - Date.parse(event.createdAt) ||
   cursor.id - event.id
+
+const feedRewardCards = (event: FeedEvent): SourceCardInput[] | null => {
+  if (
+    (event.type !== 'REWARD' && event.type !== 'TRADE') ||
+    !Array.isArray(event.tokenIds)
+  ) {
+    return null
+  }
+  const cards = event.tokenIds.flatMap(tokenId => {
+    if (!Number.isSafeInteger(tokenId) || tokenId < 0) return []
+    const itemType = FEED_CARD_FRAME_BY_TOKEN_CODE[(tokenId >> 16) & 0xff]
+    if (!itemType) return []
+    const card = LIBRARY_CARD_BY_ID.get(tokenId & 0x00ffff)
+    return card ? [{ ...card, itemType }] : []
+  })
+  return cards.length > 0 ? cards : null
+}
 
 type DeckCursorMode = 'list' | 'search'
 type DeckSortValue = string | number | boolean | null
@@ -1000,9 +1029,7 @@ export class PlayerRpcRepository {
           playerRank: row.player_rank,
           playerRankStage: row.player_rank_stage,
           season: row.season,
-          gameMode: row.game_mode,
-          cards: [],
-          heroes: []
+          gameMode: row.game_mode
         }) as unknown as FeedEvent
     )
     for (const row of skypassRows.results) {
@@ -1016,26 +1043,20 @@ export class PlayerRpcRepository {
           id: row.row_id * 2 + 1,
           type: 'REWARD',
           createdAt: row.claimed_at,
-          tokenIds,
-          cards: [],
-          heroes: []
+          tokenIds
         } as unknown as FeedEvent)
       } else if (row.item_type === 303) {
         events.push({
           id: row.row_id * 2 + 1,
           type: 'REWARD',
           createdAt: row.claimed_at,
-          stickerPoints: row.amount,
-          cards: [],
-          heroes: []
+          stickerPoints: row.amount
         } as unknown as FeedEvent)
       } else if (unlockedStarterDeck) {
         events.push({
           id: row.row_id * 2 + 1,
           type: 'STARTED_DECK_UNLOCK',
-          createdAt: row.claimed_at,
-          cards: [],
-          heroes: []
+          createdAt: row.claimed_at
         } as unknown as FeedEvent)
       }
     }
@@ -1046,9 +1067,7 @@ export class PlayerRpcRepository {
         id: 4_503_599_627_370_496 + row.row_id,
         type: row.event_type,
         createdAt: row.created_at,
-        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
-        cards: [],
-        heroes: []
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number)
       } as unknown as FeedEvent)
     }
     for (const row of leaderboardRows.results) {
@@ -1058,9 +1077,7 @@ export class PlayerRpcRepository {
         createdAt: row.created_at,
         gameMode: row.game_mode,
         leaderboardRank: row.leaderboard_rank,
-        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
-        cards: [],
-        heroes: []
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number)
       } as unknown as FeedEvent)
     }
     for (const row of conquestV2RewardRows.results) {
@@ -1071,9 +1088,7 @@ export class PlayerRpcRepository {
         // REWARD contract rather than inventing a cash amount.
         type: 'REWARD',
         createdAt: row.created_at,
-        tokenIds: parseJsonArray(row.token_ids_json).map(Number),
-        cards: [],
-        heroes: []
+        tokenIds: parseJsonArray(row.token_ids_json).map(Number)
       } as unknown as FeedEvent)
     }
 
@@ -1105,7 +1120,13 @@ export class PlayerRpcRepository {
       end = previousEnd < 0 ? filtered.length : previousEnd
       start = Math.max(0, end - size)
     }
-    const res = filtered.slice(start, end)
+    const selected = filtered.slice(start, end)
+    const res = selected.map(event =>
+      sourceFeedEventWire({
+        ...event,
+        cards: feedRewardCards(event)
+      })
+    )
     return {
       page: {
         pageSize: size,

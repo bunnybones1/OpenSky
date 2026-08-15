@@ -64,6 +64,45 @@ const SOURCE_PUBLIC_ACCOUNT_STAT_FIELDS = [
   'winRatio',
   'winStreak'
 ]
+const SOURCE_FEED_EVENT_FIELDS = [
+  'id',
+  'type',
+  'createdAt',
+  'match',
+  'level',
+  'playerRank',
+  'playerRankStage',
+  'season',
+  'tokenIds',
+  'cards',
+  'heroes',
+  'gameMode',
+  'leaderboardRank',
+  'conquestV2Reward',
+  'conquestV2TreasureLevel',
+  'stickerPoints'
+]
+const SOURCE_CARD_FIELDS = [
+  'id',
+  'name',
+  'description',
+  'asset',
+  'class',
+  'element',
+  'type',
+  'manaCost',
+  'power',
+  'health',
+  'attachedSpellID',
+  'keywords',
+  'status',
+  'set',
+  'imageURL',
+  'itemType',
+  'isNew',
+  'silverCardTokenId',
+  'goldCardTokenId'
+]
 
 const rpcAs = async (
   sessionUserId: string,
@@ -1668,12 +1707,30 @@ describe('legacy player RPC compatibility', () => {
         id: number
         type: string
         createdAt: string
-        tokenIds?: number[]
+        tokenIds: number[] | null
+        cards: unknown[] | null
+        heroes: unknown[] | null
+        [key: string]: unknown
       }>
     }>()
     expect(firstPage).toMatchObject({
       page: { hasBefore: true },
       res: [{ type: 'DELAYED_REWARD', tokenIds: [131208] }]
+    })
+    expect(Object.keys(firstPage.res[0])).toEqual(SOURCE_FEED_EVENT_FIELDS)
+    expect(firstPage.res[0]).toMatchObject({
+      match: null,
+      level: null,
+      playerRank: null,
+      playerRankStage: null,
+      season: null,
+      cards: null,
+      heroes: null,
+      gameMode: null,
+      leaderboardRank: null,
+      conquestV2Reward: null,
+      conquestV2TreasureLevel: null,
+      stickerPoints: null
     })
     expect(JSON.parse(atob(firstPage.page.after))).toEqual([
       String(firstPage.res[0].id),
@@ -1703,12 +1760,24 @@ describe('legacy player RPC compatibility', () => {
         before: string
         after: string
       }
-      res: Array<{ type: string; tokenIds?: number[] }>
+      res: Array<{
+        type: string
+        tokenIds: number[] | null
+        cards: Array<Record<string, unknown>> | null
+      }>
     }>()
     expect(secondPage).toMatchObject({
       page: { hasAfter: true, hasBefore: true },
       res: [{ type: 'REWARD', tokenIds: [(0xff << 16) + 42] }]
     })
+    expect(Object.keys(secondPage.res[0])).toEqual(SOURCE_FEED_EVENT_FIELDS)
+    expect(secondPage.res[0].cards).toHaveLength(1)
+    expect(Object.keys(secondPage.res[0].cards![0])).toEqual(SOURCE_CARD_FIELDS)
+    expect(secondPage.res[0].cards![0]).toMatchObject({
+      id: 42,
+      itemType: 'SW_BASE_CARDS'
+    })
+    expect(secondPage.res[0].cards![0]).not.toHaveProperty('validFromSeason')
 
     const previous = await rpc('GetFeed', {
       page: { pageSize: 1, after: secondPage.page.before },
@@ -1743,6 +1812,24 @@ describe('legacy player RPC compatibility', () => {
     expect(await filtered.json()).toMatchObject({
       res: [{ type: 'RANKUP' }]
     })
+    const rewards = await rpc('GetFeed', {
+      req: {
+        accountAddress: identityReference,
+        types: ['REWARD']
+      }
+    })
+    const rewardPage = await rewards.json<{
+      res: Array<{
+        tokenIds: number[] | null
+        cards: Array<Record<string, unknown>> | null
+      }>
+    }>()
+    const goldReward = rewardPage.res.find(event =>
+      event.tokenIds?.includes(131_209)
+    )
+    expect(goldReward?.cards).toEqual([
+      expect.objectContaining({ id: 137, itemType: 'SW_GOLD_CARDS' })
+    ])
     expect(
       (
         await rpc('GetFeed', {
