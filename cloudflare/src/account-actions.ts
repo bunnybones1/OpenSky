@@ -1,5 +1,10 @@
 import type { AccountAction, ActionType, Page, SortBy } from '@opensky/proto'
 
+import {
+  sourceAccountActionListWire,
+  sourceAccountActionWire,
+  type SourceAccountActionInput
+} from './account-action-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
@@ -211,7 +216,7 @@ const pageSize = (page?: Page, fallback = DEFAULT_PAGE_SIZE) =>
       : fallback
   )
 
-const accountAction = (row: ActionRow): AccountAction => ({
+const accountActionInput = (row: ActionRow): SourceAccountActionInput => ({
   id: row.id,
   accountAddress: row.account_address,
   actionType: row.action_type,
@@ -221,6 +226,9 @@ const accountAction = (row: ActionRow): AccountAction => ({
   updatedAt: row.updated_at,
   expiresAt: row.expires_at
 })
+
+const accountAction = (row: ActionRow): AccountAction =>
+  sourceAccountActionWire(accountActionInput(row))
 
 export class AccountActionsRepository {
   constructor(private readonly database: D1Database) {}
@@ -315,7 +323,7 @@ export class AccountActionsRepository {
         hasAfter: start > 0,
         sort: sort.sort.map(item => item.response)
       },
-      actions: selected.map(accountAction)
+      actions: sourceAccountActionListWire(selected.map(accountActionInput))
     }
   }
 

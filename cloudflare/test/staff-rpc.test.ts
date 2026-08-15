@@ -1956,7 +1956,7 @@ describe('fail-closed Google identity staff authorization', () => {
       accounts: Array<{
         account: { address: string }
         conquestsUnlocked: boolean
-        accountActions: unknown[]
+        accountActions: unknown[] | null
         ipHistory: unknown[]
       }>
     }
@@ -1969,7 +1969,7 @@ describe('fail-closed Google identity staff authorization', () => {
       expect.objectContaining({
         account: expect.objectContaining({ address: `identity:${PLAYER}` }),
         conquestsUnlocked: true,
-        accountActions: [],
+        accountActions: null,
         ipHistory: []
       })
     ])
@@ -2066,7 +2066,7 @@ describe('fail-closed Google identity staff authorization', () => {
           score: 0,
           updatedAt: '2026-08-13T15:00:00.000Z',
           account: { name: 'Staff Player' },
-          accountActions: []
+          accountActions: null
         }
       ]
     })

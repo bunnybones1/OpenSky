@@ -32,6 +32,7 @@ import {
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
+import { sourceNullableAccountActionListWire } from './account-action-wire'
 import { AccountActionsRepository } from './account-actions'
 import { AccountReportsRepository } from './account-reports'
 import { AppDevKeyRepository } from './app-dev-keys'
@@ -937,7 +938,9 @@ export const handleApiRequest = async (
             return {
               account,
               conquestsUnlocked: row.conquests_unlocked === 1,
-              accountActions: actionsByUser.get(row.user_id) ?? [],
+              accountActions: sourceNullableAccountActionListWire(
+                actionsByUser.get(row.user_id)
+              ),
               ipHistory: []
             }
           })
@@ -982,7 +985,9 @@ export const handleApiRequest = async (
               score: row.score,
               updatedAt: row.updated_at,
               account,
-              accountActions: actionsByUser.get(row.user_id) ?? []
+              accountActions: sourceNullableAccountActionListWire(
+                actionsByUser.get(row.user_id)
+              )
             }
           })
         )
