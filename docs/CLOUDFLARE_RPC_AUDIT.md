@@ -1315,6 +1315,64 @@ exact proof remains the isolated-D1 Worker integration test. Verification did
 not create a sanction, account action, signal, game, reward, payment, inventory
 record, or wallet state.
 
+## Account signal wire fidelity rollout — 2026-08-15
+
+The generated Go `AccountSignal` model has seven public JSON fields and four
+private fields. `signalData` is an interface field without `omitempty`, so an
+absent value serializes as explicit `null`; `score` has Go `float32` precision.
+The generated `AccountSignalSummary` publishes its address, `float64` score,
+timestamps, account pointer, and account-action slice while keeping its account
+ID and cursor private. The source defines all three `SignalStatus` values.
+Direct signal and summary routes construct nonnil empty slices and therefore
+serialize as `[]`; absent nested account and account-action map entries remain
+nil and serialize as `null`. The same source nil-map rule means a `GMAccount`
+without recorded IP addresses publishes `ipHistory: null`, not an invented
+empty list.
+
+`cloudflare/src/account-signal-wire.ts` now owns the exact public signal and
+summary projections, numeric widths, pointer boundaries, privacy boundaries,
+and nonnil list results. The staff signal route and account-summary route pass
+through those shared serializers, and the nested action list composes the
+already source-locked account-action serializer. `GMListAccounts` now preserves
+the source's nullable IP-history value. This is a serialization-only change; it
+does not alter signal scoring, staff authority, authentication, sanctions,
+accounts, games, rewards, payments, inventory, or wallets.
+
+The source-derived gate parses both complete generated structs and JSON tags,
+all three status values, list construction and nil-map behavior, staff and API
+routes, shared serializer composition, and the build gate. Fifteen mutations
+fail closed on field, enum, numeric-width, pointer, privacy, list, route,
+composition, IP-history, or build-gate drift. The existing account-action gate
+was also strengthened to follow the composed nested serializer. Six direct
+wire tests plus isolated-D1 staff integration coverage assert required nulls
+and zero values, exact public keys, private-field exclusion, top-level `[]`,
+nested `null`, and nullable IP history.
+
+The complete release contract passed 446 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31892776384` passed in 9m47s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`782d9e39-c848-423d-8eed-85fb11797a68` to
+`21379f89-437c-4c2f-8590-bb9195aee18d`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`.
+Unauthenticated `GMListAccountSignals` and `GMAccountSignalSummaries` requests
+both returned `401` with the same cache boundary before staff-data access. No
+production admin grant, account signal, report, action, sanction, or reward was
+created merely to inspect populated responses; exact positive-path proof
+remains in isolated-D1 Worker integration tests. Verification did not mutate
+any production account, game, reward, payment, inventory, or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
