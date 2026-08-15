@@ -73,6 +73,9 @@ export const cloudflareBuildScriptErrors = rootPackage => {
   if (!build.includes('pnpm check:cloudflare:deck-wire')) {
     errors.push('Cloudflare build must include the generated Go Deck wire gate')
   }
+  if (!build.includes('pnpm check:cloudflare:card-wire')) {
+    errors.push('Cloudflare build must include the generated Go Card wire gate')
+  }
   return errors
 }
 

@@ -22,6 +22,28 @@ const rpc = (method: string, body: object) =>
     testEnv
   )
 
+const CARD_WIRE_FIELDS = [
+  'id',
+  'name',
+  'description',
+  'asset',
+  'class',
+  'element',
+  'type',
+  'manaCost',
+  'power',
+  'health',
+  'attachedSpellID',
+  'keywords',
+  'status',
+  'set',
+  'imageURL',
+  'itemType',
+  'isNew',
+  'silverCardTokenId',
+  'goldCardTokenId'
+]
+
 describe('source card-library RPC compatibility', () => {
   it('serves the complete active source library in numeric ID order', async () => {
     const response = await rpc('GetCardLibrary', { page: { pageSize: 1 } })
@@ -31,6 +53,7 @@ describe('source card-library RPC compatibility', () => {
     }
     expect(body.cards).toHaveLength(cardLibrarySource.count)
     expect(cardLibrarySource.count).toBeGreaterThan(800)
+    expect(Object.keys(body.cards[0])).toEqual(CARD_WIRE_FIELDS)
     expect(body.cards[0]).toMatchObject({
       id: 1,
       name: 'Foul Stench',
@@ -43,6 +66,18 @@ describe('source card-library RPC compatibility', () => {
       silverCardTokenId: 65_537,
       goldCardTokenId: 131_073
     })
+    expect(body.cards[0]).toMatchObject({
+      attachedSpellID: null,
+      imageURL: {
+        small: expect.stringMatching(/\/2x\/1\.webp$/),
+        medium: expect.stringMatching(/\/4x\/1\.webp$/),
+        large: expect.stringMatching(/\/6x\/1\.webp$/)
+      },
+      itemType: 'UNKNOWN',
+      isNew: null
+    })
+    expect(body.cards[0]).not.toHaveProperty('attributes')
+    expect(body.cards[0]).not.toHaveProperty('validFromSeason')
     expect(body.cards.at(-1)?.id).toBeGreaterThan(4_000)
     expect(body.cards.every(card => card.class !== 'TOK')).toBe(true)
   })
@@ -92,6 +127,7 @@ describe('source card-library RPC compatibility', () => {
     }>()
     expect(filteredBody.page.pageSize).toBe(2)
     expect(filteredBody.res.map(item => item.card.id)).toEqual([16, 96])
+    expect(Object.keys(filteredBody.res[0].card)).toEqual(CARD_WIRE_FIELDS)
     expect(filteredBody.res[0]).toMatchObject({
       card: { name: 'Stone Fist' },
       balance: '0'

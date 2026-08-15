@@ -42,6 +42,7 @@ import {
   libraryCardsFromDeckString,
   searchLibraryCards
 } from './card-library'
+import { sourceCardWire } from './card-wire'
 import { CookiePoliciesRepository } from './cookie-policies'
 import {
   ClientFeedbackRepository,
@@ -452,7 +453,9 @@ export const handleApiRequest = async (
 
       case 'GetCardLibrary': {
         await requestBody<Record<string, unknown>>(request)
-        return json(request, env, { cards: allLibraryCards() })
+        return json(request, env, {
+          cards: allLibraryCards().map(sourceCardWire)
+        })
       }
 
       case 'GetCardsByID': {
@@ -467,7 +470,9 @@ export const handleApiRequest = async (
             'cardIDs must be an array of non-negative integers'
           )
         }
-        return json(request, env, { cards: libraryCardsByIds(body.cardIDs) })
+        return json(request, env, {
+          cards: libraryCardsByIds(body.cardIDs).map(sourceCardWire)
+        })
       }
 
       case 'GetCardsByDeckString': {
@@ -476,7 +481,7 @@ export const handleApiRequest = async (
           throw invalidArgument('deckString is required')
         }
         return json(request, env, {
-          cards: libraryCardsFromDeckString(body.deckString)
+          cards: libraryCardsFromDeckString(body.deckString).map(sourceCardWire)
         })
       }
 
@@ -518,17 +523,20 @@ export const handleApiRequest = async (
         const inventory = inventoryUserId
           ? await playerRpc.cardSearchInventory(inventoryUserId)
           : []
-        return json(
-          request,
-          env,
-          searchLibraryCards(
-            criteria,
-            body.page,
-            inventory,
-            !!inventoryUserId,
-            body.req.includeUserBalances === true
-          )
+        const result = searchLibraryCards(
+          criteria,
+          body.page,
+          inventory,
+          !!inventoryUserId,
+          body.req.includeUserBalances === true
         )
+        return json(request, env, {
+          ...result,
+          res: result.res.map(entry => ({
+            ...entry,
+            card: sourceCardWire(entry.card)
+          }))
+        })
       }
 
       case 'RegisterAccount': {
