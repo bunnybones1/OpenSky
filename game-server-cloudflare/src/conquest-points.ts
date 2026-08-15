@@ -10,6 +10,8 @@ import {
   storedMatchModes
 } from '@opensky/shared/match-modes'
 
+import { sourceRewardListWire, sourceRewardWire } from './reward-wire'
+
 const EVENT_ID = 2
 const POINTS_CAP = 13_750
 const TREASURE_TOTAL_POINTS = [
@@ -98,7 +100,7 @@ const progress = (currentPoints: number): ConquestV2TreasureProgress => {
 const parseRewards = (value: string): Reward[] => {
   try {
     const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? (parsed as Reward[]) : []
+    return Array.isArray(parsed) ? sourceRewardListWire(parsed as Reward[]) : []
   } catch {
     return []
   }
@@ -136,14 +138,14 @@ const receipt = async (
     : [[], []]
   for (const player of playerRows.results) {
     storedRewards[player.player_index] = [
-      {
+      sourceRewardWire({
         accountID: player.account_id,
         type: RewardType.CONQUEST_POINTS,
         conquestV2TreasureProgress: {
           beforeMatch: progress(player.before_points),
           afterMatch: progress(player.after_points)
         }
-      }
+      })
     ]
   }
   return row

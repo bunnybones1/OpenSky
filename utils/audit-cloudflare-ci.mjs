@@ -42,16 +42,27 @@ export const ciWorkflowAuditErrors = (workflow, nodeVersion) => {
   return errors
 }
 
+export const cloudflareBuildScriptErrors = rootPackage => {
+  const build = rootPackage?.scripts?.['build:cloudflare'] ?? ''
+  return build.includes('pnpm check:cloudflare:match-reward-wire')
+    ? []
+    : ['Cloudflare build must include the generated Go match reward wire gate']
+}
+
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [workflow, nodeVersion] = await Promise.all([
+  const [workflow, nodeVersion, rootPackage] = await Promise.all([
     readFile(
       path.join(root, '.github/workflows/cloudflare-release.yml'),
       'utf8'
     ),
-    readFile(path.join(root, '.nvmrc'), 'utf8')
+    readFile(path.join(root, '.nvmrc'), 'utf8'),
+    readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse)
   ])
-  const errors = ciWorkflowAuditErrors(workflow, nodeVersion)
+  const errors = [
+    ...ciWorkflowAuditErrors(workflow, nodeVersion),
+    ...cloudflareBuildScriptErrors(rootPackage)
+  ]
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1

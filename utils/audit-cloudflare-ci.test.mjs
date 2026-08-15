@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { ciWorkflowAuditErrors } from './audit-cloudflare-ci.mjs'
+import {
+  ciWorkflowAuditErrors,
+  cloudflareBuildScriptErrors
+} from './audit-cloudflare-ci.mjs'
 
 const validWorkflow = `
 pull_request:
@@ -42,4 +46,22 @@ test('rejects deployment authority in pull-request CI', () => {
     const errors = ciWorkflowAuditErrors(`${validWorkflow}\n${forbidden}`, '24')
     assert.ok(errors.some(error => error.includes(forbidden.split('.')[0])))
   }
+})
+
+test('requires the source match-reward wire gate in the complete build', async () => {
+  const rootPackage = JSON.parse(await readFile('package.json', 'utf8'))
+  assert.deepEqual(cloudflareBuildScriptErrors(rootPackage), [])
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:match-reward-wire && ',
+          ''
+        )
+      }
+    })[0],
+    /match reward wire/
+  )
 })

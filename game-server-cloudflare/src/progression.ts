@@ -35,6 +35,7 @@ import {
   type RankDefinition,
   type RankingOutcome
 } from './ranking'
+import { sourceRewardListWire, sourceRewardWire } from './reward-wire'
 
 interface MatchPlayersRow {
   player1_user_id: string | null
@@ -496,7 +497,7 @@ const receipt = (database: D1Database, proposalId: string) =>
 const parseRewardList = (value: string): Reward[] => {
   try {
     const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? (parsed as Reward[]) : []
+    return Array.isArray(parsed) ? sourceRewardListWire(parsed as Reward[]) : []
   } catch {
     return []
   }
@@ -550,31 +551,32 @@ const experienceReceipt = async (
   }
 }
 
-const rankedUnlockReward = (accountID: number): Reward => ({
-  accountID,
-  type: RewardType.RANK,
-  gameMode: GameMode.RANKED_CONSTRUCTED,
-  rank: {
-    beforeMatch: {
-      rank: PlayerRank.UNRANKED,
-      rankStage: PlayerRankStage.STAGE_I,
-      requiredRankPoints: 0,
-      rankPosition: 0,
-      score: 0,
-      scoreAbove: 0,
-      scoreBelow: 0
-    },
-    afterMatch: {
-      rank: PlayerRank.WANDERER,
-      rankStage: PlayerRankStage.STAGE_I,
-      requiredRankPoints: 100,
-      rankPosition: 0,
-      score: 0,
-      scoreAbove: 0,
-      scoreBelow: 0
+const rankedUnlockReward = (accountID: number): Reward =>
+  sourceRewardWire({
+    accountID,
+    type: RewardType.RANK,
+    gameMode: GameMode.RANKED_CONSTRUCTED,
+    rank: {
+      beforeMatch: {
+        rank: PlayerRank.UNRANKED,
+        rankStage: PlayerRankStage.STAGE_I,
+        requiredRankPoints: 0,
+        rankPosition: 0,
+        score: 0,
+        scoreAbove: 0,
+        scoreBelow: 0
+      },
+      afterMatch: {
+        rank: PlayerRank.WANDERER,
+        rankStage: PlayerRankStage.STAGE_I,
+        requiredRankPoints: 100,
+        rankPosition: 0,
+        score: 0,
+        scoreAbove: 0,
+        scoreBelow: 0
+      }
     }
-  }
-})
+  })
 
 /**
  * Applies the source quest engine's trusted deltas once per accepted match.
@@ -1706,28 +1708,30 @@ export const applyMatchStats = async (
             modeProjections
           )
     ])
-    rewards[player].push({
-      accountID: stats.account_id ?? 0,
-      type: RewardType.RANK,
-      gameMode: modes[player],
-      rank: {
-        beforeMatch: rankData(
-          stats.player_rank,
-          stats.player_rank_stage,
-          transition.currentDefinition,
-          stats.score,
-          beforeContext
-        ),
-        afterMatch: rankData(
-          transition.playerRank,
-          transition.playerRankStage,
-          transition.nextDefinition,
-          transition.score,
-          afterContext,
-          afterContext.displayRank
-        )
-      }
-    })
+    rewards[player].push(
+      sourceRewardWire({
+        accountID: stats.account_id ?? 0,
+        type: RewardType.RANK,
+        gameMode: modes[player],
+        rank: {
+          beforeMatch: rankData(
+            stats.player_rank,
+            stats.player_rank_stage,
+            transition.currentDefinition,
+            stats.score,
+            beforeContext
+          ),
+          afterMatch: rankData(
+            transition.playerRank,
+            transition.playerRankStage,
+            transition.nextDefinition,
+            transition.score,
+            afterContext,
+            afterContext.displayRank
+          )
+        }
+      })
+    )
     if (winner !== undefined && transition.score >= MASTER_POINTS) {
       grandweaverModes.add(modes[player])
     }

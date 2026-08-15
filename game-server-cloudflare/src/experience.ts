@@ -6,6 +6,8 @@ import {
   RewardType
 } from '@opensky/proto'
 
+import { sourceRewardWire } from './reward-wire'
+
 export const MATCH_PLAYED_XP = 30
 export const MATCH_RESULT_XP = 20
 export const MINIMUM_HEROES_FOR_MATCH_XP = 3
@@ -52,17 +54,18 @@ export const experienceReward = (
   player: MatchExperiencePlayer,
   amount: number,
   reason: RewardExpReason
-): Reward => ({
-  accountID: player.accountID,
-  type: RewardType.EXP,
-  exp: {
-    amount,
-    reason,
-    currentLevel: player.seasonLevel,
-    requiredExp: EXPERIENCE_PER_LEVEL,
-    beforeMatchExp: player.experience
-  }
-})
+): Reward =>
+  sourceRewardWire({
+    accountID: player.accountID,
+    type: RewardType.EXP,
+    exp: {
+      amount,
+      reason,
+      currentLevel: player.seasonLevel,
+      requiredExp: EXPERIENCE_PER_LEVEL,
+      beforeMatchExp: player.experience
+    }
+  })
 
 /**
  * Faithful TypeScript port of the source match XP awarder. This function is

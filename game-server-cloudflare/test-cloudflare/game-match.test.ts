@@ -2548,7 +2548,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       winner_player: 1,
       ended_at: expect.any(String)
     })
-    expect(JSON.parse(ledger!.result_json)).toMatchObject({
+    const storedResult = JSON.parse(ledger!.result_json)
+    expect(storedResult).toMatchObject({
       winner: 1,
       status: 'ABANDONED',
       player1Moves: 0,
@@ -2558,6 +2559,33 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         [expect.objectContaining({ type: 'RANK' })]
       ]
     })
+    for (const reward of storedResult.rewards.flat()) {
+      expect(Object.keys(reward).sort()).toEqual(
+        [
+          'accountID',
+          'type',
+          'gameMode',
+          'rank',
+          'exp',
+          'card',
+          'hero',
+          'heroSkin',
+          'deck',
+          'conquestV2TreasureProgress',
+          'stickerPoints'
+        ].sort()
+      )
+      expect(reward).toMatchObject({
+        rank: expect.any(Object),
+        exp: null,
+        card: null,
+        hero: null,
+        heroSkin: null,
+        deck: null,
+        conquestV2TreasureProgress: null,
+        stickerPoints: null
+      })
+    }
 
     await evictDurableObject(stub())
     const reconnected = await connectAs(PRINCIPAL_2, USER_ID_2)
@@ -2574,7 +2602,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(recentReconnect.store).toMatch(/^0x[0-9a-f]+$/)
     expect(recentRewards).toEqual({
       type: 'rewards',
-      data: JSON.parse(ledger!.result_json).rewards[1]
+      data: storedResult.rewards[1]
     })
 
     const recentInfoResponse = await stub().fetch(
@@ -2595,7 +2623,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       replayID: 'replay-test-42',
       accounts: [fixture().match.player1.account, fixture().match.player2.account],
       store: recentReconnect.store,
-      rewards: JSON.parse(ledger!.result_json).rewards[1]
+      rewards: storedResult.rewards[1]
     })
     const privateInfo = await stub().fetch(
       'https://match/internal/recent-match-info',

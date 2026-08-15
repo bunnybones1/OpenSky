@@ -15,6 +15,8 @@ import {
 } from '@opensky/shared/match-modes'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
+import { sourceRewardWire } from './reward-wire'
+
 const SILVER_OFFSET = 1 << 16
 const GOLD_OFFSET = 2 << 16
 
@@ -143,12 +145,9 @@ const cardReward = (
   const source = cardsById.get(cardId)
   if (!source) throw new Error(`Conquest reward card ${cardId} is invalid`)
   const { validFromSeason: _validFromSeason, ...wireCard } = source
-  return {
+  return sourceRewardWire({
     accountID,
     type: RewardType.CARD,
-    gameMode: null,
-    rank: null,
-    exp: null,
     card: {
       amount: 0,
       card: {
@@ -167,13 +166,8 @@ const cardReward = (
         createdAt: null,
         isNew: null
       } as unknown as Item
-    },
-    hero: null,
-    heroSkin: null,
-    deck: null,
-    conquestV2TreasureProgress: null,
-    stickerPoints: null
-  } as unknown as Reward
+    }
+  })
 }
 
 const receiptFromRow = (

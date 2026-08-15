@@ -89,7 +89,7 @@ test('requires every package deployment path to use the target runner', () => {
       'deploy:cloudflare':
         'pnpm build && node ./utils/run-cloudflare-production.mjs deploy wrangler.jsonc',
       'deploy:cloudflare:game-server':
-        'node ./utils/run-cloudflare-production.mjs deploy game-server-cloudflare/wrangler.jsonc',
+        'pnpm check:cloudflare:match-reward-wire && node ./utils/run-cloudflare-production.mjs deploy game-server-cloudflare/wrangler.jsonc',
       'deploy:cloudflare:match-service':
         'node ./utils/run-cloudflare-production.mjs deploy match-service-cloudflare/wrangler.jsonc',
       'deploy:cloudflare:matchmaker':
@@ -107,6 +107,15 @@ test('requires every package deployment path to use the target runner', () => {
     }
   }
   assert.deepEqual(productionScriptErrors(rootPackage, analyticsPackage), [])
+  const guardedGameDeploy = rootPackage.scripts['deploy:cloudflare:game-server']
+  rootPackage.scripts['deploy:cloudflare:game-server'] =
+    guardedGameDeploy.replace('pnpm check:cloudflare:match-reward-wire && ', '')
+  assert.ok(
+    productionScriptErrors(rootPackage, analyticsPackage).some(error =>
+      error.includes('match reward wire gate')
+    )
+  )
+  rootPackage.scripts['deploy:cloudflare:game-server'] = guardedGameDeploy
   rootPackage.scripts['deploy:cloudflare'] += ' && wrangler deploy lookalike'
   assert.ok(
     productionScriptErrors(rootPackage, analyticsPackage).some(error =>

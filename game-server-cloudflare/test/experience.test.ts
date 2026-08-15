@@ -1,4 +1,9 @@
-import { GameMode, MatchStatus, RewardExpReason } from '@opensky/proto'
+import {
+  GameMode,
+  MatchStatus,
+  RewardExpReason,
+  RewardType
+} from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -36,6 +41,26 @@ describe('source match experience awarder', () => {
       RewardExpReason.MatchPlayed,
       RewardExpReason.Victory
     ])
+    expect(rewards[0][0]).toEqual({
+      accountID: 1,
+      type: RewardType.EXP,
+      gameMode: null,
+      rank: null,
+      exp: {
+        amount: 30,
+        reason: RewardExpReason.MatchPlayed,
+        reasonExtraData: null,
+        currentLevel: 1,
+        requiredExp: 200,
+        beforeMatchExp: 17
+      },
+      card: null,
+      hero: null,
+      heroSkin: null,
+      deck: null,
+      conquestV2TreasureProgress: null,
+      stickerPoints: null
+    })
     expect(rewards[0].map(reward => reward.exp?.amount)).toEqual([30, 20])
     expect(reasons(rewards[1])).toEqual([RewardExpReason.MatchPlayed])
   })

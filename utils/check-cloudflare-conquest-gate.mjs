@@ -148,22 +148,15 @@ const workerRewardWireErrors = settlement => {
   const compact = reward.replace(/\s+/g, ' ')
   const errors = []
   for (const token of [
+    'sourceRewardWire({',
     'validFromSeason: _validFromSeason',
-    'gameMode: null',
-    'rank: null',
-    'exp: null',
     'amount: 0',
     'itemType: ItemType.UNKNOWN',
     'contractAddress: null',
     "balance: '0'",
     'lastUpdateID: 0',
     'updatedAt: null',
-    'createdAt: null',
-    'hero: null',
-    'heroSkin: null',
-    'deck: null',
-    'conquestV2TreasureProgress: null',
-    'stickerPoints: null'
+    'createdAt: null'
   ]) {
     if (!compact.includes(token)) {
       errors.push(`Worker Conquest reward wire contract is missing: ${token}`)

@@ -137,6 +137,15 @@ export const productionScriptErrors = (rootPackage, analyticsPackage) => {
       errors.push(`${name} contains a direct Wrangler production command`)
     }
   }
+  if (
+    !scripts['deploy:cloudflare:game-server']?.includes(
+      'pnpm check:cloudflare:match-reward-wire'
+    )
+  ) {
+    errors.push(
+      'deploy:cloudflare:game-server bypasses the generated Go match reward wire gate'
+    )
+  }
   const analyticsScript = analyticsPackage?.scripts?.['deploy:cloudflare']
   if (
     !analyticsScript?.includes(
