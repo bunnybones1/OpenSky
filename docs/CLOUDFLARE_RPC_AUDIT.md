@@ -1700,6 +1700,59 @@ Conquest modes were false. Production D1 reported no pending migrations. The
 verification made no database writes and changed no account, queue, match,
 reward, wallet, or staff state.
 
+## Social-info response fidelity rollout — 2026-08-15
+
+The generated Go social response surface consists of the two-field
+`DiscordInfoResponse`, the three-field `TwitchInfoResponse`, and all 14 required
+`TwitchStream` fields. None uses `omitempty`. The Twitch stream list is a Go
+slice of pointers and each stream's tag IDs are another slice, so nil outer
+slices, nil stream elements, and nil tag slices serialize as explicit `null`.
+On a cache hit the source unmarshals cached JSON back into the generated
+response struct before returning it, which discards unknown cache metadata and
+restores missing fields to their Go zero values.
+
+`cloudflare/src/social-info-wire.ts` now owns explicit Discord, Twitch
+response, nested stream, and nullable-list projections. Both public RPC routes
+pass fresh or cached repository output through those projections. Direct tests
+cover all required fields, scalar zero values, nullable slices/pointer elements,
+and unknown-field exclusion. An isolated-D1 integration test inserts cached
+top-level and nested private metadata, proves neither value reaches the public
+RPC, and proves no provider request occurs on the cache hit.
+
+The source-derived gate parses all three generated structs and their exact JSON
+tags, pins the source's struct-cache unmarshal, external-stream decode and count
+behavior, requires every explicit Worker field, checks both public routes, and
+is mandatory in the complete Cloudflare build. Eleven mutations fail closed
+on generated fields, slice/pointer semantics, source cache behavior, private
+field insertion, route bypass, or build-gate removal.
+
+The complete local release contract passed 468 main-Worker tests across 79
+files, 34 game-server unit tests, 93 game-server Workers tests, 31 match-service
+tests, 78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31905471005` passed in 9m23s for runtime commit
+`ec7f60e018abe1b930963da0323cf741dc486447` before deployment.
+
+Only the main Worker was deployed, advancing it from
+`726ac476-8567-43f3-89bb-d3ac7d85691f` to
+`f1358a94-0415-4d5c-af9a-535b0d26378c`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no new asset
+files. The verifier resolved web asset `/assets/index-b1769b84.js`, unchanged
+game asset `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales,
+and the release-safe cache policy on its first attempt.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+`GetDiscordInfo` and `GetTwitchInfo` both continued to fail closed with
+`503 webrpc.unavailable` and `Cache-Control: no-store` because Cloud Weasel's
+optional provider identifiers/secrets are deliberately not configured. This
+rollout did not enable either provider, seed a cache response, or invent social
+data. Production D1 reported no pending migrations. Verification made no
+database writes and changed no account, content, provider, queue, match, reward,
+wallet, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
