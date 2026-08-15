@@ -1881,7 +1881,6 @@ export class PlayerRpcRepository {
         `SELECT item_type, token_id, balance, is_new, created_at
          FROM player_items
          WHERE user_id = ? AND balance > 0
-           AND item_type IN ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')
          ORDER BY token_id ASC, item_type ASC`
       )
       .bind(userId)

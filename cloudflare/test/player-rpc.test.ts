@@ -121,6 +121,13 @@ const SOURCE_ITEM_SUMMARY_FIELDS = [
   'updatedAt',
   'createdAt'
 ]
+const SOURCE_CARD_WITH_BALANCE_FIELDS = [
+  'card',
+  'balance',
+  'balanceByType',
+  'createdAt'
+]
+const SOURCE_BALANCE_TUPLE_FIELDS = ['balance', 'isNew']
 
 const rpcAs = async (
   sessionUserId: string,
@@ -2601,18 +2608,31 @@ describe('legacy player RPC compatibility', () => {
         contractQuery: false
       }
     })
-    expect(await cardSearch.json()).toMatchObject({
+    const cardSearchBody = await cardSearch.json<{
+      res: Array<Record<string, unknown>>
+    }>()
+    expect(cardSearchBody).toMatchObject({
       res: [
         {
           card: { id: 42 },
           balance: '5',
           balanceByType: {
-            SW_SILVER_CARDS: { balance: '2' },
-            SW_GOLD_CARDS: { balance: '3' }
+            SW_SILVER_CARDS: { balance: '2', isNew: null },
+            SW_GOLD_CARDS: { balance: '3', isNew: null }
           }
         }
       ]
     })
+    expect(Object.keys(cardSearchBody.res[0])).toEqual(
+      SOURCE_CARD_WITH_BALANCE_FIELDS
+    )
+    const balanceByType = cardSearchBody.res[0].balanceByType as Record<
+      string,
+      Record<string, unknown>
+    >
+    for (const tuple of Object.values(balanceByType)) {
+      expect(Object.keys(tuple)).toEqual(SOURCE_BALANCE_TUPLE_FIELDS)
+    }
 
     const supply = await rpc('GetItemSupply', { tokenID: 42 }, false)
     expect(supply.status).toBe(200)

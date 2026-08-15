@@ -29,6 +29,7 @@ export const cardWireErrors = (
   generatedSource,
   cardsRPCSource,
   cardWire,
+  cardBalanceWire,
   api,
   playerRPC
 ) => {
@@ -136,11 +137,19 @@ export const cardWireErrors = (
     'allLibraryCards().map(sourceCardWire)',
     'libraryCardsByIds(body.cardIDs).map(sourceCardWire)',
     'libraryCardsFromDeckString(body.deckString).map(sourceCardWire)',
-    'card: sourceCardWire(entry.card)'
+    'result.res.map(sourceCardWithBalanceWire)'
   ]) {
     if (!cardRoutes.includes(token)) {
       errors.push(`main Worker Card projection is missing: ${token}`)
     }
+  }
+  const compactCardBalanceWire = cardBalanceWire.replace(/\s+/g, ' ')
+  if (
+    !compactCardBalanceWire.includes(
+      'card: entry.card == null ? null : sourceCardWire(entry.card)'
+    )
+  ) {
+    errors.push('nested SearchCards results bypass the Card wire')
   }
   if (!playerRPC.includes('card.validFromSeason <= season')) {
     errors.push('internal Card season metadata is no longer available to policy')
@@ -155,6 +164,7 @@ const main = async () => {
       ['api', 'proto', 'api.gen.go'],
       ['api', 'rpc', 'cards.go'],
       ['cloudflare', 'src', 'card-wire.ts'],
+      ['cloudflare', 'src', 'card-balance-wire.ts'],
       ['cloudflare', 'src', 'api.ts'],
       ['cloudflare', 'src', 'player-rpc.ts']
     ].map(parts => readFile(path.join(root, ...parts), 'utf8'))

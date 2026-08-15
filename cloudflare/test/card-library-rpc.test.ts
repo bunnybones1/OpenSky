@@ -43,6 +43,12 @@ const CARD_WIRE_FIELDS = [
   'silverCardTokenId',
   'goldCardTokenId'
 ]
+const CARD_WITH_BALANCE_WIRE_FIELDS = [
+  'card',
+  'balance',
+  'balanceByType',
+  'createdAt'
+]
 
 describe('source card-library RPC compatibility', () => {
   it('serves the complete active source library in numeric ID order', async () => {
@@ -127,10 +133,15 @@ describe('source card-library RPC compatibility', () => {
     }>()
     expect(filteredBody.page.pageSize).toBe(2)
     expect(filteredBody.res.map(item => item.card.id)).toEqual([16, 96])
+    expect(Object.keys(filteredBody.res[0])).toEqual(
+      CARD_WITH_BALANCE_WIRE_FIELDS
+    )
     expect(Object.keys(filteredBody.res[0].card)).toEqual(CARD_WIRE_FIELDS)
     expect(filteredBody.res[0]).toMatchObject({
       card: { name: 'Stone Fist' },
-      balance: '0'
+      balance: '0',
+      balanceByType: null,
+      createdAt: null
     })
 
     const hiddenToken = await rpc('SearchCards', {
@@ -253,6 +264,13 @@ describe('source card-library RPC compatibility', () => {
         balance: 2,
         isNew: true,
         createdAt: '2026-01-02T00:00:00.000Z'
+      },
+      {
+        itemType: 'SW_CONQUEST_TICKET',
+        tokenId: 1,
+        balance: 4,
+        isNew: true,
+        createdAt: '2026-01-03T00:00:00.000Z'
       }
     ]
     const hidden = searchLibraryCards(
@@ -262,7 +280,11 @@ describe('source card-library RPC compatibility', () => {
       true,
       false
     )
-    expect(hidden.res[0]).toMatchObject({ balance: '0', balanceByType: {} })
+    expect(hidden.res[0]).toMatchObject({
+      balance: '0',
+      balanceByType: null,
+      createdAt: null
+    })
 
     const included = searchLibraryCards(
       { ids: [1], ownedCards: true },
@@ -272,12 +294,19 @@ describe('source card-library RPC compatibility', () => {
       true
     )
     expect(included.res[0]).toMatchObject({
-      balance: '3',
+      balance: '7',
       balanceByType: {
-        SW_BASE_CARDS: { balance: '1' },
-        SW_SILVER_CARDS: { balance: '2', isNew: true }
+        SW_BASE_CARDS: { balance: '1', isNew: null },
+        SW_SILVER_CARDS: { balance: '2', isNew: null },
+        SW_CONQUEST_TICKET: { balance: '4', isNew: null }
       },
-      createdAt: '2026-01-02T00:00:00.000Z'
+      createdAt: '2026-01-03T00:00:00.000Z'
+    })
+    const empty = searchLibraryCards({ ids: [1] }, {}, [], true, true)
+    expect(empty.res[0]).toMatchObject({
+      balance: '0',
+      balanceByType: {},
+      createdAt: null
     })
     expect(() =>
       searchLibraryCards({ ownedCards: true }, {}, [], false)

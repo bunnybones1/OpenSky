@@ -42,6 +42,7 @@ import {
   libraryCardsFromDeckString,
   searchLibraryCards
 } from './card-library'
+import { sourceCardWithBalanceWire } from './card-balance-wire'
 import { sourceCardWire } from './card-wire'
 import { CookiePoliciesRepository } from './cookie-policies'
 import {
@@ -532,10 +533,7 @@ export const handleApiRequest = async (
         )
         return json(request, env, {
           ...result,
-          res: result.res.map(entry => ({
-            ...entry,
-            card: sourceCardWire(entry.card)
-          }))
+          res: result.res.map(sourceCardWithBalanceWire)
         })
       }
 

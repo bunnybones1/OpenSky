@@ -1,11 +1,7 @@
 import cardLibrary from './generated/card-library.json'
-import type {
-  Card,
-  CardSearchCriteria,
-  CardWithBalance,
-  Page,
-  SortBy
-} from '@opensky/proto'
+import type { Card, CardSearchCriteria, Page, SortBy } from '@opensky/proto'
+
+import type { SourceCardWithBalanceInput } from './card-balance-wire'
 
 type LibraryCard = (typeof cardLibrary.cards)[number]
 
@@ -19,7 +15,7 @@ export interface CardInventoryBalance {
 
 export interface CardSearchResult {
   page: Page
-  res: CardWithBalance[]
+  res: Array<Omit<SourceCardWithBalanceInput, 'card'> & { card: Card }>
 }
 
 const cards = cardLibrary.cards as LibraryCard[]
@@ -33,6 +29,22 @@ const cardFrames = new Set([
   'SW_BASE_CARDS',
   'SW_SILVER_CARDS',
   'SW_GOLD_CARDS'
+])
+const sourceCardBalanceItemTypes = new Set([
+  'SW_BASE_CARDS',
+  'SW_SKYPASS',
+  'SW_TITLES',
+  'SW_STICKER_POINTS',
+  'SW_XP',
+  'SW_SILVER_DUST',
+  'SW_SILVER_CARDS',
+  'SW_GOLD_CARDS',
+  'SW_CONQUEST_TICKET',
+  'SW_CRYSTALS',
+  'SW_STICKERS',
+  'SW_HERO_SKINS',
+  'SW_CARD_BACKS',
+  'SW_HERO'
 ])
 
 const deckClasses: Record<string, string[]> = {
@@ -415,22 +427,28 @@ export const searchLibraryCards = (
   const selected = filtered.slice(start, end)
   const inventoryByCard = new Map<number, CardInventoryBalance[]>()
   for (const item of inventory) {
-    if (!cardFrames.has(item.itemType) || item.balance <= 0) continue
+    if (!sourceCardBalanceItemTypes.has(item.itemType) || item.balance <= 0) {
+      continue
+    }
     const existing = inventoryByCard.get(item.tokenId) || []
     existing.push(item)
     inventoryByCard.set(item.tokenId, existing)
   }
   const res = selected.map(card => {
-    const balances = includeBalances ? inventoryByCard.get(card.id) || [] : []
-    const balanceByType = Object.fromEntries(
-      balances.map(item => [
-        item.itemType,
-        {
-          balance: String(item.balance),
-          ...(item.isNew ? { isNew: true } : {})
-        }
-      ])
-    )
+    const exposesBalances = includeBalances && hasAccount
+    const balances = exposesBalances ? inventoryByCard.get(card.id) || [] : []
+    const balanceByType = exposesBalances
+      ? Object.fromEntries(
+          balances.map(item => [
+            item.itemType,
+            {
+              balance: String(item.balance),
+              // Source SearchCards never populates BalanceTuple.IsNew.
+              isNew: null
+            }
+          ])
+        )
+      : null
     const latestCreatedAt = balances
       .map(item => item.createdAt)
       .sort()
@@ -439,7 +457,7 @@ export const searchLibraryCards = (
       card: card as unknown as Card,
       balance: String(balances.reduce((sum, item) => sum + item.balance, 0)),
       balanceByType,
-      createdAt: latestCreatedAt || ''
+      createdAt: latestCreatedAt || null
     }
   })
   return {
