@@ -495,6 +495,58 @@ disabled, and production D1 reported no pending migrations. A live
 and no internal metadata. Verification did not create synthetic card, account,
 match, reward, or economy state.
 
+### Complete FeedEvent JSON wire — 2026-08-15
+
+Milestone `3e612232` applies the generated-wire rule to the complete public
+`FeedEvent` boundary. The Go struct has 16 public JSON fields with no
+`omitempty`; its 11 pointer fields and three nil-capable slices serialize as
+explicit nulls when unset. The account ID, match ID, and pagination cursor
+remain private. The previous TypeScript feed builders forced empty card and
+hero slices and returned partially populated event objects instead of the
+source shape.
+
+A shared projection now emits the exact public field order and sends nested
+cards through the hardened Card serializer. As in the source RPC, `MATCH` and
+`LEVELUP` events remain excluded, while `REWARD` and `TRADE` token receipts
+hydrate base, Silver, and Gold cards from the generated catalog. The existing
+Cloud Weasel browser encoding's `0xff` base-card frame is accepted without
+altering the persisted token receipt. Direct Worker tests cover all null arms,
+the exact nested 19-field Card shape, base and Gold hydration, and the Silver
+Conquest V2 reward path.
+
+The source-derived release gate parses the generated Go field order, pointer,
+slice, private-field, omission, source-filter, and reward-hydration contracts;
+it also requires the main Worker route and original web feed consumer to stay
+connected to the shared projection. Its mutation suite rejects 12 forms of
+source drift, sparse nulls, private-field leakage, Card-wire bypass, missing
+frame compatibility, or route drift. The complete release contract passed 394
+main-Worker tests, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both
+production builds. Exact-head GitHub Actions run `31870915182` passed before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`4c2c3160-759c-4ae5-a869-3b1d7dd174b2` to
+`5e72b4ee-eac8-4bdf-8e7f-1bf6794a3bca`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-b1769b84.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. The generated web entry differs
+from the previous entry only in chunk filenames and its source-map name; after
+normalizing those hashes, the entries are byte-for-byte identical, and no
+webapp source changed in this milestone.
+
+Public `Version`, `Ping`, and game-mode probes returned `200` with
+`Cache-Control: no-store`; game and matchmaker protocol-3 health remained
+healthy, practice PvP and bot modes remained enabled, both Conquest modes
+remained disabled, and production D1 reported no pending migrations. A
+signed-in production account page rendered its existing “Gained a Stalwart
+Sentinel Card!” reward through the hydrated feed path. Verification did not
+create synthetic feed, card, account, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
