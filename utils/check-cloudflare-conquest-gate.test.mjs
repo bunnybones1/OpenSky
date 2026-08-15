@@ -4,7 +4,8 @@ import test from 'node:test'
 
 import {
   conquestGateErrors,
-  conquestPoolCatalogErrors
+  conquestPoolCatalogErrors,
+  conquestSettlementSourceParityErrors
 } from './check-cloudflare-conquest-gate.mjs'
 
 test('production keeps both Conquest queues behind the settlement gate', async () => {
@@ -310,4 +311,56 @@ test('binds the reviewed Conquest card ranges to the generated catalog', () => {
     /differ/
   )
   assert.match(conquestPoolCatalogErrors('', catalog)[0], /missing/)
+})
+
+test('derives Conquest settlement rewards and terminal behavior from source', async () => {
+  const [stateManager, conquestModel, settlement, progression] =
+    await Promise.all([
+      readFile('api/lib/conquest/state_manager.go', 'utf8'),
+      readFile('api/data/conquest.go', 'utf8'),
+      readFile('game-server-cloudflare/src/conquest-settlement.ts', 'utf8'),
+      readFile('game-server-cloudflare/src/progression.ts', 'utf8')
+    ])
+  const source = `${stateManager}\n${conquestModel}`
+  assert.deepEqual(
+    conquestSettlementSourceParityErrors(source, settlement, progression),
+    []
+  )
+
+  assert.match(
+    conquestSettlementSourceParityErrors(
+      source,
+      settlement.replace(
+        'return { silver: 2, gold: 0 }',
+        'return { silver: 1, gold: 0 }'
+      ),
+      progression
+    )[0],
+    /reward bundles drifted/
+  )
+  assert.match(
+    conquestSettlementSourceParityErrors(
+      source.replace('i <= 2', 'i <= 1'),
+      settlement,
+      progression
+    )[0],
+    /reward bundles drifted/
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source,
+      settlement.replace(
+        "['DELAYED_REWARD', goldTokenIds]",
+        "['REWARD', goldTokenIds]"
+      ),
+      progression
+    ).some(error => error.includes('feed projection drifted'))
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source,
+      settlement,
+      progression.replace('wins >= 3', 'wins >= 4')
+    ).some(error => error.includes('terminal contract is missing'))
+  )
 })

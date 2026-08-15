@@ -7,6 +7,174 @@ export const CONQUEST_MODES = new Set([
   'CONQUEST_DISCOVERY'
 ])
 
+const bracedBlock = (source, marker) => {
+  const markerIndex = source.indexOf(marker)
+  if (markerIndex < 0) return undefined
+  const open = source.indexOf('{', markerIndex + marker.length)
+  if (open < 0) return undefined
+  let depth = 0
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(open + 1, index)
+  }
+  return undefined
+}
+
+const switchCases = block => {
+  const markers = [
+    ...block.matchAll(/^\s*(?:case\s+(\d+)|default)\s*:/gm)
+  ]
+  return markers.map((marker, index) => ({
+    key: marker[1] === undefined ? 'default' : Number(marker[1]),
+    body: block.slice(
+      marker.index + marker[0].length,
+      markers[index + 1]?.index ?? block.length
+    )
+  }))
+}
+
+const occurrences = (source, pattern) => [...source.matchAll(pattern)].length
+
+const sourceConquestBundles = source => {
+  const block = bracedBlock(source, 'switch wins')
+  if (!block) return undefined
+  const bundles = new Map()
+  for (const entry of switchCases(block)) {
+    if (entry.key === 'default') {
+      if (!entry.body.includes('m.complete(conquest)')) return undefined
+      bundles.set('default', { silver: 0, gold: 0 })
+      continue
+    }
+    let silver = occurrences(entry.body, /m\.getSilverCard\(conquest\)/g)
+    for (const loop of entry.body.matchAll(
+      /for\s+(\w+)\s*:=\s*1;\s*\1\s*<=\s*(\d+);\s*\1\+\+\s*\{([\s\S]*?)\n\s*\}/g
+    )) {
+      const callsInside = occurrences(
+        loop[3],
+        /m\.getSilverCard\(conquest\)/g
+      )
+      silver += (Number(loop[2]) - 1) * callsInside
+    }
+    bundles.set(entry.key, {
+      silver,
+      gold: occurrences(entry.body, /m\.getGoldCard\(sess, conquest\)/g)
+    })
+  }
+  return bundles
+}
+
+const workerConquestBundles = source => {
+  const block = bracedBlock(source, 'export const conquestRewardBundle')
+  if (!block) return undefined
+  const switchBlock = bracedBlock(block, 'switch (wins)')
+  if (!switchBlock) return undefined
+  const bundles = new Map()
+  for (const entry of switchCases(switchBlock)) {
+    const reward = entry.body.match(
+      /return\s+\{\s*silver:\s*(\d+),\s*gold:\s*(\d+)\s*\}/
+    )
+    if (!reward) return undefined
+    bundles.set(entry.key, {
+      silver: Number(reward[1]),
+      gold: Number(reward[2])
+    })
+  }
+  return bundles
+}
+
+const sortedBundles = bundles =>
+  [...bundles.entries()].sort(([left], [right]) =>
+    String(left).localeCompare(String(right))
+  )
+
+const sourceFeedProjection = source => {
+  const projection = {}
+  for (const match of source.matchAll(
+    /if\s+len\((silver|gold)CardIDs\)\s*>\s*0\s*\{[\s\S]*?Type:\s+proto\.FeedEventType_(REWARD|DELAYED_REWARD)/g
+  )) {
+    projection[match[1]] = match[2]
+  }
+  return projection
+}
+
+const workerFeedProjection = source =>
+  Object.fromEntries(
+    [...source.matchAll(
+      /\['(REWARD|DELAYED_REWARD)',\s*(silver|gold)TokenIds\]/g
+    )].map(match => [match[2], match[1]])
+  )
+
+/**
+ * Derives the reward table and feed projection from the Go implementation,
+ * then compares them with the TypeScript settlement instead of maintaining a
+ * second hand-written source contract in the release gate.
+ */
+export const conquestSettlementSourceParityErrors = (
+  source,
+  settlement,
+  progression
+) => {
+  const errors = []
+  const sourceBundles = sourceConquestBundles(source)
+  const workerBundles = workerConquestBundles(settlement)
+  if (!sourceBundles) {
+    errors.push('source Conquest reward bundle table could not be derived')
+  }
+  if (!workerBundles) {
+    errors.push('Worker Conquest reward bundle table could not be derived')
+  }
+  if (
+    sourceBundles &&
+    workerBundles &&
+    JSON.stringify(sortedBundles(sourceBundles)) !==
+      JSON.stringify(sortedBundles(workerBundles))
+  ) {
+    errors.push('Worker Conquest reward bundles drifted from the Go source')
+  }
+
+  const sourceFeed = sourceFeedProjection(source)
+  const workerFeed = workerFeedProjection(settlement)
+  if (
+    JSON.stringify(sourceFeed) !== JSON.stringify(workerFeed) ||
+    sourceFeed.silver !== 'REWARD' ||
+    sourceFeed.gold !== 'DELAYED_REWARD'
+  ) {
+    errors.push('Worker Conquest feed projection drifted from the Go source')
+  }
+
+  const compactSource = source.replace(/\s+/g, ' ')
+  const compactSettlement = settlement.replace(/\s+/g, ' ')
+  const compactProgression = progression.replace(/\s+/g, ' ')
+  for (const token of [
+    'case proto.ConquestMatchResult_LOSS: return false',
+    'return wins < 3',
+    'conquest.Status = proto.ConquestStatus_REWARDS_PENDING',
+    'm.complete(conquest)'
+  ]) {
+    if (!compactSource.includes(token)) {
+      errors.push(`source Conquest terminal contract is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'const ended = wins >= 3 || values.includes(ConquestMatchResult.LOSS)',
+    ': wins === 0 ? ConquestStatus.COMPLETED : ConquestStatus.REWARDS_PENDING'
+  ]) {
+    if (!compactProgression.includes(token)) {
+      errors.push(`Worker Conquest terminal contract is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'Array.from({ length: bundle.silver }, () => choose(silver)',
+    '.sort((left, right) => left - right)'
+  ]) {
+    if (!compactSettlement.includes(token)) {
+      errors.push(`Worker Conquest draw contract is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const reviewedPoolCardIds = poolActivation => {
   const match = poolActivation.match(
     /INSERT INTO conquest_reward_pool_valid_card_ranges[\s\S]*?VALUES([\s\S]*?);/
@@ -345,6 +513,18 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (
+    evidence.sourceSettlement !== undefined ||
+    evidence.progression !== undefined
+  ) {
+    errors.push(
+      ...conquestSettlementSourceParityErrors(
+        evidence.sourceSettlement ?? '',
+        evidence.settlement ?? '',
+        evidence.progression ?? ''
+      )
+    )
+  }
   if (evidence.goldModerationMigration !== undefined) {
     for (const token of [
       "SET status = 'DISABLED'",
@@ -535,7 +715,9 @@ const main = async () => {
     v2ScheduleOperations,
     staff,
     cardLibrary,
+    sourceSettlement,
     settlement,
+    progression,
     goldModerationMigration,
     goldDelivery,
     sourceDelayedMinting,
@@ -646,6 +828,13 @@ const main = async () => {
       path.join(root, 'cloudflare', 'src', 'generated', 'card-library.json'),
       'utf8'
     ),
+    Promise.all([
+      readFile(
+        path.join(root, 'api', 'lib', 'conquest', 'state_manager.go'),
+        'utf8'
+      ),
+      readFile(path.join(root, 'api', 'data', 'conquest.go'), 'utf8')
+    ]).then(sources => sources.join('\n')),
     readFile(
       path.join(
         root,
@@ -653,6 +842,10 @@ const main = async () => {
         'src',
         'conquest-settlement.ts'
       ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'progression.ts'),
       'utf8'
     ),
     readFile(
@@ -748,7 +941,9 @@ const main = async () => {
     v2ScheduleOperations,
     staff,
     cardLibrary,
+    sourceSettlement,
     settlement,
+    progression,
     goldModerationMigration,
     goldDelivery,
     sourceDelayedMinting,
