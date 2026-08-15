@@ -35,6 +35,7 @@ import { AccountsRepository } from './accounts'
 import { AccountActionsRepository } from './account-actions'
 import { AccountReportsRepository } from './account-reports'
 import { AppDevKeyRepository } from './app-dev-keys'
+import { sourceNullableBannerListWire } from './banner-wire'
 import { BotMatchRepository, type BotMatchEndRequest } from './bot-match'
 import {
   allLibraryCards,
@@ -1077,7 +1078,9 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
-          banners: await content.listAllBanners()
+          banners: sourceNullableBannerListWire(
+            await content.listAllBanners()
+          )
         })
       }
 
@@ -2197,7 +2200,9 @@ export const handleApiRequest = async (
       }
 
       case 'GetBanners': {
-        return json(request, env, { banners: await content.listBanners() })
+        return json(request, env, {
+          banners: sourceNullableBannerListWire(await content.listBanners())
+        })
       }
 
       case 'GetFeaturedStreamers': {

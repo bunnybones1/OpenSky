@@ -155,12 +155,16 @@ describe('source content RPC compatibility', () => {
     expect(banners.status).toBe(200)
     expect(await banners.json()).toEqual({
       banners: [
-        expect.objectContaining({
+        {
+          id: expect.any(Number),
           order: 5,
           type: 'INFO',
+          color: null,
           msg: 'Cloud Weasel lives',
-          dismissable: true
-        })
+          dismissable: true,
+          startAt: expect.any(String),
+          endAt: expect.any(String)
+        }
       ]
     })
     expect(await (await rpc('GetFeaturedStreamers', {}, false)).json()).toEqual(

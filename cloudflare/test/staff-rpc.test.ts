@@ -2580,10 +2580,14 @@ describe('fail-closed Google identity staff authorization', () => {
     expect((await rpcAs(PLAYER, 'GMListBanners')).status).toBe(403)
     await grantAdmin()
     expect(await (await rpcAs(ADMIN, 'GMListBanners')).json()).toMatchObject({
-      banners: [{ msg: 'Expired' }, { msg: 'Active' }, { msg: 'Scheduled' }]
+      banners: [
+        { msg: 'Expired', color: null },
+        { msg: 'Active', color: null },
+        { msg: 'Scheduled', color: null }
+      ]
     })
     expect(await (await rpcAs(PLAYER, 'GetBanners')).json()).toMatchObject({
-      banners: [{ msg: 'Active' }]
+      banners: [{ msg: 'Active', color: null }]
     })
   })
 
