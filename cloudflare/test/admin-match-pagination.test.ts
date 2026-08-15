@@ -136,6 +136,15 @@ describe('staff match pagination', () => {
       {}
     )
     expect(endedDescending.res[0].match.id).toBe(activeId)
+    expect(endedDescending.res[0]).toMatchObject({
+      reviewed: false,
+      duration: null
+    })
+    expect(Object.keys(endedDescending.res[0]).sort()).toEqual([
+      'duration',
+      'match',
+      'reviewed'
+    ])
     expect(JSON.parse(atob(endedDescending.page.before!))).toEqual([
       String(activeId),
       null

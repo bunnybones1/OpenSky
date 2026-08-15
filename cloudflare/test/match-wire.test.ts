@@ -1,7 +1,11 @@
 import type { GameMode, Match, MatchPlayer, MatchStatus } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
-import { sourceMatchWire } from '../src/match-wire'
+import {
+  sourceGMMatchListWire,
+  sourceGMMatchWire,
+  sourceMatchWire
+} from '../src/match-wire'
 
 const player = (id: number): MatchPlayer =>
   ({
@@ -79,5 +83,16 @@ describe('generated Go match JSON wire', () => {
       createdAt: null,
       replayID: 'match-wire-replay'
     })
+  })
+
+  it('serializes every nil GMMatch pointer and a non-nil empty list exactly', () => {
+    expect(
+      sourceGMMatchWire({ match: null, reviewed: false, duration: undefined })
+    ).toEqual({
+      match: null,
+      reviewed: false,
+      duration: null
+    })
+    expect(sourceGMMatchListWire([])).toEqual([])
   })
 })

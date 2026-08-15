@@ -34,6 +34,7 @@ const pointerFields = (source, name) =>
 
 export const matchWireErrors = (
   source,
+  sourceHandler,
   matchWire,
   competitive,
   replays,
@@ -76,6 +77,7 @@ export const matchWireErrors = (
     'playerSessionId',
     'isBot'
   ]
+  const gmMatchFields = ['match', 'reviewed', 'duration']
   if (!exactFields(source, 'Match', matchFields)) {
     errors.push(
       'source Match JSON contract could not be derived without omission'
@@ -84,6 +86,11 @@ export const matchWireErrors = (
   if (!exactFields(source, 'MatchPlayer', playerFields)) {
     errors.push(
       'source MatchPlayer JSON contract could not be derived without omission'
+    )
+  }
+  if (!exactFields(source, 'GMMatch', gmMatchFields)) {
+    errors.push(
+      'source GMMatch JSON contract could not be derived without omission'
     )
   }
   if (
@@ -115,6 +122,22 @@ export const matchWireErrors = (
   ) {
     errors.push('source MatchPlayer pointer contract changed')
   }
+  if (
+    JSON.stringify(pointerFields(source, 'GMMatch')) !==
+    JSON.stringify(['match', 'duration'])
+  ) {
+    errors.push('source GMMatch pointer contract changed')
+  }
+
+  for (const token of [
+    'results := []*gmMatchWithUsers{}',
+    'matches := make([]*proto.GMMatch, len(results))',
+    'matches[i] = match.GMMatch'
+  ]) {
+    if (!sourceHandler.includes(token)) {
+      errors.push(`source GM match list contract changed: ${token}`)
+    }
+  }
 
   const compactWire = matchWire.replace(/\s+/g, ' ')
   for (const token of [
@@ -133,7 +156,10 @@ export const matchWireErrors = (
     'tagArtID: player.tagArtID ?? null',
     'crystalID: player.crystalID ?? null',
     'deckClass: player.deckClass ?? null',
-    'playerSessionId: player.playerSessionId ?? null'
+    'playerSessionId: player.playerSessionId ?? null',
+    'match: value.match ? sourceMatchWire(value.match) : null',
+    'duration: value.duration ?? null',
+    'values.map(sourceGMMatchWire)'
   ]) {
     if (!compactWire.includes(token)) {
       errors.push(`Worker source match wire is missing: ${token}`)
@@ -146,11 +172,18 @@ export const matchWireErrors = (
   if (!matchProjection?.includes('return sourceMatchWire({')) {
     errors.push('stored match rows are not normalized at their shared boundary')
   }
+  const adminProjection = competitive.match(
+    /async listAdminMatches\([\s\S]*?\n  async setReviewed\(/
+  )?.[0]
+  if (!adminProjection?.includes('res: sourceGMMatchListWire(')) {
+    errors.push('staff match rows are not normalized at their shared boundary')
+  }
   if (!replays.includes('match: found.match')) {
     errors.push('public replay metadata does not use the normalized match wire')
   }
   for (const token of [
     'await competitive.listMatches(',
+    'await competitive.listAdminMatches(',
     'match: await competitive.getMatch(',
     'await replayArchive('
   ]) {
@@ -163,20 +196,29 @@ export const matchWireErrors = (
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [source, matchWire, competitive, replays, api] = await Promise.all([
-    readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
-    readFile(path.join(root, 'cloudflare', 'src', 'match-wire.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare', 'src', 'replays.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
-  ])
-  const errors = matchWireErrors(source, matchWire, competitive, replays, api)
+  const [source, sourceHandler, matchWire, competitive, replays, api] =
+    await Promise.all([
+      readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
+      readFile(path.join(root, 'api', 'rpc', 'admin_ban_tools.go'), 'utf8'),
+      readFile(path.join(root, 'cloudflare', 'src', 'match-wire.ts'), 'utf8'),
+      readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
+      readFile(path.join(root, 'cloudflare', 'src', 'replays.ts'), 'utf8'),
+      readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
+    ])
+  const errors = matchWireErrors(
+    source,
+    sourceHandler,
+    matchWire,
+    competitive,
+    replays,
+    api
+  )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Match history, detail, and replay metadata preserve the generated Go JSON wire'
+      'Match history, staff lists, detail, and replay metadata preserve the generated Go JSON wire'
     )
   }
 }

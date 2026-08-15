@@ -1,4 +1,4 @@
-import type { Match, MatchPlayer } from '@opensky/proto'
+import type { GMMatch, Match, MatchPlayer } from '@opensky/proto'
 
 // The generated TypeScript declarations model RIDL pointers as optional
 // properties, but encoding/json emits every field because the Go structs do
@@ -42,3 +42,20 @@ export const sourceMatchWire = (match: Match): Match =>
     createdAt: match.createdAt ?? null,
     replayID: match.replayID
   }) as unknown as Match
+
+export interface SourceGMMatchInput {
+  match?: Match | null
+  reviewed: boolean
+  duration?: number | null
+}
+
+export const sourceGMMatchWire = (value: SourceGMMatchInput): GMMatch =>
+  ({
+    match: value.match ? sourceMatchWire(value.match) : null,
+    reviewed: value.reviewed,
+    duration: value.duration ?? null
+  }) as unknown as GMMatch
+
+export const sourceGMMatchListWire = (
+  values: SourceGMMatchInput[]
+): GMMatch[] => values.map(sourceGMMatchWire)

@@ -26,7 +26,7 @@ import { invalidArgument, notFound, permissionDenied } from './errors'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
-import { sourceMatchWire } from './match-wire'
+import { sourceGMMatchListWire, sourceMatchWire } from './match-wire'
 import { identityReferenceFor } from './rpc-principal'
 
 const RANKED_MODES = new Set<GameMode>([
@@ -1367,11 +1367,13 @@ export class CompetitiveRepository {
         hasAfter,
         sort: sort.sort.map(key => key.response)
       },
-      res: slice.map(value => ({
-        match: value.match,
-        reviewed: value.row.reviewed === 1,
-        ...(value.duration !== undefined ? { duration: value.duration } : {})
-      }))
+      res: sourceGMMatchListWire(
+        slice.map(value => ({
+          match: value.match,
+          reviewed: value.row.reviewed === 1,
+          duration: value.duration
+        }))
+      )
     }
   }
 
