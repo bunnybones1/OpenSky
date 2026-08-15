@@ -749,6 +749,59 @@ Base-card inventory, rank and Conquest sections, match statistics, and
 existing “Gained a Stalwart Sentinel Card!” reward. Verification created no
 synthetic card, delivery task, item, account, match, reward, or economy state.
 
+### Complete Page and SortBy JSON wire — 2026-08-15
+
+Milestone `8721f75d` applies the generated-wire rule to every paginated RPC at
+the shared JSON boundary. Go's `Page` has six public fields with no
+`omitempty`: nullable page size, before/after cursors and availability flags,
+plus a nullable sort slice. `SortBy` likewise always emits its column and
+nullable order. Empty result pages therefore carry explicit null cursors,
+while paginator-created availability flags remain real false values rather
+than disappearing.
+
+The source paginator also replaces an absent or empty sort request with its
+effective default, removes the unique cursor key from the returned sort list,
+and always allocates both availability flags. The Worker now reports the
+source `created_at DESC` feed sort and the rank-sensitive leaderboard sort;
+the special centered account-leaderboard response retains its source sparse
+Page semantics, which the shared boundary completes with nulls. All existing
+card, deck, match, account, staff, payment, and rank pagination routes pass
+through the same projection.
+
+The source-derived release gate parses both generated structs, their exact
+field order/types/no-omission contract, paginator defaulting and cursor
+attachment, source feed and leaderboard sort construction, the shared Worker
+boundary, and the complete-build/CI connection. Its mutation suite rejects 14
+forms of source drift, sparse nulls, cursor-flag loss, sort drift, boundary
+bypass, or gate removal. The complete release contract passed 403 main-Worker
+tests, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both
+production builds. Exact-head GitHub Actions run `31877748621` passed before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`27ea8f79-5f90-49d6-96f7-9edcacf5e751` to
+`709470b3-6fd5-4be9-9113-d2f8bcd471c6`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Read-only production `SearchCards` probes returned `200` with
+`Cache-Control: no-store`. An empty result emitted the exact six-field Page
+with null cursors, false availability flags, and `mana_weight ASC`; a one-card
+page emitted both source cursors, `hasBefore: true`, `hasAfter: false`, and the
+same effective sort. Practice PvP and bot modes remained enabled and both
+Conquest modes remained disabled. Game and matchmaker protocol-3 health stayed
+healthy, and production D1 reported no pending migrations. The signed-in
+original account page still rendered its full navigation, 31/856 Base-card
+inventory, rank and Conquest sections, match statistics, and existing “Gained
+a Stalwart Sentinel Card!” reward. Verification created no synthetic account,
+page state, card, item, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
