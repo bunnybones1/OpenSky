@@ -1957,7 +1957,7 @@ describe('fail-closed Google identity staff authorization', () => {
         account: { address: string }
         conquestsUnlocked: boolean
         accountActions: unknown[] | null
-        ipHistory: unknown[]
+        ipHistory: unknown[] | null
       }>
     }
     expect(body.page).toMatchObject({
@@ -1970,7 +1970,7 @@ describe('fail-closed Google identity staff authorization', () => {
         account: expect.objectContaining({ address: `identity:${PLAYER}` }),
         conquestsUnlocked: true,
         accountActions: null,
-        ipHistory: []
+        ipHistory: null
       })
     ])
 
@@ -2027,7 +2027,7 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       signal: [
-        expect.objectContaining({
+        {
           id: expect.any(Number),
           signalType: 'user report',
           signalStatus: 'PENDING',
@@ -2039,7 +2039,7 @@ describe('fail-closed Google identity staff authorization', () => {
             comment: 'Repeated stalling'
           },
           score: 0
-        })
+        }
       ]
     })
     expect((await rpcAs(ADMIN, 'GMListAccountSignals', {})).status).toBe(400)
@@ -2058,7 +2058,11 @@ describe('fail-closed Google identity staff authorization', () => {
       }
     })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
+    const body = (await response.json()) as {
+      page: { pageSize: number; hasBefore: boolean; hasAfter: boolean }
+      signals: Array<Record<string, unknown>>
+    }
+    expect(body).toMatchObject({
       page: { pageSize: 50, hasBefore: false, hasAfter: false },
       signals: [
         {
@@ -2070,6 +2074,13 @@ describe('fail-closed Google identity staff authorization', () => {
         }
       ]
     })
+    expect(Object.keys(body.signals[0] ?? {}).sort()).toEqual([
+      'account',
+      'accountActions',
+      'accountAddress',
+      'score',
+      'updatedAt'
+    ])
 
     await env.AUTH_DB.prepare(
       `UPDATE player_account_settings

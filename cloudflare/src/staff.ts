@@ -9,6 +9,7 @@ import type {
   SortBy
 } from '@opensky/proto'
 
+import { sourceAccountSignalListWire } from './account-signal-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { isConquestQueueReady } from './conquest-readiness'
 import type { ConquestRewardPoolOperation } from './conquest-reward-pool-operations'
@@ -1360,25 +1361,27 @@ export class StaffRepository {
       )
       .bind(userId, userId)
       .all<SignalRow>()
-    return result.results.map(row => ({
-      id: row.id,
-      signalType: row.signal_type,
-      signalStatus: row.signal_status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      signalData:
-        row.reporter_user_id && row.match_id
-          ? {
-              reportedBy: `identity:${row.reporter_user_id}`,
-              matchId: row.match_id,
-              comment: row.comment
-            }
-          : {},
-      // The current source score table does not assign a raw weight to the
-      // "user report" signal. Aggregate fraud probability belongs to a
-      // separate analytics pipeline that Cloud Weasel has not fabricated.
-      score: 0
-    }))
+    return sourceAccountSignalListWire(
+      result.results.map(row => ({
+        id: row.id,
+        signalType: row.signal_type,
+        signalStatus: row.signal_status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        signalData:
+          row.reporter_user_id && row.match_id
+            ? {
+                reportedBy: `identity:${row.reporter_user_id}`,
+                matchId: row.match_id,
+                comment: row.comment
+              }
+            : {},
+        // The current source score table does not assign a raw weight to the
+        // "user report" signal. Aggregate fraud probability belongs to a
+        // separate analytics pipeline that Cloud Weasel has not fabricated.
+        score: 0
+      }))
+    )
   }
 
   async signalSummaries(input: {

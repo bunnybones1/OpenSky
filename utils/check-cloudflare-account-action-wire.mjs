@@ -50,6 +50,7 @@ export const accountActionWireErrors = (
   moderationRPC,
   accountRPC,
   accountActionWire,
+  accountSignalWire,
   repository,
   api,
   packageSource
@@ -185,15 +186,28 @@ export const accountActionWireErrors = (
   if (!api.includes("from './account-action-wire'")) {
     errors.push('main Worker lost the shared account-action wire import')
   }
-  for (const [start, end] of [
-    ["case 'GMListAccounts':", "case 'GMListAccountSignals':"],
-    ["case 'GMAccountSignalSummaries':", "case 'GMListMatches':"]
-  ]) {
-    if (
-      !section(api, start, end).includes('sourceNullableAccountActionListWire(')
-    ) {
-      errors.push(`nested account-action list bypasses source nulls: ${start}`)
-    }
+  const workerAccountsRoute = section(
+    api,
+    "case 'GMListAccounts':",
+    "case 'GMListAccountSignals':"
+  )
+  if (!workerAccountsRoute.includes('sourceNullableAccountActionListWire(')) {
+    errors.push(
+      "nested account-action list bypasses source nulls: case 'GMListAccounts':"
+    )
+  }
+  const workerSummariesRoute = section(
+    api,
+    "case 'GMAccountSignalSummaries':",
+    "case 'GMListMatches':"
+  )
+  if (
+    !workerSummariesRoute.includes('sourceAccountSignalSummaryListWire(') ||
+    !accountSignalWire.includes('sourceNullableAccountActionListWire(')
+  ) {
+    errors.push(
+      "nested account-action list bypasses source nulls: case 'GMAccountSignalSummaries':"
+    )
   }
   for (const [start, end, token] of [
     [
@@ -243,6 +257,7 @@ const main = async () => {
     'api/rpc/admin_ban_tools.go',
     'api/rpc/gamemaster.go',
     'cloudflare/src/account-action-wire.ts',
+    'cloudflare/src/account-signal-wire.ts',
     'cloudflare/src/account-actions.ts',
     'cloudflare/src/api.ts',
     'package.json'

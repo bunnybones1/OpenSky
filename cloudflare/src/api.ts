@@ -34,6 +34,7 @@ import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { AccountsRepository } from './accounts'
 import { sourceNullableAccountActionListWire } from './account-action-wire'
 import { AccountActionsRepository } from './account-actions'
+import { sourceAccountSignalSummaryListWire } from './account-signal-wire'
 import { AccountReportsRepository } from './account-reports'
 import { AppDevKeyRepository } from './app-dev-keys'
 import { sourceNullableBannerListWire } from './banner-wire'
@@ -941,7 +942,7 @@ export const handleApiRequest = async (
               accountActions: sourceNullableAccountActionListWire(
                 actionsByUser.get(row.user_id)
               ),
-              ipHistory: []
+              ipHistory: null
             }
           })
         )
@@ -972,24 +973,24 @@ export const handleApiRequest = async (
         const actionsByUser = await accountActions.forUsers(
           result.rows.map(row => row.user_id)
         )
-        const signals = await Promise.all(
-          result.rows.map(async row => {
-            const accountAddress = identityReferenceFor(row.user_id)
-            const account = await playerRpc.getAccountForAdmin(
-              undefined,
-              accountAddress
-            )
-            if (!account) throw notFound('account not found')
-            return {
-              accountAddress,
-              score: row.score,
-              updatedAt: row.updated_at,
-              account,
-              accountActions: sourceNullableAccountActionListWire(
-                actionsByUser.get(row.user_id)
+        const signals = sourceAccountSignalSummaryListWire(
+          await Promise.all(
+            result.rows.map(async row => {
+              const accountAddress = identityReferenceFor(row.user_id)
+              const account = await playerRpc.getAccountForAdmin(
+                undefined,
+                accountAddress
               )
-            }
-          })
+              if (!account) throw notFound('account not found')
+              return {
+                accountAddress,
+                score: row.score,
+                updatedAt: row.updated_at,
+                account,
+                accountActions: actionsByUser.get(row.user_id)
+              }
+            })
+          )
         )
         return json(request, env, { page: result.page, signals })
       }
