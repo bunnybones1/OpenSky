@@ -450,6 +450,51 @@ matchmaker protocol-3 health remained healthy, both Conquest modes remained
 disabled, and production D1 reported no pending migrations. Verification did
 not create synthetic deck, account, match, reward, or economy state.
 
+### Complete Card JSON wire — 2026-08-14
+
+Milestone `f0afe396` applies the generated-wire rule to all four public Card
+RPC boundaries. The Go struct has 19 public JSON fields with no `omitempty`;
+its attached-spell ID, image URL, new-card flag, Silver token ID, and Gold token
+ID pointers serialize as explicit nulls when nil, as does the nil-capable
+keyword slice. Internal attributes and season-availability metadata remain
+private. The previous TypeScript routes returned raw catalog objects, which
+could leak `validFromSeason` and did not make the source null contract explicit.
+
+A shared projection now emits the exact public field order for
+`GetCardLibrary`, `GetCardsByID`, `GetCardsByDeckString`, and nested
+`SearchCards` results. Internal catalog consumers retain `validFromSeason` for
+reward-policy eligibility checks, so enforcing the API privacy boundary does
+not weaken off-chain fulfillment rules. Direct Worker tests assert all 19
+fields, nullable pointer values, the nested three-size image object, and the
+absence of both private fields on direct and nested Card results.
+
+The source-derived release gate parses the generated Go public/private field
+set, pointer set, absence of omission, nested `CardImageURL` contract, all four
+source RPCs and Worker projections, and continued internal season-policy use.
+Its mutation suite rejects ten forms of source drift, sparse nulls, private
+metadata leakage, projection bypass, or policy-metadata loss. The complete
+release contract passed 394 main-Worker tests, 34 game-server unit tests, 93
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 25
+game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31869368136` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`7592f739-3069-4dde-9c83-12b7bdc3e64d` to
+`4c2c3160-759c-4ae5-a869-3b1d7dd174b2`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no asset changes;
+the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
+game-mode probes returned `200` with `Cache-Control: no-store`; game and
+matchmaker protocol-3 health remained healthy, both Conquest modes remained
+disabled, and production D1 reported no pending migrations. A live
+`GetCardsByID` probe returned the exact 19-field Card shape with explicit nulls
+and no internal metadata. Verification did not create synthetic card, account,
+match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
