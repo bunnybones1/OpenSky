@@ -13,7 +13,7 @@ const testEnv = env as unknown as Env
 const USER_ID = 'identity-cookie-policy-user'
 const REFERENCE = `identity:${USER_ID}`
 
-const rpc = async (method: string, body: object) => {
+const rpc = async (method: string, body: unknown) => {
   const token = await createIdentitySession(
     USER_ID,
     testEnv.SESSION_SIGNING_KEY
@@ -44,6 +44,80 @@ beforeEach(async () => {
 })
 
 describe('identity cookie policy', () => {
+  it('preserves source option-map decoding and validates before storage', async () => {
+    const defaults = await rpc('SaveCookiePolicy', {})
+    expect(defaults.status).toBe(200)
+    expect(await (await rpc('GetCookiePolicy', {})).json()).toEqual({
+      res: {
+        AUTHENTICATION: true,
+        PRODUCT_ANALYTICS: false
+      }
+    })
+
+    const enabled = await rpc('SaveCookiePolicy', {
+      cookieOptions: { PRODUCT_ANALYTICS: true }
+    })
+    expect(enabled.status).toBe(200)
+
+    const nullDefaults = await rpc('SaveCookiePolicy', {
+      cookieOptions: null
+    })
+    expect(nullDefaults.status).toBe(200)
+    const beforeInvalid = await testEnv.AUTH_DB.prepare(
+      'SELECT policy, updated_at FROM cookie_policies WHERE account_address = ?'
+    )
+      .bind(REFERENCE)
+      .first()
+
+    const unknown = await rpc('SaveCookiePolicy', {
+      cookieOptions: {
+        PRODUCT_ANALYTICS: true,
+        DOES_NOT_EXIST: true
+      }
+    })
+    expect(unknown.status).toBe(400)
+    expect(await unknown.json()).toMatchObject({
+      code: 'webrpc.unknown',
+      msg: 'Unknown cookie policy DOES_NOT_EXIST'
+    })
+    expect(
+      await testEnv.AUTH_DB.prepare(
+        'SELECT policy, updated_at FROM cookie_policies WHERE account_address = ?'
+      )
+        .bind(REFERENCE)
+        .first()
+    ).toEqual(beforeInvalid)
+
+    const nonBoolean = await rpc('SaveCookiePolicy', {
+      cookieOptions: { PRODUCT_ANALYTICS: 'yes' }
+    })
+    expect(nonBoolean.status).toBe(400)
+    expect(await nonBoolean.json()).toMatchObject({
+      code: 'webrpc.invalid_argument'
+    })
+    expect(
+      await testEnv.AUTH_DB.prepare(
+        'SELECT policy, updated_at FROM cookie_policies WHERE account_address = ?'
+      )
+        .bind(REFERENCE)
+        .first()
+    ).toEqual(beforeInvalid)
+
+    expect(await (await rpc('GetCookiePolicy', {})).json()).toEqual({
+      res: {
+        AUTHENTICATION: true,
+        PRODUCT_ANALYTICS: false
+      }
+    })
+    expect(
+      await testEnv.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM cookie_policies WHERE account_address = ?'
+      )
+        .bind(REFERENCE)
+        .first('count')
+    ).toBe(1)
+  })
+
   it('stores only essential authentication and optional analytics consent', async () => {
     const save = await rpc('SaveCookiePolicy', {
       cookieOptions: {

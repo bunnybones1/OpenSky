@@ -11,6 +11,9 @@ export class RpcError extends Error {
 export const invalidArgument = (message: string) =>
   new RpcError(400, 'webrpc.invalid_argument', message)
 
+export const unknown = (message: string) =>
+  new RpcError(400, 'webrpc.unknown', message)
+
 export const permissionDenied = (message: string) =>
   new RpcError(403, 'webrpc.permission_denied', message)
 

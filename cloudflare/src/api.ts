@@ -46,7 +46,10 @@ import {
 } from './card-library'
 import { sourceCardWithBalanceWire } from './card-balance-wire'
 import { sourceCardWire } from './card-wire'
-import { CookiePoliciesRepository } from './cookie-policies'
+import {
+  CookiePoliciesRepository,
+  sourceCookiePolicyOptions
+} from './cookie-policies'
 import {
   ClientFeedbackRepository,
   MAX_FEEDBACK_REQUEST_BYTES
@@ -1998,15 +2001,19 @@ export const handleApiRequest = async (
 
       case 'SaveCookiePolicy': {
         const principal = await rpcPrincipal(request, env)
-        const body = await requestBody<{
-          cookieOptions?: Record<string, boolean>
-        }>(request)
-        if (!body.cookieOptions || typeof body.cookieOptions !== 'object') {
-          throw invalidArgument('cookieOptions is required')
+        const body = await requestBody<unknown>(request)
+        if (
+          body !== null &&
+          (typeof body !== 'object' || Array.isArray(body))
+        ) {
+          throw invalidArgument('request body must be an object')
         }
+        const cookieOptions = sourceCookiePolicyOptions(
+          body && 'cookieOptions' in body ? body.cookieOptions : undefined
+        )
         await cookiePolicies.save(
           principal.reference,
-          body.cookieOptions,
+          cookieOptions,
           principal.kind
         )
         return json(request, env, { status: true })
