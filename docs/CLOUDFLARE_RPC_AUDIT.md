@@ -1588,6 +1588,68 @@ and zero rows written. No production staff grant or Conquest state was
 fabricated to exercise a positive admin path; exact proof remains in the
 isolated-D1 Worker tests.
 
+## Competitive response fidelity rollout — 2026-08-15
+
+The generated Go `DeckRank`, `DeckRankAccount`, and `LeaderboardEntry`
+responses emit every public JSON field without `omitempty`. `DeckRank.Score`
+and both `DeckRankAccount` members are pointers, a nil card-ID slice encodes as
+null, and the two deck aggregate ratios are scanned as float32 values. The Go
+public deck leaderboard also deliberately differs from authenticated search:
+it leaves `deckRank.highestPlayerAddress` at the zero hash and permits
+`highestPlayer: null` when the stored highest-player ID is invalid, while
+search explicitly hydrates the address. The Worker previously filled the
+nested public-list address and rejected the source-valid nil player with an
+error.
+
+Milestone `08fe6563` adds one shared competitive projection for deck ranks,
+deck-rank accounts, and leaderboard entries. It emits explicit pointer/slice
+nulls, applies source-shortest float32 JSON values, excludes the Go-private rank
+state, card revision, and cursor, and composes the existing protected Account
+and AccountStat projections. The deck repository now keeps the public-list and
+authenticated-search address paths distinct and returns the nullable top player
+instead of fabricating an account or failing the whole public page.
+
+The source-derived competitive gate parses all three generated Go structs,
+their public fields, pointer and float32 types, the public-list allocation and
+nil-player branch, search address hydration, leaderboard account/reward
+hydration, both Worker repositories, all four RPC boundaries, and the complete
+build. Fourteen independent mutations fail closed on source, null, hydration,
+privacy, route, or gate drift. The existing Account gate was strengthened to
+prove the new composed leaderboard boundary still reaches `sourceAccountWire`;
+it was not relaxed to accept raw nested accounts. Direct serializer tests cover
+nil pointers/slices, private-field removal, and float32 values, while
+isolated-D1 RPC tests cover the real nullable public top-player row and the
+different search projection.
+
+The complete release contract passed 462 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78
+matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31902595397` passed in 7m48s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`f5d96739-e503-4015-a347-4d41d6368edf` to
+`c3bc86b1-8877-4efd-b4eb-72a1af0a3d29`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Version` returned the new Worker ID and `Ping` returned
+`200`; both used `Cache-Control: no-store`. Public `ListDeckRanks` returned the
+source-shaped allocated empty `res: []` page, and unauthenticated
+`SearchDeckRanks` returned `401` before data access. A one-entry public
+leaderboard shape probe returned exactly the five generated entry fields, the
+19-field protected Account projection, and the 18-field public AccountStat
+projection without logging player values. Before and after D1 snapshots both
+found zero deck-rank rows, zero positive or nil-player rank rows, six ranked
+stat rows, and three eligible accounts; both reported `changed_db: false` and
+zero rows written. No production account, deck rank, leaderboard stat, reward,
+or staff grant was created or changed for verification.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
