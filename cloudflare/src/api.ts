@@ -110,6 +110,10 @@ import {
   type SourceSkypassLevelInput,
   type SourceSkypassRewardInput
 } from './skypass-wire'
+import {
+  sourceDiscordInfoWire,
+  sourceTwitchInfoWire
+} from './social-info-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -2249,11 +2253,15 @@ export const handleApiRequest = async (
       }
 
       case 'GetDiscordInfo': {
-        return json(request, env, { data: await socialInfo.discordInfo() })
+        return json(request, env, {
+          data: sourceDiscordInfoWire(await socialInfo.discordInfo())
+        })
       }
 
       case 'GetTwitchInfo': {
-        return json(request, env, { data: await socialInfo.twitchInfo() })
+        return json(request, env, {
+          data: sourceTwitchInfoWire(await socialInfo.twitchInfo())
+        })
       }
 
       case 'GetStickers': {

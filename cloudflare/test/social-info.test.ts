@@ -166,4 +166,68 @@ describe('source social-info compatibility', () => {
       data: { streamers_online: 1, vods_available: 0 }
     })
   })
+
+  it('reprojects cached JSON through generated response structs', async () => {
+    const cachedAt = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO social_info_cache (cache_key, response_json, cached_at)
+         VALUES (?, ?, ?)`
+      ).bind(
+        'discord_info',
+        JSON.stringify({
+          users_online: 4,
+          instant_invite_url: 'invite',
+          internalCacheKey: 'private'
+        }),
+        cachedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO social_info_cache (cache_key, response_json, cached_at)
+         VALUES (?, ?, ?)`
+      ).bind(
+        'twitch_info',
+        JSON.stringify({
+          streamers_online: 1,
+          vods_available: 0,
+          streams: [
+            {
+              ...twitchStream,
+              internalAccessToken: 'private'
+            }
+          ],
+          internalCacheKey: 'private'
+        }),
+        cachedAt
+      )
+    ])
+    const socialFetch = vi.fn<SocialInfoFetch>()
+    const services: AuthServices = {
+      verifyProof: async () => {
+        throw new Error('not expected')
+      },
+      socialFetch
+    }
+    const rpc = (method: string) =>
+      handleApiRequest(
+        new Request(
+          `https://opensky.example/api/rpc/SkyWeaverAPI/${method}`,
+          { method: 'POST', body: '{}' }
+        ),
+        configuredEnv(),
+        services
+      )
+
+    expect(await (await rpc('GetDiscordInfo')).json()).toEqual({
+      data: { users_online: 4, instant_invite_url: 'invite' }
+    })
+    expect(await (await rpc('GetTwitchInfo')).json()).toEqual({
+      data: {
+        streamers_online: 1,
+        vods_available: 0,
+        streams: [twitchStream]
+      }
+    })
+    expect(socialFetch).not.toHaveBeenCalled()
+  })
 })
