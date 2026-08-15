@@ -420,6 +420,25 @@ Object alarm may partially grant inventory before the receipt is durable.
 
 ## Verified tests and remaining rollout gates
 
+Milestone `befd1bed` adds an independent source-derived settlement audit to
+`pnpm check:cloudflare:conquest-gate`. The audit parses the Go `switch wins`
+table and its grant loops directly from `api/lib/conquest/state_manager.go`,
+then compares that contract with the TypeScript `conquestRewardBundle`
+projection. It also derives the source feed distinction (immediate Silver
+`REWARD`, delayed Gold `DELAYED_REWARD`) and terminal progress rules, and
+requires independent Silver draws plus sorted Silver token IDs. Mutation tests
+prove that changing a source loop count, a TypeScript bundle count, a feed
+type, or the third-win terminal threshold fails the gate.
+
+The focused Conquest gate passed all five contract tests. The complete local
+release contract passed 391 main-Worker tests, 31 game-server unit tests, 92
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 25
+game/browser tests, six analytics tests, all source/off-chain audits,
+typechecks, and both production builds. Exact-head GitHub Actions run
+`31853107806` passed in 8m53s. This is release-safety evidence only: it changes
+no runtime artifact, schema, binding, production data, pool policy, or queue
+activation.
+
 - Differential bundle counts for 0, 1, 2, and 3 wins.
 - Independent Silver draws, sorted settlement token IDs, and weekly-Gold-only
   selection.
