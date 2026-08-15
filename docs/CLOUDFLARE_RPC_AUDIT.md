@@ -1927,6 +1927,62 @@ Production D1 reported no pending migrations. Verification changed no account,
 equipment, inventory, deck, match, reward, wallet, queue, content, or staff
 state.
 
+## Cookie-policy input fidelity rollout — 2026-08-15
+
+The source middleware authenticates both `GetCookiePolicy` and
+`SaveCookiePolicy`, so the Cloudflare access boundary was already correct and
+remains unchanged. The input decoder was not faithful: generated Go accepts an
+omitted or null `cookieOptions` map as nil, rejects non-boolean values during
+JSON decoding, and the handler rejects every name outside the exact
+`AUTHENTICATION`, `MARKETPLACE`, `GEO_BLOCKING`, and `PRODUCT_ANALYTICS` enum
+before saving. The TypeScript adapter previously rejected a missing map while
+silently accepting and normalizing unknown or non-boolean entries.
+
+Runtime commit `7b58db70e075b3844250d4ee8b0448c118d42c00` now preserves
+the source map-decoding boundary. Omitted and null maps restore the appropriate
+wallet or identity defaults, unknown names return the source
+`webrpc.unknown` error, and invalid value types return
+`webrpc.invalid_argument`. Validation completes before the repository call, so
+a mixed invalid request cannot partially update D1. Google identity policy
+continues to store only essential authentication and optional product analytics;
+the source's Marketplace and geo-blocking defaults remain available only for
+legacy wallet sessions and do not regain product authority.
+
+The source-derived release gate pins the generated enum and request map, Go
+defaults, handler validation and modifiability rule, integration evidence,
+middleware access, Worker error codes, validation-before-write ordering, and
+the complete-build inclusion. Mutation coverage rejects enum, access, default,
+decode, write-order, test, and gate drift. The isolated Worker contract also
+proves that both invalid-name and invalid-type requests leave the stored policy
+and timestamp unchanged.
+
+The complete local release contract passed 478 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31914333098` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`53018052-85cd-47ce-9d19-96200a914d6f` to
+`89a36662-9fdc-402b-9579-071ccc4eef5d`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no new asset
+files. The deployment verifier resolved web asset
+`/assets/index-d976a081.js`, unchanged game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+Anonymous `GetCookiePolicy` and `SaveCookiePolicy` requests both returned
+`401 webrpc.unauthenticated` with `Cache-Control: no-store`, proving that the
+source authentication boundary still precedes both reads and writes. An
+identity-free D1 aggregate found zero policy rows, zero unknown option names,
+zero writes, and `changed_db: false`; production D1 reported no pending
+migrations. Verification changed no account, cookie-policy, inventory, deck,
+match, reward, wallet, queue, content, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
