@@ -32,7 +32,6 @@ import {
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 
 import { AccountsRepository } from './accounts'
-import { sourceNullableAccountActionListWire } from './account-action-wire'
 import { AccountActionsRepository } from './account-actions'
 import { sourceAccountSignalSummaryListWire } from './account-signal-wire'
 import { AccountReportsRepository } from './account-reports'
@@ -53,9 +52,11 @@ import {
   MAX_FEEDBACK_REQUEST_BYTES
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
+import { sourceNullableGameModeStatusHistoryListWire } from './game-mode-history-wire'
 import {
-  sourceNullableGameModeStatusHistoryListWire
-} from './game-mode-history-wire'
+  sourceGMAccountListWire,
+  sourceGMStatsWire
+} from './staff-account-wire'
 import {
   CONQUEST_V2_EVENT_ID,
   ConquestRepository,
@@ -681,7 +682,9 @@ export const handleApiRequest = async (
       case 'GMStats': {
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
-        return json(request, env, { stats: await staff.stats() })
+        return json(request, env, {
+          stats: sourceGMStatsWire(await staff.stats())
+        })
       }
 
       case 'GMCreateAppDevKey': {
@@ -929,22 +932,24 @@ export const handleApiRequest = async (
         const actionsByUser = await accountActions.forUsers(
           result.rows.map(row => row.user_id)
         )
-        const accounts = await Promise.all(
-          result.rows.map(async row => {
-            const account = await playerRpc.getAccountForAdmin(
-              undefined,
-              identityReferenceFor(row.user_id)
-            )
-            if (!account) throw notFound('account not found')
-            return {
-              account,
-              conquestsUnlocked: row.conquests_unlocked === 1,
-              accountActions: sourceNullableAccountActionListWire(
-                actionsByUser.get(row.user_id)
-              ),
-              ipHistory: null
-            }
-          })
+        const accounts = sourceGMAccountListWire(
+          await Promise.all(
+            result.rows.map(async row => {
+              const account = await playerRpc.getAccountForAdmin(
+                undefined,
+                identityReferenceFor(row.user_id)
+              )
+              if (!account) throw notFound('account not found')
+              return {
+                account,
+                conquestsUnlocked: row.conquests_unlocked === 1,
+                accountActions: actionsByUser.get(row.user_id),
+                // Collecting IP history is a separate privacy/retention policy
+                // decision. Preserve the source nil-map wire until approved.
+                ipHistory: null
+              }
+            })
+          )
         )
         return json(request, env, { page: result.page, accounts })
       }

@@ -1965,6 +1965,12 @@ describe('fail-closed Google identity staff authorization', () => {
       hasBefore: false,
       hasAfter: false
     })
+    expect(Object.keys(body.accounts[0]!).sort()).toEqual([
+      'account',
+      'accountActions',
+      'conquestsUnlocked',
+      'ipHistory'
+    ])
     expect(body.accounts).toEqual([
       expect.objectContaining({
         account: expect.objectContaining({ address: `identity:${PLAYER}` }),

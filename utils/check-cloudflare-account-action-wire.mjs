@@ -51,6 +51,7 @@ export const accountActionWireErrors = (
   accountRPC,
   accountActionWire,
   accountSignalWire,
+  staffAccountWire,
   repository,
   api,
   packageSource
@@ -183,15 +184,15 @@ export const accountActionWireErrors = (
     }
   }
 
-  if (!api.includes("from './account-action-wire'")) {
-    errors.push('main Worker lost the shared account-action wire import')
-  }
   const workerAccountsRoute = section(
     api,
     "case 'GMListAccounts':",
     "case 'GMListAccountSignals':"
   )
-  if (!workerAccountsRoute.includes('sourceNullableAccountActionListWire(')) {
+  if (
+    !workerAccountsRoute.includes('sourceGMAccountListWire(') ||
+    !staffAccountWire.includes('sourceNullableAccountActionListWire(')
+  ) {
     errors.push(
       "nested account-action list bypasses source nulls: case 'GMListAccounts':"
     )
@@ -258,6 +259,7 @@ const main = async () => {
     'api/rpc/gamemaster.go',
     'cloudflare/src/account-action-wire.ts',
     'cloudflare/src/account-signal-wire.ts',
+    'cloudflare/src/staff-account-wire.ts',
     'cloudflare/src/account-actions.ts',
     'cloudflare/src/api.ts',
     'package.json'

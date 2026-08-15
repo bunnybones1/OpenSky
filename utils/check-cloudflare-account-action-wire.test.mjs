@@ -10,6 +10,7 @@ const fixtureFiles = [
   'api/rpc/gamemaster.go',
   'cloudflare/src/account-action-wire.ts',
   'cloudflare/src/account-signal-wire.ts',
+  'cloudflare/src/staff-account-wire.ts',
   'cloudflare/src/account-actions.ts',
   'cloudflare/src/api.ts',
   'package.json'
@@ -88,9 +89,9 @@ test('rejects enum, pointer, privacy, list, route, and gate drift', async () => 
       'sourceAccountActionListWire('
     ),
     mutate(
-      'cloudflare/src/api.ts',
-      'accountActions: sourceNullableAccountActionListWire(',
-      'accountActions: ('
+      'cloudflare/src/staff-account-wire.ts',
+      'sourceNullableAccountActionListWire(',
+      'sourceAccountActionListWire('
     ),
     mutate(
       'cloudflare/src/api.ts',
