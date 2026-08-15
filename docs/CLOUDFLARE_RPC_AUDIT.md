@@ -238,6 +238,53 @@ healthy `Ping` and an unauthenticated `ClaimSkypassRewards` rejection with
 `Cache-Control: no-store`. No production reward was claimed or fabricated;
 the authenticated mutation path is proven by isolated D1 Worker tests.
 
+### Complete match metadata JSON wire — 2026-08-14
+
+Milestone `92bb3d04` closes the remaining generated-wire gap around match
+history, match detail, admin match views, and replay metadata. The Go `Match`
+and `MatchPlayer` structs do not use JSON `omitempty`: all 21 public match
+fields and all 11 player fields are present, and nil pointers serialize as
+explicit nulls. The TypeScript projection had omitted missing region, tag art,
+crystal, session, winner, tutorial, and timestamp values. That sparse shape
+could reach the same preserved enum-sensitive client path as the earlier
+reward-union mismatch.
+
+A shared source-shaped normalizer now runs at the single persisted-match row
+projection used by every list, detail, staff, and replay-capability read.
+Existing D1 rows therefore receive the corrected shape on read without being
+rewritten. The source-derived release gate parses both generated Go structs,
+their exact field order, every pointer, and the absence of `omitempty`; mutation
+coverage rejects source drift, a missing null arm, a raw database projection,
+or a replay boundary that bypasses normalization. Direct exact-object tests
+cover nil match/player pointers, the account match-list boundary, completed
+replay metadata, and the source-valid in-progress null winner/end time.
+
+The complete local release contract passed 393 main-Worker tests, 34
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests,
+78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all typechecks, and both production builds. Exact-head
+GitHub Actions run `31861410988` passed in 9m02s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`0f94187f-9e42-42ad-84ec-c9525e73a3d0` to
+`4f444875-bbe5-476a-97b4-bebe16a46a6d`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. The production verifier resolved web
+asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Public `Ping`, `Version`, game-mode, and protocol-v3 game-health probes
+returned `200` with `no-store`; both Practice modes remained enabled and both
+Conquest modes remained disabled. The signed-in production account rendered
+its real human-practice match 12 in `LATEST MATCHES`, and its existing replay
+loaded through the engine to the 2:59/3:00 replay scene with both players and
+controls visible and no enum error. The read-only reward-readiness audit kept
+SkyPass `1/1` active and every policy-gated reward track dormant. Verification
+created no match, reward, receipt, inventory row, pool, queue, D1 migration, or
+economy authority.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
