@@ -333,10 +333,17 @@ describe('source conquest RPC foundation', () => {
       .bind(userId, now)
       .run()
 
-    expect(await (await rpc('ConquestStatus', {})).json()).toMatchObject({
+    expect(await (await rpc('ConquestStatus', {})).json()).toEqual({
       conquest: {
+        id: expect.any(Number),
+        status: ConquestStatus.IN_PROGRESS,
+        nonce: 1,
+        mode: GameMode.CONQUEST_CONSTRUCTED,
         hero: Hero.SAMYA,
-        deckClass: DeckClass.AGY
+        deckClass: DeckClass.AGY,
+        matchProgress: {},
+        createdAt: now,
+        endedAt: null
       }
     })
 

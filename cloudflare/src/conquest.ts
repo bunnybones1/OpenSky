@@ -11,6 +11,7 @@ import {
 } from '@opensky/proto'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
+import { sourceConquestWire } from './conquest-wire'
 import { invalidArgument } from './errors'
 import { goFloat32Percentage } from './go-numbers'
 
@@ -58,19 +59,20 @@ interface WeeklyGoldRow {
   total_supply: number
 }
 
-const conquest = (row: ConquestRow): Conquest => ({
-  id: row.id,
-  status: row.status,
-  nonce: row.nonce,
-  mode: row.mode,
-  hero: row.hero,
-  // The source ConquestStatus RPC never reads a persisted deck class. It
-  // derives the optional projection from the locked hero on every response.
-  deckClass: HERO_DECK_CLASS[row.hero] ?? DeckClass.UNKNOWN_CLASS,
-  matchProgress: parseConquestMatchProgress(row.match_progress),
-  createdAt: row.created_at,
-  ...(row.ended_at ? { endedAt: row.ended_at } : {})
-})
+const conquest = (row: ConquestRow): Conquest =>
+  sourceConquestWire({
+    id: row.id,
+    status: row.status,
+    nonce: row.nonce,
+    mode: row.mode,
+    hero: row.hero,
+    // The source ConquestStatus RPC never reads a persisted deck class. It
+    // derives the optional projection from the locked hero on every response.
+    deckClass: HERO_DECK_CLASS[row.hero] ?? DeckClass.UNKNOWN_CLASS,
+    matchProgress: parseConquestMatchProgress(row.match_progress),
+    createdAt: row.created_at,
+    endedAt: row.ended_at ?? undefined
+  })
 
 const rewardsForWins = (wins: number) => ({
   silver: wins === 1 ? 1 : wins === 2 ? 2 : wins === 3 ? 1 : 0,
