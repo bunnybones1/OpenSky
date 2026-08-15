@@ -1,6 +1,28 @@
-import type { GameMode, GameModeStatusHistory } from '@opensky/proto'
+import type {
+  GameMode,
+  GameModeStatusHistory,
+  GameModesStatus
+} from '@opensky/proto'
 
 type Nullable<T> = T | null | undefined
+
+export type SourceGameModesStatusInput = Partial<GameModesStatus>
+
+/** Recreates encoding/json output for the generated Go game-mode switches. */
+export const sourceGameModesStatusWire = (
+  status: SourceGameModesStatusInput
+): GameModesStatus => ({
+  tutorial: status.tutorial ?? false,
+  practicePVP: status.practicePVP ?? false,
+  practiceBot: status.practiceBot ?? false,
+  warmUp: status.warmUp ?? false,
+  rankedConstructed: status.rankedConstructed ?? false,
+  rankedDiscovery: status.rankedDiscovery ?? false,
+  conquestConstructed: status.conquestConstructed ?? false,
+  conquestDiscovery: status.conquestDiscovery ?? false,
+  challengeConstructed: status.challengeConstructed ?? false,
+  challengeDiscovery: status.challengeDiscovery ?? false
+})
 
 export type SourceGameModeStatusHistoryInput = {
   id?: number

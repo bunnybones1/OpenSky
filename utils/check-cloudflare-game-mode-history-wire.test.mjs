@@ -23,17 +23,42 @@ const fixtures = async () => {
 
 const errorsFor = value => gameModeHistoryWireErrors(...Object.values(value))
 
-test('derives and enforces game-mode history wire from Go source', async () => {
+test('derives and enforces game-mode status and history wire from Go source', async () => {
   assert.deepEqual(errorsFor(await fixtures()), [])
 })
 
-test('rejects enum, pointer, privacy, nil-list, route, and gate drift', async () => {
+test('rejects status, enum, pointer, privacy, nil-list, route, and gate drift', async () => {
   const value = await fixtures()
   const mutate = (file, from, to) => ({
     ...value,
     [file]: value[file].replace(from, to)
   })
   const mutations = [
+    mutate(
+      'api/proto/api.gen.go',
+      'Tutorial             bool `json:"tutorial"`',
+      'Tutorial             bool `json:"tutorial,omitempty"`'
+    ),
+    mutate(
+      'api/rpc/game_modes.go',
+      'PracticePVP:          true',
+      'PracticePVP:          false'
+    ),
+    mutate(
+      'api/rpc/game_modes.go',
+      'case proto.GameMode_PRACTICE_PVP:',
+      'case proto.GameMode_UNKNOWN:'
+    ),
+    mutate(
+      'cloudflare/src/game-mode-history-wire.ts',
+      'practicePVP: status.practicePVP ?? false',
+      'practicePVP: status.practiceBot ?? false'
+    ),
+    mutate(
+      'cloudflare/src/api.ts',
+      'return sourceGameModesStatusWire(body.status as GameModesStatus)',
+      'return body.status as GameModesStatus'
+    ),
     mutate('api/proto/api.gen.go', 'GameMode  *GameMode', 'GameMode  GameMode'),
     mutate(
       'api/proto/api.gen.go',

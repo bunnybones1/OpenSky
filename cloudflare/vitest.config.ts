@@ -40,7 +40,8 @@ export default defineConfig(async () => {
                   conquestConstructed: false,
                   conquestDiscovery: false,
                   challengeConstructed: true,
-                  challengeDiscovery: true
+                  challengeDiscovery: true,
+                  internalStatusRevision: 'must-not-reach-public-rpc'
                 }
               })
             },

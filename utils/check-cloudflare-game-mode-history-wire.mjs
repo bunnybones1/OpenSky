@@ -53,6 +53,25 @@ export const gameModeHistoryWireErrors = (
   packageSource
 ) => {
   const errors = []
+  const expectedStatusFields = [
+    field('Tutorial', 'bool', 'tutorial'),
+    field('PracticePVP', 'bool', 'practicePVP'),
+    field('PracticeBot', 'bool', 'practiceBot'),
+    field('WarmUp', 'bool', 'warmUp'),
+    field('RankedConstructed', 'bool', 'rankedConstructed'),
+    field('RankedDiscovery', 'bool', 'rankedDiscovery'),
+    field('ConquestConstructed', 'bool', 'conquestConstructed'),
+    field('ConquestDiscovery', 'bool', 'conquestDiscovery'),
+    field('ChallengeConstructed', 'bool', 'challengeConstructed'),
+    field('ChallengeDiscovery', 'bool', 'challengeDiscovery')
+  ]
+  if (
+    JSON.stringify(
+      structFields(structBody(generatedSource, 'GameModesStatus'))
+    ) !== JSON.stringify(expectedStatusFields)
+  ) {
+    errors.push('source GameModesStatus JSON contract changed')
+  }
   const expectedFields = [
     field('ID', 'uint64', 'id'),
     field('AccountID', 'AccountID', '-'),
@@ -87,6 +106,39 @@ export const gameModeHistoryWireErrors = (
     errors.push('source GameMode enum changed')
   }
 
+  const sourceStatusRoute = section(
+    rpcSource,
+    'func (s *Server) GetGameModesStatus(',
+    '\nfunc (s *Server) GMGameModeSet('
+  )
+  for (const token of [
+    'Tutorial:             true',
+    'PracticePVP:          true',
+    'PracticeBot:          true',
+    'WarmUp:               true',
+    'RankedConstructed:    true',
+    'RankedDiscovery:      true',
+    'ConquestConstructed:  true',
+    'ConquestDiscovery:    true',
+    'ChallengeConstructed: true',
+    'ChallengeDiscovery:   true',
+    'case proto.GameMode_TUTORIAL:',
+    'case proto.GameMode_PRACTICE_BOT:',
+    'case proto.GameMode_PRACTICE_PVP:',
+    'case proto.GameMode_WARM_UP:',
+    'case proto.GameMode_RANKED_CONSTRUCTED:',
+    'case proto.GameMode_RANKED_DISCOVERY:',
+    'case proto.GameMode_CONQUEST_CONSTRUCTED:',
+    'case proto.GameMode_CONQUEST_DISCOVERY:',
+    'case proto.GameMode_CHALLENGE_CONSTRUCTED:',
+    'case proto.GameMode_CHALLENGE_DISCOVERY:',
+    'return status, nil'
+  ]) {
+    if (!sourceStatusRoute.includes(token)) {
+      errors.push(`source game-mode status response changed: ${token}`)
+    }
+  }
+
   const sourceRoute = section(
     rpcSource,
     'func (s *Server) GMGameModeStatusHistory(',
@@ -102,6 +154,22 @@ export const gameModeHistoryWireErrors = (
   }
 
   const compactWire = historyWire.replace(/\s+/g, ' ')
+  for (const token of [
+    'tutorial: status.tutorial ?? false',
+    'practicePVP: status.practicePVP ?? false',
+    'practiceBot: status.practiceBot ?? false',
+    'warmUp: status.warmUp ?? false',
+    'rankedConstructed: status.rankedConstructed ?? false',
+    'rankedDiscovery: status.rankedDiscovery ?? false',
+    'conquestConstructed: status.conquestConstructed ?? false',
+    'conquestDiscovery: status.conquestDiscovery ?? false',
+    'challengeConstructed: status.challengeConstructed ?? false',
+    'challengeDiscovery: status.challengeDiscovery ?? false'
+  ]) {
+    if (!compactWire.includes(token)) {
+      errors.push(`main Worker game-mode status wire is missing: ${token}`)
+    }
+  }
   for (const token of [
     'id: history.id ?? 0',
     'gameMode: history.gameMode ?? null',
@@ -120,7 +188,18 @@ export const gameModeHistoryWireErrors = (
   }
 
   if (!api.includes("from './game-mode-history-wire'")) {
-    errors.push('main Worker lost the shared game-mode history wire import')
+    errors.push('main Worker lost the shared game-mode wire import')
+  }
+  if (
+    !section(
+      api,
+      'const authoritativeGameModesStatus = async (',
+      '\nexport const handleApiRequest = async ('
+    ).includes(
+      'return sourceGameModesStatusWire(body.status as GameModesStatus)'
+    )
+  ) {
+    errors.push('GetGameModesStatus bypasses source normalization')
   }
   if (
     !section(
@@ -167,7 +246,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Game-mode history enum, required pointers, private fields, and nil lists preserve generated Go semantics'
+      'Game-mode status fields plus history enums, pointers, private fields, and nil lists preserve generated Go semantics'
     )
   }
 }

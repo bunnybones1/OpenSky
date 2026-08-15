@@ -52,7 +52,10 @@ import {
   MAX_FEEDBACK_REQUEST_BYTES
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
-import { sourceNullableGameModeStatusHistoryListWire } from './game-mode-history-wire'
+import {
+  sourceGameModesStatusWire,
+  sourceNullableGameModeStatusHistoryListWire
+} from './game-mode-history-wire'
 import {
   sourceGMAccountListWire,
   sourceGMStatsWire
@@ -296,7 +299,7 @@ const authoritativeGameModesStatus = async (
   ) {
     throw new Error('match service returned invalid mode status')
   }
-  return body.status as GameModesStatus
+  return sourceGameModesStatusWire(body.status as GameModesStatus)
 }
 
 export const handleApiRequest = async (
