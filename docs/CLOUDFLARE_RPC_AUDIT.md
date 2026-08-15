@@ -1534,6 +1534,60 @@ reported `changed_db: false` and zero rows written. No production match or
 staff grant was fabricated to exercise the positive path; exact proof remains
 in isolated-D1 Worker tests.
 
+## Conquest V2 response fidelity rollout — 2026-08-15
+
+The generated Go Conquest V2 response family has no `omitempty` JSON fields.
+In particular, `ConquestV2PoolConfigData.MaxPoolCeiling` is a pointer, and the
+source pool manager deliberately leaves that pointer nil in the `Settings`
+projection while populating it in `Default` and `Final`. The settings response
+must therefore include `"maxPoolCeiling": null`; the Worker previously omitted
+the property. The source staff progress handler also starts with a nil result
+slice, so a page with no event-2 rows must return `data: null`, not `[]`.
+
+Milestone `62b840cf` adds one shared source-wire module for the complete
+Conquest V2 family: pool, treasure info, config data/config pointers, summary
+and treasure-level slices, treasure progress, account progress pointers, and
+pointer-valued treasure maps. The economy repository and all player/staff RPC
+boundaries now use those projections. This repairs existing responses on read
+without enabling the dormant legacy cash pool, changing reward policy, or
+writing production data.
+
+The source-derived gate parses all eight generated Go structs, pointer and
+slice types, absence of JSON omission, pool-manager constructor behavior,
+summary allocation, the staff handler's nil list, and the public treasure
+map's pointer values. Fourteen independent mutations fail closed on struct,
+pointer, slice, map, repository, route, or build-gate drift. Direct serializer
+tests distinguish nil from allocated empty slices and preserve nil pointers;
+isolated-D1 RPC tests cover the real empty staff page and exact config output.
+
+The complete release contract passed 458 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78
+matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31900254562` passed in 10m00s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`9b6253da-ff09-4a38-a04a-0bea0d5f8499` to
+`f5d96739-e503-4015-a347-4d41d6368edf`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Version` returned the new Worker ID and `Ping` returned
+`200`; both used `Cache-Control: no-store`. Unauthenticated config and staff
+progress requests returned `401` with that cache boundary. The dormant public
+pool remained `{ "amount": 0, "totalWeight": 0 }`, and all eleven public
+treasure levels remained off-chain zero values. Before and after snapshots
+both found one settings row at version zero and no pool cache, config audit,
+event-2 progress, or reward-schedule rows; both reported `changed_db: false`
+and zero rows written. No production staff grant or Conquest state was
+fabricated to exercise a positive admin path; exact proof remains in the
+isolated-D1 Worker tests.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
