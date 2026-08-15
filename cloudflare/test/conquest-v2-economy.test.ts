@@ -113,6 +113,7 @@ describe('Conquest V2 economy preview', () => {
           weightPerSilverCard: 0
         },
         settings: {
+          maxPoolCeiling: null,
           poolCeiling: 0,
           poolFloor: 0,
           topWeightUnitPrice: 0,

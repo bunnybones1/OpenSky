@@ -73,6 +73,12 @@ import {
 } from './conquest-reward-pool-operations'
 import { ConquestV2EconomyRepository } from './conquest-v2-economy'
 import {
+  sourceConquestTreasureInfoMapWire,
+  sourceConquestV2PoolWire,
+  sourceConquestV2TreasureProgressWire,
+  sourceNullableConquestV2AccountTreasureProgressListWire
+} from './conquest-v2-wire'
+import {
   CONQUEST_V2_REWARD_SCHEDULE_OPERATION_HEADER,
   ConquestV2RewardScheduleOperationsRepository
 } from './conquest-v2-reward-schedule-operations'
@@ -1339,11 +1345,13 @@ export const handleApiRequest = async (
         const result = await staff.conquestTreasureProgress(body.page)
         return json(request, env, {
           page: result.page,
-          data: result.rows.map(row => ({
-            accountID: row.account_id,
-            accountName: row.account_name,
-            progress: conquestTreasureProgress(row.current_points)
-          }))
+          data: sourceNullableConquestV2AccountTreasureProgressListWire(
+            result.rows.map(row => ({
+              accountID: row.account_id,
+              accountName: row.account_name,
+              progress: conquestTreasureProgress(row.current_points)
+            }))
+          )
         })
       }
 
@@ -1822,7 +1830,9 @@ export const handleApiRequest = async (
 
       case 'ConquestV2Pool': {
         await requestBody<Record<string, never>>(request)
-        return json(request, env, { pool: { amount: 0, totalWeight: 0 } })
+        return json(request, env, {
+          pool: sourceConquestV2PoolWire({ amount: 0, totalWeight: 0 })
+        })
       }
 
       case 'ConquestV2Progress': {
@@ -1833,14 +1843,18 @@ export const handleApiRequest = async (
           CONQUEST_V2_EVENT_ID
         )
         return json(request, env, {
-          progress: conquestTreasureProgress(points.current)
+          progress: sourceConquestV2TreasureProgressWire(
+            conquestTreasureProgress(points.current)
+          )
         })
       }
 
       case 'ConquestTreasuresInfo': {
         await requestBody<Record<string, never>>(request)
         return json(request, env, {
-          treasures: await conquestV2OffchainTreasureInfo(env.AUTH_DB)
+          treasures: sourceConquestTreasureInfoMapWire(
+            await conquestV2OffchainTreasureInfo(env.AUTH_DB)
+          )
         })
       }
 

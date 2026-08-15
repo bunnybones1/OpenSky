@@ -3076,6 +3076,15 @@ describe('fail-closed Google identity staff authorization', () => {
     ).rejects.toThrow(/immutable/i)
   })
 
+  it('preserves the source nil list for empty Conquest treasure progress', async () => {
+    await grantAdmin()
+    expect(
+      await (
+        await rpcAs(ADMIN, 'GMListConquestV2AccountTreasureProgress')
+      ).json()
+    ).toMatchObject({ data: null })
+  })
+
   it('paginates event-2 Conquest treasure progress using source thresholds', async () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([

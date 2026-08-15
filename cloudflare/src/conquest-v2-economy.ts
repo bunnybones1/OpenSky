@@ -1,13 +1,18 @@
 import type {
   ConquestV2Pool,
   ConquestV2PoolConfig,
-  ConquestV2PoolConfigData,
   ConquestV2Summary,
   ConquestV2TreasureLevelSummary
 } from '@opensky/proto'
 
 import { invalidArgument } from './errors'
 import { goFloat32 } from './go-numbers'
+import {
+  sourceConquestV2PoolConfigWire,
+  sourceConquestV2PoolWire,
+  sourceConquestV2SummaryWire,
+  type SourceConquestV2PoolConfigDataInput
+} from './conquest-v2-wire'
 
 const EVENT_ID = 2
 const MAX_INT32 = 2_147_483_647
@@ -15,7 +20,7 @@ const MAX_FLOAT32 = 3.4028234663852886e38
 
 // Exact values from api/etc/opensky-api.conf.sample. The checked-in source
 // leaves WeightPerSilverCard and PoolTTLSeconds unset, so both compile to zero.
-const DEFAULT_CONFIG: ConquestV2PoolConfigData = {
+const DEFAULT_CONFIG: SourceConquestV2PoolConfigDataInput = {
   maxPoolCeiling: 5_000,
   poolCeiling: 2_500,
   poolFloor: 100,
@@ -52,7 +57,10 @@ export interface ConquestV2PoolConfigUpdate {
   weightPerSilverCard?: unknown
 }
 
-const settingsData = (row: SettingsRow): ConquestV2PoolConfigData => ({
+const settingsData = (
+  row: SettingsRow
+): SourceConquestV2PoolConfigDataInput => ({
+  maxPoolCeiling: null,
   poolCeiling: row.pool_ceiling,
   poolFloor: row.pool_floor,
   topWeightUnitPrice: row.top_weight_unit_price,
@@ -61,8 +69,8 @@ const settingsData = (row: SettingsRow): ConquestV2PoolConfigData => ({
 })
 
 const finalConfig = (
-  settings: ConquestV2PoolConfigData
-): ConquestV2PoolConfigData => ({
+  settings: SourceConquestV2PoolConfigDataInput
+): SourceConquestV2PoolConfigDataInput => ({
   ...DEFAULT_CONFIG,
   poolCeiling:
     settings.poolCeiling > 0
@@ -130,11 +138,11 @@ export class ConquestV2EconomyRepository {
 
   async config(): Promise<ConquestV2PoolConfig> {
     const settings = settingsData(await this.settingsRow())
-    return {
+    return sourceConquestV2PoolConfigWire({
       default: { ...DEFAULT_CONFIG },
       settings,
       final: finalConfig(settings)
-    }
+    })
   }
 
   async setConfig(
@@ -165,7 +173,8 @@ export class ConquestV2EconomyRepository {
     for (let attempt = 0; attempt < 4; attempt++) {
       const beforeRow = await this.settingsRow()
       const before = settingsData(beforeRow)
-      const after: ConquestV2PoolConfigData = {
+      const after: SourceConquestV2PoolConfigDataInput = {
+        maxPoolCeiling: null,
         poolCeiling: parsed.poolCeiling ?? before.poolCeiling,
         poolFloor: parsed.poolFloor ?? before.poolFloor,
         topWeightUnitPrice:
@@ -268,7 +277,10 @@ export class ConquestV2EconomyRepository {
       )
       .first<CacheRow>()
     if (cache && new Date(cache.expires_at).getTime() > at.getTime()) {
-      return { amount: cache.amount, totalWeight: cache.total_weight }
+      return sourceConquestV2PoolWire({
+        amount: cache.amount,
+        totalWeight: cache.total_weight
+      })
     }
 
     const [config, levels] = await Promise.all([
@@ -310,7 +322,7 @@ export class ConquestV2EconomyRepository {
       )
       .bind(amount, totalWeight, expiresAt, at.toISOString())
       .run()
-    return { amount, totalWeight }
+    return sourceConquestV2PoolWire({ amount, totalWeight })
   }
 
   async summary(at = new Date()): Promise<ConquestV2Summary> {
@@ -322,11 +334,11 @@ export class ConquestV2EconomyRepository {
     for (const level of treasureLevels) {
       totalWeight = Math.fround(totalWeight + level.totalWeight)
     }
-    return {
+    return sourceConquestV2SummaryWire({
       pool: pool.amount,
       totalWeight: goFloat32(totalWeight),
       weightUnitPrice: roundWeightUnitPrice(pool.amount, totalWeight),
       treasureLevels
-    }
+    })
   }
 }
