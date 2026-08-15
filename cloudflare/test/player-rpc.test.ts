@@ -1369,6 +1369,38 @@ describe('legacy player RPC compatibility', () => {
     expect(
       (await rpc('GetMatch', { matchID: rankedRow!.id }, false)).status
     ).toBe(401)
+
+    // The preserved Practice > Versus Player flow records a private challenge,
+    // which the source includes in the owner's match history even though bot
+    // practice remains hidden.
+    const challengeTime = new Date(Date.parse(now) + 2_000).toISOString()
+    await insertHistoryMatch(
+      'challenge-history',
+      'CHALLENGE_CONSTRUCTED',
+      challengeTime
+    )
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET player1_mode = 'CHALLENGE_CONSTRUCTED',
+           player2_mode = 'CHALLENGE_CONSTRUCTED'
+       WHERE proposal_id = 'challenge-history'`
+    ).run()
+    expect(
+      await (
+        await rpc('ListMatches', {
+          page: { pageSize: 1 },
+          req: { accountAddress: identityReference }
+        })
+      ).json()
+    ).toMatchObject({
+      res: [
+        {
+          replayID: 'challenge-history-replay',
+          player1GameMode: 'CHALLENGE_CONSTRUCTED',
+          player2GameMode: 'CHALLENGE_CONSTRUCTED'
+        }
+      ]
+    })
   })
 
   it('rebuilds the source profile feed from durable reward and rank receipts', async () => {
