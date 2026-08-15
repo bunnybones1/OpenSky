@@ -1212,6 +1212,56 @@ that exact proof remains the isolated-D1 Worker integration test. Verification
 did not create a checkout, payment, log, fulfillment, reward, inventory record,
 or wallet state.
 
+## App developer key wire fidelity rollout — 2026-08-15
+
+The generated Go `AppDevKey` model has nine required public JSON fields plus a
+private pagination cursor. Its creator, updater, creation-time, and update-time
+pointers do not use `omitempty`, so absent values serialize as explicit `null`;
+the cursor must never reach the wire. The source list handler starts from a
+nonnil empty slice, so an empty result serializes as `[]` rather than `null`.
+
+`cloudflare/src/app-dev-key-wire.ts` now owns that exact projection and
+make-backed list boundary. Create, list, and token-reveal responses all pass
+through the shared serializer. The signed app-developer JWT's `app` claim uses
+the same normalized value, while the repository's private audit snapshots
+remain unchanged. This is a serialization-only change; it does not alter key
+generation, token signing, enable/disable behavior, authentication, staff
+authority, accounts, games, rewards, payments, or wallets.
+
+The source-derived gate parses the complete generated struct and JSON tags,
+pins the source create/list/token construction, checks all three Worker route
+boundaries, enforces the private cursor and empty-array result, and remains in
+the complete Cloudflare build. Ten mutations fail closed on pointer, privacy,
+list, repository, route, or build-gate drift. Three direct wire tests plus the
+isolated-D1 staff integration coverage assert all required nulls and zero
+values, populated key projection, exact public keys, cursor exclusion, and the
+empty-array result.
+
+The complete release contract passed 436 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31889567405` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`8b61df99-fd31-4099-b38d-c59cf2ea763c` to
+`e9b5e721-ae53-4eb4-b93b-a8e5c47acc08`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated `GMListAppDevKeys` request returned `401` with the same cache
+boundary before staff-data access. No production admin grant, developer key,
+or developer token was created merely to inspect a populated response; that
+exact proof remains the isolated-D1 Worker integration test. Verification did
+not enable, disable, reveal, create, or otherwise mutate any production key,
+account, game, reward, payment, inventory, or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
