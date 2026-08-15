@@ -321,6 +321,48 @@ release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
 game-mode probes returned `200` with `Cache-Control: no-store`; the game Worker
 remained healthy on protocol 3, and both Conquest modes remained disabled.
 
+### Complete Account profile JSON wire — 2026-08-14
+
+Milestone `60c91b09` applies the generated-wire rule to every Cloudflare
+`Account` projection. The Go struct has 19 public JSON fields with no
+`omitempty`; ten are pointers and therefore serialize as explicit nulls when
+unset. The previous TypeScript identity, wallet-compatibility, and leaderboard
+objects conditionally omitted values such as settings, region, title, crystal,
+inviter, and burner status. Public reads now retain the source privacy boundary
+by returning null settings and burner status, while owner and staff reads keep
+their permitted nested values. Nested `AccountStats` and `AccountSettings`
+continue to honor their own source `omitempty` tags.
+
+The shared projection also restores the source `CrystalGetter` decoration from
+identity-owned off-chain inventory. Profile and leaderboard reads select a
+positive `SW_CRYSTALS` balance with the exact source priority order
+`7, 1, 2, 3, 8, 4, 5, 6`; this remains an account cosmetic and does not require
+a wallet. Direct Worker tests cover the exact 19-field owner and public shapes,
+privacy nulls, source crystal fallback after a balance reaches zero, and the
+leaderboard/deck-rank boundaries. A source-derived mutation gate rejects field,
+pointer, nested-omission, priority, positive-balance, projection, or API-route
+drift and is required by the complete CI build.
+
+The complete release contract passed 394 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31864996362` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`4075b6a3-1f2b-4da5-9408-1dc70af1dc86` to
+`f2919ba4-3849-4163-a197-c718573d1f34`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no asset changes;
+the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
+game-mode probes returned `200` with `Cache-Control: no-store`; game and
+matchmaker protocol-3 health remained healthy, both Conquest modes remained
+disabled, and production D1 reported no pending migrations. Verification did
+not create synthetic account, item, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
