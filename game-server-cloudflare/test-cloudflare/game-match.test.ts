@@ -7,13 +7,20 @@ import {
 } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GameMode, MatchStatus } from '@opensky/proto'
+import { gameStateParse } from '@opensky/shared/gameStateSerializer'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
+import * as StateBindings from '@skyweaver/state-browser-sys'
+import type {
+  PlayerSecret,
+  SkyWeaver
+} from '@skyweaver/state-metadata'
 
 import {
   archiveReplayRecords,
   GameMatch,
   GameServerEnv
 } from '../src/game-match'
+import { hexToBytes } from '../src/encoding'
 import { recordAbandonPenalty } from '../src/abandon-penalties'
 import {
   INTERNAL_AUTH_HEADER,
@@ -27,6 +34,7 @@ import {
   applyMatchStats,
   applyWarmUpProgress
 } from '../src/progression'
+import { initializeStateWasm } from '../src/state-runtime'
 import {
   createMatchFixture,
   PLAYER_SESSION_ID_1,
@@ -1709,12 +1717,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       'https://match/internal/replay/0',
       { headers }
     )
-    const [init] = (await initialRecord.json()) as Array<{
+    const [init] = gameStateParse(await initialRecord.text()) as Array<{
       type: string
       version: string
       rootProof: string
       players: unknown[]
-      secrets: unknown[]
+      secrets: Array<[PlayerSecret<SkyWeaver>, number[]]>
     }>
     expect(init).toMatchObject({
       type: 'init',
@@ -1723,6 +1731,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(init.players).toHaveLength(2)
     expect(init.secrets).toHaveLength(2)
+    expect(init.secrets[0][0].instances).toBeInstanceOf(Map)
+    expect(init.secrets[0][0].secret.cardRarities).toBeInstanceOf(Map)
     expect(init.players).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1743,7 +1753,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     const diffRecord = await stub().fetch('https://match/internal/replay/1', {
       headers
     })
-    expect(await diffRecord.json()).toEqual([
+    const diffLog = gameStateParse(await diffRecord.text()) as Array<{
+      type: string
+      timestamp: string
+      message: { type: string; data: string[] }
+    }>
+    expect(diffLog).toEqual([
       {
         type: 'gameplay',
         timestamp: expect.any(String),
@@ -1753,6 +1768,33 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         }
       }
     ])
+
+    // Exercise the same boundary as the browser replay worker. JSON must
+    // restore secret Maps before the real WASM constructor sees them, and
+    // every authoritative diff must decode with the same generated enums.
+    initializeStateWasm()
+    const replay = new StateBindings.WasmMatch(
+      undefined,
+      hexToBytes(init.rootProof),
+      init.secrets.map(([secret, randomSeed]) => [
+        secret,
+        Uint8Array.from(randomSeed)
+      ]),
+      true,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      (length: number) => Array.from({ length }, () => 0)
+    )
+    try {
+      for (const diff of diffLog.flatMap(record => record.message.data)) {
+        expect(() => replay.raw_apply(hexToBytes(diff))).not.toThrow()
+      }
+      expect(replay.serialize(3).byteLength).toBeGreaterThan(0)
+    } finally {
+      replay.free()
+    }
 
     const denied = await stub().fetch('https://match/internal/replay/0')
     expect(denied.status).toBe(404)
