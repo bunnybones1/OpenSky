@@ -1091,6 +1091,18 @@ export class CompetitiveRepository {
         pageSize: size,
         hasBefore: end < rows.length,
         hasAfter: start > 0,
+        sort: [
+          ...(!hasRankFilter
+            ? [
+                {
+                  column: 'player_rank',
+                  order: 'DESC' as SortBy['order']
+                }
+              ]
+            : []),
+          { column: 'st.score', order: 'DESC' as SortBy['order'] },
+          { column: 'st.updated_at', order: 'ASC' as SortBy['order'] }
+        ],
         ...(slice.length > 0
           ? {
               before: encodeLeaderboardCursor(slice[0], hasRankFilter),

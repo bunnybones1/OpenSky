@@ -1137,6 +1137,12 @@ export class PlayerRpcRepository {
         pageSize: size,
         hasBefore: end < filtered.length,
         hasAfter: start > 0,
+        sort: [
+          {
+            column: 'created_at',
+            order: 'DESC' as SortBy['order']
+          }
+        ],
         ...(res.length > 0
           ? {
               before: encodeFeedEventCursor(res[0]),

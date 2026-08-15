@@ -128,9 +128,23 @@ describe('source card-library RPC compatibility', () => {
     })
     expect(filtered.status).toBe(200)
     const filteredBody = await filtered.json<{
-      page: { pageSize: number }
+      page: Record<string, unknown> & { pageSize: number }
       res: Array<{ card: { id: number; name: string }; balance: string }>
     }>()
+    expect(Object.keys(filteredBody.page)).toEqual([
+      'pageSize',
+      'before',
+      'hasBefore',
+      'after',
+      'hasAfter',
+      'sort'
+    ])
+    expect(filteredBody.page).toMatchObject({
+      pageSize: 2,
+      hasBefore: true,
+      hasAfter: false,
+      sort: [{ column: 'mana_weight', order: 'ASC' }]
+    })
     expect(filteredBody.page.pageSize).toBe(2)
     expect(filteredBody.res.map(item => item.card.id)).toEqual([16, 96])
     expect(Object.keys(filteredBody.res[0])).toEqual(
@@ -147,7 +161,19 @@ describe('source card-library RPC compatibility', () => {
     const hiddenToken = await rpc('SearchCards', {
       req: { criteria: { ids: [20_000] } }
     })
-    expect((await hiddenToken.json<{ res: unknown[] }>()).res).toHaveLength(0)
+    const hiddenTokenBody = await hiddenToken.json<{
+      page: Record<string, unknown>
+      res: unknown[]
+    }>()
+    expect(hiddenTokenBody.res).toHaveLength(0)
+    expect(hiddenTokenBody.page).toStrictEqual({
+      pageSize: 20,
+      before: null,
+      hasBefore: false,
+      after: null,
+      hasAfter: false,
+      sort: [{ column: 'mana_weight', order: 'ASC' }]
+    })
     const includedToken = await rpc('SearchCards', {
       req: { criteria: { ids: [20_000], includeTokens: true } }
     })

@@ -72,6 +72,7 @@ import {
 import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
 import { sourcePendingCardsListWire } from './pending-card-wire'
+import { sourceResponsePageWire } from './page-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -173,7 +174,7 @@ const responseHeaders = (request: Request, env: Env): Headers => {
 }
 
 const json = (request: Request, env: Env, body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
+  new Response(JSON.stringify(sourceResponsePageWire(body)), {
     status,
     headers: responseHeaders(request, env)
   })
