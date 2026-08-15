@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   sourceBalanceTupleWire,
+  sourceCardOwnershipWire,
   sourceCardWithBalanceWire
 } from '../src/card-balance-wire'
 
@@ -45,5 +46,51 @@ describe('source CardWithBalance JSON wire', () => {
     expect(sourceBalanceTupleWire({ balance: '7', isNew: true })).toStrictEqual(
       { balance: '7', isNew: true }
     )
+  })
+
+  it('normalizes every ownership tuple and preserves the 13-field order', () => {
+    const counts = { STR: 0 }
+    const matrix = { STR: { SW_BASE_CARDS: 0 } }
+    const result = sourceCardOwnershipWire({
+      cardBalances: {
+        6: {
+          SW_BASE_CARDS: { balance: '1', isNew: false },
+          SW_SILVER_CARDS: { balance: '0' }
+        }
+      },
+      lockedCards: 1,
+      lockedCardsByClass: counts,
+      lockedCardsByFrame: { SW_BASE_CARDS: 1 },
+      lockedCardsByClassAndFrame: matrix,
+      unlockedCards: 1,
+      unlockedCardsByClass: counts,
+      unlockedCardsByFrame: { SW_BASE_CARDS: 1 },
+      unlockedCardsByClassAndFrame: matrix,
+      pendingCards: 0,
+      pendingCardsByClass: counts,
+      pendingCardsByFrame: { SW_BASE_CARDS: 0 },
+      pendingCardsByClassAndFrame: matrix
+    }) as unknown as Record<string, unknown>
+    expect(Object.keys(result)).toEqual([
+      'cardBalances',
+      'lockedCards',
+      'lockedCardsByClass',
+      'lockedCardsByFrame',
+      'lockedCardsByClassAndFrame',
+      'unlockedCards',
+      'unlockedCardsByClass',
+      'unlockedCardsByFrame',
+      'unlockedCardsByClassAndFrame',
+      'pendingCards',
+      'pendingCardsByClass',
+      'pendingCardsByFrame',
+      'pendingCardsByClassAndFrame'
+    ])
+    expect(result.cardBalances).toStrictEqual({
+      '6': {
+        SW_BASE_CARDS: { balance: '1', isNew: false },
+        SW_SILVER_CARDS: { balance: '0', isNew: null }
+      }
+    })
   })
 })

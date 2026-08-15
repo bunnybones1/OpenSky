@@ -128,6 +128,21 @@ const SOURCE_CARD_WITH_BALANCE_FIELDS = [
   'createdAt'
 ]
 const SOURCE_BALANCE_TUPLE_FIELDS = ['balance', 'isNew']
+const SOURCE_CARD_OWNERSHIP_FIELDS = [
+  'cardBalances',
+  'lockedCards',
+  'lockedCardsByClass',
+  'lockedCardsByFrame',
+  'lockedCardsByClassAndFrame',
+  'unlockedCards',
+  'unlockedCardsByClass',
+  'unlockedCardsByFrame',
+  'unlockedCardsByClassAndFrame',
+  'pendingCards',
+  'pendingCardsByClass',
+  'pendingCardsByFrame',
+  'pendingCardsByClassAndFrame'
+]
 
 const rpcAs = async (
   sessionUserId: string,
@@ -2487,15 +2502,19 @@ describe('legacy player RPC compatibility', () => {
         cardBalances: Record<string, Record<string, { balance: string }>>
       }
     }>()
+    expect(Object.keys(res)).toEqual(SOURCE_CARD_OWNERSHIP_FIELDS)
     expect(res.unlockedCards).toBe(30)
     expect(res.lockedCards).toBe(826)
     expect(res.unlockedCardsByClass.STR).toBe(30)
     expect(res.unlockedCardsByFrame.SW_BASE_CARDS).toBe(30)
     expect(res.cardBalances['6']).toMatchObject({
-      SW_BASE_CARDS: { balance: '1' },
-      SW_SILVER_CARDS: { balance: '0' },
-      SW_GOLD_CARDS: { balance: '0' }
+      SW_BASE_CARDS: { balance: '1', isNew: expect.any(Boolean) },
+      SW_SILVER_CARDS: { balance: '0', isNew: null },
+      SW_GOLD_CARDS: { balance: '0', isNew: null }
     })
+    for (const tuple of Object.values(res.cardBalances['6'])) {
+      expect(Object.keys(tuple)).toEqual(SOURCE_BALANCE_TUPLE_FIELDS)
+    }
 
     const otherUserId = 'public-card-ownership-user'
     const now = new Date().toISOString()
@@ -2521,9 +2540,20 @@ describe('legacy player RPC compatibility', () => {
       false
     )
     expect(publicOwnership.status).toBe(200)
-    expect(await publicOwnership.json()).toMatchObject({
+    const publicOwnershipBody = await publicOwnership.json<{
       res: {
-        cardBalances: { '6': { SW_SILVER_CARDS: { balance: '2' } } }
+        cardBalances: Record<string, Record<string, Record<string, unknown>>>
+      }
+    }>()
+    expect(publicOwnershipBody).toMatchObject({
+      res: {
+        cardBalances: {
+          '6': {
+            SW_BASE_CARDS: { balance: '1', isNew: false },
+            SW_SILVER_CARDS: { balance: '2', isNew: false },
+            SW_GOLD_CARDS: { balance: '0', isNew: null }
+          }
+        }
       }
     })
     expect(

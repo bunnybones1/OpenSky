@@ -20,6 +20,10 @@ import { DeckClass } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
+import {
+  sourceCardOwnershipWire,
+  type SourceCardOwnershipInput
+} from './card-balance-wire'
 import { allLibraryCards } from './card-library'
 import type { SourceCardInput } from './card-wire'
 import { pendingConquestCards } from './conquest-delivery'
@@ -2234,7 +2238,7 @@ export class PlayerRpcRepository {
         Object.fromEntries(CARD_FRAMES.map(frame => [frame, 0]))
       ])
     ) as Record<string, Record<string, number>>
-    const cardBalances: CardOwnershipResponse['cardBalances'] = {}
+    const cardBalances: SourceCardOwnershipInput['cardBalances'] = {}
     const seenCards = new Set<number>()
 
     for (const row of rows) {
@@ -2250,7 +2254,7 @@ export class PlayerRpcRepository {
       const activeClass = cardClass as (typeof CARD_CLASSES)[number]
       if (!cardBalances[row.card_id]) {
         cardBalances[row.card_id] = Object.fromEntries(
-          CARD_FRAMES.map(frame => [frame, { balance: '0', isNew: false }])
+          CARD_FRAMES.map(frame => [frame, { balance: '0', isNew: null }])
         )
       }
       cardBalances[row.card_id][row.item_type] = {
@@ -2318,7 +2322,7 @@ export class PlayerRpcRepository {
       }
     }
 
-    return {
+    return sourceCardOwnershipWire({
       cardBalances,
       lockedCards: TOTAL_ACTIVE_CARDS - seenCards.size,
       lockedCardsByClass: lockedByClass,
@@ -2332,7 +2336,7 @@ export class PlayerRpcRepository {
       pendingCardsByClass: pendingByClass,
       pendingCardsByFrame: pendingByFrame,
       pendingCardsByClassAndFrame: pendingByClassAndFrame
-    }
+    })
   }
 
   private async backfillQuestPeriods(userId: string): Promise<void> {
