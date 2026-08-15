@@ -1,15 +1,35 @@
-import type { Account, FriendPoints } from '@opensky/proto'
-
 import { invalidArgument, permissionDenied } from './errors'
+import type {
+  SourceFriendPointsInput,
+  SourceGiftedInviterAccountInput
+} from './friend-points-wire'
 import { seasonFromDate } from './legacy-seasons'
-import { PlayerRpcRepository } from './player-rpc'
 import { identityReferenceFor } from './rpc-principal'
 
 interface FriendPointRow {
   invitee_user_id: string
+  account_id: number
+  account_name: string
+  locale: string
+  level: number
+  region: string | null
+  tag_art_id: string | null
   levels: number
   points: number
   points_spent: number
+}
+
+interface GiftedInviterRow {
+  user_id: string
+  account_id: number
+  account_name: string
+  locale: string
+  created_at: string
+  updated_at: string
+  warm_ups: number
+  level: number
+  region: string | null
+  tag_art_id: string | null
 }
 
 const identityUserId = (reference: string) => {
@@ -74,6 +94,12 @@ export class SocialRepository {
       this.database
         .prepare(
           `SELECT invite.invitee_user_id,
+                  game.id AS account_id,
+                  account.name AS account_name,
+                  account.locale,
+                  profile.level,
+                  account.region,
+                  account.tag_art_id,
                   COALESCE(season_points.levels, 0) AS levels,
                   COALESCE(
                     season_points.points_carried + season_points.levels,
@@ -81,6 +107,15 @@ export class SocialRepository {
                   ) AS points,
                   COALESCE(season_points.points_spent, 0) AS points_spent
            FROM player_invites invite
+           JOIN game_accounts game
+             ON game.user_id = invite.invitee_user_id
+           JOIN player_account_settings account
+             ON account.user_id = invite.invitee_user_id
+            AND account.account_status IN (
+              'ACTIVE', 'VIP', 'SUSPENDED', 'FLAGGED', 'TO_DELETE'
+            )
+           JOIN player_profiles profile
+             ON profile.user_id = invite.invitee_user_id
            LEFT JOIN player_friend_points season_points
              ON season_points.invitee_user_id = invite.invitee_user_id
             AND season_points.inviter_user_id = invite.inviter_user_id
@@ -89,7 +124,7 @@ export class SocialRepository {
            ORDER BY COALESCE(
              season_points.points_carried + season_points.levels,
              0
-           ) DESC, invite.invitee_user_id ASC
+           ) DESC, game.id ASC
            LIMIT 5`
         )
         .bind(season, userId)
@@ -111,27 +146,27 @@ export class SocialRepository {
         .first<{ total: number }>()
     ])
 
-    const accounts = new PlayerRpcRepository(this.database)
-    const friends: FriendPoints[] = []
-    for (const row of rows.results) {
-      const account = await accounts.getAccountByReference(
-        identityReferenceFor(row.invitee_user_id)
-      )
-      if (!account) continue
-      friends.push({
-        account,
-        season,
-        levels: row.levels,
-        points: row.points,
-        pointsSpent: row.points_spent
-      })
-    }
+    const friends: SourceFriendPointsInput[] = rows.results.map(row => ({
+      account: {
+        id: row.account_id,
+        address: identityReferenceFor(row.invitee_user_id),
+        name: row.account_name,
+        locale: row.locale,
+        level: row.level,
+        ...(row.region ? { region: row.region } : {}),
+        ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {})
+      },
+      season,
+      levels: row.levels,
+      points: row.points,
+      pointsSpent: row.points_spent
+    }))
     return { total: total?.total ?? 0, friends }
   }
 
   async getPointsGifted(userId: string): Promise<{
     total: number
-    inviter: Account | null
+    inviter: SourceGiftedInviterAccountInput | null
   }> {
     const invite = await this.database
       .prepare(
@@ -150,9 +185,42 @@ export class SocialRepository {
       )
       .bind(userId, invite.inviter_user_id)
       .first<{ total: number }>()
-    const inviter = await new PlayerRpcRepository(
-      this.database
-    ).getAccountByReference(identityReferenceFor(invite.inviter_user_id))
-    return { total: total?.total ?? 0, inviter }
+    const inviter = await this.database
+      .prepare(
+        `SELECT users.id AS user_id,
+                game.id AS account_id,
+                account.name AS account_name,
+                account.locale,
+                account.created_at,
+                account.updated_at,
+                account.warm_ups,
+                profile.level,
+                account.region,
+                account.tag_art_id
+         FROM users
+         JOIN game_accounts game ON game.user_id = users.id
+         JOIN player_account_settings account ON account.user_id = users.id
+         JOIN player_profiles profile ON profile.user_id = users.id
+         WHERE users.id = ?`
+      )
+      .bind(invite.inviter_user_id)
+      .first<GiftedInviterRow>()
+    return {
+      total: total?.total ?? 0,
+      inviter: inviter
+        ? {
+            id: inviter.account_id,
+            address: identityReferenceFor(inviter.user_id),
+            name: inviter.account_name,
+            locale: inviter.locale,
+            createdAt: inviter.created_at,
+            updatedAt: inviter.updated_at,
+            warmUps: inviter.warm_ups,
+            level: inviter.level,
+            ...(inviter.region ? { region: inviter.region } : {}),
+            ...(inviter.tag_art_id ? { tagArtID: inviter.tag_art_id } : {})
+          }
+        : null
+    }
   }
 }

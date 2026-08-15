@@ -116,6 +116,10 @@ import {
   type SourceSkypassRewardInput
 } from './skypass-wire'
 import {
+  sourceFriendPointsResponseWire,
+  sourcePointsGiftedResponseWire
+} from './friend-points-wire'
+import {
   sourceDiscordInfoWire,
   sourceTwitchInfoWire
 } from './social-info-wire'
@@ -1786,7 +1790,9 @@ export const handleApiRequest = async (
         return json(
           request,
           env,
-          await social.getFriendPoints(principal.userId)
+          sourceFriendPointsResponseWire(
+            await social.getFriendPoints(principal.userId)
+          )
         )
       }
 
@@ -1796,7 +1802,9 @@ export const handleApiRequest = async (
         return json(
           request,
           env,
-          await social.getPointsGifted(principal.userId)
+          sourcePointsGiftedResponseWire(
+            await social.getPointsGifted(principal.userId)
+          )
         )
       }
 

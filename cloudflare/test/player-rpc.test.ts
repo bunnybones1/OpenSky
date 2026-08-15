@@ -356,6 +356,16 @@ describe('legacy player RPC compatibility', () => {
     const inviterUserId = 'rpc-inviter-user-id'
     const inviterReference = `identity:${inviterUserId}`
     const now = new Date().toISOString()
+
+    const noInviter = await rpc('GetPointsGifted', {
+      address: identityReference
+    })
+    expect(await noInviter.json()).toEqual({ total: 0, inviter: null })
+    const noFriends = await rpc('GetFriendPoints', {
+      address: identityReference
+    })
+    expect(await noFriends.json()).toEqual({ total: 0, friends: [] })
+
     await env.AUTH_DB.prepare(
       `INSERT INTO users
          (id, display_name, primary_email, created_at, updated_at)
@@ -420,21 +430,75 @@ describe('legacy player RPC compatibility', () => {
     const gifted = await rpc('GetPointsGifted', {
       address: identityReference
     })
-    expect(await gifted.json()).toMatchObject({
+    const inviterAccount = await env.AUTH_DB.prepare(
+      `SELECT game.id,
+              account.created_at,
+              account.updated_at
+       FROM game_accounts game
+       JOIN player_account_settings account ON account.user_id = game.user_id
+       WHERE game.user_id = ?`
+    )
+      .bind(inviterUserId)
+      .first<{ id: number; created_at: string; updated_at: string }>()
+    if (!inviterAccount) throw new Error('inviter account was not bootstrapped')
+    expect(await gifted.json()).toEqual({
       total: 5,
-      inviter: { address: inviterReference, name: 'Inviting Weasel' }
+      inviter: {
+        id: inviterAccount.id,
+        address: inviterReference,
+        name: 'Inviting Weasel',
+        locale: 'en',
+        createdAt: inviterAccount.created_at,
+        updatedAt: inviterAccount.updated_at,
+        experience: 0,
+        warmUps: 0,
+        level: 1,
+        seasonLevel: 0,
+        levelUpXP: 0,
+        stats: null,
+        region: null,
+        tagArtID: null,
+        crystalID: null,
+        titleID: null,
+        settings: null,
+        invitedBy: null,
+        isBurnerWallet: null
+      }
     })
 
     const friends = await rpcAs(inviterUserId, 'GetFriendPoints', {
       address: inviterReference
     })
-    expect(await friends.json()).toMatchObject({
+    const friendAccount = await env.AUTH_DB.prepare(
+      'SELECT id FROM game_accounts WHERE user_id = ?'
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    if (!friendAccount) throw new Error('friend account was not bootstrapped')
+    expect(await friends.json()).toEqual({
       total: 7,
       friends: [
         {
           account: {
+            id: friendAccount.id,
             address: identityReference,
-            invitedBy: inviterReference
+            name: 'Cloud Weasel Player',
+            locale: 'en',
+            createdAt: null,
+            updatedAt: null,
+            experience: 0,
+            warmUps: 0,
+            level: 1,
+            seasonLevel: 0,
+            levelUpXP: 0,
+            stats: null,
+            region: null,
+            tagArtID: null,
+            crystalID: null,
+            titleID: null,
+            settings: null,
+            invitedBy: null,
+            isBurnerWallet: null
           },
           season,
           levels: 3,
@@ -443,6 +507,71 @@ describe('legacy player RPC compatibility', () => {
         }
       ]
     })
+  })
+
+  it('filters and orders the source top-five active friend-point list', async () => {
+    const season = seasonFromDate()
+    const now = new Date().toISOString()
+    const friendSpecs = [
+      ['friend-z', 'Friend.Z', 'ACTIVE', 10],
+      ['friend-a', 'Friend.A', 'VIP', 10],
+      ['friend-suspended', 'Friend.Suspended', 'SUSPENDED', 9],
+      ['friend-flagged', 'Friend.Flagged', 'FLAGGED', 8],
+      ['friend-delete-pending', 'Friend.Delete.Pending', 'TO_DELETE', 7],
+      ['friend-sixth', 'Friend.Sixth', 'ACTIVE', 6],
+      ['friend-banned', 'Friend.Banned', 'BANNED', 100],
+      ['friend-deleted', 'Friend.Deleted', 'DELETED', 100]
+    ] as const
+
+    for (const [friendId, name, status, points] of friendSpecs) {
+      await env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(friendId, name, `${friendId}@example.com`, now, now)
+        .run()
+      await new PlayerRepository(env.AUTH_DB).bootstrap(friendId)
+      await env.AUTH_DB.batch([
+        env.AUTH_DB.prepare(
+          `UPDATE player_account_settings SET account_status = ?
+           WHERE user_id = ?`
+        ).bind(status, friendId),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_invites
+             (invitee_user_id, inviter_user_id, created_at)
+           VALUES (?, ?, ?)`
+        ).bind(friendId, userId, now),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_friend_points
+             (invitee_user_id, inviter_user_id, season, levels,
+              points_carried, points_spent, updated_at)
+           VALUES (?, ?, ?, ?, 0, 0, ?)`
+        ).bind(friendId, userId, season, points, now)
+      ])
+    }
+
+    const response = await rpc('GetFriendPoints', {
+      address: identityReference
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json<{
+      total: number
+      friends: Array<{
+        account: { address: string }
+        points: number
+      }>
+    }>()
+    expect(body.total).toBe(0)
+    expect(
+      body.friends.map(friend => [friend.account.address, friend.points])
+    ).toEqual([
+      ['identity:friend-z', 10],
+      ['identity:friend-a', 10],
+      ['identity:friend-suspended', 9],
+      ['identity:friend-flagged', 8],
+      ['identity:friend-delete-pending', 7]
+    ])
   })
 
   it('heals eligible pre-port accounts into the source Wanderer rank', async () => {
