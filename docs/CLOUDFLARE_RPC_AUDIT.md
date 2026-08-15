@@ -205,6 +205,39 @@ safe cache policy. Read-only production probes returned healthy API and game
 workers with `Cache-Control: no-store`; the affected replay now reports both
 30-card initial decks and all 80 archive records.
 
+### Canonical SkyPass reward cards — 2026-08-14
+
+The Go SkyPass reward applier returns the complete `card.Card` selected from
+the source card index and changes only its reward `itemType`. The TypeScript
+port instead constructed a placeholder from a short name table and inferred
+class ranges. Most card rewards therefore reached the preserved claim dialog
+with empty descriptions, assets, and image URLs; `UNKNOWN` element, type, and
+set values; zero stats; and an invented `isNew: true` flag.
+
+Milestone `a1ee00c9` now projects rewards from the checked-in canonical card
+library. Base-card and hero-starter unlock rows use the same canonical name and
+class instead of the removed fallback table. `ListSkypassRewards` also
+rehydrates previously persisted placeholder card receipts at read time, so an
+existing immutable receipt renders correctly without being rewritten. The
+source's nullable `isNew` field remains `null`, while the reward frame is still
+set explicitly as the Go applier does.
+
+The isolated Worker contract covers a card outside the former name table,
+including its description, asset, class, element, type, stats, set, image URLs,
+inventory unlock, and read-time repair of a legacy placeholder. The focused
+player RPC suite passed 50/50 tests; the complete release gate passed 392 main-
+Worker tests, 231 multiplayer tests, 25 browser/game tests, six analytics
+tests, every source/off-chain audit, all typechecks, and both production
+builds. Exact-head GitHub Actions run `31855485197` passed in 8m14s.
+
+Main Worker version `0f94187f-9e42-42ad-84ec-c9525e73a3d0` was then deployed.
+The fail-closed verifier matched web asset `/assets/index-b6aa1ef3.js`, game
+asset `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and
+the release-safe cache policy on its first attempt. Public probes returned a
+healthy `Ping` and an unauthenticated `ClaimSkypassRewards` rejection with
+`Cache-Control: no-store`. No production reward was claimed or fabricated;
+the authenticated mutation path is proven by isolated D1 Worker tests.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
