@@ -1,5 +1,10 @@
 import type { AppDevKey, Page, SortBy } from '@opensky/proto'
 
+import {
+  sourceAppDevKeyListWire,
+  sourceAppDevKeyWire,
+  type SourceAppDevKeyInput
+} from './app-dev-key-wire'
 import { invalidArgument, notFound } from './errors'
 import { signAppDevSession } from './jwt'
 
@@ -19,19 +24,20 @@ interface AppDevKeyRow {
   updated_at: string
 }
 
-const present = (row: AppDevKeyRow): AppDevKey => ({
+const appDevKeyInput = (row: AppDevKeyRow): SourceAppDevKeyInput => ({
   id: row.id,
   appKey: row.app_key,
   name: row.name,
   email: row.email,
   disabled: row.disabled === 1,
   createdBy: row.created_by_game_account_id,
-  ...(row.updated_by_game_account_id
-    ? { updatedBy: row.updated_by_game_account_id }
-    : {}),
+  updatedBy: row.updated_by_game_account_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at
 })
+
+const present = (row: AppDevKeyRow): AppDevKey =>
+  sourceAppDevKeyWire(appDevKeyInput(row))
 
 const auditSnapshot = (row: AppDevKeyRow) => ({
   id: row.id,
@@ -385,7 +391,7 @@ export class AppDevKeyRepository {
         hasAfter: start > 0,
         sort: requested.sort.map(item => item.response)
       },
-      data: selected.map(present)
+      data: sourceAppDevKeyListWire(selected.map(appDevKeyInput))
     }
   }
 

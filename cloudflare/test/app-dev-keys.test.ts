@@ -121,7 +121,7 @@ describe('app developer key management', () => {
     })
     expect(body.appDevKey.id).toEqual(expect.any(Number))
     expect(body.appDevKey.createdBy).toEqual(expect.any(Number))
-    expect(body.appDevKey.updatedBy).toBeUndefined()
+    expect(body.appDevKey.updatedBy).toBeNull()
     expect(body.appDevKey.createdAt).toEqual(expect.any(String))
     expect(body.appDevKey.updatedAt).toBe(body.appDevKey.createdAt)
     expect(body.appDevKey.appKey).toMatch(/^SW01[0-9a-f]{28}$/)
