@@ -6,6 +6,7 @@ import {
   ItemType,
   RewardType,
   type Card,
+  type Item,
   type Reward
 } from '@opensky/proto'
 import {
@@ -141,26 +142,38 @@ const cardReward = (
 ): Reward => {
   const source = cardsById.get(cardId)
   if (!source) throw new Error(`Conquest reward card ${cardId} is invalid`)
+  const { validFromSeason: _validFromSeason, ...wireCard } = source
   return {
     accountID,
     type: RewardType.CARD,
+    gameMode: null,
+    rank: null,
+    exp: null,
     card: {
-      amount: 1,
+      amount: 0,
       card: {
-        ...source,
-        itemType,
-        isNew: true
+        ...wireCard,
+        itemType: ItemType.UNKNOWN,
+        isNew: null
       } as unknown as Card,
       item: {
         id: 0,
+        contractAddress: null,
         itemType,
         tokenID: cardId,
-        balance: '1',
+        balance: '0',
         lastUpdateID: 0,
-        isNew: true
-      }
-    }
-  }
+        updatedAt: null,
+        createdAt: null,
+        isNew: null
+      } as unknown as Item
+    },
+    hero: null,
+    heroSkin: null,
+    deck: null,
+    conquestV2TreasureProgress: null,
+    stickerPoints: null
+  } as unknown as Reward
 }
 
 const receiptFromRow = (

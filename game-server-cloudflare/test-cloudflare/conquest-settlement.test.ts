@@ -1,5 +1,10 @@
 import { env } from 'cloudflare:test'
-import { ConquestMatchResult, ConquestStatus, ItemType } from '@opensky/proto'
+import {
+  ConquestMatchResult,
+  ConquestStatus,
+  ItemType,
+  RewardType
+} from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
@@ -262,6 +267,75 @@ describe('source Conquest reward settlement', () => {
     })
   })
 
+  it('returns the exact source card reward wire shape', async () => {
+    const conquest = await setup(1)
+    const receipt = await settlePendingConquest(
+      env.AUTH_DB,
+      conquest!.id,
+      SETTLED_AT,
+      sequenceDraw(0)
+    )
+
+    expect(receipt.rewards).toEqual([
+      {
+        accountID: 91,
+        type: RewardType.CARD,
+        gameMode: null,
+        rank: null,
+        exp: null,
+        card: {
+          amount: 0,
+          card: {
+            id: 6,
+            name: 'Stomp',
+            description:
+              'Do damage to target unit equal to the highest health among ally units.',
+            asset: 'spell-case-94',
+            class: 'STR',
+            element: 'EARTH',
+            type: 'SPELL',
+            manaCost: 2,
+            power: 0,
+            health: 0,
+            attachedSpellID: null,
+            keywords: [],
+            status: 'PLAY',
+            set: 'CORE_SET',
+            imageURL: {
+              small:
+                'https://assets.skyweaver.net/latest/full-cards/en/2x/6.webp',
+              medium:
+                'https://assets.skyweaver.net/latest/full-cards/en/4x/6.webp',
+              large:
+                'https://assets.skyweaver.net/latest/full-cards/en/6x/6.webp'
+            },
+            itemType: ItemType.UNKNOWN,
+            isNew: null,
+            silverCardTokenId: 65_542,
+            goldCardTokenId: 131_078
+          },
+          item: {
+            id: 0,
+            contractAddress: null,
+            itemType: ItemType.SW_SILVER_CARDS,
+            tokenID: 6,
+            balance: '0',
+            lastUpdateID: 0,
+            updatedAt: null,
+            createdAt: null,
+            isNew: null
+          }
+        },
+        hero: null,
+        heroSkin: null,
+        deck: null,
+        conquestV2TreasureProgress: null,
+        stickerPoints: null
+      }
+    ])
+    expect(receipt.rewards[0].card?.card).not.toHaveProperty('validFromSeason')
+  })
+
   it('allows duplicate independent Silver draws and increments one balance', async () => {
     const conquest = await setup(2)
     const receipt = await settlePendingConquest(
@@ -331,6 +405,19 @@ describe('source Conquest reward settlement', () => {
       goldCardIds: [136],
       silverTokenIds: [65_542],
       goldTokenIds: [131_208]
+    })
+    expect(receipt.rewards[1]).toMatchObject({
+      type: RewardType.CARD,
+      card: {
+        amount: 0,
+        card: { itemType: ItemType.UNKNOWN, isNew: null },
+        item: {
+          itemType: ItemType.SW_GOLD_CARDS,
+          tokenID: 136,
+          balance: '0',
+          isNew: null
+        }
+      }
     })
     expect((await inventory()).results).toMatchObject([
       { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 1 }

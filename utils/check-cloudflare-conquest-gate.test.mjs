@@ -314,14 +314,15 @@ test('binds the reviewed Conquest card ranges to the generated catalog', () => {
 })
 
 test('derives Conquest settlement rewards and terminal behavior from source', async () => {
-  const [stateManager, conquestModel, settlement, progression] =
+  const [stateManager, conquestModel, cardIndex, settlement, progression] =
     await Promise.all([
       readFile('api/lib/conquest/state_manager.go', 'utf8'),
       readFile('api/data/conquest.go', 'utf8'),
+      readFile('api/data/card_index.go', 'utf8'),
       readFile('game-server-cloudflare/src/conquest-settlement.ts', 'utf8'),
       readFile('game-server-cloudflare/src/progression.ts', 'utf8')
     ])
-  const source = `${stateManager}\n${conquestModel}`
+  const source = `${stateManager}\n${conquestModel}\n${cardIndex}`
   assert.deepEqual(
     conquestSettlementSourceParityErrors(source, settlement, progression),
     []
@@ -362,5 +363,30 @@ test('derives Conquest settlement rewards and terminal behavior from source', as
       settlement,
       progression.replace('wins >= 3', 'wins >= 4')
     ).some(error => error.includes('terminal contract is missing'))
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source,
+      settlement.replace('amount: 0', 'amount: 1'),
+      progression
+    ).some(error => error.includes('reward wire'))
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source,
+      settlement.replace('itemType: ItemType.UNKNOWN', 'itemType: itemType'),
+      progression
+    ).some(error => error.includes('reward wire'))
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source.replace(
+        'card.ImageURL = m.GetImageURL(card.ID)',
+        `card.ItemType = proto.ItemType_SW_SILVER_CARDS
+        card.ImageURL = m.GetImageURL(card.ID)`
+      ),
+      settlement,
+      progression
+    ).some(error => error.includes('source Conquest reward wire'))
   )
 })

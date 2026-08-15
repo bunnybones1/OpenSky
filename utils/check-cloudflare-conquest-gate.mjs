@@ -22,9 +22,7 @@ const bracedBlock = (source, marker) => {
 }
 
 const switchCases = block => {
-  const markers = [
-    ...block.matchAll(/^\s*(?:case\s+(\d+)|default)\s*:/gm)
-  ]
+  const markers = [...block.matchAll(/^\s*(?:case\s+(\d+)|default)\s*:/gm)]
   return markers.map((marker, index) => ({
     key: marker[1] === undefined ? 'default' : Number(marker[1]),
     body: block.slice(
@@ -50,10 +48,7 @@ const sourceConquestBundles = source => {
     for (const loop of entry.body.matchAll(
       /for\s+(\w+)\s*:=\s*1;\s*\1\s*<=\s*(\d+);\s*\1\+\+\s*\{([\s\S]*?)\n\s*\}/g
     )) {
-      const callsInside = occurrences(
-        loop[3],
-        /m\.getSilverCard\(conquest\)/g
-      )
+      const callsInside = occurrences(loop[3], /m\.getSilverCard\(conquest\)/g)
       silver += (Number(loop[2]) - 1) * callsInside
     }
     bundles.set(entry.key, {
@@ -100,10 +95,94 @@ const sourceFeedProjection = source => {
 
 const workerFeedProjection = source =>
   Object.fromEntries(
-    [...source.matchAll(
-      /\['(REWARD|DELAYED_REWARD)',\s*(silver|gold)TokenIds\]/g
-    )].map(match => [match[2], match[1]])
+    [
+      ...source.matchAll(
+        /\['(REWARD|DELAYED_REWARD)',\s*(silver|gold)TokenIds\]/g
+      )
+    ].map(match => [match[2], match[1]])
   )
+
+const sourceRewardWireIsCanonical = source => {
+  const cardIndex = bracedBlock(source, 'func (m *cardIndex) LoadCards')
+  if (
+    !cardIndex ||
+    !cardIndex.includes('card.ImageURL = m.GetImageURL(card.ID)') ||
+    !cardIndex.includes('card.SilverCardTokenID = &silverCardTokenID') ||
+    !cardIndex.includes('card.GoldCardTokenID = &goldCardTokenID') ||
+    cardIndex.includes('card.ItemType =') ||
+    cardIndex.includes('card.IsNew =')
+  ) {
+    return false
+  }
+  for (const [method, itemType] of [
+    ['getSilverCard', 'SW_SILVER_CARDS'],
+    ['getGoldCard', 'SW_GOLD_CARDS']
+  ]) {
+    const methodBody = bracedBlock(source, `func (m *StateManager) ${method}`)
+    const rewardCard = methodBody
+      ? bracedBlock(methodBody, 'Card: &proto.RewardCard')
+      : undefined
+    const item = rewardCard
+      ? bracedBlock(rewardCard, 'Item: &proto.Item')
+      : undefined
+    if (
+      !methodBody ||
+      !rewardCard ||
+      !item ||
+      !rewardCard.includes('Card: card.Card') ||
+      !item.includes(`ItemType: proto.ItemType_${itemType}`) ||
+      !item.includes('TokenID:  card.Card.ID') ||
+      /\bAmount\s*:/.test(rewardCard) ||
+      /\b(?:Balance|IsNew)\s*:/.test(item) ||
+      /card\.(?:ItemType|IsNew)\s*=/.test(methodBody)
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+const workerRewardWireErrors = settlement => {
+  const reward = bracedBlock(settlement, 'const cardReward')
+  if (!reward) return ['Worker Conquest card reward could not be derived']
+  const compact = reward.replace(/\s+/g, ' ')
+  const errors = []
+  for (const token of [
+    'validFromSeason: _validFromSeason',
+    'gameMode: null',
+    'rank: null',
+    'exp: null',
+    'amount: 0',
+    'itemType: ItemType.UNKNOWN',
+    'contractAddress: null',
+    "balance: '0'",
+    'lastUpdateID: 0',
+    'updatedAt: null',
+    'createdAt: null',
+    'hero: null',
+    'heroSkin: null',
+    'deck: null',
+    'conquestV2TreasureProgress: null',
+    'stickerPoints: null'
+  ]) {
+    if (!compact.includes(token)) {
+      errors.push(`Worker Conquest reward wire contract is missing: ${token}`)
+    }
+  }
+  if (occurrences(reward, /isNew:\s*null/g) !== 2) {
+    errors.push(
+      'Worker Conquest reward wire must preserve two null newness fields'
+    )
+  }
+  for (const token of ['amount: 1', "balance: '1'", 'isNew: true']) {
+    if (compact.includes(token)) {
+      errors.push(
+        `Worker Conquest reward wire invents persisted state: ${token}`
+      )
+    }
+  }
+  return errors
+}
 
 /**
  * Derives the reward table and feed projection from the Go implementation,
@@ -142,6 +221,11 @@ export const conquestSettlementSourceParityErrors = (
   ) {
     errors.push('Worker Conquest feed projection drifted from the Go source')
   }
+
+  if (!sourceRewardWireIsCanonical(source)) {
+    errors.push('source Conquest reward wire shape could not be derived')
+  }
+  errors.push(...workerRewardWireErrors(settlement))
 
   const compactSource = source.replace(/\s+/g, ' ')
   const compactSettlement = settlement.replace(/\s+/g, ' ')
@@ -558,7 +642,9 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'db.In(proto.TaskStatus_PENDING, proto.TaskStatus_DISABLED)'
     ]) {
       if (!evidence.sourceDelayedMinting.includes(token)) {
-        errors.push(`source delayed Conquest Gold contract is missing: ${token}`)
+        errors.push(
+          `source delayed Conquest Gold contract is missing: ${token}`
+        )
       }
     }
   }
@@ -833,7 +919,8 @@ const main = async () => {
         path.join(root, 'api', 'lib', 'conquest', 'state_manager.go'),
         'utf8'
       ),
-      readFile(path.join(root, 'api', 'data', 'conquest.go'), 'utf8')
+      readFile(path.join(root, 'api', 'data', 'conquest.go'), 'utf8'),
+      readFile(path.join(root, 'api', 'data', 'card_index.go'), 'utf8')
     ]).then(sources => sources.join('\n')),
     readFile(
       path.join(
@@ -857,9 +944,15 @@ const main = async () => {
       ),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare', 'src', 'conquest-delivery.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-delivery.ts'),
+      'utf8'
+    ),
     Promise.all([
-      readFile(path.join(root, 'api', 'lib', 'jobqueue', 'delayed_minting.go'), 'utf8'),
+      readFile(
+        path.join(root, 'api', 'lib', 'jobqueue', 'delayed_minting.go'),
+        'utf8'
+      ),
       readFile(path.join(root, 'api', 'rpc', 'cards.go'), 'utf8')
     ]).then(sources => sources.join('\n')),
     readFile(
