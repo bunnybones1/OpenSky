@@ -699,6 +699,56 @@ rendered its full navigation, 31/856 Base-card inventory, rank and Conquest
 sections, and existing “Gained a Stalwart Sentinel Card!” reward. Verification
 created no synthetic card, item, account, match, reward, or economy state.
 
+### Complete PendingCardsResponse JSON wire — 2026-08-15
+
+Milestone `61e136a7` applies the generated-wire rule to `GetPendingCards`. The
+Go `PendingCardsResponse` has exactly three public JSON fields with no
+`omitempty`: `cards`, `tokenIDs`, and `mintAt`. Both slices are nullable, and
+the handler's outer result slice is also nil when an account has no delivery
+tasks, so an empty account must return `{ "res": null }` rather than an empty
+array. A delivery task whose card or token list is still nil must likewise
+emit explicit null fields.
+
+The embedded card is the canonical card-index projection. Its generated
+`itemType` remains `UNKNOWN` and `isNew` remains null; Silver or Gold identity
+is carried separately by `tokenIDs`. The previous TypeScript response invented
+a Gold item type and true newness on the embedded card, returned an empty
+array for no tasks, and leaked the card index's private `validFromSeason`
+field. A shared pending-card projection now composes the protected Card wire
+and preserves the exact three-field response shape and nil-slice behavior.
+
+The source-derived release gate parses the generated response fields and Go
+handler initialization, requires the shared projection to remain connected to
+the delivery repository and API route, and composes the existing Card wire
+gate for its nested object. Its mutation suite rejects 15 forms of source
+drift, sparse nulls, invented enum/newness values, private catalog leakage, or
+projection bypass. The complete release contract passed 400 main-Worker tests,
+34 game-server unit tests, 93 game-server Workers tests, 31 match-service
+tests, 78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31876497154` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`d9f7e220-0aa9-4eb6-b298-f451bd96edaa` to
+`27ea8f79-5f90-49d6-96f7-9edcacf5e751`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+The signed-in production pending-cards page completed its authenticated query
+without an enum or decoding error and rendered its source-compatible empty
+state. Public API `Ping`, version metadata, and game-mode status returned `200`
+with `Cache-Control: no-store`; practice PvP and bot modes remained enabled
+and both Conquest modes remained disabled. Game and matchmaker protocol-3
+health stayed healthy, and production D1 reported no pending migrations. The
+signed-in original account page still rendered its full navigation, 31/856
+Base-card inventory, rank and Conquest sections, match statistics, and
+existing “Gained a Stalwart Sentinel Card!” reward. Verification created no
+synthetic card, delivery task, item, account, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
