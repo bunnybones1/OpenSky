@@ -802,6 +802,60 @@ inventory, rank and Conquest sections, match statistics, and existing “Gained
 a Stalwart Sentinel Card!” reward. Verification created no synthetic account,
 page state, card, item, match, reward, or economy state.
 
+### Complete player Reward JSON wire — 2026-08-15
+
+Milestone `abc79009` applies the generated Go `Reward` wire to every
+main-Worker producer and response boundary. The source union has exactly 11
+public JSON fields with no `omitempty`: account, type, game mode, rank, XP,
+card, hero, hero skin, deck, Conquest V2 treasure progress, and sticker
+points. Every inactive pointer must therefore be an explicit null. Nested rank,
+XP, card/item, deck, and treasure-progress pointers and nil slices retain the
+same rule instead of disappearing from a sparse TypeScript object.
+
+The shared projection now covers `ClaimQuestRewards`, `ReRollQuest`,
+`ClaimSkypassRewards`, and `BotMatchEnd`. `ListQuests` and every empty player
+reward result preserve the source handlers' nil-slice JSON as null rather than
+an invented empty array. SkyPass list rows always expose `gainedRewards`, and
+old persisted receipts are normalized when read. Embedded cards and items pass
+through their existing generated-field projections, repairing older card
+metadata while preventing internal catalog or persistence fields from leaking.
+
+The source-derived gate parses the complete generated union and nested pointer
+contracts, pins the nil-slice construction in the Go quest, SkyPass, and bot
+handlers, requires all four public Worker boundaries and stored SkyPass reads,
+and composes the protected Card and Item projections. Its mutation suite
+rejects 14 forms of source drift, sparse variants, nil-slice invention, private
+leakage, stored-receipt bypass, route bypass, or gate removal. Direct unit and
+isolated D1 integration coverage assert exact union keys, nested nulls, card and
+item privacy, empty reward results, quest XP/rank, SkyPass card claims, and bot
+tutorial receipts.
+
+The complete release contract passed 407 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31878912880` passed in 8m48s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`709470b3-6fd5-4be9-9113-d2f8bcd471c6` to
+`fda1a2e3-a52d-4635-a61e-d6caa3f99332`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated SkyPass claim returned `401` with the same cache boundary
+before any player-state access. The signed-in original Home, complete season-62
+SkyPass, and account screens all rendered without a Reward enum or union decode
+error. The account retained its full navigation, 31/856 Base-card inventory,
+rank and Conquest sections, match statistics, and existing “Gained a Stalwart
+Sentinel Card!” receipt. Verification did not claim, fabricate, or mutate any
+production reward, account, card, item, match, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
