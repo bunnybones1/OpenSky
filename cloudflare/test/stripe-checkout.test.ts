@@ -1025,22 +1025,68 @@ describe('dormant Stripe Checkout port', () => {
     })
     expect(paymentsResponse.status).toBe(200)
     const paymentsBody = (await paymentsResponse.json()) as {
-      payments: Array<{ id: number; externalTxnID: string }>
+      payments: Array<{
+        id: number
+        accountID: number
+        status: string | null
+        provider: string | null
+        externalTxnID: string
+        createdAt: string | null
+      }>
     }
     expect(paymentsBody.payments).toEqual([
-      expect.objectContaining({ externalTxnID: payment.stripe_session_id })
+      expect.objectContaining({
+        status: 'PENDING',
+        provider: 'STRIPE',
+        externalTxnID: payment.stripe_session_id,
+        createdAt: expect.any(String)
+      })
     ])
+    expect(Object.keys(paymentsBody.payments[0])).toEqual([
+      'id',
+      'accountID',
+      'status',
+      'provider',
+      'externalTxnID',
+      'createdAt'
+    ])
+    expect(paymentsBody.payments[0]).not.toHaveProperty('cursor')
+    expect(
+      (
+        (await (
+          await call('GMListPayments', { provider: 'GOOGLE_PLAY' })
+        ).json()) as { payments: unknown[] }
+      ).payments
+    ).toEqual([])
 
     const logsResponse = await call('GMListPaymentLogs', {
       paymentID: paymentsBody.payments[0].id
     })
     expect(logsResponse.status).toBe(200)
-    expect(await logsResponse.json()).toMatchObject({
+    const logsBody = (await logsResponse.json()) as {
+      logs: Array<{
+        id: number
+        paymentID: number
+        data: { type: string; data: unknown } | null
+        createdAt: string | null
+      }>
+    }
+    expect(logsBody).toMatchObject({
       logs: [
         { data: { type: '*stripe.CheckoutSession' } },
         { data: { type: 'payments.IntentRequest' } }
       ]
     })
+    expect(Object.keys(logsBody.logs[0])).toEqual([
+      'id',
+      'paymentID',
+      'data',
+      'createdAt'
+    ])
+    expect(Object.keys(logsBody.logs[0].data!)).toEqual(['type', 'data'])
+    expect(
+      await (await call('GMListPaymentLogs', { paymentID: 999_999 })).json()
+    ).toEqual({ logs: [] })
     expect((await call('GMListPaymentLogs', { paymentID: 0 })).status).toBe(400)
   })
 })

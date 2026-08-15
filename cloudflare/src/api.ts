@@ -127,6 +127,7 @@ import {
   sourceNullablePaymentProviderProductListWire
 } from './payment-provider-product-wire'
 import { listPaymentProviderProducts } from './payment-provider-products'
+import { sourcePaymentListWire, sourcePaymentLogListWire } from './payment-wire'
 import {
   MobileStoreVerificationRepository,
   type MobileStoreFetch
@@ -2698,7 +2699,11 @@ export const handleApiRequest = async (
           provider?: PaymentProvider
           address?: string
         }>(request)
-        return json(request, env, await stripe.listStaffPayments(body))
+        const response = await stripe.listStaffPayments(body)
+        return json(request, env, {
+          ...response,
+          payments: sourcePaymentListWire(response.payments)
+        })
       }
 
       case 'GMListPaymentLogs': {
@@ -2706,7 +2711,9 @@ export const handleApiRequest = async (
         await staff.requireAdmin(principal.userId)
         const body = await requestBody<{ paymentID?: number }>(request)
         return json(request, env, {
-          logs: await stripe.listStaffPaymentLogs(body.paymentID ?? 0)
+          logs: sourcePaymentLogListWire(
+            await stripe.listStaffPaymentLogs(body.paymentID ?? 0)
+          )
         })
       }
 
