@@ -856,6 +856,55 @@ rank and Conquest sections, match statistics, and existing “Gained a Stalwart
 Sentinel Card!” receipt. Verification did not claim, fabricate, or mutate any
 production reward, account, card, item, match, or economy state.
 
+## Quest wire fidelity rollout — 2026-08-15
+
+The generated Go `Quest` JSON contract has 14 required fields and does not use
+`omitempty`; its quest type, epic type/index/length, reward, and periodicity
+pointers therefore serialize as explicit `null` when inactive. `QuestReward`
+likewise always emits both `itemType` and `amount`, including a null item-type
+pointer. The TypeScript repositories intentionally use sparse internal objects,
+so returning those objects directly could omit enum arms that the preserved
+browser decoder expects.
+
+`cloudflare/src/quest-wire.ts` now owns the source-shaped response projection.
+`ListQuests` and `GetEpicQuestChain` normalize every list element, while
+`ClaimQuestRewards` and `ReRollQuest` preserve a null outer quest and normalize
+the returned quest when present. The projection emits every generated field and
+the nested reward pointer without changing the repositories' internal model.
+
+The source-derived gate parses the exact `Quest` and `QuestReward` field order,
+types, and JSON tags from `api/proto/api.gen.go`; checks the pointer construction
+in `api/data/quest.go`; covers all four response routes; and remains in the full
+Cloudflare build. Eleven mutation cases fail closed on source pointer/tag drift,
+sparse enum or reward output, route bypasses, list bypasses, and build-gate
+removal. Direct unit and isolated-D1 integration tests assert the exact 14-field
+wire for both ordinary and epic quests.
+
+The complete release contract passed 410 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker tests,
+25 game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31879885749` passed in 9m47s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`fda1a2e3-a52d-4635-a61e-d6caa3f99332` to
+`4a32473b-411c-4183-ba38-72b3f33d217f`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-b6aa1ef3.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated `ListQuests` request returned `401` with the same cache
+boundary before player-state access. The signed-in original `/quests/daily`
+screen rendered its daily and starter-chain quests, reward amounts, progress,
+and existing claim control without an enum/decode error; the complete season-62
+SkyPass also rendered successfully. Verification did not click Claim or mutate
+any production quest, reward, account, card, item, match, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
