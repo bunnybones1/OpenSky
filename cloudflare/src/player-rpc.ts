@@ -2307,7 +2307,7 @@ export class PlayerRpcRepository {
     const pendingByClassAndFrame = emptyMatrix()
     let pendingCards = 0
     for (const pending of pendingRows) {
-      for (const card of pending.cards) {
+      for (const card of pending.cards ?? []) {
         const cardClass = CARD_CLASS_BY_ID.get(card.id)
         if (
           !CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])

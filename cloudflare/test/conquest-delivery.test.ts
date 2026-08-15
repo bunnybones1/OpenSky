@@ -101,20 +101,44 @@ describe('delayed Conquest Gold delivery', () => {
 
     expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toMatchObject([
       {
-        cards: [{ id: 136, itemType: ItemType.SW_GOLD_CARDS, isNew: true }],
+        cards: [{ id: 136, itemType: ItemType.UNKNOWN, isNew: null }],
         tokenIDs: [131_208],
         mintAt: DUE_AT
       }
     ])
-    expect(await (await rpc('GetPendingCards')).json()).toMatchObject({
+    const response = await (await rpc('GetPendingCards')).json<{
+      res: Array<{ cards: Array<Record<string, unknown>> }>
+    }>()
+    expect(response).toMatchObject({
       res: [
         {
-          cards: [{ id: 136, itemType: ItemType.SW_GOLD_CARDS }],
+          cards: [{ id: 136, itemType: ItemType.UNKNOWN, isNew: null }],
           tokenIDs: [131_208],
           mintAt: DUE_AT
         }
       ]
     })
+    expect(Object.keys(response.res[0].cards[0])).toEqual([
+      'id',
+      'name',
+      'description',
+      'asset',
+      'class',
+      'element',
+      'type',
+      'manaCost',
+      'power',
+      'health',
+      'attachedSpellID',
+      'keywords',
+      'status',
+      'set',
+      'imageURL',
+      'itemType',
+      'isNew',
+      'silverCardTokenId',
+      'goldCardTokenId'
+    ])
     expect((await rpc('GetPendingCards', false)).status).toBe(401)
 
     const ownership = await new PlayerRpcRepository(env.AUTH_DB).cardOwnership(
@@ -127,6 +151,12 @@ describe('delayed Conquest Gold delivery', () => {
       pendingCardsByClassAndFrame: { STR: { SW_GOLD_CARDS: 1 } }
     })
     expect(ownership.cardBalances[136].SW_GOLD_CARDS.balance).toBe('0')
+  })
+
+  it('preserves the source nil result when no delayed task exists', async () => {
+    expect(await (await rpc('GetPendingCards')).json()).toStrictEqual({
+      res: null
+    })
   })
 
   it('keeps moderated Gold visible while blocking a read-to-claim race', async () => {

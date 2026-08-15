@@ -1,5 +1,5 @@
 import cardLibrary from './generated/card-library.json'
-import { ItemType, type Card, type PendingCardsResponse } from '@opensky/proto'
+import type { SourcePendingCardsResponseInput } from './pending-card-wire'
 
 const MAX_DELIVERIES_PER_RUN = 100
 const MAX_ATTEMPTS = 5
@@ -34,7 +34,7 @@ const ids = (value: string): number[] => {
 export const pendingConquestCards = async (
   database: D1Database,
   userId: string
-): Promise<PendingCardsResponse[]> => {
+): Promise<SourcePendingCardsResponseInput[]> => {
   const rows = await database
     .prepare(
       `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
@@ -58,11 +58,9 @@ export const pendingConquestCards = async (
       throw new Error('Conquest Gold delivery contains an invalid card')
     }
     return {
-      cards: cards.map(card => ({
-        ...card!,
-        itemType: ItemType.SW_GOLD_CARDS,
-        isNew: true
-      })) as unknown as Card[],
+      // The source appends CardIndex's canonical card. ItemType and IsNew stay
+      // at their zero values; tokenIDs separately carry the Gold identity.
+      cards: cards.map(card => card!),
       tokenIDs,
       mintAt: row.deliver_at
     }

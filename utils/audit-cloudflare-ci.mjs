@@ -86,6 +86,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go CardOwnershipResponse wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:pending-card-wire')) {
+    errors.push(
+      'Cloudflare build must include the generated Go PendingCardsResponse wire gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:feed-event-wire')) {
     errors.push(
       'Cloudflare build must include the generated Go FeedEvent wire gate'

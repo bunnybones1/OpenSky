@@ -174,6 +174,19 @@ test('requires all generated Go JSON wire gates in the complete build', async ()
       scripts: {
         ...rootPackage.scripts,
         'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:pending-card-wire && ',
+          ''
+        )
+      }
+    })[0],
+    /PendingCardsResponse wire/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
           'pnpm check:cloudflare:feed-event-wire && ',
           ''
         )

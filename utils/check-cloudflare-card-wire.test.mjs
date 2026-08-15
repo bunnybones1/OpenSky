@@ -11,6 +11,7 @@ const fixtures = async () => {
       'api/rpc/cards.go',
       'cloudflare/src/card-wire.ts',
       'cloudflare/src/card-balance-wire.ts',
+      'cloudflare/src/pending-card-wire.ts',
       'cloudflare/src/api.ts',
       'cloudflare/src/player-rpc.ts'
     ].map(file => readFile(file, 'utf8'))
@@ -20,8 +21,9 @@ const fixtures = async () => {
     cardsRPCSource: values[1],
     cardWire: values[2],
     cardBalanceWire: values[3],
-    api: values[4],
-    playerRPC: values[5]
+    pendingCardWire: values[4],
+    api: values[5],
+    playerRPC: values[6]
   }
 }
 
@@ -95,6 +97,13 @@ test('rejects source drift, private leaks, and projection bypasses', async () =>
       cardBalanceWire: value.cardBalanceWire.replace(
         'card: entry.card == null ? null : sourceCardWire(entry.card)',
         'card: entry.card'
+      )
+    },
+    {
+      ...value,
+      pendingCardWire: value.pendingCardWire.replace(
+        'pending.cards.map(card => sourceCardWire(card))',
+        'pending.cards'
       )
     },
     {

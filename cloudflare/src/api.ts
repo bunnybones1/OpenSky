@@ -71,6 +71,7 @@ import {
 } from './conquest-v2-reward-schedule-operations'
 import { conquestV2OffchainTreasureInfo } from './conquest-v2-reward-worker'
 import { pendingConquestCards } from './conquest-delivery'
+import { sourcePendingCardsListWire } from './pending-card-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -2148,7 +2149,9 @@ export const handleApiRequest = async (
       case 'GetPendingCards': {
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
-          res: await pendingConquestCards(env.AUTH_DB, principal.userId)
+          res: sourcePendingCardsListWire(
+            await pendingConquestCards(env.AUTH_DB, principal.userId)
+          )
         })
       }
 

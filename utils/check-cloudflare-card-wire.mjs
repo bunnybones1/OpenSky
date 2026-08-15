@@ -30,6 +30,7 @@ export const cardWireErrors = (
   cardsRPCSource,
   cardWire,
   cardBalanceWire,
+  pendingCardWire,
   api,
   playerRPC
 ) => {
@@ -151,6 +152,14 @@ export const cardWireErrors = (
   ) {
     errors.push('nested SearchCards results bypass the Card wire')
   }
+  const compactPendingCardWire = pendingCardWire.replace(/\s+/g, ' ')
+  if (
+    !compactPendingCardWire.includes(
+      'pending.cards.map(card => sourceCardWire(card))'
+    )
+  ) {
+    errors.push('nested GetPendingCards results bypass the Card wire')
+  }
   if (!playerRPC.includes('card.validFromSeason <= season')) {
     errors.push('internal Card season metadata is no longer available to policy')
   }
@@ -165,6 +174,7 @@ const main = async () => {
       ['api', 'rpc', 'cards.go'],
       ['cloudflare', 'src', 'card-wire.ts'],
       ['cloudflare', 'src', 'card-balance-wire.ts'],
+      ['cloudflare', 'src', 'pending-card-wire.ts'],
       ['cloudflare', 'src', 'api.ts'],
       ['cloudflare', 'src', 'player-rpc.ts']
     ].map(parts => readFile(path.join(root, ...parts), 'utf8'))
