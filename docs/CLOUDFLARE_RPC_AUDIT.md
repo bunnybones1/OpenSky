@@ -1011,6 +1011,55 @@ navigation and content without an enum or union decode error. Verification did
 not dismiss, mark seen, fabricate, or mutate any production notification,
 reward, account, card, item, match, or economy state.
 
+## Banner wire fidelity rollout — 2026-08-15
+
+The generated Go `Banner` response has nine fields and a three-value
+`BannerType` enum. Its `type` and `color` pointers do not use `omitempty`, so
+they serialize as explicit `null` when nil; `link`, `startAt`, and `endAt` are
+the actual optional fields. Both the player and staff source stores begin with
+nil Go slices and therefore serialize the outer banner list as `null` when no
+rows are available.
+
+`cloudflare/src/banner-wire.ts` now owns the shared source-shaped projection.
+It emits the six required fields with their Go zero values, preserves explicit
+nulls for `type` and `color`, omits only the three source-optional fields, and
+normalizes empty player and staff lists to `null`. `GetBanners` and
+`GMListBanners` use that same serializer, keeping D1's convenient internal
+shape away from the preserved browser decoder.
+
+The source-derived gate parses all nine generated fields, their exact types,
+JSON names, and `omitempty` markers; pins the exact `INFO`, `WARNING`, and
+`EMERGENCY` enum; checks both nil-slice source paths and both Worker response
+routes; and remains in the complete Cloudflare build. Ten mutation cases fail
+closed on field, enum, pointer, omission, nil-list, route, or build-gate drift.
+Three direct unit tests assert complete values, required nulls and zero values,
+optional omissions, and empty-list semantics.
+
+The complete release contract passed 423 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker tests,
+25 game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31883583103` passed in 9m44s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`28cc547b-d26b-4079-8e0d-a13af6a08ea2` to
+`364ed0b3-2d6f-4bee-9265-449d3fbe64cb`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+public `GetBanners` returned the source-faithful `{"banners":null}` with the
+same cache boundary. The signed-in original `/home` screen consumed that null
+list and rendered the existing account, Items, Ranks, Market, and Play
+navigation plus Home content without an enum or decoder error. Verification
+did not dismiss, create, update, delete, fabricate, or mutate any production
+banner, account, reward, card, item, match, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
