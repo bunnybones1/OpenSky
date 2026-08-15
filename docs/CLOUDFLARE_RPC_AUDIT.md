@@ -1882,6 +1882,51 @@ noncanonical point-balance rows with `changed_db: false` and zero rows written.
 Production D1 reported no pending migrations. Verification changed no account,
 invite, reward, wallet, match, queue, content, or staff state.
 
+## Deck-equipment response fidelity rollout — 2026-08-15
+
+The generated Go `DeckEquipment` response always emits all three fields:
+`stickers` is nullable when its source slice was never allocated, while
+`heroSkin` and `cardBack` are nullable pointers. The Cloudflare repository
+previously built a sparse object, so an account without equipment received
+`{}` instead of the source response
+`{"stickers":null,"heroSkin":null,"cardBack":null}`.
+
+`cloudflare/src/deck-equipment-wire.ts` now owns that exact response boundary.
+It preserves populated sticker lists and numeric hero/card-back selections while
+restoring generated nulls for every absent field. Source-derived mutation
+coverage pins the generated struct and JSON tags, source handler allocation,
+equipped sticker/card-back selection, hero-skin ownership mapping, repository
+query, route projection, and mandatory release-gate inclusion.
+
+Runtime commit `56c15c7987ea21ecac3ea6c6b876990dd93c4394` passed the
+complete local release contract: 477 main-Worker tests across 82 files, 34
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests,
+78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31912479628` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`3d804d4d-84a6-4eae-8ec8-c62015d76c40` to
+`53018052-85cd-47ce-9d19-96200a914d6f`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. The deployment verifier resolved web
+asset `/assets/index-d976a081.js`, unchanged game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy after normal edge propagation.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+Anonymous `GetDeckEquipmentByDeckString` returned
+`401 webrpc.unauthenticated` with `Cache-Control: no-store`. Under the existing
+Google session, the preserved Practice-vs-Bot page loaded the ADA starter deck
+at 30/30 without an auth fallback or generic failure; no match was started and
+no equipment was changed. An identity-free D1 aggregate found zero equipped
+item rows, zero invalid item types, zero writes, and `changed_db: false`.
+Production D1 reported no pending migrations. Verification changed no account,
+equipment, inventory, deck, match, reward, wallet, queue, content, or staff
+state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
