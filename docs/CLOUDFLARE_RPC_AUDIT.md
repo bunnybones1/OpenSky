@@ -957,6 +957,60 @@ and its existing claim control without an enum or union decode error.
 Verification did not click Claim or mutate any production SkyPass, reward,
 account, card, item, match, or economy state.
 
+## Notification wire fidelity rollout — 2026-08-15
+
+The generated Go notification response is a five-value enum-discriminated
+union. Its `type` pointer is required, inactive outer variants use
+`omitempty`, and active leaderboard, Conquest, one-time, and season-start
+payloads contain a second mix of required pointers, maps, slices, scalars, and
+optional fields. In particular, nil leaderboard maps and rank slices and nil
+nested rank enum pointers serialize as explicit `null`; one-time template
+`createdAt`, `updatedAt`, and `updatedBy` are also required pointers. Both the
+player list and staff template list originate as nil Go slices and therefore
+serialize as `null` when empty.
+
+`cloudflare/src/notification-wire.ts` now owns that complete source-shaped
+projection. It selects only the union arm matching `NotificationType`, fills
+the required zero-value fields for older sparse D1 payloads, strips inactive
+arms, preserves required nulls and optional omissions, and normalizes the
+public player list plus all three staff template response routes. This keeps
+the repositories' storage-friendly internal representation away from the
+preserved browser decoder.
+
+The source-derived gate parses all seven generated Go structs and the exact
+five-value enum; pins both source RPCs' nil-list construction and the data
+model's active-arm validation; requires all four Worker response boundaries;
+and remains in the complete Cloudflare build. Sixteen mutations fail closed on
+enum, pointer, tag, omission, nil-list, validator, route, and gate drift. Direct
+unit and isolated-D1 integration coverage asserts every union arm, inactive-arm
+privacy, nested enum nulls, sparse stored payload repair, source-null lists, and
+staff template omission rules.
+
+The complete release contract passed 420 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker tests,
+25 game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31882617389` passed in 8m17s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`0caab9ac-4418-441e-b79a-814a572640c1` to
+`28cc547b-d26b-4079-8e0d-a13af6a08ea2`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated `ListNotifications` request returned `401` with the same
+cache boundary before player-state access. The signed-in original `/home`
+screen consumed the source-null empty notification list and rendered its full
+navigation and content without an enum or union decode error. Verification did
+not dismiss, mark seen, fabricate, or mutate any production notification,
+reward, account, card, item, match, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
