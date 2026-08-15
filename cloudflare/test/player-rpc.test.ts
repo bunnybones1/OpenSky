@@ -2927,6 +2927,27 @@ describe('legacy player RPC compatibility', () => {
       periodicity: 'DAILY',
       reward: { itemType: 'SW_XP', amount: 100 }
     })
+    expect(Object.keys(body.quests[0])).toEqual([
+      'id',
+      'position',
+      'questType',
+      'epicType',
+      'epicIndex',
+      'epicLength',
+      'progress',
+      'endProgress',
+      'reward',
+      'periodicity',
+      'isRerollable',
+      'isClaimable',
+      'isClaimed',
+      'isNew'
+    ])
+    expect(body.quests[0]).toMatchObject({
+      epicType: 'starter1_test',
+      epicIndex: 1,
+      epicLength: 3
+    })
 
     const seen = await rpc('SetQuestsAsSeen', {
       ids: body.quests.map(quest => quest.id)
@@ -2958,6 +2979,22 @@ describe('legacy player RPC compatibility', () => {
       }>()
     ).quests
     expect(initialQuests.map(quest => quest.epicIndex)).toEqual([1, 2, 3, 4, 5])
+    expect(Object.keys(initialQuests[0])).toEqual([
+      'id',
+      'position',
+      'questType',
+      'epicType',
+      'epicIndex',
+      'epicLength',
+      'progress',
+      'endProgress',
+      'reward',
+      'periodicity',
+      'isRerollable',
+      'isClaimable',
+      'isClaimed',
+      'isNew'
+    ])
     expect(initialQuests[0]).toMatchObject({
       id: expect.any(Number),
       isClaimable: true,

@@ -74,6 +74,11 @@ import { pendingConquestCards } from './conquest-delivery'
 import { sourcePendingCardsListWire } from './pending-card-wire'
 import { sourceResponsePageWire } from './page-wire'
 import {
+  sourceNullableQuestWire,
+  sourceQuestListWire,
+  type SourceQuestInput
+} from './quest-wire'
+import {
   sourceNullableRewardListWire,
   type SourceRewardInput
 } from './reward-wire'
@@ -2444,7 +2449,9 @@ export const handleApiRequest = async (
       case 'ListQuests': {
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
-          quests: await playerRpc.listQuests(principal.userId),
+          quests: sourceQuestListWire(
+            await playerRpc.listQuests(principal.userId)
+          ),
           rewards: null
         })
       }
@@ -2467,7 +2474,9 @@ export const handleApiRequest = async (
           body.ids
         )
         return json(request, env, {
-          quest: result.quest,
+          quest: sourceNullableQuestWire(
+            result.quest as SourceQuestInput | null
+          ),
           rewards: sourceNullableRewardListWire(
             result.rewards as SourceRewardInput[]
           )
@@ -2482,7 +2491,7 @@ export const handleApiRequest = async (
         }
         const result = await playerRpc.rerollQuest(principal.userId, body.id!)
         return json(request, env, {
-          quest: result.quest,
+          quest: sourceNullableQuestWire(result.quest),
           rewards: sourceNullableRewardListWire(
             result.rewards as SourceRewardInput[]
           )
@@ -2500,9 +2509,8 @@ export const handleApiRequest = async (
           throw new Error('epic type cannot be nil')
         }
         return json(request, env, {
-          quests: await playerRpc.epicQuestChain(
-            principal.userId,
-            body.epicType
+          quests: sourceQuestListWire(
+            await playerRpc.epicQuestChain(principal.userId, body.epicType)
           )
         })
       }
