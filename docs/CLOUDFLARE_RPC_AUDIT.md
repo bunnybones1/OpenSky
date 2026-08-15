@@ -1483,6 +1483,57 @@ to probe the authenticated positive path; exact proof remains in isolated-D1
 Worker integration tests. Verification did not mutate any production account,
 signal, report, sanction, game, reward, payment, inventory, or wallet state.
 
+## Staff match response fidelity rollout — 2026-08-15
+
+The generated Go `GMMatch` response has exactly three JSON fields: the
+`match` pointer, the non-pointer `reviewed` boolean, and the `duration`
+pointer. None use `omitempty`, so an in-progress match must contain
+`"duration": null`; the source handler also allocates its result with `make`,
+so an empty staff match list is `[]`, not null. The Worker previously omitted
+the duration property when its D1 match had no end time.
+
+Milestone `f06bd300` adds one composed staff-match projection beside the
+existing exact `Match`/`MatchPlayer` projection. It emits all three fields,
+normalizes both pointers to explicit null, preserves numeric zero duration,
+and maps an empty input to a non-nil empty list. The staff repository now uses
+that projection at its single response boundary, so existing D1 rows are
+repaired on read without mutation.
+
+The source-derived match gate now parses the complete `GMMatch` struct, both
+pointer fields, the absence of JSON omission, and the Go handler's non-nil
+result allocation. It also requires the shared Worker projection and the
+staff API boundary. Nine independent mutations fail closed on source pointer
+or allocation drift, missing nulls, raw row projection, and existing
+match/replay boundary bypasses. Direct serializer tests cover nil pointers and
+the empty list; an isolated-D1 repository test proves an active match exposes
+exactly `match`, `reviewed`, and `duration`, with the duration set to null.
+
+The complete release contract passed 453 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78
+matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31898063960` passed in 9m28s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`d975fa6f-305a-48ef-a109-bb0f0a9341b9` to
+`9b6253da-ff09-4a38-a04a-0bea0d5f8499`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy after edge convergence. Production D1 reported no
+pending migrations.
+
+Read-only production `Version` returned the new Worker ID and `Ping` returned
+`200`; both used `Cache-Control: no-store`. An unauthenticated
+`GMListMatches` request returned `401` with the same cache boundary before any
+staff-data read. D1 contained the same 12 ended matches, zero in-progress
+matches, and zero match reviews before and after deployment; both snapshots
+reported `changed_db: false` and zero rows written. No production match or
+staff grant was fabricated to exercise the positive path; exact proof remains
+in isolated-D1 Worker tests.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
