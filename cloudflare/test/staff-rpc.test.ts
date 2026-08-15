@@ -2313,7 +2313,7 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       page: { pageSize: 200, hasBefore: false, hasAfter: false },
-      statusHistory: []
+      statusHistory: null
     })
   })
 

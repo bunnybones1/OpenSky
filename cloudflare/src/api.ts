@@ -52,6 +52,9 @@ import {
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
 import {
+  sourceNullableGameModeStatusHistoryListWire
+} from './game-mode-history-wire'
+import {
   CONQUEST_V2_EVENT_ID,
   ConquestRepository,
   conquestTreasureProgress,
@@ -1050,7 +1053,9 @@ export const handleApiRequest = async (
         )
         return json(request, env, {
           page: result.page,
-          statusHistory: result.rows
+          statusHistory: sourceNullableGameModeStatusHistoryListWire(
+            result.rows
+          )
         })
       }
 
