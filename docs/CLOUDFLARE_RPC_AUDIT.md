@@ -596,6 +596,58 @@ pending migrations. A signed-in production account page rendered its existing
 Verification was read-only and created no synthetic item, account, match,
 reward, or economy state.
 
+### Complete CardWithBalance and BalanceTuple JSON wire — 2026-08-15
+
+Milestone `87da0f24` applies the generated-wire rule to the nested
+`SearchCards` balance result. The Go `CardWithBalance` struct has four public
+JSON fields with no `omitempty`; its Card and creation-time pointers and its
+nil-capable balance map serialize as explicit nulls. Its database pagination
+cursor remains private. The nested `BalanceTuple` has two non-omitted fields:
+a decimal-string BigInt balance and a nullable new-item pointer.
+
+The previous TypeScript projection returned an empty map and empty timestamp
+when balances were not requested, and it omitted false or unset `isNew` values.
+It also limited balance rows to the three card frames, while the source query
+selects every generated item type at or above `SW_BASE_CARDS`. A shared
+projection now composes the protected Card wire, preserves nil versus empty-map
+semantics, emits every tuple flag explicitly, and derives that complete source
+item-type range. Ownership filtering remains limited to the three source card
+frames, independently from the broader source balance calculation.
+
+The source-derived release gate parses both generated structs, field order,
+pointer and map nullability, private cursor, BigInt encoding, source account
+guard, source item-type threshold, balance-map initialization, and nil `IsNew`
+behavior. It also requires the repository query, search algorithm, composed
+Card projection, API route, and complete-build/CI gate to stay connected. Its
+mutation suite rejects 18 forms of source drift, sparse nulls, cursor leakage,
+numeric BigInts, item-range narrowing, invented newness, or projection bypass.
+The complete release contract passed 396 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31874045151` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`d8cccbcd-b982-46f6-947b-9b8dd3a01255` to
+`ffece14b-ad95-4f90-8121-3c3314f31425`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Read-only production `SearchCards` probes returned `200` with
+`Cache-Control: no-store`. Anonymous card 6 emitted `balanceByType: null` and
+`createdAt: null`; the public account projection emitted its Base-card balance
+with `isNew: null`; and card 1 retained the source's broader range by reporting
+the matching `SW_HERO` tuple with an explicit null flag. Practice PvP and bot
+modes remained enabled, both Conquest modes remained disabled, game and
+matchmaker protocol-3 health stayed healthy, and production D1 reported no
+pending migrations. The signed-in account page still rendered its 31-card
+inventory and existing reward feed. Verification created no synthetic card,
+item, account, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
