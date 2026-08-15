@@ -5,11 +5,11 @@ import type {
   Notification,
   NotificationOneTime,
   Sticker,
-  StickerOwnershipResponse,
   TwitchFeaturedStreamer
 } from '@opensky/proto'
 import { BannerType } from '@opensky/proto'
 
+import type { SourceStickerOwnershipInput } from './content-wire'
 import { invalidArgument, notFound } from './errors'
 
 interface BannerRow {
@@ -411,7 +411,7 @@ export class ContentRepository {
     }))
   }
 
-  async stickerOwnership(userId: string): Promise<StickerOwnershipResponse> {
+  async stickerOwnership(userId: string): Promise<SourceStickerOwnershipInput> {
     const rows = await this.database
       .prepare(
         `SELECT token_id, balance FROM player_items
@@ -424,7 +424,7 @@ export class ContentRepository {
       stickerBalances: Object.fromEntries(
         rows.results.map(row => [
           row.token_id,
-          { balance: String(row.balance), isNew: false }
+          { balance: String(row.balance), isNew: null }
         ])
       )
     }

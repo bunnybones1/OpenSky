@@ -237,7 +237,7 @@ describe('source content RPC compatibility', () => {
         })
       ).json()
     ).toEqual({
-      res: { stickerBalances: { 77: { balance: '3', isNew: false } } }
+      res: { stickerBalances: { 77: { balance: '3', isNew: null } } }
     })
     expect((await rpc('GetStickerOwnership', {}, false)).status).toBe(401)
   })

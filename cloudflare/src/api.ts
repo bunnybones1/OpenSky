@@ -53,6 +53,11 @@ import {
 } from './client-feedback'
 import { CompetitiveRepository } from './competitive'
 import {
+  sourceStickerListWire,
+  sourceStickerOwnershipWire,
+  sourceTwitchFeaturedStreamerListWire
+} from './content-wire'
+import {
   sourceGameModesStatusWire,
   sourceNullableGameModeStatusHistoryListWire
 } from './game-mode-history-wire'
@@ -2248,7 +2253,9 @@ export const handleApiRequest = async (
 
       case 'GetFeaturedStreamers': {
         return json(request, env, {
-          streamers: await content.listFeaturedStreamers()
+          streamers: sourceTwitchFeaturedStreamerListWire(
+            await content.listFeaturedStreamers()
+          )
         })
       }
 
@@ -2267,7 +2274,9 @@ export const handleApiRequest = async (
       case 'GetStickers': {
         await identityPrincipal(request, env)
         return json(request, env, {
-          stickers: await content.listStickers(seasonFromDate())
+          stickers: sourceStickerListWire(
+            await content.listStickers(seasonFromDate())
+          )
         })
       }
 
@@ -2282,14 +2291,18 @@ export const handleApiRequest = async (
           throw invalidArgument('season must be an unsigned 16-bit integer')
         }
         return json(request, env, {
-          stickers: await content.listStickers(body.season!)
+          stickers: sourceStickerListWire(
+            await content.listStickers(body.season!)
+          )
         })
       }
 
       case 'GetStickerOwnership': {
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
-          res: await content.stickerOwnership(principal.userId)
+          res: sourceStickerOwnershipWire(
+            await content.stickerOwnership(principal.userId)
+          )
         })
       }
 
