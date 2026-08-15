@@ -648,6 +648,57 @@ pending migrations. The signed-in account page still rendered its 31-card
 inventory and existing reward feed. Verification created no synthetic card,
 item, account, match, reward, or economy state.
 
+### Complete CardOwnershipResponse JSON wire — 2026-08-15
+
+Milestone `6203c500` applies the generated-wire rule to the complete
+`GetCardOwnership` response. The Go `CardOwnershipResponse` struct has 13
+public JSON fields with no `omitempty` or pointer fields: the nested card
+balance map, locked/unlocked/pending totals, and each corresponding class,
+frame, and class-by-frame aggregate map. The source initializes all ten maps,
+including an empty map when there are no matching rows.
+
+For every owned card, the source also initializes Base, Silver, and Gold with a
+zero-value `BalanceTuple`. Those tuples have a nil `IsNew` pointer and therefore
+serialize as `isNew: null`; a stored balance row carries a real pointer, so its
+false value must remain `isNew: false`. The previous TypeScript projection
+invented false for zero-value frames. A shared ownership projection now
+normalizes every nested tuple through the protected `BalanceTuple` wire while
+emitting all 13 outer fields in generated order.
+
+The source-derived release gate parses the generated field order, map types,
+no-omission and non-pointer contract; verifies every source map initialization,
+the three-frame tuple initialization, and the stored `IsNew` assignment; and
+requires the shared projection, repository, API route, and complete-build/CI
+gate to remain connected. Its mutation suite rejects 14 forms of source drift,
+sparse tuple flags, map-initialization loss, or projection/route bypass. The
+complete release contract passed 397 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31875076774` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`ffece14b-ad95-4f90-8121-3c3314f31425` to
+`d9f7e220-0aa9-4eb6-b298-f451bd96edaa`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+The read-only production `GetCardOwnership` probe returned `200` with
+`Cache-Control: no-store` and all 13 response fields. Card 6 emitted its stored
+Base tuple as `{balance: "1", isNew: false}` and both zero-value premium frames
+as `{balance: "0", isNew: null}`. The account aggregate remained 31 unlocked
+and 825 locked cards. Public API `Ping` and version metadata passed; practice
+PvP and bot modes remained enabled, both Conquest modes remained disabled,
+game and matchmaker protocol-3 health stayed healthy, and production D1
+reported no pending migrations. The signed-in original account page still
+rendered its full navigation, 31/856 Base-card inventory, rank and Conquest
+sections, and existing “Gained a Stalwart Sentinel Card!” reward. Verification
+created no synthetic card, item, account, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
