@@ -482,3 +482,44 @@ after queues are deliberately enabled.
 WalletConnect is not part of this gate. Card contents belong to the Google
 identity inventory first; a later optional wallet link can merge or export
 wallet-held contents without becoming login authority.
+
+## Exact reward-wire rollout proof — 2026-08-14
+
+Commit `3c064370` restores the exact JSON shape emitted by the Go
+`getSilverCard` and `getGoldCard` paths. The earlier TypeScript settlement
+invented `amount: 1`, a Silver/Gold `itemType` on the embedded canonical card,
+`isNew: true`, and `balance: "1"`. The source instead leaves both generated
+newness fields null, leaves the embedded card item type `UNKNOWN`, serializes
+the reward amount as zero, and returns a zero-balance item whose separate item
+type identifies the Silver or Gold frame. It also serializes every unused
+reward variant as null and omits the card index's internal
+`validFromSeason` field. Persisted D1 inventory remains independently marked
+new after the actual off-chain grant; this correction changes only the
+match-end reward wire consumed by the preserved game UI.
+
+An exact-object Workers test now covers the complete Silver reward, while the
+Gold path verifies the same zero/null/enum contract. The fail-closed Conquest
+gate derives the corresponding Go initializers and card-index enrichment, then
+rejects Worker mutations that invent amount, balance, card rarity, or newness.
+The complete local release contract passed 392 main-Worker tests, 31
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests,
+78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all typechecks, and both production builds. Exact-head
+GitHub Actions run `31857778657` passed in 8m52s before deployment.
+
+Only the game server was deployed, advancing it from version
+`a88966dd-6e41-4d99-824c-1c273145f9b5` to
+`3ad69eed-1041-4793-acac-aa525ebb7477`. The main Worker remained
+`0f94187f-9e42-42ad-84ec-c9525e73a3d0`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Public game health returned protocol
+version 3 with `Cache-Control: no-store`; the unchanged web and game entries
+remained `/assets/index-b6aa1ef3.js` and
+`/game/cloudflare/assets/index-79a70ba2.js`, both one-year immutable.
+
+Post-deploy `Version` and `GetGameModesStatus` probes returned `200` with
+`no-store`; both Practice modes stayed enabled and both Conquest modes stayed
+disabled. The read-only reward-readiness audit still classified original
+Conquest as `dormant-policy` with zero verified active pools. No production
+match, pool, queue, receipt, reward, inventory row, or economy authority was
+created to manufacture rollout evidence.
