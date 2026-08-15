@@ -241,10 +241,10 @@ describe('SkyPass reward definition updates', () => {
     })
     expect(body.rewards[1]).toMatchObject({
       level: 3,
-      amount: 0,
       isStarter: true,
       attributes: { tokenIDs: [140], cardSetsExcluded: ['HEXBOUND_INVASION'] }
     })
+    expect(body.rewards[1]).not.toHaveProperty('amount')
     expect(body.rewards[2]).toMatchObject({
       itemType: 'SW_HERO',
       isInfinite: true,

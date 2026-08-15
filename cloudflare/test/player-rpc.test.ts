@@ -3675,9 +3675,18 @@ describe('legacy player RPC compatibility', () => {
           level: number
           earned: boolean
           rewards: Array<{
+            id: number
+            level: number
+            season: number
             tier: string
             itemType: string
+            amount?: number
             isStarter: boolean
+            isInfinite: boolean
+            attributes?: Record<string, unknown>
+            claimable: boolean
+            claimed: boolean
+            gainedRewards: unknown[] | null
           }>
         }>
       }
@@ -3687,7 +3696,15 @@ describe('legacy player RPC compatibility', () => {
       seasonName: 'Frosted Redux',
       hasPremium: false
     })
-    expect(body.res.levels.find(level => level.level === 1)).toMatchObject({
+    expect(Object.keys(body.res)).toEqual([
+      'levels',
+      'seasonNumber',
+      'seasonName',
+      'hasPremium'
+    ])
+    const firstLevel = body.res.levels.find(level => level.level === 1)!
+    expect(Object.keys(firstLevel)).toEqual(['level', 'earned', 'rewards'])
+    expect(firstLevel).toMatchObject({
       earned: false,
       rewards: [
         expect.objectContaining({
@@ -3697,6 +3714,32 @@ describe('legacy player RPC compatibility', () => {
         })
       ]
     })
+    expect(Object.keys(firstLevel.rewards[0])).toEqual([
+      'id',
+      'level',
+      'season',
+      'tier',
+      'itemType',
+      'isStarter',
+      'isInfinite',
+      'attributes',
+      'claimable',
+      'claimed',
+      'gainedRewards'
+    ])
+    expect(firstLevel.rewards[0]).toMatchObject({
+      attributes: {
+        tokenIDs: [140],
+        cardSets: ['HEXBOUND_INVASION']
+      },
+      gainedRewards: null
+    })
+    const premiumTicket = body.res.levels
+      .find(level => level.level === 2)!
+      .rewards.find(reward => reward.itemType === 'SW_CONQUEST_TICKET')!
+    expect(premiumTicket).toHaveProperty('amount', 1)
+    expect(premiumTicket).not.toHaveProperty('attributes')
+    expect(premiumTicket.gainedRewards).toBeNull()
 
     const unlocks = await rpc('DeckClassUnlockLevels', {}, false)
     expect(await unlocks.json()).toMatchObject({

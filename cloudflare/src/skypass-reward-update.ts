@@ -119,7 +119,7 @@ const parseAttributes = (value: string | null): RewardAttributes => {
 }
 
 const present = (row: RewardRow): SkypassReward => {
-  const attributes = parseAttributes(row.attributes)
+  const attributes = row.attributes ? parseAttributes(row.attributes) : null
   return {
     id: row.id,
     level: row.level,
@@ -129,12 +129,14 @@ const present = (row: RewardRow): SkypassReward => {
     amount: row.amount,
     isStarter: row.is_starter === 1,
     isInfinite: row.is_infinite === 1,
-    attributes: {
-      tokenIDs: attributes.tokenIDs || [],
-      cardSets: attributes.cardSets || [],
-      cardSetsExcluded: attributes.cardSetsExcluded || [],
-      unlockDeckClasses: attributes.unlockDeckClasses || []
-    },
+    attributes: (attributes
+      ? {
+          tokenIDs: attributes.tokenIDs || [],
+          cardSets: attributes.cardSets || [],
+          cardSetsExcluded: attributes.cardSetsExcluded || [],
+          unlockDeckClasses: attributes.unlockDeckClasses || []
+        }
+      : null) as unknown as SkypassReward['attributes'],
     claimable: false,
     claimed: false
   }

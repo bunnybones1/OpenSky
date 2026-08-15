@@ -3476,7 +3476,9 @@ export class PlayerRpcRepository {
             amount: row.amount,
             isStarter: row.is_starter === 1,
             isInfinite: row.is_infinite === 1,
-            attributes: parseAttributes(row.attributes),
+            attributes: (row.attributes
+              ? parseAttributes(row.attributes)
+              : null) as unknown as SkypassReward['attributes'],
             claimable: row.tier === 1 || (row.tier === 2 && hasPremium),
             claimed: row.claimed === 1,
             // The generated TS interface cannot express the Go nil slice,
@@ -3585,7 +3587,9 @@ export class PlayerRpcRepository {
       amount: row.amount,
       isStarter: row.is_starter === 1,
       isInfinite: row.is_infinite === 1,
-      attributes: parseAttributes(row.attributes),
+      attributes: (row.attributes
+        ? parseAttributes(row.attributes)
+        : null) as unknown as SkypassReward['attributes'],
       claimable: false,
       claimed: false
     }))

@@ -82,6 +82,13 @@ import {
   sourceNullableRewardListWire,
   type SourceRewardInput
 } from './reward-wire'
+import {
+  sourceListSkypassRewardsWire,
+  sourceNullableSkypassRewardListWire,
+  sourceSkypassRewardListWire,
+  type SourceSkypassLevelInput,
+  type SourceSkypassRewardInput
+} from './skypass-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -1200,11 +1207,20 @@ export const handleApiRequest = async (
             services.skypassRewardAllowedOrigins ??
               env.SKYPASS_REWARDS_ALLOWED_ORIGINS
           ).review(season, body.version)
-          return json(request, env, review)
+          return json(request, env, {
+            ...review,
+            rewards: sourceSkypassRewardListWire(
+              review.rewards as SourceSkypassRewardInput[]
+            )
+          })
         }
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
-          rewards: await playerRpc.listSkypassRewardDefinitions(season)
+          rewards: sourceNullableSkypassRewardListWire(
+            (await playerRpc.listSkypassRewardDefinitions(
+              season
+            )) as SourceSkypassRewardInput[]
+          )
         })
       }
 
@@ -1231,10 +1247,12 @@ export const handleApiRequest = async (
             env.SKYPASS_REWARDS_ALLOWED_ORIGINS
         )
         return json(request, env, {
-          rewards: await skypassRewardUpdates.update(
-            principal.userId,
-            body.season ?? 0,
-            body.url ?? ''
+          rewards: sourceNullableSkypassRewardListWire(
+            (await skypassRewardUpdates.update(
+              principal.userId,
+              body.season ?? 0,
+              body.url ?? ''
+            )) as SourceSkypassRewardInput[]
           )
         })
       }
@@ -1255,12 +1273,14 @@ export const handleApiRequest = async (
             env.SKYPASS_REWARDS_ALLOWED_ORIGINS
         )
         return json(request, env, {
-          rewards: await skypassRewardUpdates.activate(
-            principal.userId,
-            body.season ?? 0,
-            body.version ?? 0,
-            body.reason ?? '',
-            body.reviewReference ?? ''
+          rewards: sourceNullableSkypassRewardListWire(
+            (await skypassRewardUpdates.activate(
+              principal.userId,
+              body.season ?? 0,
+              body.version ?? 0,
+              body.reason ?? '',
+              body.reviewReference ?? ''
+            )) as SourceSkypassRewardInput[]
           )
         })
       }
@@ -2671,12 +2691,12 @@ export const handleApiRequest = async (
           season
         )
         return json(request, env, {
-          res: {
-            levels,
+          res: sourceListSkypassRewardsWire({
+            levels: levels as SourceSkypassLevelInput[],
             seasonNumber: season,
             seasonName: seasonName(season),
             hasPremium
-          }
+          })
         })
       }
 

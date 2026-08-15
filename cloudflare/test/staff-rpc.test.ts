@@ -2664,7 +2664,10 @@ describe('fail-closed Google identity staff authorization', () => {
       season: 999
     })
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({
+    const responseBody = await response.json<{
+      rewards: Array<Record<string, unknown>>
+    }>()
+    expect(responseBody).toEqual({
       rewards: [
         expect.objectContaining({
           level: 1,
@@ -2689,6 +2692,16 @@ describe('fail-closed Google identity staff authorization', () => {
           attributes: expect.objectContaining({ tokenIDs: [2] })
         })
       ]
+    })
+    const premiumTicket = responseBody.rewards[0]
+    expect(premiumTicket).toHaveProperty('amount', 1)
+    expect(premiumTicket).not.toHaveProperty('attributes')
+    expect(premiumTicket).toHaveProperty('gainedRewards', null)
+    const starterHero = responseBody.rewards[2]
+    expect(starterHero).not.toHaveProperty('amount')
+    expect(starterHero).toMatchObject({
+      attributes: { tokenIDs: [2], unlockDeckClasses: ['AGY'] },
+      gainedRewards: null
     })
   })
 
