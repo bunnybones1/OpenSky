@@ -285,6 +285,42 @@ SkyPass `1/1` active and every policy-gated reward track dormant. Verification
 created no match, reward, receipt, inventory row, pool, queue, D1 migration, or
 economy authority.
 
+### Complete Conquest status JSON wire — 2026-08-14
+
+Milestone `973a25ba` applies the same generated-wire discipline to the
+player-facing `ConquestStatus` and `ConquestStats` responses. The Go `Conquest`
+struct has nine public JSON fields and no JSON `omitempty`; its deck class,
+creation time, and end time are pointers. An in-progress conquest therefore
+includes an explicit `"endedAt": null`, while the TypeScript projection had
+conditionally omitted that field. Strict source-shaped consumers could reject
+the sparse object even though the underlying conquest state was valid.
+
+A dedicated normalizer now emits all nine fields with explicit null pointer
+arms while retaining the generated TypeScript domain type used by the match
+service. The source-derived release gate parses the exact generated `Conquest`
+and 11-field `ConquestStats` structures, pointer sets, field order, and absence
+of JSON omission. Mutation coverage rejects source drift, a missing null arm,
+an incomplete statistics object, or a main-Worker boundary that bypasses the
+shared projection. The direct Worker test asserts the exact status object for
+an in-progress conquest, including the derived hero deck class and null end
+time.
+
+The complete release contract passed 393 main-Worker tests, 34 game-server
+unit tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31863349134` passed in 7m36s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`4f444875-bbe5-476a-97b4-bebe16a46a6d` to
+`4075b6a3-1f2b-4da5-9408-1dc70af1dc86`. The game Worker, match service, and
+matchmaker were not deployed, and no D1 migration ran. The fail-closed
+verifier again resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
+game-mode probes returned `200` with `Cache-Control: no-store`; the game Worker
+remained healthy on protocol 3, and both Conquest modes remained disabled.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
