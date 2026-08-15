@@ -1111,6 +1111,55 @@ the authenticated populated/null response proof remains the isolated D1 Worker
 integration test rather than an invented production claim. Verification did
 not create a checkout, payment, reward, inventory record, or wallet state.
 
+## Game-mode history wire fidelity rollout — 2026-08-15
+
+The generated Go `GameModeStatusHistory` model has six fields, but only four
+are public JSON: `id`, `gameMode`, `enabled`, and `createdAt`. Its enum and
+timestamp pointers do not use `omitempty`, so missing values serialize as
+explicit `null`; the private account ID and pagination cursor must never reach
+the wire. The exact source `GameMode` enum has 11 values, including both
+`PRACTICE_BOT` and `PRACTICE_PVP`. The source history handler starts from a nil
+Go slice, so an empty result serializes as `{"statusHistory":null}`.
+
+`cloudflare/src/game-mode-history-wire.ts` now owns that source-shaped
+projection and nullable-list boundary. `GMGameModeStatusHistory` passes every
+row through the shared serializer, supplies the Go zero values for required
+scalars, preserves required pointer nulls, and excludes both private fields.
+This is a serialization-only change; it does not alter game-mode status,
+administrative authority, matchmaking, games, accounts, or rewards.
+
+The source-derived gate parses all six generated fields and their JSON tags,
+pins the exact 11-value enum, checks the source nil-list construction and
+Worker route, and remains in the complete Cloudflare build. Ten mutations fail
+closed on enum, pointer, privacy, nil-list, route, or build-gate drift. Three
+direct wire tests plus isolated-D1 staff integration coverage assert required
+nulls and zero values, populated `PRACTICE_PVP`, private-field exclusion, and
+the source-null empty result.
+
+The complete release contract passed 429 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31886111412` passed in 9m28s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`8f53e2e2-338b-457b-876e-00abd1b083a6` to
+`141a516e-5d31-409b-93c1-e1fa2114ed17`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated `GMGameModeStatusHistory` request returned `401` with the
+same cache boundary before staff-data access. No production admin grant was
+created merely to inspect an empty staff response. Verification did not change
+game-mode status, create history, start matchmaking, launch a game, or mutate
+any account, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
