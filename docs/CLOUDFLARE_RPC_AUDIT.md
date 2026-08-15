@@ -407,6 +407,49 @@ matchmaker protocol-3 health remained healthy, both Conquest modes remained
 disabled, and production D1 reported no pending migrations. Verification did
 not create synthetic account, statistic, match, reward, or economy state.
 
+### Complete Deck JSON wire — 2026-08-14
+
+Milestone `b56d2f7a` applies the generated-wire rule to every player-facing
+`Deck` projection. The Go struct has 13 public JSON fields with no
+`omitempty`; its creation, update, and favorite times are pointers and
+therefore serialize as explicit nulls when nil. The account ID and pagination
+cursor remain private. The previous TypeScript projection returned an empty
+string for an unfavorited deck's nil `favoritedAt`, and an existing loose test
+had accidentally preserved that mismatch.
+
+A shared normalizer now emits the exact field order and all three pointer arms.
+The existing D1 row projection feeds List, Search, Get, Create, and Update, so
+all five player-facing RPCs receive the same source-shaped response without a
+schema change. It also preserves the source custom marshal behavior that
+derives `isFavorite` from a non-nil favorite time. Direct Worker coverage
+asserts all 13 fields, real creation/update timestamps, and null favorite time
+both for starter-deck listing and after toggling a custom deck off.
+
+The source-derived release gate parses the generated Go public/private field
+set, pointer set, absence of omission, custom favorite marshal, source RPCs and
+favorite regression, shared Worker projection, and all main-Worker routes. Its
+mutation suite rejects ten forms of source drift, sparse nulls, favorite-time
+coercion, or projection bypass. The complete release contract passed 394
+main-Worker tests, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both
+production builds. Exact-head GitHub Actions run `31868082473` passed before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`d91f8375-12c4-4870-ba2b-5948c2e7fe21` to
+`7592f739-3069-4dde-9c83-12b7bdc3e64d`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no asset changes;
+the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
+game-mode probes returned `200` with `Cache-Control: no-store`; game and
+matchmaker protocol-3 health remained healthy, both Conquest modes remained
+disabled, and production D1 reported no pending migrations. Verification did
+not create synthetic deck, account, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
