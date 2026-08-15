@@ -449,7 +449,7 @@ export const handleApiRequest = async (
           status: true,
           jwtToken,
           address: proof.address,
-          ...(account ? { account } : {})
+          account: account ?? null
         })
       }
 
@@ -462,7 +462,7 @@ export const handleApiRequest = async (
             : await accounts.findByAddress(address)
         return json(request, env, {
           address,
-          ...(account ? { account } : {}),
+          account: account ?? null,
           ...(principal.kind === 'identity'
             ? { gamePrincipal: await deriveGamePrincipal(principal.userId) }
             : {})

@@ -2,6 +2,14 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+const section = (source, start, end) => {
+  const startIndex = source.indexOf(start)
+  const endIndex = source.indexOf(end, startIndex + start.length)
+  return startIndex >= 0 && endIndex > startIndex
+    ? source.slice(startIndex, endIndex)
+    : ''
+}
+
 const structBody = (source, name) =>
   source.match(new RegExp(`type ${name} struct \\{([\\s\\S]*?)\\n\\}`))?.[1]
 
@@ -44,13 +52,16 @@ const crystalPriorities = source => {
 
 export const accountWireErrors = (
   source,
+  authSource,
+  integrationSource,
   crystalSource,
   accountWire,
   accounts,
   player,
   competitive,
   competitiveWire,
-  api
+  api,
+  authTest
 ) => {
   const errors = []
   const accountFields = [
@@ -95,6 +106,57 @@ export const accountWireErrors = (
   ) {
     errors.push('source Account pointer contract changed')
   }
+
+  const compact = value => value.replace(/\s+/g, ' ')
+  const generatedAuth = compact(
+    section(
+      source,
+      'func (s *skyWeaverAPIServer) serveGetAuthTokenJSON(',
+      'func (s *skyWeaverAPIServer) serveGetSession('
+    )
+  )
+  for (const token of [
+    'Ret3 *Account `json:"account"`',
+    '}{ret0, ret1, ret2, ret3}'
+  ]) {
+    if (!generatedAuth.includes(token)) {
+      errors.push(`generated GetAuthToken account wire changed: ${token}`)
+    }
+  }
+  const generatedSession = compact(
+    section(
+      source,
+      'func (s *skyWeaverAPIServer) serveGetSessionJSON(',
+      'func (s *skyWeaverAPIServer) serveMigrateAccount('
+    )
+  )
+  for (const token of ['Ret1 *Account `json:"account"`', '}{ret0, ret1}']) {
+    if (!generatedSession.includes(token)) {
+      errors.push(`generated GetSession account wire changed: ${token}`)
+    }
+  }
+
+  const sourceAuth = compact(authSource)
+  for (const token of [
+    'var respAccount *proto.Account',
+    'respAccount = account.Account',
+    'return true, jwtString, proof.Address, respAccount, nil',
+    'return walletAddress, respAccount, nil'
+  ]) {
+    if (!sourceAuth.includes(token)) {
+      errors.push(`source auth/session account behavior changed: ${token}`)
+    }
+  }
+  const initialAuthIntegration = compact(
+    section(
+      integrationSource,
+      'status, ajwtToken, address, account, err = apitest.Client().GetAuthToken(',
+      'adminAccountID, err = apitest.CreateRandomAdminAccount('
+    )
+  )
+  if (!initialAuthIntegration.includes('assert.Nil(t, account)')) {
+    errors.push('source pre-registration auth no longer proves a nil account')
+  }
   if (
     !exactFields(
       source,
@@ -133,7 +195,7 @@ export const accountWireErrors = (
     errors.push('source nested AccountSettings omission contract changed')
   }
 
-  const compactWire = accountWire.replace(/\s+/g, ' ')
+  const compactWire = compact(accountWire)
   for (const field of accountFields) {
     const token = nullableFields.includes(field)
       ? `${field}: account.${field} ?? null`
@@ -224,6 +286,27 @@ export const accountWireErrors = (
       errors.push(`main Worker Account boundary is missing: ${token}`)
     }
   }
+  const workerAuth = compact(
+    section(api, "case 'GetAuthToken':", "case 'GetSession':")
+  )
+  if (!workerAuth.includes('account: account ?? null')) {
+    errors.push('GetAuthToken does not preserve the generated null account')
+  }
+  const workerSession = compact(
+    section(api, "case 'GetSession':", "case 'Ping':")
+  )
+  if (!workerSession.includes('account: account ?? null')) {
+    errors.push('GetSession does not preserve the generated null account')
+  }
+  const compactAuthTest = compact(authTest)
+  for (const token of [
+    'expect(body).toMatchObject({ status: true, address, account: null })',
+    'expect(await session.json()).toEqual({ address, account: null })'
+  ]) {
+    if (!compactAuthTest.includes(token)) {
+      errors.push(`auth/session null-account proof changed: ${token}`)
+    }
+  }
   return errors
 }
 
@@ -231,15 +314,23 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     source,
+    authSource,
+    integrationSource,
     crystalSource,
     accountWire,
     accounts,
     player,
     competitive,
     competitiveWire,
-    api
+    api,
+    authTest
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'rpc', 'auth.go'), 'utf8'),
+    readFile(
+      path.join(root, 'api', 'rpc', 'accounts_integration_test.go'),
+      'utf8'
+    ),
     readFile(path.join(root, 'api', 'data', 'crystal.go'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'account-wire.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'accounts.ts'), 'utf8'),
@@ -249,24 +340,28 @@ const main = async () => {
       path.join(root, 'cloudflare', 'src', 'competitive-wire.ts'),
       'utf8'
     ),
-    readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'test', 'auth-api.test.ts'), 'utf8')
   ])
   const errors = accountWireErrors(
     source,
+    authSource,
+    integrationSource,
     crystalSource,
     accountWire,
     accounts,
     player,
     competitive,
     competitiveWire,
-    api
+    api,
+    authTest
   )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Account projections preserve the generated Go wire and crystal priority'
+      'Account and auth/session projections preserve generated Go nulls and crystal priority'
     )
   }
 }

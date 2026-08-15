@@ -7,45 +7,57 @@ import { accountWireErrors } from './check-cloudflare-account-wire.mjs'
 const fixtures = async () => {
   const [
     source,
+    authSource,
+    integrationSource,
     crystalSource,
     accountWire,
     accounts,
     player,
     competitive,
     competitiveWire,
-    api
+    api,
+    authTest
   ] = await Promise.all([
     readFile('api/proto/api.gen.go', 'utf8'),
+    readFile('api/rpc/auth.go', 'utf8'),
+    readFile('api/rpc/accounts_integration_test.go', 'utf8'),
     readFile('api/data/crystal.go', 'utf8'),
     readFile('cloudflare/src/account-wire.ts', 'utf8'),
     readFile('cloudflare/src/accounts.ts', 'utf8'),
     readFile('cloudflare/src/player-rpc.ts', 'utf8'),
     readFile('cloudflare/src/competitive.ts', 'utf8'),
     readFile('cloudflare/src/competitive-wire.ts', 'utf8'),
-    readFile('cloudflare/src/api.ts', 'utf8')
+    readFile('cloudflare/src/api.ts', 'utf8'),
+    readFile('cloudflare/test/auth-api.test.ts', 'utf8')
   ])
   return {
     source,
+    authSource,
+    integrationSource,
     crystalSource,
     accountWire,
     accounts,
     player,
     competitive,
     competitiveWire,
-    api
+    api,
+    authTest
   }
 }
 
 const errorsFor = value =>
   accountWireErrors(
     value.source,
+    value.authSource,
+    value.integrationSource,
     value.crystalSource,
     value.accountWire,
     value.accounts,
     value.player,
     value.competitive,
     value.competitiveWire,
-    value.api
+    value.api,
+    value.authTest
   )
 
 test('derives and enforces the complete Go Account JSON wire', async () => {
@@ -60,6 +72,34 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
       source: value.source.replace(
         'Settings        *AccountSettingsWrapper `json:"settings" db:"-"`',
         'Settings        *AccountSettingsWrapper `json:"settings,omitempty" db:"-"`'
+      )
+    },
+    {
+      ...value,
+      source: value.source.replace(
+        'Ret3 *Account `json:"account"`',
+        'Ret3 *Account `json:"account,omitempty"`'
+      )
+    },
+    {
+      ...value,
+      source: value.source.replace(
+        'Ret1 *Account `json:"account"`',
+        'Ret1 *Account `json:"account,omitempty"`'
+      )
+    },
+    {
+      ...value,
+      authSource: value.authSource.replace(
+        'return walletAddress, respAccount, nil',
+        'return walletAddress, nil, nil'
+      )
+    },
+    {
+      ...value,
+      integrationSource: value.integrationSource.replace(
+        'assert.Nil(t, account)',
+        'assert.NotNil(t, account)'
       )
     },
     {
@@ -116,6 +156,24 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
     {
       ...value,
       api: value.api.replace("case 'ListLeaderboard':", "case 'OldBoard':")
+    },
+    {
+      ...value,
+      api: value.api.replace('account: account ?? null', '')
+    },
+    {
+      ...value,
+      api: value.api.replace(
+        'account: account ?? null,\n          ...(principal.kind',
+        '...(principal.kind'
+      )
+    },
+    {
+      ...value,
+      authTest: value.authTest.replace(
+        'expect(body).toMatchObject({ status: true, address, account: null })',
+        'expect(body).toMatchObject({ status: true, address })'
+      )
     }
   ]
   for (const [index, mutation] of mutations.entries()) {

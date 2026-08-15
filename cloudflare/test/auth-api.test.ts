@@ -35,7 +35,14 @@ const rpc = async (
 const authenticate = async (): Promise<string> => {
   const response = await rpc('GetAuthToken', { ethAuthProofString: 'stub-proof' })
   expect(response.status).toBe(200)
-  return ((await response.json()) as { jwtToken: string }).jwtToken
+  const body = (await response.json()) as {
+    status: boolean
+    jwtToken: string
+    address: string
+    account: unknown
+  }
+  expect(body).toMatchObject({ status: true, address, account: null })
+  return body.jwtToken
 }
 
 beforeEach(async () => {
@@ -48,7 +55,7 @@ describe('Cloudflare auth RPC', () => {
     const session = await rpc('GetSession', {}, token)
 
     expect(session.status).toBe(200)
-    expect(await session.json()).toEqual({ address })
+    expect(await session.json()).toEqual({ address, account: null })
   })
 
   it('registers an account and restores it from the session', async () => {
