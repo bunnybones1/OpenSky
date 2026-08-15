@@ -131,6 +131,17 @@ describe('source payment provider product catalog', () => {
         }
       ]
     })
+    expect(
+      await (
+        await rpc({
+          provider: 'STRIPE',
+          itemType: 'SW_BASE_CARDS'
+        })
+      ).json()
+    ).toEqual({ products: null })
+    expect(await (await rpc({ provider: 'UNKNOWN' })).json()).toEqual({
+      products: null
+    })
     expect((await rpc({ provider: 'STRIPE' }, false)).status).toBe(401)
     expect((await rpc({})).status).toBe(400)
   })

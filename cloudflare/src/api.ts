@@ -120,6 +120,9 @@ import {
 } from './leaderboard-reward-schedule-operations'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
+import {
+  sourceNullablePaymentProviderProductListWire
+} from './payment-provider-product-wire'
 import { listPaymentProviderProducts } from './payment-provider-products'
 import {
   MobileStoreVerificationRepository,
@@ -2619,7 +2622,9 @@ export const handleApiRequest = async (
         }>(request)
         if (!body.provider) throw invalidArgument('provider is required')
         return json(request, env, {
-          products: listPaymentProviderProducts(body.provider, body.itemType)
+          products: sourceNullablePaymentProviderProductListWire(
+            listPaymentProviderProducts(body.provider, body.itemType)
+          )
         })
       }
 
