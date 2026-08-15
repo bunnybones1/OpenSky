@@ -1650,6 +1650,56 @@ stat rows, and three eligible accounts; both reported `changed_db: false` and
 zero rows written. No production account, deck rank, leaderboard stat, reward,
 or staff grant was created or changed for verification.
 
+## Game-mode status response fidelity rollout — 2026-08-15
+
+The generated Go `GameModesStatus` response contains exactly ten required
+boolean fields. `GetGameModesStatus` initializes every field to true and then
+applies the persisted override for each exact `GameMode` case. The Cloudflare
+match service already returned all ten authoritative fields, including the
+separate practice-bot and practice-PvP switches, but the public Worker only
+validated those required fields and then returned the upstream object itself.
+That allowed future match-service metadata to cross a JSON boundary where Go's
+generated struct would have discarded it.
+
+`cloudflare/src/game-mode-history-wire.ts` now owns an explicit
+`sourceGameModesStatusWire` projection as well as the existing history
+projection. The public RPC still fails closed unless all ten upstream values
+are booleans, then emits only the ten generated fields in source order. Direct
+tests cover mixed values, Go zero values, and unknown-field removal. The
+isolated-D1 RPC test deliberately supplies private upstream metadata and proves
+it cannot reach `GetGameModesStatus`. The source-derived gate now pins the
+generated field names/tags, all-ten-enabled source constructor, all ten switch
+cases, explicit Worker projection, history contract, and build integration.
+Fifteen mutations fail closed on status, enum, pointer, privacy, nil-list,
+route, or build-gate drift.
+
+The complete local release contract passed 464 main-Worker tests, 34
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests,
+78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31904102647` passed in 10m1s for runtime commit
+`a380f399d1ee599da068c3e58882f651441bd986` before deployment.
+
+Only the main Worker was deployed, advancing it from
+`c3bc86b1-8877-4efd-b4eb-72a1af0a3d29` to
+`726ac476-8567-43f3-89bb-d3ac7d85691f`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files. The verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Read-only production `Version`, `Ping`, and `GetGameModesStatus` probes all
+returned `200` with `Cache-Control: no-store`. `Version` reported the exact new
+Worker ID. The game-mode response contained exactly the ten generated keys:
+tutorial, practice PvP, practice bot, warm-up, both ranked modes, both Conquest
+modes, and both challenge modes. The deployed operational values remained
+unchanged: all non-Conquest modes were true and both independently gated
+Conquest modes were false. Production D1 reported no pending migrations. The
+verification made no database writes and changed no account, queue, match,
+reward, wallet, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
