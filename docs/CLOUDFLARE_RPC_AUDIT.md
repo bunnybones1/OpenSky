@@ -226,7 +226,7 @@ The isolated Worker contract covers a card outside the former name table,
 including its description, asset, class, element, type, stats, set, image URLs,
 inventory unlock, and read-time repair of a legacy placeholder. The focused
 player RPC suite passed 50/50 tests; the complete release gate passed 392 main-
-Worker tests, 231 multiplayer tests, 25 browser/game tests, six analytics
+Worker tests, 232 multiplayer tests, 25 browser/game tests, six analytics
 tests, every source/off-chain audit, all typechecks, and both production
 builds. Exact-head GitHub Actions run `31855485197` passed in 8m14s.
 
