@@ -120,6 +120,9 @@ describe('deck-rank RPC compatibility', () => {
       })
     ])
     expect(page1.res[0].highestPlayer.settings).toBeNull()
+    expect(page1.res[0].deckRank).toMatchObject({
+      highestPlayerAddress: ''
+    })
     expect(page1.page.hasBefore).toBe(true)
     expect(JSON.parse(atob(page1.page.after!))).toEqual([
       string3,
@@ -171,6 +174,33 @@ describe('deck-rank RPC compatibility', () => {
         })
       ).status
     ).toBe(400)
+  })
+
+  it('preserves a source-valid null highest player instead of failing the public list', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE player_deck_ranks SET highest_player_user_id = NULL
+       WHERE library_revision = ? AND deck_string = ?`
+    )
+      .bind(CURRENT_DECK_RANK_LIBRARY_REVISION, string3)
+      .run()
+
+    const response = await rpc('ListDeckRanks', {
+      page: { pageSize: 1 },
+      req: { class: DeckClass.HRT }
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      res: [
+        {
+          deckRank: {
+            deckString: string3,
+            highestPlayerID: '0',
+            highestPlayerAddress: ''
+          },
+          highestPlayer: null
+        }
+      ]
+    })
   })
 
   it('preserves source class filtering and excludes zero-score list rows', async () => {

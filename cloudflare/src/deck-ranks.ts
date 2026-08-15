@@ -12,6 +12,10 @@ import type {
 import { invalidArgument, notFound } from './errors'
 import { goFloat32, goFloat32Ratio } from './go-numbers'
 import { identityReferenceFor } from './rpc-principal'
+import {
+  sourceDeckRankAccountWire,
+  sourceDeckRankWire
+} from './competitive-wire'
 
 export const CURRENT_DECK_RANK_LIBRARY_REVISION = cardLibrary.sourceSha256
 const DEFAULT_PAGE_SIZE = 20
@@ -205,26 +209,31 @@ const compareCursor = (
     : cursor.deckString.localeCompare(row.deck_string)
 }
 
-const deckRank = (row: DeckRankRow): DeckRank => ({
-  deckString: row.deck_string,
-  class: row.deck_class,
-  cardIds: JSON.parse(row.card_ids_json) as number[],
-  winCount: row.win_count,
-  lossCount: row.loss_count,
-  forfeitCount: row.forfeit_count,
-  abandonCount: row.abandon_count,
-  tieCount: row.tie_count,
-  winRatio: row.win_ratio,
-  // PostgreSQL orders and cursor-encodes the integer column, then scans the
-  // response field into Go float32. Keep the row integer for pagination and
-  // normalize only the player-facing wire projection.
-  gamesPlayed: goFloat32(row.games_played),
-  score: row.score,
-  highestPlayerID: String(row.highest_player_account_id ?? 0),
-  highestPlayerAddress: row.highest_player_user_id
-    ? identityReferenceFor(row.highest_player_user_id)
-    : ''
-})
+const deckRank = (
+  row: DeckRankRow,
+  hydrateHighestPlayerAddress: boolean
+): DeckRank =>
+  sourceDeckRankWire({
+    deckString: row.deck_string,
+    class: row.deck_class,
+    cardIds: JSON.parse(row.card_ids_json) as number[],
+    winCount: row.win_count,
+    lossCount: row.loss_count,
+    forfeitCount: row.forfeit_count,
+    abandonCount: row.abandon_count,
+    tieCount: row.tie_count,
+    winRatio: row.win_ratio,
+    // PostgreSQL orders and cursor-encodes the integer column, then scans the
+    // response field into Go float32. Keep the row integer for pagination and
+    // normalize only the player-facing wire projection.
+    gamesPlayed: goFloat32(row.games_played),
+    score: row.score,
+    highestPlayerID: String(row.highest_player_account_id ?? 0),
+    highestPlayerAddress:
+      hydrateHighestPlayerAddress && row.highest_player_user_id
+        ? identityReferenceFor(row.highest_player_user_id)
+        : ''
+  })
 
 export const completeDeckRankInsert = (
   database: D1Database,
@@ -350,10 +359,17 @@ export class DeckRanksRepository {
     )
     const res: DeckRankAccount[] = []
     for (const row of result.rows) {
-      if (!row.highest_player_user_id) throw notFound('missing account')
-      const account = await accountForUser(row.highest_player_user_id)
-      if (!account) throw notFound('missing account')
-      res.push({ deckRank: deckRank(row), highestPlayer: account })
+      let highestPlayer: Account | null = null
+      if (row.highest_player_user_id) {
+        highestPlayer = await accountForUser(row.highest_player_user_id)
+        if (!highestPlayer) throw notFound('missing account')
+      }
+      res.push(
+        sourceDeckRankAccountWire({
+          deckRank: deckRank(row, false),
+          highestPlayer
+        })
+      )
     }
     return { page: result.page, res }
   }
@@ -381,6 +397,9 @@ export class DeckRanksRepository {
       }
       return matches
     })
-    return { page: result.page, res: result.rows.map(deckRank) }
+    return {
+      page: result.page,
+      res: result.rows.map(row => deckRank(row, true))
+    }
   }
 }

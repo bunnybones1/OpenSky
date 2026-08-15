@@ -12,6 +12,7 @@ const fixtures = async () => {
     accounts,
     player,
     competitive,
+    competitiveWire,
     api
   ] = await Promise.all([
     readFile('api/proto/api.gen.go', 'utf8'),
@@ -20,6 +21,7 @@ const fixtures = async () => {
     readFile('cloudflare/src/accounts.ts', 'utf8'),
     readFile('cloudflare/src/player-rpc.ts', 'utf8'),
     readFile('cloudflare/src/competitive.ts', 'utf8'),
+    readFile('cloudflare/src/competitive-wire.ts', 'utf8'),
     readFile('cloudflare/src/api.ts', 'utf8')
   ])
   return {
@@ -29,6 +31,7 @@ const fixtures = async () => {
     accounts,
     player,
     competitive,
+    competitiveWire,
     api
   }
 }
@@ -41,6 +44,7 @@ const errorsFor = value =>
     value.accounts,
     value.player,
     value.competitive,
+    value.competitiveWire,
     value.api
   )
 
@@ -98,8 +102,15 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
     {
       ...value,
       competitive: value.competitive.replace(
-        'account: sourceAccountWire({',
-        'account: ({'
+        'return sourceLeaderboardEntryWire({',
+        'return ({'
+      )
+    },
+    {
+      ...value,
+      competitiveWire: value.competitiveWire.replace(
+        'account: value.account ? sourceAccountWire(value.account) : null',
+        'account: value.account ?? null'
       )
     },
     {

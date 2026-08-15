@@ -49,6 +49,7 @@ export const accountWireErrors = (
   accounts,
   player,
   competitive,
+  competitiveWire,
   api
 ) => {
   const errors = []
@@ -177,8 +178,7 @@ export const accountWireErrors = (
 
   const projections = [
     ['wallet account', accounts],
-    ['identity account', player],
-    ['leaderboard account', competitive]
+    ['identity account', player]
   ]
   for (const [name, projection] of projections) {
     if (
@@ -190,6 +190,22 @@ export const accountWireErrors = (
     if (!projection.replace(/\s+/g, ' ').includes('sourceAccountWire({')) {
       errors.push(`${name} projection bypasses sourceAccountWire`)
     }
+  }
+  if (
+    !competitive.includes('import { sourceLeaderboardEntryWire }') ||
+    !competitive.includes('return sourceLeaderboardEntryWire({')
+  ) {
+    errors.push('leaderboard account projection bypasses competitive wire')
+  }
+  if (
+    !competitiveWire.includes('import { sourceAccountWire }') ||
+    !competitiveWire
+      .replace(/\s+/g, ' ')
+      .includes(
+        'account: value.account ? sourceAccountWire(value.account) : null'
+      )
+  ) {
+    errors.push('competitive wire bypasses sourceAccountWire')
   }
   for (const [name, projection, userExpression] of [
     ['identity account', player, "sourceCrystalIDSQL('u.id')"],
@@ -220,6 +236,7 @@ const main = async () => {
     accounts,
     player,
     competitive,
+    competitiveWire,
     api
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
@@ -228,6 +245,10 @@ const main = async () => {
     readFile(path.join(root, 'cloudflare', 'src', 'accounts.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'player-rpc.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'competitive-wire.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
   ])
   const errors = accountWireErrors(
@@ -237,6 +258,7 @@ const main = async () => {
     accounts,
     player,
     competitive,
+    competitiveWire,
     api
   )
   if (errors.length) {

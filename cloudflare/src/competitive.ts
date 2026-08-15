@@ -21,7 +21,8 @@ import {
 
 import { sourceAccountStatWire } from './account-stat-wire'
 import { encodeDeckString } from './deck-codec'
-import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
+import { sourceCrystalIDSQL } from './account-wire'
+import { sourceLeaderboardEntryWire } from './competitive-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
@@ -1034,8 +1035,8 @@ export class CompetitiveRepository {
 
   private entry(row: ProjectedLeaderboardRow): LeaderboardEntry {
     const rewards = leaderboardRewardsForRank(row.reward_rank ?? 0)
-    return {
-      account: sourceAccountWire({
+    return sourceLeaderboardEntryWire({
+      account: {
         id: row.account_id,
         address: identityReferenceFor(row.user_id),
         name: row.name,
@@ -1053,12 +1054,12 @@ export class CompetitiveRepository {
         ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
         ...(row.crystal_id !== null ? { crystalID: row.crystal_id } : {}),
         ...(row.title_id !== null ? { titleID: row.title_id } : {})
-      }),
+      },
       accountStat: statFromRow(row, 'leaderboard'),
       rank: row.leaderboard_rank,
       rankedSilverReward: rewards.silverCards,
       rankedTicketReward: rewards.conquestTickets
-    }
+    })
   }
 
   async listLeaderboard(page: Page | undefined, request: LeaderboardRequest) {
