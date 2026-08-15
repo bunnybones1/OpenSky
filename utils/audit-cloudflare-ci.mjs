@@ -44,9 +44,18 @@ export const ciWorkflowAuditErrors = (workflow, nodeVersion) => {
 
 export const cloudflareBuildScriptErrors = rootPackage => {
   const build = rootPackage?.scripts?.['build:cloudflare'] ?? ''
-  return build.includes('pnpm check:cloudflare:match-reward-wire')
-    ? []
-    : ['Cloudflare build must include the generated Go match reward wire gate']
+  const errors = []
+  if (!build.includes('pnpm check:cloudflare:match-wire')) {
+    errors.push(
+      'Cloudflare build must include the generated Go match wire gate'
+    )
+  }
+  if (!build.includes('pnpm check:cloudflare:match-reward-wire')) {
+    errors.push(
+      'Cloudflare build must include the generated Go match reward wire gate'
+    )
+  }
+  return errors
 }
 
 const main = async () => {

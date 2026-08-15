@@ -12,10 +12,7 @@ import {
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
-import {
-  canonicalGainedRewards,
-  PlayerRpcRepository
-} from '../src/player-rpc'
+import { canonicalGainedRewards, PlayerRpcRepository } from '../src/player-rpc'
 import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
 import {
   clearTestSkypassPolicies,
@@ -101,14 +98,7 @@ const setSkypassSeasonProgress = async (
            excluded.achieved_account_level
          ),
          updated_at = excluded.updated_at`
-    ).bind(
-      userId,
-      season,
-      now,
-      now,
-      initialAccountLevel,
-      achievedAccountLevel
-    )
+    ).bind(userId, season, now, now, initialAccountLevel, achievedAccountLevel)
   ])
 }
 
@@ -117,9 +107,10 @@ beforeEach(async () => {
     'DROP TRIGGER IF EXISTS reject_skypass_claim_completion'
   ).run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
-  await clearTestSkypassPolicies(env.AUTH_DB, [
-    610, 611, 612, 613, 614, 615, 616, 617
-  ])
+  await clearTestSkypassPolicies(
+    env.AUTH_DB,
+    [610, 611, 612, 613, 614, 615, 616, 617]
+  )
   const now = new Date().toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users (id, display_name, primary_email, created_at, updated_at)
@@ -1212,7 +1203,14 @@ describe('legacy player RPC compatibility', () => {
       req: { accountAddress: identityReference }
     })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
+    const history = await response.json<{
+      res: Array<{
+        [key: string]: unknown
+        player1: Record<string, unknown>
+        player2: Record<string, unknown>
+      }>
+    }>()
+    expect(history).toMatchObject({
       res: [
         {
           status: 'COMPLETED',
@@ -1238,6 +1236,55 @@ describe('legacy player RPC compatibility', () => {
         }
       ]
     })
+    const listedMatch = history.res[0]!
+    expect(Object.keys(listedMatch).sort()).toEqual(
+      [
+        'id',
+        'status',
+        'player1',
+        'player2',
+        'player1GameMode',
+        'player2GameMode',
+        'initPlayer1DeckNumCards',
+        'initPlayer2DeckNumCards',
+        'player1DeckClass',
+        'player2DeckClass',
+        'winningPlayer',
+        'turnNonce',
+        'player1Moves',
+        'player2Moves',
+        'metrics',
+        'tutorialLevel',
+        'startedAt',
+        'endedAt',
+        'updatedAt',
+        'createdAt',
+        'replayID'
+      ].sort()
+    )
+    for (const projectedPlayer of [listedMatch.player1, listedMatch.player2]) {
+      expect(Object.keys(projectedPlayer).sort()).toEqual(
+        [
+          'id',
+          'address',
+          'name',
+          'region',
+          'tagArtID',
+          'crystalID',
+          'deckString',
+          'initDeckString',
+          'deckClass',
+          'playerSessionId',
+          'isBot'
+        ].sort()
+      )
+      expect(projectedPlayer).toMatchObject({
+        region: null,
+        tagArtID: null,
+        crystalID: null
+      })
+    }
+    expect(listedMatch).toMatchObject({ tutorialLevel: null })
     expect(
       (
         await rpc('ListMatches', {
@@ -1713,17 +1760,7 @@ describe('legacy player RPC compatibility', () => {
          (?, 'SW_HERO', 2, 1, 1, 'test', ?, ?),
          (?, 'SW_HERO', 99, 1, 1, 'test', ?, ?)`
     )
-      .bind(
-        userId,
-        now,
-        now,
-        userId,
-        now,
-        now,
-        userId,
-        now,
-        now
-      )
+      .bind(userId, now, now, userId, now, now, userId, now, now)
       .run()
 
     const unlocked = await rpc('ListUnlockedDeckClasses', {})
@@ -3341,7 +3378,8 @@ describe('legacy player RPC compatibility', () => {
     expect(claimed.rewards[0].card?.card).toMatchObject({
       id: 42,
       name: 'Engine Blade',
-      description: '{trigger:Sunrise:} Gain {+1pow}, {Lifesteal}, and {Wither}.',
+      description:
+        '{trigger:Sunrise:} Gain {+1pow}, {Lifesteal}, and {Wither}.',
       asset: 'unit-patty-03',
       class: 'STR',
       element: 'METAL',
@@ -3683,9 +3721,7 @@ describe('legacy player RPC compatibility', () => {
       {
         level: 1,
         earned: true,
-        rewards: [
-          { itemType: 'SW_STICKER_POINTS', amount: 7, isStarter: true }
-        ]
+        rewards: [{ itemType: 'SW_STICKER_POINTS', amount: 7, isStarter: true }]
       },
       {
         level: 4,

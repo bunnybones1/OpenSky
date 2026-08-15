@@ -118,7 +118,14 @@ describe('source replay archive contract', () => {
     expect(response.status).toBe(200)
     const body = await response.json<{
       ok: boolean
-      match: { status: string; replayID: string; winningPlayer: number }
+      match: {
+        status: string
+        replayID: string
+        winningPlayer: number | null
+        tutorialLevel: unknown
+        player1: Record<string, unknown>
+        player2: Record<string, unknown>
+      }
       recordURIs: string[]
       archiveIndexURI: string
     }>()
@@ -135,6 +142,19 @@ describe('source replay archive contract', () => {
       `https://opensky.example/api/replays/${MATCH_ID}/${REPLAY_ID}/0`,
       `https://opensky.example/api/replays/${MATCH_ID}/${REPLAY_ID}/1`
     ])
+    expect(body.match).toMatchObject({ tutorialLevel: null })
+    expect(body.match.player1).toMatchObject({
+      region: null,
+      tagArtID: null,
+      crystalID: null,
+      playerSessionId: null
+    })
+    expect(body.match.player2).toMatchObject({
+      region: null,
+      tagArtID: null,
+      crystalID: null,
+      playerSessionId: null
+    })
 
     const record = await handleReplayRequest(
       new Request(body.recordURIs[0]),
@@ -165,7 +185,8 @@ describe('source replay archive contract', () => {
   it('withholds active matches for two hours, then preserves their source status', async () => {
     await env.AUTH_DB.prepare(
       `UPDATE multiplayer_matches
-       SET status = 'active', result_json = NULL, ended_at = NULL
+       SET status = 'active', winner_player = NULL, result_json = NULL,
+           ended_at = NULL
        WHERE id = ?`
     )
       .bind(MATCH_ID)
@@ -186,9 +207,13 @@ describe('source replay archive contract', () => {
 
     const stale = await rpc({ matchID: MATCH_ID, replayID: REPLAY_ID })
     expect(stale.status).toBe(200)
-    expect(await stale.json()).toMatchObject({
+    const staleBody = await stale.json<{
+      ok: boolean
+      match: { status: string; winningPlayer: unknown; endedAt: unknown }
+    }>()
+    expect(staleBody).toMatchObject({
       ok: true,
-      match: { status: 'IN_PROGRESS' }
+      match: { status: 'IN_PROGRESS', winningPlayer: null, endedAt: null }
     })
   })
 })

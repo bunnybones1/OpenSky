@@ -24,6 +24,7 @@ import { invalidArgument, notFound, permissionDenied } from './errors'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
+import { sourceMatchWire } from './match-wire'
 import { identityReferenceFor } from './rpc-principal'
 
 const RANKED_MODES = new Set<GameMode>([
@@ -820,7 +821,7 @@ const matchFromRow = (row: MatchRow): Match | null => {
               ? 'FORFEITED'
               : 'COMPLETED'
   const modes = storedMatchModes(row)
-  return {
+  return sourceMatchWire({
     id: row.id,
     status: status as Match['status'],
     player1,
@@ -854,7 +855,7 @@ const matchFromRow = (row: MatchRow): Match | null => {
     updatedAt: row.updated_at,
     createdAt: row.created_at,
     replayID: row.replay_id
-  }
+  })
 }
 
 export class CompetitiveRepository {

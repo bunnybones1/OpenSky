@@ -48,9 +48,22 @@ test('rejects deployment authority in pull-request CI', () => {
   }
 })
 
-test('requires the source match-reward wire gate in the complete build', async () => {
+test('requires both source match wire gates in the complete build', async () => {
   const rootPackage = JSON.parse(await readFile('package.json', 'utf8'))
   assert.deepEqual(cloudflareBuildScriptErrors(rootPackage), [])
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:match-wire && ',
+          ''
+        )
+      }
+    })[0],
+    /match wire/
+  )
   assert.match(
     cloudflareBuildScriptErrors({
       ...rootPackage,
