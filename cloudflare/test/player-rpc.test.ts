@@ -44,6 +44,26 @@ const SOURCE_ACCOUNT_FIELDS = [
   'updatedAt',
   'warmUps'
 ]
+const SOURCE_PUBLIC_ACCOUNT_STAT_FIELDS = [
+  'abandonCount',
+  'createdAt',
+  'experience',
+  'forfeitCount',
+  'gameMode',
+  'gamesPlayed',
+  'lossCount',
+  'lossStreak',
+  'playerRank',
+  'playerRankStage',
+  'rank',
+  'rankProgress',
+  'score',
+  'season',
+  'tieCount',
+  'winCount',
+  'winRatio',
+  'winStreak'
+]
 
 const rpcAs = async (
   sessionUserId: string,
@@ -360,22 +380,44 @@ describe('legacy player RPC compatibility', () => {
     ])
 
     const account = await rpc('GetAccount', { address: identityReference })
-    expect(await account.json()).toMatchObject({
+    const body = await account.json<{
+      account: {
+        stats: {
+          rankedConstructed: Record<string, unknown>
+          rankedDiscovery: Record<string, unknown>
+        }
+      }
+    }>()
+    expect(body).toMatchObject({
       account: {
         stats: {
           rankedConstructed: {
             playerRank: 'WANDERER',
-            playerRankStage: 'STAGE_I',
-            playerRankState: '[-1,1750,350,0]'
+            playerRankStage: 'STAGE_I'
           },
           rankedDiscovery: {
             playerRank: 'WANDERER',
-            playerRankStage: 'STAGE_I',
-            playerRankState: '[-1,1750,350,0]'
+            playerRankStage: 'STAGE_I'
           }
         }
       }
     })
+    expect(body.account.stats.rankedConstructed).not.toHaveProperty(
+      'playerRankState'
+    )
+    expect(body.account.stats.rankedDiscovery).not.toHaveProperty(
+      'playerRankState'
+    )
+    const rows = await env.AUTH_DB.prepare(
+      `SELECT player_rank_state FROM player_account_stats
+       WHERE user_id = ? ORDER BY game_mode ASC`
+    )
+      .bind(userId)
+      .all<{ player_rank_state: string }>()
+    expect(rows.results).toEqual([
+      { player_rank_state: '[-1,1750,350,0]' },
+      { player_rank_state: '[-1,1750,350,0]' }
+    ])
   })
 
   it('exposes identity accounts publicly without private settings', async () => {
@@ -509,7 +551,12 @@ describe('legacy player RPC compatibility', () => {
   it('returns source-shaped current and historical account stats', async () => {
     const season = seasonFromDate()
     const account = await rpc('GetAccount', { address: identityReference })
-    expect(await account.json()).toMatchObject({
+    const accountBody = await account.json<{
+      account: {
+        stats: { rankedConstructed: Record<string, unknown> }
+      }
+    }>()
+    expect(accountBody).toMatchObject({
       account: {
         stats: {
           rankedConstructed: {
@@ -533,6 +580,12 @@ describe('legacy player RPC compatibility', () => {
         }
       }
     })
+    expect(
+      Object.keys(accountBody.account.stats.rankedConstructed).sort()
+    ).toEqual(SOURCE_PUBLIC_ACCOUNT_STAT_FIELDS)
+    expect(accountBody.account.stats.rankedConstructed).not.toHaveProperty(
+      'playerRankState'
+    )
 
     await env.AUTH_DB.prepare(
       `UPDATE player_account_stats
@@ -554,10 +607,11 @@ describe('legacy player RPC compatibility', () => {
         season: number
         gamesPlayed: number
         winRatio: number
-        score: number
-        rank?: number
-        rankProgress: number
-        experience: number
+        score: number | null
+        createdAt: string | null
+        rank: number | null
+        rankProgress: number | null
+        experience: number | null
       }>
       discoveryStats: Array<{ season: number; gamesPlayed: number }>
     }>()
@@ -566,11 +620,16 @@ describe('legacy player RPC compatibility', () => {
     expect(body.constructedStats[0]).toMatchObject({
       season: 1,
       gamesPlayed: 0,
-      score: 0,
+      score: null,
+      createdAt: null,
+      rank: null,
       rankProgress: 0,
       experience: 0
     })
-    expect(body.constructedStats[0]).not.toHaveProperty('rank')
+    expect(Object.keys(body.constructedStats[0]).sort()).toEqual(
+      SOURCE_PUBLIC_ACCOUNT_STAT_FIELDS
+    )
+    expect(body.constructedStats[0]).not.toHaveProperty('playerRankState')
     expect(body.constructedStats[1]).toMatchObject({
       season,
       gamesPlayed: 4,
@@ -686,11 +745,15 @@ describe('legacy player RPC compatibility', () => {
     expect(moderatedBody.constructedStats).toEqual([
       expect.objectContaining({
         playerRank: 'UNRANKED',
-        score: 0,
+        score: null,
+        createdAt: null,
+        rank: null,
         rankProgress: 0
       })
     ])
-    expect(moderatedBody.constructedStats[0]).not.toHaveProperty('rank')
+    expect(moderatedBody.constructedStats[0]).not.toHaveProperty(
+      'playerRankState'
+    )
   })
 
   it('preserves source float32 account ratios and rank-progress flooring', async () => {
@@ -908,6 +971,7 @@ describe('legacy player RPC compatibility', () => {
       page: { hasBefore: boolean; after: string }
       res: Array<{
         account: Record<string, unknown> & { name: string }
+        accountStat: Record<string, unknown>
         rank: number
         rankedSilverReward: number
         rankedTicketReward: number
@@ -930,6 +994,15 @@ describe('legacy player RPC compatibility', () => {
       settings: null,
       isBurnerWallet: null
     })
+    expect(Object.keys(firstBody.res[0].accountStat).sort()).toEqual(
+      SOURCE_PUBLIC_ACCOUNT_STAT_FIELDS
+    )
+    expect(firstBody.res[0].accountStat).toMatchObject({
+      experience: null,
+      rank: null,
+      rankProgress: null
+    })
+    expect(firstBody.res[0].accountStat).not.toHaveProperty('playerRankState')
     expect(firstBody.page.hasBefore).toBe(true)
 
     const insertedUserId = 'leaderboard-inserted-before-cursor'

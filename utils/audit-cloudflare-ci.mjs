@@ -65,6 +65,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go Account wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:account-stat-wire')) {
+    errors.push(
+      'Cloudflare build must include the generated Go AccountStat wire gate'
+    )
+  }
   return errors
 }
 

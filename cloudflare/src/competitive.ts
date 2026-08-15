@@ -19,6 +19,7 @@ import {
   storedMatchModes
 } from '@opensky/shared/match-modes'
 
+import { sourceAccountStatWire } from './account-stat-wire'
 import { encodeDeckString } from './deck-codec'
 import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
@@ -526,23 +527,29 @@ const projectedRank = (row: StatRow): number | undefined => {
     : row.rank_position
 }
 
-const statFromRow = (row: StatRow, rank?: number): AccountStat => {
+const statFromRow = (
+  row: StatRow,
+  projection: 'account' | 'leaderboard' = 'account'
+): AccountStat => {
   const gamesPlayed = row.win_count + row.loss_count + row.tie_count
   const experience = totalExperience(row.level ?? 1, row.xp ?? 0)
-  const position = rank ?? projectedRank(row)
+  const position = projection === 'account' ? projectedRank(row) : undefined
   let rankProgress: number | undefined
-  if (row.player_rank === ('UNRANKED' as PlayerRank)) {
-    rankProgress = Math.min(1, goFloat32FloorHundredthsRatio(experience, 200))
-  } else if (row.rank_count !== undefined) {
-    const rankCount = row.rank_count ?? 0
-    rankProgress = Math.min(
-      1,
-      position !== undefined
-        ? goFloat32FloorHundredthsRatio(position, rankCount)
-        : 0
-    )
+  if (projection === 'account') {
+    rankProgress = 0
+    if (row.player_rank === ('UNRANKED' as PlayerRank)) {
+      rankProgress = Math.min(1, goFloat32FloorHundredthsRatio(experience, 200))
+    } else if (row.rank_count !== undefined) {
+      const rankCount = row.rank_count ?? 0
+      rankProgress = Math.min(
+        1,
+        position !== undefined
+          ? goFloat32FloorHundredthsRatio(position, rankCount)
+          : 0
+      )
+    }
   }
-  return {
+  return sourceAccountStatWire({
     gameMode: row.game_mode,
     winCount: row.win_count,
     lossCount: row.loss_count,
@@ -551,18 +558,17 @@ const statFromRow = (row: StatRow, rank?: number): AccountStat => {
     abandonCount: row.abandon_count,
     winRatio: goFloat32Ratio(row.win_count, gamesPlayed),
     gamesPlayed,
-    experience,
+    ...(projection === 'account' ? { experience } : {}),
     score: row.score,
     createdAt: row.created_at,
     ...(position !== undefined ? { rank: position } : {}),
     ...(rankProgress !== undefined ? { rankProgress } : {}),
     playerRank: row.player_rank,
     playerRankStage: row.player_rank_stage,
-    playerRankState: row.player_rank_state,
     winStreak: row.win_streak,
     lossStreak: row.loss_streak,
     season: row.season
-  }
+  })
 }
 
 const accountStatRowsQuery = (where: string): string => `
@@ -631,27 +637,26 @@ const syntheticStat = (
   season: number,
   level: number,
   xp: number
-): AccountStat =>
-  statFromRow({
-    user_id: '',
-    game_mode: gameMode,
-    season,
-    win_count: 0,
-    loss_count: 0,
-    tie_count: 0,
-    forfeit_count: 0,
-    abandon_count: 0,
-    score: 0,
-    player_rank: 'UNRANKED' as PlayerRank,
-    player_rank_stage: 'STAGE_NONE' as PlayerRankStage,
-    player_rank_state: '',
-    win_streak: 0,
-    loss_streak: 0,
-    created_at: new Date(0).toISOString(),
-    updated_at: new Date(0).toISOString(),
-    level,
-    xp
+): AccountStat => {
+  const experience = totalExperience(level, xp)
+  return sourceAccountStatWire({
+    gameMode,
+    winCount: 0,
+    lossCount: 0,
+    tieCount: 0,
+    forfeitCount: 0,
+    abandonCount: 0,
+    winRatio: 0,
+    gamesPlayed: 0,
+    experience,
+    rankProgress: Math.min(1, goFloat32FloorHundredthsRatio(experience, 200)),
+    playerRank: 'UNRANKED' as PlayerRank,
+    playerRankStage: 'STAGE_NONE' as PlayerRankStage,
+    winStreak: 0,
+    lossStreak: 0,
+    season
   })
+}
 
 const compareRows = (left: LeaderboardRow, right: LeaderboardRow): number =>
   (RANK_ORDER[right.player_rank] ?? 0) - (RANK_ORDER[left.player_rank] ?? 0) ||
@@ -1049,7 +1054,7 @@ export class CompetitiveRepository {
         ...(row.crystal_id !== null ? { crystalID: row.crystal_id } : {}),
         ...(row.title_id !== null ? { titleID: row.title_id } : {})
       }),
-      accountStat: statFromRow(row, row.leaderboard_rank),
+      accountStat: statFromRow(row, 'leaderboard'),
       rank: row.leaderboard_rank,
       rankedSilverReward: rewards.silverCards,
       rankedTicketReward: rewards.conquestTickets
