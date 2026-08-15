@@ -83,6 +83,11 @@ import {
   type SourceRewardInput
 } from './reward-wire'
 import {
+  sourceNotificationOneTimeWire,
+  sourceNullableNotificationListWire,
+  sourceNullableNotificationOneTimeListWire
+} from './notification-wire'
+import {
   sourceListSkypassRewardsWire,
   sourceNullableSkypassRewardListWire,
   sourceSkypassRewardListWire,
@@ -1142,7 +1147,9 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
-          res: await content.listNotificationTemplates()
+          res: sourceNullableNotificationOneTimeListWire(
+            await content.listNotificationTemplates()
+          )
         })
       }
 
@@ -1156,9 +1163,11 @@ export const handleApiRequest = async (
           throw invalidArgument('notification is required')
         }
         return json(request, env, {
-          res: await content.createNotificationTemplate(
-            principal.userId,
-            body.notification
+          res: sourceNotificationOneTimeWire(
+            await content.createNotificationTemplate(
+              principal.userId,
+              body.notification
+            )
           )
         })
       }
@@ -1173,9 +1182,11 @@ export const handleApiRequest = async (
           throw invalidArgument('notification is required')
         }
         return json(request, env, {
-          res: await content.updateNotificationTemplate(
-            principal.userId,
-            body.notification
+          res: sourceNotificationOneTimeWire(
+            await content.updateNotificationTemplate(
+              principal.userId,
+              body.notification
+            )
           )
         })
       }
@@ -2235,7 +2246,9 @@ export const handleApiRequest = async (
       case 'ListNotifications': {
         const principal = await identityPrincipal(request, env)
         return json(request, env, {
-          notifications: await content.listNotifications(principal.userId)
+          notifications: sourceNullableNotificationListWire(
+            await content.listNotifications(principal.userId)
+          )
         })
       }
 

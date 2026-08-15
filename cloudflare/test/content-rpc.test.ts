@@ -299,12 +299,95 @@ describe('source content RPC compatibility', () => {
       ).json()
     ).toEqual({ status: true })
     expect(await (await rpc('ListNotifications', {})).json()).toEqual({
-      notifications: []
+      notifications: null
     })
     expect(
       (await rpc('SetNotificationsAsSeen', { notificationIDs: [] })).status
     ).toBe(400)
     expect((await rpc('ListNotifications', {}, false)).status).toBe(401)
+  })
+
+  it('normalizes every notification union arm to the generated Go wire', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_notifications
+           (user_id, notification_type, payload, created_at)
+         VALUES (?, 'LEADERBOARD_REWARD', ?, ?)`
+      ).bind(
+        userId,
+        JSON.stringify({
+          leaderboardReward: {
+            earnedConstructedPlayerRanks: [{}]
+          }
+        }),
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_notifications
+           (user_id, notification_type, payload, created_at)
+         VALUES (?, 'CONQUEST_V2_REWARD', ?, ?)`
+      ).bind(
+        userId,
+        JSON.stringify({ conquestV2Reward: { season: 62, week: 3 } }),
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_notifications
+           (user_id, notification_type, payload, created_at)
+         VALUES (?, 'SEASON_START', ?, ?)`
+      ).bind(
+        userId,
+        JSON.stringify({ seasonStart: { seasonNumber: 63 } }),
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_notifications
+           (user_id, notification_type, payload, created_at)
+         VALUES (?, 'SKYPASS_LEVEL_INTRODUCTION', '{}', ?)`
+      ).bind(userId, now)
+    ])
+
+    expect(await (await rpc('ListNotifications', {})).json()).toEqual({
+      notifications: [
+        {
+          id: expect.any(Number),
+          type: 'LEADERBOARD_REWARD',
+          leaderboardReward: {
+            season: 0,
+            week: 0,
+            silverCardAmounts: null,
+            ticketAmount: 0,
+            earnedConstructedPlayerRanks: [
+              { playerRank: null, playerRankStage: null }
+            ],
+            earnedDiscoveryPlayerRanks: null,
+            rankedConstructedRank: 0,
+            rankedDiscoveryRank: 0
+          }
+        },
+        {
+          id: expect.any(Number),
+          type: 'CONQUEST_V2_REWARD',
+          conquestV2Reward: {
+            season: 62,
+            week: 3,
+            treasureLevel: 0,
+            amountUSDC: 0,
+            silverCardAmounts: null
+          }
+        },
+        {
+          id: expect.any(Number),
+          type: 'SEASON_START',
+          seasonStart: { seasonNumber: 63, seasonName: '' }
+        },
+        {
+          id: expect.any(Number),
+          type: 'SKYPASS_LEVEL_INTRODUCTION'
+        }
+      ]
+    })
   })
 
   it('materializes each eligible one-time template exactly once', async () => {
