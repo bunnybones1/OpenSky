@@ -363,6 +363,50 @@ matchmaker protocol-3 health remained healthy, both Conquest modes remained
 disabled, and production D1 reported no pending migrations. Verification did
 not create synthetic account, item, match, reward, or economy state.
 
+### Complete AccountStat JSON wire — 2026-08-14
+
+Milestone `f34a57f8` applies the generated-wire rule to every public
+`AccountStat` projection. The Go struct has 19 public JSON fields; its six
+non-`omitempty` pointers (`experience`, `score`, `createdAt`, `rank`,
+`rankProgress`, and `season`) serialize as explicit nulls when unset. The sole
+omitted public-tagged field is the internal Glicko `playerRankState`. The
+previous TypeScript projections omitted some nil pointer fields and did not
+make the public-versus-internal state boundary explicit.
+
+A shared normalizer now emits the complete public shape while allowing the
+typed internal match profile to opt into `playerRankState`. Account profile and
+history reads derive experience, rank, and rank progress; synthetic missing
+seasons preserve the source's nil score, creation time, and rank; leaderboard
+entries preserve their source score and creation time while keeping derived
+experience, rank, and rank progress null. Direct Worker tests assert the exact
+18-field public object, the synthetic and leaderboard null arms, absence of
+internal Glicko state on public responses, and unchanged internal D1 state.
+
+The source-derived release gate parses the generated Go field order, all six
+pointer arms, the sole `omitempty` field, the public/internal RPC regressions,
+synthetic-season construction, leaderboard projection, and each main-Worker
+route. Its mutation suite rejects 13 forms of source drift, sparse nulls,
+internal-state leakage, or projection bypass. The complete release contract
+passed 394 main-Worker tests, 34 game-server unit tests, 93 game-server Workers
+tests, 31 match-service tests, 78 matchmaker tests, 25 game/browser tests, six
+analytics tests, every source/off-chain audit, all service typechecks, and both
+production builds. Exact-head GitHub Actions run `31866726129` passed before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`f2919ba4-3849-4163-a197-c718573d1f34` to
+`d91f8375-12c4-4870-ba2b-5948c2e7fe21`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no asset changes;
+the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public `Version`, `Ping`, and
+game-mode probes returned `200` with `Cache-Control: no-store`; game and
+matchmaker protocol-3 health remained healthy, both Conquest modes remained
+disabled, and production D1 reported no pending migrations. Verification did
+not create synthetic account, statistic, match, reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
