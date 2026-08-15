@@ -1,6 +1,18 @@
 import { invalidArgument } from './errors'
 import { identityReferenceFor } from './rpc-principal'
 
+export interface SourceReportInput {
+  reportedAddress?: unknown
+  matchId?: unknown
+  reporterComment?: unknown
+}
+
+export interface SourceReportRequest {
+  reportedAddress: string
+  matchId: number
+  reporterComment: string
+}
+
 interface MatchParticipants {
   player1_user_id: string | null
   player2_user_id: string | null
@@ -53,25 +65,37 @@ const truncateUtf8 = (value: string, bytes: number) => {
     .replace(/\uFFFD$/, '')
 }
 
+/** Recreates encoding/json zero values for the generated Go Report request. */
+export const sourceReportRequest = (
+  input: SourceReportInput
+): SourceReportRequest => {
+  if (
+    (input.reportedAddress != null &&
+      typeof input.reportedAddress !== 'string') ||
+    (input.matchId != null &&
+      (typeof input.matchId !== 'number' ||
+        !Number.isSafeInteger(input.matchId) ||
+        input.matchId < 0)) ||
+    (input.reporterComment != null && typeof input.reporterComment !== 'string')
+  ) {
+    throw invalidArgument('missing report data')
+  }
+  return {
+    reportedAddress: input.reportedAddress ?? '',
+    matchId: input.matchId ?? 0,
+    reporterComment: input.reporterComment ?? ''
+  }
+}
+
 export class AccountReportsRepository {
   constructor(private readonly database: D1Database) {}
 
   async report(
     reporterUserId: string,
-    input: {
-      reportedAddress?: string
-      matchId?: number
-      reporterComment?: string
-    }
+    input: SourceReportInput
   ): Promise<boolean> {
-    if (
-      typeof input.reportedAddress !== 'string' ||
-      typeof input.matchId !== 'number' ||
-      typeof input.reporterComment !== 'string'
-    ) {
-      throw invalidArgument('missing report data')
-    }
-    if (!Number.isSafeInteger(input.matchId) || input.matchId <= 0) {
+    const report = sourceReportRequest(input)
+    if (report.matchId <= 0) {
       throw invalidArgument('failed to fetch reported match')
     }
 
@@ -81,7 +105,7 @@ export class AccountReportsRepository {
                 player1_principal, player2_principal
          FROM multiplayer_matches WHERE id = ?`
       )
-      .bind(input.matchId)
+      .bind(report.matchId)
       .first<MatchParticipants>()
     if (!match) throw invalidArgument('failed to fetch reported match')
     const reporterPlayer =
@@ -90,7 +114,7 @@ export class AccountReportsRepository {
         : match.player2_user_id === reporterUserId
           ? 1
           : undefined
-    const normalizedReportedAddress = input.reportedAddress.toLowerCase()
+    const normalizedReportedAddress = report.reportedAddress.toLowerCase()
     const reporterAddress = identityReferenceFor(reporterUserId)
     const reporterPrincipal =
       reporterPlayer === 0
@@ -99,7 +123,7 @@ export class AccountReportsRepository {
           ? match.player2_principal
           : undefined
     if (
-      input.reportedAddress === reporterAddress ||
+      report.reportedAddress === reporterAddress ||
       (reporterPrincipal &&
         normalizedReportedAddress === reporterPrincipal.toLowerCase())
     ) {
@@ -116,8 +140,8 @@ export class AccountReportsRepository {
         : normalizedReportedAddress === match.player2_principal.toLowerCase()
           ? match.player2_user_id
           : null
-    const reportedUserId = input.reportedAddress.startsWith('identity:')
-      ? input.reportedAddress.slice('identity:'.length)
+    const reportedUserId = report.reportedAddress.startsWith('identity:')
+      ? report.reportedAddress.slice('identity:'.length)
       : principalUserId
     if (!reportedUserId) throw invalidArgument('account does not exist')
     const reportedAccount = await this.database
@@ -135,7 +159,7 @@ export class AccountReportsRepository {
 
     const now = new Date().toISOString()
     const comment = truncateUtf8(
-      sanitizeReportComment(input.reporterComment),
+      sanitizeReportComment(report.reporterComment),
       4000
     )
     await this.database
@@ -146,7 +170,7 @@ export class AccountReportsRepository {
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(match_id, reporter_user_id) DO NOTHING`
       )
-      .bind(input.matchId, reportedUserId, reporterUserId, comment, now, now)
+      .bind(report.matchId, reportedUserId, reporterUserId, comment, now, now)
       .run()
     return true
   }

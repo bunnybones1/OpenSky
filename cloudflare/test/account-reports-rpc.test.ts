@@ -2,7 +2,10 @@ import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
-import { sanitizeReportComment } from '../src/account-reports'
+import {
+  sanitizeReportComment,
+  sourceReportRequest
+} from '../src/account-reports'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
@@ -69,7 +72,7 @@ beforeEach(async () => {
 })
 
 describe('source match-scoped account reporting', () => {
-  it('requires an identity session and complete report payload', async () => {
+  it('requires an identity session and a report object', async () => {
     expect((await rpcAs(REPORTER, report(), false)).status).toBe(401)
     expect((await rpcAs(REPORTER, {})).status).toBe(400)
     expect(await (await rpcAs(REPORTER, {})).json()).toMatchObject({
@@ -78,6 +81,16 @@ describe('source match-scoped account reporting', () => {
     expect((await rpcAs(REPORTER, { report: { matchId: 700 } })).status).toBe(
       400
     )
+    expect(
+      sourceReportRequest({
+        reportedAddress: `identity:${OPPONENT}`,
+        matchId: 700
+      })
+    ).toEqual({
+      reportedAddress: `identity:${OPPONENT}`,
+      matchId: 700,
+      reporterComment: ''
+    })
   })
 
   it('persists a pending user-report signal with identity audit fields', async () => {
@@ -98,6 +111,21 @@ describe('source match-scoped account reporting', () => {
       signal_status: 'PENDING',
       comment: 'AFK'
     })
+  })
+
+  it('preserves an omitted comment as the generated Go empty-string value', async () => {
+    const response = await rpcAs(REPORTER, {
+      report: {
+        reportedAddress: `identity:${OPPONENT}`,
+        matchId: 700
+      }
+    })
+    expect(response.status).toBe(200)
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT comment FROM player_account_reports'
+      ).first()
+    ).toEqual({ comment: '' })
   })
 
   it('accepts the opponent principal emitted by the preserved game UI', async () => {
