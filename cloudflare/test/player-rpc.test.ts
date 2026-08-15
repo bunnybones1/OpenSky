@@ -423,8 +423,9 @@ describe('legacy player RPC compatibility', () => {
         `INSERT INTO player_items
            (user_id, item_type, token_id, balance, is_new, unlock_source,
             created_at, updated_at)
-         VALUES (?, 'SW_STICKER_POINTS', 0, 7, 0, 'friend-level', ?, ?)`
-      ).bind(inviterUserId, now, now)
+         VALUES (?, 'SW_STICKER_POINTS', 0, 7, 0, 'friend-level', ?, ?),
+                (?, 'SW_STICKER_POINTS', 9, 100, 0, 'noncanonical-test', ?, ?)`
+      ).bind(inviterUserId, now, now, inviterUserId, now, now)
     ])
 
     const gifted = await rpc('GetPointsGifted', {

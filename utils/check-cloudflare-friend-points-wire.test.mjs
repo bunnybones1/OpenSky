@@ -9,6 +9,7 @@ const fixtureFiles = [
   'api/rpc/friend_points.go',
   'api/data/levels_per_season.go',
   'api/data/account.go',
+  'api/data/item.go',
   'cloudflare/src/friend-points-wire.ts',
   'cloudflare/src/social.ts',
   'cloudflare/src/api.ts',
@@ -69,6 +70,11 @@ test('rejects struct, query, zero-value, route, and gate drift', async () => {
       'proto.AccountStatus_DELETED,'
     ),
     mutate(
+      'api/data/item.go',
+      'StickerPointsItemID  = uint64(1)',
+      'StickerPointsItemID  = uint64(2)'
+    ),
+    mutate(
       'cloudflare/src/friend-points-wire.ts',
       'createdAt: null,',
       'createdAt: account.createdAt ?? null,'
@@ -77,6 +83,11 @@ test('rejects struct, query, zero-value, route, and gate drift', async () => {
       'cloudflare/src/friend-points-wire.ts',
       'invitedBy: null,',
       'invitedBy: account.invitedBy ?? null,'
+    ),
+    mutate(
+      'cloudflare/src/social.ts',
+      'AND token_id = 0',
+      'AND token_id = 9'
     ),
     mutate(
       'cloudflare/src/social.ts',

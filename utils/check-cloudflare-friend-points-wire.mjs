@@ -41,6 +41,7 @@ export const friendPointsWireErrors = (
   rpcSource,
   levelsSource,
   accountSource,
+  itemSource,
   wireSource,
   socialSource,
   apiSource,
@@ -212,6 +213,21 @@ export const friendPointsWireErrors = (
     }
   }
 
+  const stickerPointLookup = section(
+    itemSource,
+    'func (s *ItemStore) GetStickerPoints(',
+    'func (s *ItemStore) SpendStickerPoints('
+  )
+  for (const token of [
+    'StickerPointsItemID  = uint64(1)',
+    'FindAccountItem(accountID, proto.ItemType_SW_STICKER_POINTS, StickerPointsItemID)',
+    'return item.Balance.Uint64(), nil'
+  ]) {
+    if (!itemSource.includes(token) && !stickerPointLookup.includes(token)) {
+      errors.push(`source sticker-point lookup changed: ${token}`)
+    }
+  }
+
   const compactWire = compact(wireSource)
   const friendAccountWire = compact(
     section(
@@ -283,7 +299,7 @@ export const friendPointsWireErrors = (
     "account.account_status IN ( 'ACTIVE', 'VIP', 'SUSPENDED', 'FLAGGED', 'TO_DELETE' )",
     'COALESCE( season_points.points_carried + season_points.levels, 0 ) DESC, game.id ASC',
     'LIMIT 5',
-    "item_type = 'SW_STICKER_POINTS'",
+    "item_type = 'SW_STICKER_POINTS' AND token_id = 0",
     'MAX(required_points)',
     'WHERE invitee_user_id = ? AND inviter_user_id = ?',
     'game.id AS account_id, account.name AS account_name, account.locale, profile.level, account.region, account.tag_art_id',
@@ -342,6 +358,7 @@ const main = async () => {
     'api/rpc/friend_points.go',
     'api/data/levels_per_season.go',
     'api/data/account.go',
+    'api/data/item.go',
     'cloudflare/src/friend-points-wire.ts',
     'cloudflare/src/social.ts',
     'cloudflare/src/api.ts',

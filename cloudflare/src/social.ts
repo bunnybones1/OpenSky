@@ -135,6 +135,7 @@ export class SocialRepository {
              COALESCE((
                SELECT SUM(balance) FROM player_items
                WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
+                 AND token_id = 0
              ), 0) +
              COALESCE((
                SELECT MAX(required_points)
