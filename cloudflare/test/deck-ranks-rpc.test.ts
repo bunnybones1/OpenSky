@@ -107,7 +107,7 @@ describe('deck-rank RPC compatibility', () => {
       page: { after?: string; hasBefore: boolean }
       res: Array<{
         deckRank: { deckString: string; score: number }
-        highestPlayer: { address: string; name: string; settings?: unknown }
+        highestPlayer: { address: string; name: string; settings: unknown }
       }>
     }
     expect(page1.res).toEqual([
@@ -119,7 +119,7 @@ describe('deck-rank RPC compatibility', () => {
         })
       })
     ])
-    expect(page1.res[0].highestPlayer.settings).toBeUndefined()
+    expect(page1.res[0].highestPlayer.settings).toBeNull()
     expect(page1.page.hasBefore).toBe(true)
     expect(JSON.parse(atob(page1.page.after!))).toEqual([
       string3,

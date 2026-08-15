@@ -48,7 +48,7 @@ test('rejects deployment authority in pull-request CI', () => {
   }
 })
 
-test('requires source match and Conquest wire gates in the complete build', async () => {
+test('requires source match, Conquest, and Account wire gates in the complete build', async () => {
   const rootPackage = JSON.parse(await readFile('package.json', 'utf8'))
   assert.deepEqual(cloudflareBuildScriptErrors(rootPackage), [])
   assert.match(
@@ -89,5 +89,18 @@ test('requires source match and Conquest wire gates in the complete build', asyn
       }
     })[0],
     /Conquest wire/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:account-wire && ',
+          ''
+        )
+      }
+    })[0],
+    /Account wire/
   )
 })

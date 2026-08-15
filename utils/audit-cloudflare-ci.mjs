@@ -60,6 +60,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go Conquest wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:account-wire')) {
+    errors.push(
+      'Cloudflare build must include the generated Go Account wire gate'
+    )
+  }
   return errors
 }
 

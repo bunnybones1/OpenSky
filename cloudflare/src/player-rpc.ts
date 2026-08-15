@@ -19,6 +19,7 @@ import type {
 import { DeckClass } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
+import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
 import { allLibraryCards } from './card-library'
 import { pendingConquestCards } from './conquest-delivery'
 import {
@@ -191,6 +192,7 @@ interface AccountRow {
   region: string | null
   tag_art_id: string | null
   title_id: number | null
+  crystal_id: number | null
   hide_player_names: number | null
   request_more_invites: number | null
   twitch_profile: string | null
@@ -1134,6 +1136,7 @@ export class PlayerRpcRepository {
                 account.region,
                 account.tag_art_id,
                 account.title_id,
+                ${sourceCrystalIDSQL('u.id')} AS crystal_id,
                 account.hide_player_names,
                 account.request_more_invites,
                 account.twitch_profile,
@@ -1163,7 +1166,7 @@ export class PlayerRpcRepository {
       .first<AccountRow>()
     if (!row) return null
 
-    return {
+    return sourceAccountWire({
       id: row.game_account_id ?? 0,
       address: identityReferenceFor(userId),
       name: row.account_name || row.display_name,
@@ -1183,12 +1186,13 @@ export class PlayerRpcRepository {
             ),
       levelUpXP: row.next_level_xp,
       stats,
-      isBurnerWallet: false,
+      isBurnerWallet: includePrivateSettings ? false : undefined,
       ...(row.inviter_user_id
         ? { invitedBy: identityReferenceFor(row.inviter_user_id) }
         : {}),
       ...(row.region ? { region: row.region } : {}),
       ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
+      ...(row.crystal_id !== null ? { crystalID: row.crystal_id } : {}),
       ...(row.title_id !== null ? { titleID: row.title_id } : {}),
       ...(includePrivateSettings
         ? {
@@ -1211,7 +1215,7 @@ export class PlayerRpcRepository {
             }
           }
         : {})
-    }
+    })
   }
 
   async getPrivateSpectateCode(

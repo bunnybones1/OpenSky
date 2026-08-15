@@ -20,6 +20,7 @@ import {
 } from '@opensky/shared/match-modes'
 
 import { encodeDeckString } from './deck-codec'
+import { sourceAccountWire, sourceCrystalIDSQL } from './account-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
@@ -98,6 +99,7 @@ interface LeaderboardRow extends StatRow {
   region: string | null
   tag_art_id: string | null
   title_id: number | null
+  crystal_id: number | null
   user_created_at: string
   profile_updated_at: string
   level: number
@@ -985,6 +987,7 @@ export class CompetitiveRepository {
         `SELECT stats.*, game.id AS account_id,
                 account.name, account.locale, account.region,
                 account.tag_art_id, account.title_id,
+                ${sourceCrystalIDSQL('stats.user_id')} AS crystal_id,
                 users.created_at AS user_created_at,
                 profile.updated_at AS profile_updated_at,
                 profile.level, profile.xp, profile.next_level_xp,
@@ -1027,7 +1030,7 @@ export class CompetitiveRepository {
   private entry(row: ProjectedLeaderboardRow): LeaderboardEntry {
     const rewards = leaderboardRewardsForRank(row.reward_rank ?? 0)
     return {
-      account: {
+      account: sourceAccountWire({
         id: row.account_id,
         address: identityReferenceFor(row.user_id),
         name: row.name,
@@ -1041,11 +1044,11 @@ export class CompetitiveRepository {
         // row, where SeasonLevel is a non-database projection and remains zero.
         seasonLevel: 0,
         levelUpXP: row.next_level_xp,
-        isBurnerWallet: false,
         ...(row.region ? { region: row.region } : {}),
         ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {}),
+        ...(row.crystal_id !== null ? { crystalID: row.crystal_id } : {}),
         ...(row.title_id !== null ? { titleID: row.title_id } : {})
-      },
+      }),
       accountStat: statFromRow(row, row.leaderboard_rank),
       rank: row.leaderboard_rank,
       rankedSilverReward: rewards.silverCards,

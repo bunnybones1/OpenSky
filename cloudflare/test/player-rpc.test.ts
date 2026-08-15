@@ -23,6 +23,27 @@ const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
 const inviterUserId = 'rpc-player-inviter-id'
 const identityReference = `identity:${userId}`
+const SOURCE_ACCOUNT_FIELDS = [
+  'address',
+  'createdAt',
+  'crystalID',
+  'experience',
+  'id',
+  'invitedBy',
+  'isBurnerWallet',
+  'level',
+  'levelUpXP',
+  'locale',
+  'name',
+  'region',
+  'seasonLevel',
+  'settings',
+  'stats',
+  'tagArtID',
+  'titleID',
+  'updatedAt',
+  'warmUps'
+]
 
 const rpcAs = async (
   sessionUserId: string,
@@ -139,9 +160,41 @@ describe('legacy player RPC compatibility', () => {
 
     const account = await rpc('GetAccount', { address: identityReference })
     expect(account.status).toBe(200)
-    expect(await account.json()).toMatchObject({
+    const accountBody = await account.json<{
+      account: Record<string, unknown>
+    }>()
+    expect(Object.keys(accountBody.account).sort()).toEqual(
+      SOURCE_ACCOUNT_FIELDS
+    )
+    expect(accountBody).toMatchObject({
       account: { address: identityReference, experience: 0, levelUpXP: 200 }
     })
+  })
+
+  it('projects the source-priority crystal from off-chain inventory', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch(
+      [6, 2, 7].map(tokenId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_CRYSTALS', ?, 1, 0, 'test', ?, ?)`
+        ).bind(userId, tokenId, now, now)
+      )
+    )
+
+    const highest = await rpc('GetAccount', { address: identityReference })
+    expect(await highest.json()).toMatchObject({ account: { crystalID: 7 } })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 0, updated_at = ?
+       WHERE user_id = ? AND item_type = 'SW_CRYSTALS' AND token_id = 7`
+    )
+      .bind(now, userId)
+      .run()
+    const next = await rpc('GetAccount', { address: identityReference })
+    expect(await next.json()).toMatchObject({ account: { crystalID: 2 } })
   })
 
   it('persists source-compatible identity profile updates', async () => {
@@ -333,10 +386,16 @@ describe('legacy player RPC compatibility', () => {
     )
     expect(account.status).toBe(200)
     const body = await account.json<{
-      account: { name: string; settings?: unknown }
+      account: Record<string, unknown> & {
+        name: string
+        settings: unknown
+        isBurnerWallet: unknown
+      }
     }>()
     expect(body.account.name).toBe('Cloud Weasel Player')
-    expect(body.account.settings).toBeUndefined()
+    expect(Object.keys(body.account).sort()).toEqual(SOURCE_ACCOUNT_FIELDS)
+    expect(body.account.settings).toBeNull()
+    expect(body.account.isBurnerWallet).toBeNull()
 
     const exists = await rpc(
       'AccountExists',
@@ -366,13 +425,13 @@ describe('legacy player RPC compatibility', () => {
     )
     expect(publicAccount.status).toBe(200)
     const publicBody = await publicAccount.json<{
-      account: { address: string; name: string; settings?: unknown }
+      account: { address: string; name: string; settings: unknown }
     }>()
     expect(publicBody.account).toMatchObject({
       address: identityReference,
       name: 'Cloud Weasel Player'
     })
-    expect(publicBody.account.settings).toBeUndefined()
+    expect(publicBody.account.settings).toBeNull()
 
     const ownAccount = await rpc('GetAccountByUsername', {
       username: 'cloud weasel player'
@@ -442,9 +501,9 @@ describe('legacy player RPC compatibility', () => {
       false
     )
     const publicBody = await publicAccount.json<{
-      account: { settings?: unknown }
+      account: { settings: unknown }
     }>()
-    expect(publicBody.account.settings).toBeUndefined()
+    expect(publicBody.account.settings).toBeNull()
   })
 
   it('returns source-shaped current and historical account stats', async () => {
@@ -827,7 +886,13 @@ describe('legacy player RPC compatibility', () => {
         `UPDATE player_account_stats SET score = 10, player_rank = 'WANDERER',
              player_rank_stage = 'STAGE_I', updated_at = ?
          WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
-      ).bind(now, 'leaderboard-b', season)
+      ).bind(now, 'leaderboard-b', season),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES ('leaderboard-a', 'SW_CRYSTALS', 7, 1, 0, 'test', ?, ?)`
+      ).bind(now, now)
     ])
 
     const first = await rpc(
@@ -842,7 +907,7 @@ describe('legacy player RPC compatibility', () => {
     const firstBody = await first.json<{
       page: { hasBefore: boolean; after: string }
       res: Array<{
-        account: { name: string }
+        account: Record<string, unknown> & { name: string }
         rank: number
         rankedSilverReward: number
         rankedTicketReward: number
@@ -856,6 +921,15 @@ describe('legacy player RPC compatibility', () => {
         rankedTicketReward: 2
       })
     ])
+    expect(Object.keys(firstBody.res[0].account).sort()).toEqual(
+      SOURCE_ACCOUNT_FIELDS
+    )
+    expect(firstBody.res[0].account).toMatchObject({
+      crystalID: 7,
+      stats: null,
+      settings: null,
+      isBurnerWallet: null
+    })
     expect(firstBody.page.hasBefore).toBe(true)
 
     const insertedUserId = 'leaderboard-inserted-before-cursor'

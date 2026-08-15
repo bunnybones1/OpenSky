@@ -1,5 +1,6 @@
 import type { Account, AccountRegistration } from '@opensky/proto'
 
+import { sourceAccountWire } from './account-wire'
 import { invalidArgument } from './errors'
 
 const ADDRESS_PATTERN = /^0x[0-9a-f]{40}$/i
@@ -17,29 +18,30 @@ interface AccountRow {
   updated_at: string
 }
 
-const toAccount = (row: AccountRow): Account => ({
-  id: row.id,
-  address: row.address,
-  name: row.name,
-  locale: row.locale,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  experience: 0,
-  warmUps: 0,
-  level: 0,
-  seasonLevel: 0,
-  levelUpXP: 0,
-  tagArtID: row.tag_art_id || undefined,
-  invitedBy: row.invited_by || undefined,
-  isBurnerWallet: row.is_burner_wallet === 1,
-  settings: {
-    hidePlayerNames: false,
-    suspended: false,
-    requestMoreInvites: false,
-    starterDeckV2Migration: true,
-    burnerAddress: row.is_burner_wallet === 1 ? row.address : undefined
-  }
-})
+const toAccount = (row: AccountRow): Account =>
+  sourceAccountWire({
+    id: row.id,
+    address: row.address,
+    name: row.name,
+    locale: row.locale,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    experience: 0,
+    warmUps: 0,
+    level: 0,
+    seasonLevel: 0,
+    levelUpXP: 0,
+    tagArtID: row.tag_art_id || undefined,
+    invitedBy: row.invited_by || undefined,
+    isBurnerWallet: row.is_burner_wallet === 1,
+    settings: {
+      hidePlayerNames: false,
+      suspended: false,
+      requestMoreInvites: false,
+      starterDeckV2Migration: true,
+      burnerAddress: row.is_burner_wallet === 1 ? row.address : undefined
+    }
+  })
 
 const selectAccount = `
   SELECT id, address, name, locale, tag_art_id, invited_by,
