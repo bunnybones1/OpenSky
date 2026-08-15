@@ -1060,6 +1060,57 @@ navigation plus Home content without an enum or decoder error. Verification
 did not dismiss, create, update, delete, fabricate, or mutate any production
 banner, account, reward, card, item, match, or economy state.
 
+## Payment product wire fidelity rollout — 2026-08-15
+
+The generated Go `PaymentProviderProduct` response has four required fields.
+Its `provider` and `itemType` enum pointers do not use `omitempty`, so they
+serialize as explicit `null` when nil; `code` and `quantity` retain their Go
+zero values. The source RPC builds its result from a nil slice, and unsupported
+providers or item types therefore return `{"products":null}` instead of an
+empty array. That distinction also matters to the preserved purchase hook,
+which guards a null catalog before reading the first product.
+
+`cloudflare/src/payment-provider-product-wire.ts` now owns that source-shaped
+projection and nullable-list boundary. The existing repository remains free to
+use convenient arrays internally, while `ListPaymentProviderProducts` emits
+the exact required pointers and nil-list result. No payment, checkout, reward,
+inventory, wallet, or authentication authority was added or changed.
+
+The source-derived gate parses all four generated fields, the exact six-value
+`PaymentProvider` and 16-value `ItemType` enums, and the complete 22-product Go
+provider/item/code catalog. It also pins the source and TypeScript quantity
+parser, the RPC's nil-result construction, the shared serializer, the route,
+and its inclusion in the complete build. Fourteen mutations fail closed on
+enum, catalog, pointer, quantity, nil-list, route, or gate drift. Three direct
+wire tests plus authenticated catalog integration coverage assert populated
+values, required nulls and zero values, and unsupported-result semantics.
+
+The complete release contract passed 426 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker tests,
+25 game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31884877018` passed in 9m39s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`364ed0b3-2d6f-4bee-9265-449d3fbe64cb` to
+`8f53e2e2-338b-457b-876e-00abd1b083a6`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Ping` returned `200` with `Cache-Control: no-store`, and
+an unauthenticated populated-catalog request returned `401` with the same cache
+boundary before player-state access. The signed-in original `/home` screen
+still rendered the existing account and full Items, Ranks, Market, and Play
+navigation. The browser harness does not expose page-network primitives, so
+the authenticated populated/null response proof remains the isolated D1 Worker
+integration test rather than an invented production claim. Verification did
+not create a checkout, payment, reward, inventory record, or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
