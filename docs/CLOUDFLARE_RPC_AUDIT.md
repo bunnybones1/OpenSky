@@ -1753,6 +1753,65 @@ data. Production D1 reported no pending migrations. Verification made no
 database writes and changed no account, content, provider, queue, match, reward,
 wallet, or staff state.
 
+## Content catalog response fidelity rollout — 2026-08-15
+
+The generated Go content surface consists of the one-field
+`TwitchFeaturedStreamer`, all six required `Sticker` fields, the required
+`StickerOwnershipResponse.stickerBalances` map, and both required
+`BalanceTuple` fields. None uses `omitempty`. `GetStickerOwnership` explicitly
+allocates its response map, but constructs each stored balance tuple with only
+`Balance`; the unset `*bool IsNew` pointer therefore serializes as
+`isNew: null`, not `false`. The Worker repository had incorrectly invented
+`false` even when the D1 row's unrelated inventory-newness flag was true.
+
+`cloudflare/src/content-wire.ts` now owns explicit featured-streamer, sticker,
+list, and sticker-ownership projections. The three catalog/ownership route
+families use those projections, unknown repository or schedule fields are
+discarded, and a nil pointer stored in the source's pointer-valued ownership map
+remains `null`. The established Cloud Weasel inactive-schedule adaptation still
+returns an allocated empty sticker list so the preserved UI can show its
+reviewed `Coming Soon` state; this rollout did not fabricate a source schedule
+or activate rewards.
+
+Direct tests cover every required field, Go zero values, unknown-field
+exclusion, allocated empty ownership maps, nested nil pointers, and nil
+`BalanceTuple.IsNew`. An isolated-D1 route test proves that a positive stored
+sticker balance returns `{balance: "3", isNew: null}` and remains owned by the
+authenticated Google identity. The source-derived gate parses all four
+generated structs, pins the source list/not-found and allocated-map behavior,
+checks the featured-streamer store, requires the exact Worker boundaries, and
+is mandatory in the complete build. Twelve mutations fail closed on generated
+fields, pointers, allocations, source tuple construction, private-field
+insertion, route bypass, repository substitution, or build-gate removal.
+
+The complete local release contract passed 471 main-Worker tests across 80
+files, 34 game-server unit tests, 93 game-server Workers tests, 31 match-service
+tests, 78 matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31907064967` passed in 9m57s for runtime commit
+`dbf13e4ac8dad58cd7af216d2142d0ed20288843` before deployment.
+
+Only the main Worker was deployed, advancing it from
+`f1358a94-0415-4d5c-af9a-535b0d26378c` to
+`106119ba-2662-4990-9e10-2a4fbacb25a4`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no new asset
+files. The verifier resolved web asset `/assets/index-d976a081.js`, unchanged
+game asset `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales,
+and the release-safe cache policy after four edge-propagation attempts.
+
+Read-only production `Version`, `Ping`, and `GetFeaturedStreamers` returned
+`200` with `Cache-Control: no-store`; `Version` reported the exact new Worker
+ID and the empty content table returned `{streamers: []}`. Anonymous
+`GetStickers` and `GetStickerOwnership` requests both returned
+`401 webrpc.unauthenticated` with `Cache-Control: no-store`, preserving the
+source authenticated boundary. Before/after D1 aggregates both found zero
+featured streamers, zero active sticker schedule entries, and zero positive
+sticker inventory rows, with `changed_db: false` and zero rows written. No
+production content, schedule, identity, or reward state was fabricated for the
+probe, and production D1 reported no pending migrations.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
