@@ -57,6 +57,7 @@ import {
   sourceStickerOwnershipWire,
   sourceTwitchFeaturedStreamerListWire
 } from './content-wire'
+import { sourceDeckEquipmentWire } from './deck-equipment-wire'
 import {
   sourceGameModesStatusWire,
   sourceNullableGameModeStatusHistoryListWire
@@ -2217,9 +2218,8 @@ export const handleApiRequest = async (
         const body = await requestBody<{ deckString?: string }>(request)
         if (!body.deckString) throw invalidArgument('deckString is required')
         return json(request, env, {
-          deckEquipment: await playerRpc.deckEquipment(
-            principal.userId,
-            body.deckString
+          deckEquipment: sourceDeckEquipmentWire(
+            await playerRpc.deckEquipment(principal.userId, body.deckString)
           )
         })
       }

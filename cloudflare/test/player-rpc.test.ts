@@ -2977,7 +2977,7 @@ describe('legacy player RPC compatibility', () => {
       accountAddress: 'identity:ignored-by-authenticated-source-contract',
       deckString: adaDeck.deckString
     })
-    expect(await equipment.json()).toMatchObject({
+    expect(await equipment.json()).toEqual({
       deckEquipment: {
         stickers: [5],
         heroSkin: 1,
@@ -3010,6 +3010,27 @@ describe('legacy player RPC compatibility', () => {
     expect(
       await (await rpc('ListEquippedItems', { itemType: 'SW_STICKERS' })).json()
     ).toEqual({ items: [] })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 0
+       WHERE user_id = ?
+         AND item_type IN ('SW_CARD_BACKS', 'SW_HERO_SKINS')`
+    )
+      .bind(userId)
+      .run()
+    expect(
+      await (
+        await rpc('GetDeckEquipmentByDeckString', {
+          deckString: adaDeck.deckString
+        })
+      ).json()
+    ).toEqual({
+      deckEquipment: {
+        stickers: null,
+        heroSkin: null,
+        cardBack: null
+      }
+    })
   })
 
   it('refuses to equip unsupported or unowned inventory', async () => {
