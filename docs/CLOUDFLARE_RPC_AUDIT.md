@@ -547,6 +547,55 @@ signed-in production account page rendered its existing “Gained a Stalwart
 Sentinel Card!” reward through the hydrated feed path. Verification did not
 create synthetic feed, card, account, match, reward, or economy state.
 
+### Complete Item and ItemSummary JSON wire — 2026-08-15
+
+Milestone `9d62314c` applies the generated-wire rule to every public `Item` and
+`ItemSummary` RPC boundary. The Go `Item` struct has nine public JSON fields
+with no `omitempty`; contract address, update and creation timestamps, and the
+new-item flag are pointers that serialize as explicit nulls when unset. The Go
+`ItemSummary` struct has five public fields, including explicit nullable update
+and creation timestamps. Private account identifiers and addresses remain
+absent, and all generated BigInt values remain decimal JSON strings.
+
+Shared projections now cover ownership lists, aggregate summaries, individual
+and batch supply, equip results, and equipped-item lists. Identity-owned Cloud
+Weasel inventory deliberately reports `contractAddress: null`: off-chain
+rewards do not invent an on-chain wallet contract. Direct Worker tests assert
+the exact nine- and five-field orders, all nullable arms, private-field
+absence, nested batch results, common equipped-row projection, and the
+off-chain contract rule.
+
+The source-derived release gate parses the generated Go field order, pointer,
+private-field, no-omission, and BigInt contracts; it also checks all six source
+RPC methods, their API routes, shared projections, batch delegation, and the
+common equipped-item mapper. Its mutation suite rejects 14 forms of source
+drift, sparse nulls, private-field leakage, numeric BigInts, projection bypass,
+or route drift. The complete release contract passed 394 main-Worker tests, 34
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests, 78
+matchmaker tests, 25 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31872715185` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`5e72b4ee-eac8-4bdf-8e7f-1bf6794a3bca` to
+`d8cccbcd-b982-46f6-947b-9b8dd3a01255`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+bytes; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Public `Version`, `Ping`, item-supply, and game-mode probes returned `200` with
+`Cache-Control: no-store`; the currently empty public Silver/Gold supply
+returned the source-compatible `{"summary":{}}`. Game and matchmaker
+protocol-3 health remained healthy, practice PvP and bot modes remained
+enabled, both Conquest modes remained disabled, and production D1 reported no
+pending migrations. A signed-in production account page rendered its existing
+31-card Cloud Weasel inventory and reward feed through the hardened item paths.
+Verification was read-only and created no synthetic item, account, match,
+reward, or economy state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
