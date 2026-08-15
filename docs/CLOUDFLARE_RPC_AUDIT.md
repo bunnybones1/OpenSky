@@ -1373,6 +1373,62 @@ created merely to inspect populated responses; exact positive-path proof
 remains in isolated-D1 Worker integration tests. Verification did not mutate
 any production account, game, reward, payment, inventory, or wallet state.
 
+## Staff account and statistics wire fidelity rollout — 2026-08-15
+
+The generated Go `IPAddressHistory` model has three public JSON fields and one
+private account ID. Its time pointer lacks `omitempty`, so an absent creation
+time serializes as explicit `null`. `GMAccount` has exactly four public fields:
+the account pointer, Conquest-unlocked flag, account-action slice, and IP-history
+slice. The source allocates the outer account result as nonnil `[]`, while both
+nested slices come from map lookups and therefore remain `null` when absent.
+The generated `GMStatsResponse` always emits all six snake-case `uint64`
+counters, including zero values.
+
+`cloudflare/src/staff-account-wire.ts` now owns the exact IP-history,
+`GMAccount`, and `GMStatsResponse` projections. It composes the existing Account
+and AccountAction privacy boundaries, preserves required zero/null values, and
+normalizes both staff routes at the API boundary. A populated IP-history
+serializer is covered with fabricated test data, but production collection
+remains deliberately disabled: starting to collect IP addresses requires a
+separate privacy, retention, and operator-access decision. Until then,
+`GMListAccounts` preserves the source nil-map result as `ipHistory: null`.
+
+The source-derived gate parses all three complete generated structs and JSON
+tags, source account-list allocation and map lookups, all status-count switch
+arms, both Worker routes, nested serializer composition, and the build gate.
+Fifteen mutations fail closed on field, pointer, privacy, list, status, route,
+composition, IP-collection, or build-gate drift. The existing AccountAction
+gate now follows the composed staff-account serializer. Five direct wire tests
+plus isolated-D1 staff integration coverage assert populated and nil IP
+history, exact `GMAccount` keys, nested privacy, all six statistic counters,
+and nonnil outer lists.
+
+The complete release contract passed 451 main-Worker tests, 34 game-server unit
+tests, 93 game-server Workers tests, 31 match-service tests, 78 matchmaker
+tests, 25 game/browser tests, six analytics tests, every source/off-chain
+audit, all service typechecks, and both production builds. Exact-head GitHub
+Actions run `31894517781` passed in 9m20s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`21379f89-437c-4c2f-8590-bb9195aee18d` to
+`19a3dd90-d6b4-4c03-8f93-b79613bc558d`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files; the verifier resolved web asset `/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production D1 reported no
+pending migrations.
+
+Read-only production `Version` returned the new Worker ID and `Ping` returned
+`200`; both used `Cache-Control: no-store`. Unauthenticated `GMStats` and
+`GMListAccounts` requests both returned `401` with the same cache boundary
+before staff-data access. No production admin grant or populated response was
+fabricated; exact positive-path proof remains in isolated-D1 Worker tests.
+Verification did not collect an IP address or mutate any production account,
+staff role, action, signal, report, sanction, game, reward, payment, inventory,
+or wallet state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
