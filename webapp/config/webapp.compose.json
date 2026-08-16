@@ -24,6 +24,7 @@
   "DIRECT_BALANCE_FETCH": false,
   "TWITCH_ACCESS_TOKEN_URL": "https://cors-everywhere.0xhorizon.net/https://twitch-access-token.skyweaver.net",
   "CREATOR_PROGRAM_URL": "https://www.skyweaver.net/community/creators-program",
+  "SOURCE_REPOSITORY_URL": "https://github.com/horizon-games/OpenSky",
   "SW_TREASURY_CONTRACT_ADDRESS": "0xB5c3023dbEcE7a6Bb78014000CD1C8ce940B50a0",
   "CAPTCHA_SITE_KEY": "",
   "CAPTCHA2_SITE_KEY": "",

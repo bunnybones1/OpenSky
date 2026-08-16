@@ -4,6 +4,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import env from '~/env'
 import { FlexBox } from '~/shared/components/Base'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import {
@@ -15,6 +16,7 @@ import { controlDialog } from '~/shared/hooks/useDialog/control-dialog'
 import { useDialog } from '~/shared/hooks/useDialog/useDialog'
 
 import { GameCreditsDialog } from './components/GameCreditsDialog'
+import { sourceRepositoryUrl } from './sourceRepository'
 
 const { openDialog: openCookieSettingsDialog } = controlDialog(
   COOKIE_SETTINGS_DIALOG_ID
@@ -27,6 +29,7 @@ export const Footer = memo(() => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const cat3State = useCat3State()
+  const repositoryUrl = sourceRepositoryUrl(env.SOURCE_REPOSITORY_URL)
 
   const { Dialog: _GameCreditsDialog, openDialog: openGameCreditsDialog } = useDialog(
     {
@@ -69,13 +72,11 @@ export const Footer = memo(() => {
           )}
         </ContentGrid>
         <FooterLinkContainer>
-          <CopyrightLink
-            href="https://github.com/horizon-games/OpenSky"
-            target="_blank"
-            rel="noreferrer"
-          >
-            https://github.com/horizon-games/OpenSky
-          </CopyrightLink>
+          {!!repositoryUrl && (
+            <CopyrightLink href={repositoryUrl} target="_blank" rel="noreferrer">
+              {repositoryUrl}
+            </CopyrightLink>
+          )}
         </FooterLinkContainer>
       </Container>
       {_GameCreditsDialog}
