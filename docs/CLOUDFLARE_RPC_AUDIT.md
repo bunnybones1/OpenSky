@@ -2125,6 +2125,47 @@ The reward-readiness audit retained original Conquest as `dormant-policy` with
 zero verified active pools. Verification created no synthetic task, reward,
 pool, queue, capability, or economy authority.
 
+## Replay reconstruction UI cleanup rollout — 2026-08-15
+
+The live Practice-PvP replay proof for the enum fix exposed one non-fatal game
+console error after state reconstruction: a deferred card-selection UI callback
+could run after reconstruction had cleared `cardSelectionState`. The callback
+then asked the bot helper to update suggestions for a selection that no longer
+existed. It did not stop playback, but it made a successful replay look
+unhealthy and obscured real failures in browser verification.
+
+Runtime commit `4810de116357b589b22d000d59b9c830a1eb79a1` makes a
+card-selection UI refresh conditional on both the system and its selection
+state being active. Active selection behavior is unchanged. A focused game
+test pins the cleared-state no-op and enabled-state predicate. The complete
+local release contract passed 492 main-Worker tests across 82 files, 34
+game-server unit tests, 93 game-server Workers tests, 31 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, all
+source/off-chain audits and typechecks, and both production builds. Exact-head
+GitHub Actions run `31920918875` passed in 10m19s before deployment.
+
+Only the main Worker/static asset package was deployed, advancing it from
+`8b9794e8-3909-4519-8757-26c3c82d43bc` to
+`272b5cbe-6d13-4a6a-9237-476a0e1bf535`. The strict verifier matched web asset
+`/assets/index-d976a081.js`, game asset
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. `Ping`, `Version`, game-mode,
+and Conquest-reward probes returned `200` with `Cache-Control: no-store`;
+Practice PvP stayed enabled, both Conquest modes stayed disabled, and
+`weeklyGolds` stayed empty.
+
+The signed-in preserved Account Matches route then launched the same completed
+human Practice replay. The new game bundle reached its 2:59/3:00 result scene
+with both players and playback controls visible, no enum/map exception, and no
+`No card selection state` diagnostic. A read-only D1 aggregate found three
+users, 94 inventory rows, and zero Conquest runs, settlements, Gold deliveries,
+settlement grants, Gold grants, Silver exchanges, or reward pools; Wrangler
+reported zero rows written and `changed_db: false`. No migrations were pending,
+and every policy-gated reward track remained dormant. R2 availability was also
+rechecked and still failed with Cloudflare code `10042`, so the private
+analytics/replay-archive pipeline remains intentionally undeployed until R2 is
+enabled on the account.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and

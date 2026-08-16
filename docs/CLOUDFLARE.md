@@ -547,6 +547,15 @@ and progress are not migrated.
   of the original failing practice-PvP match 12 loaded through the engine into
   its replay/result scene with no enum or map-decoding exception, using exact
   game asset `/game/cloudflare/assets/index-79a70ba2.js`.
+- Replay state reconstruction can clear card-selection state before a deferred
+  UI-ready callback completes. Milestone `4810de11` makes that stale callback a
+  no-op while preserving active selection suggestions. All 27 game tests and
+  the complete release contract passed; exact-head CI run `31920918875` passed
+  before main Worker `272b5cbe-6d13-4a6a-9237-476a0e1bf535` deployed game
+  asset `/game/cloudflare/assets/index-7e9c419b.js`. The same signed-in human
+  Practice replay reached 2:59/3:00 with no enum failure or missing-selection
+  diagnostic. Read-only verification wrote zero D1 rows and kept both Conquest
+  modes and every unapproved reward policy dormant.
 - Player match history preserves the source completed-mode filter, default
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes
