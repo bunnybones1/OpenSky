@@ -852,3 +852,32 @@ verified drill receipts, or enabled Conquest modes. It wrote zero rows and
 reported `changes: 0` and `changed_db: false`. Reward readiness had no errors:
 SkyPass remains the sole active reviewed policy and every Conquest-related
 reward track remains dormant.
+
+## Cross-service readiness dispatch proof
+
+Milestone `cca0bd9861d61cdd9c34a82d57247adb66b391a2` replaces the
+last mocked dispatch seam with a real Workers integration path. A genuine
+`ConquestDrillRepository` operation calls the actual match-service Worker; its
+service binding calls the actual game Worker; and the request reaches the
+named game Durable Object against the shared D1 database. The two reserved
+system participants load without sockets, the real commit/reveal alarms create
+WASM state, and the first bot alarm records an authoritative action.
+
+The proof stops before settlement and grants no rollout authority. It asserts
+an active authoritative match alongside zero verified queue-readiness rows and
+zero enabled Conquest modes. Existing component tests remain responsible for
+the exact three-win settlement, failure, retry, and 24-hour Gold-delivery
+contracts. The mandatory Conquest gate now rejects removal of any link in the
+cross-service proof.
+
+The complete local release contract passed 507 main-Worker tests, 34
+game-server unit tests, 96 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit and typecheck, and both production builds. Exact-head
+GitHub Actions run
+[`31950407299`](https://github.com/bunnybones1/OpenSky/actions/runs/31950407299),
+job `95172892587`, passed in 10m34s.
+
+No runtime artifact, migration, binding, production capability, reward pool,
+synthetic operation, match, settlement, readiness row, or mode flag changed.
+No Cloudflare deployment was appropriate for this proof-only milestone.

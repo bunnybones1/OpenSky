@@ -1594,6 +1594,37 @@ also returned `200` with `no-store`. Reward readiness remained error-free with
 core progression and the reviewed SkyPass policy live while all four
 unapproved reward tracks remained dormant.
 
+## Cross-service readiness dispatch proof — 2026-08-16
+
+Milestone `cca0bd9861d61cdd9c34a82d57247adb66b391a2` closes the
+remaining test seam between the dormant Conquest drill orchestrator and the
+authoritative game runtime. The Workers integration test starts a real
+capability-authorized operation through `ConquestDrillRepository`, dispatches
+it through the actual match-service Worker and service binding, and reaches the
+actual game Worker and named Durable Object with the same D1 database.
+
+Both reserved system participants load without player sockets. The test drives
+the real commit/reveal alarm until the WASM state exists, advances the first bot
+timer, and observes an authoritative bot action. It simultaneously proves that
+the match ledger is active while the verified queue-readiness count and enabled
+Conquest-mode count remain zero. The fail-closed Conquest source gate now
+requires this exact cross-service boundary and has mutation coverage for its
+removal.
+
+The complete local release contract passed 507 main-Worker tests, 34
+game-server unit tests, 96 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit and service typecheck, and both production builds.
+Exact-head GitHub Actions run
+[`31950407299`](https://github.com/bunnybones1/OpenSky/actions/runs/31950407299),
+job `95172892587`, passed in 10m34s.
+
+This is a proof-and-release-gate milestone only. No Worker artifact, binding,
+migration, capability, operation, match, reward pool, queue-readiness row,
+game-mode flag, or production data changed, so no Cloudflare service was
+redeployed. Production remains on the previously verified Worker versions and
+both Conquest queues remain dormant.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
