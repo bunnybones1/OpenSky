@@ -14,7 +14,6 @@ import type {
   GameModesStatus,
   GMListMatchesRequest,
   GooglePlayPaymentResponse,
-  Hero,
   ItemType,
   NotificationOneTime,
   Page,
@@ -73,7 +72,8 @@ import {
   CONQUEST_V2_EVENT_ID,
   ConquestRepository,
   conquestTreasureProgress,
-  LEGACY_CONQUEST_EVENT_ID
+  LEGACY_CONQUEST_EVENT_ID,
+  sourceConquestHeroArgument
 } from './conquest'
 import {
   CONQUEST_READINESS_OPERATION_HEADER,
@@ -1827,10 +1827,11 @@ export const handleApiRequest = async (
 
       case 'EnterConquest': {
         const principal = await identityPrincipal(request, env)
-        const body = await requestBody<{ hero?: Hero }>(request)
-        if (!body.hero) throw invalidArgument('hero is required')
+        const body = await requestBody<unknown>(request)
+        const hero = sourceConquestHeroArgument(body)
+        if (hero === undefined) throw invalidArgument('must provide hero')
         return json(request, env, {
-          status: await conquest.enter(principal.userId, body.hero)
+          status: await conquest.enter(principal.userId, hero)
         })
       }
 

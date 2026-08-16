@@ -27,7 +27,7 @@ import {
 const testEnv = env as unknown as Env
 const userId = 'conquest-player-user-id'
 
-const rpc = async (method: string, body: object, signedIn = true) => {
+const rpc = async (method: string, body: unknown, signedIn = true) => {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (signedIn) {
     const token = await createIdentitySession(
@@ -193,10 +193,18 @@ describe('source conquest RPC foundation', () => {
   })
 
   it('spends one source non-tradable ticket and enters only once', async () => {
+    expect((await rpc('EnterConquest', null)).status).toBe(400)
+    expect((await rpc('EnterConquest', [])).status).toBe(400)
     expect((await rpc('EnterConquest', {})).status).toBe(400)
+    expect((await rpc('EnterConquest', { hero: null })).status).toBe(400)
+    expect((await rpc('EnterConquest', { hero: 1 })).status).toBe(400)
     expect((await rpc('EnterConquest', { hero: Hero.UNKNOWN })).status).toBe(
       500
     )
+    expect((await rpc('EnterConquest', { hero: '' })).status).toBe(500)
+    expect(
+      (await rpc('EnterConquest', { hero: 'FUTURE_HERO' })).status
+    ).toBe(500)
     expect((await rpc('EnterConquest', { hero: Hero.ADA })).status).toBe(500)
     const now = new Date().toISOString()
     await env.AUTH_DB.prepare(

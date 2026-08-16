@@ -30,7 +30,27 @@ const pointerFields = (source, name) =>
     .filter(field => field.type.startsWith('*'))
     .map(field => field.json)
 
-export const conquestWireErrors = (source, conquestWire, conquest, api) => {
+const bracedBlock = (source, marker) => {
+  const markerIndex = source.indexOf(marker)
+  if (markerIndex < 0) return undefined
+  const open = source.indexOf('{', markerIndex + marker.length)
+  if (open < 0) return undefined
+  let depth = 0
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(open + 1, index)
+  }
+  return undefined
+}
+
+export const conquestWireErrors = (
+  source,
+  sourceRpc,
+  conquestWire,
+  conquest,
+  api
+) => {
   const errors = []
   if (
     !exactFields(source, 'Conquest', [
@@ -81,6 +101,37 @@ export const conquestWireErrors = (source, conquestWire, conquest, api) => {
     errors.push('source ConquestStats pointer contract changed')
   }
 
+  const compactSource = source.replace(/\s+/g, ' ')
+  const compactSourceRpc = sourceRpc.replace(/\s+/g, ' ')
+  const compactEnterDecoder = (
+    bracedBlock(
+      source,
+      'func (s *skyWeaverAPIServer) serveEnterConquestJSON'
+    ) ?? ''
+  ).replace(/\s+/g, ' ')
+  if (!compactEnterDecoder.includes('Arg0 *Hero `json:"hero"`')) {
+    errors.push(
+      'source EnterConquest decoder contract is missing: Arg0 *Hero `json:"hero"`'
+    )
+  }
+  for (const token of [
+    'var j string err := json.Unmarshal(b, &j)',
+    '*x = Hero(Hero_value[j])'
+  ]) {
+    if (!compactSource.includes(token)) {
+      errors.push(`source EnterConquest decoder contract is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'if hero == nil { return false, proto.Errorf(proto.ErrInvalidArgument, "must provide hero")',
+    's.ConquestStateManager.Enter(ctx, accountID, *hero)',
+    'return false, proto.ErrorInternal("enter conquest")'
+  ]) {
+    if (!compactSourceRpc.includes(token)) {
+      errors.push(`source EnterConquest handler contract is missing: ${token}`)
+    }
+  }
+
   const compactWire = conquestWire.replace(/\s+/g, ' ')
   for (const token of [
     'deckClass: conquest.deckClass ?? null',
@@ -93,6 +144,18 @@ export const conquestWireErrors = (source, conquestWire, conquest, api) => {
   }
 
   const compact = conquest.replace(/\s+/g, ' ')
+  for (const token of [
+    'export const sourceConquestHeroArgument = ( body: unknown ): Hero | undefined =>',
+    'if (body === null) return undefined',
+    "typeof body !== 'object' || Array.isArray(body)",
+    'if (value === undefined || value === null) return undefined',
+    "if (typeof value !== 'string')",
+    ': Hero.UNKNOWN'
+  ]) {
+    if (!compact.includes(token)) {
+      errors.push(`Worker EnterConquest decoder is missing: ${token}`)
+    }
+  }
   for (const token of [
     'sourceConquestWire({',
     'deckClass: HERO_DECK_CLASS[row.hero] ?? DeckClass.UNKNOWN_CLASS',
@@ -115,12 +178,29 @@ export const conquestWireErrors = (source, conquestWire, conquest, api) => {
   ) {
     errors.push('Worker Conquest wire conditionally omits endedAt')
   }
+  const compactApi = api.replace(/\s+/g, ' ')
   for (const token of [
     'conquest: await conquest.status(principal.userId)',
     'stats: await conquest.stats(principal.userId)'
   ]) {
-    if (!api.replace(/\s+/g, ' ').includes(token)) {
+    if (!compactApi.includes(token)) {
       errors.push(`main Worker Conquest boundary is missing: ${token}`)
+    }
+  }
+  const enterStart = api.indexOf("case 'EnterConquest':")
+  const enterEnd = api.indexOf("case 'ConquestStatus':", enterStart)
+  const compactEnterApi =
+    enterStart >= 0 && enterEnd > enterStart
+      ? api.slice(enterStart, enterEnd).replace(/\s+/g, ' ')
+      : ''
+  for (const token of [
+    'const body = await requestBody<unknown>(request)',
+    'const hero = sourceConquestHeroArgument(body)',
+    "if (hero === undefined) throw invalidArgument('must provide hero')",
+    'status: await conquest.enter(principal.userId, hero)'
+  ]) {
+    if (!compactEnterApi.includes(token)) {
+      errors.push(`main Worker EnterConquest boundary is missing: ${token}`)
     }
   }
   return errors
@@ -128,19 +208,26 @@ export const conquestWireErrors = (source, conquestWire, conquest, api) => {
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [source, conquestWire, conquest, api] = await Promise.all([
+  const [source, sourceRpc, conquestWire, conquest, api] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'rpc', 'conquests.go'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest-wire.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
   ])
-  const errors = conquestWireErrors(source, conquestWire, conquest, api)
+  const errors = conquestWireErrors(
+    source,
+    sourceRpc,
+    conquestWire,
+    conquest,
+    api
+  )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Conquest status and statistics preserve the generated Go JSON wire'
+      'Conquest input, status, and statistics preserve the generated Go contract'
     )
   }
 }

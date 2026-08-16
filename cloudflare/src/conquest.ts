@@ -33,6 +33,30 @@ const HERO_DECK_CLASS: Partial<Record<Hero, DeckClass>> = {
   [Hero.SITTI]: DeckClass.HRI
 }
 
+const SOURCE_HERO_VALUES = new Set<Hero>(Object.values(Hero))
+
+/**
+ * Recreates encoding/json's nullable `*Hero` request field. The generated Go
+ * enum decoder accepts any JSON string and maps an unknown name to the enum's
+ * zero value; only incompatible JSON types fail unmarshalling.
+ */
+export const sourceConquestHeroArgument = (
+  body: unknown
+): Hero | undefined => {
+  if (body === null) return undefined
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+  const value = (body as Record<string, unknown>).hero
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+  return SOURCE_HERO_VALUES.has(value as Hero)
+    ? (value as Hero)
+    : Hero.UNKNOWN
+}
+
 const TREASURE_TOTAL_POINTS = [
   0, 250, 750, 1_500, 2_500, 3_750, 5_250, 7_000, 9_000, 11_250, 13_750
 ] as const
