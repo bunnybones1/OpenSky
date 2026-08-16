@@ -1704,7 +1704,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   })
 
   it('persists source-shaped replay initialization and authoritative diffs', async () => {
-    await initializeMatch()
+    await initializeMatch(
+      createMatchFixture({
+        proposalId,
+        gameMode: GameMode.PRACTICE_PVP
+      })
+    )
     const headers = {
       [INTERNAL_AUTH_HEADER]: 'game-server-test-secret'
     }
@@ -1727,6 +1732,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(init).toMatchObject({
       type: 'init',
       version: 'test-release',
+      gameMode: GameMode.PRACTICE_PVP,
       rootProof: expect.stringMatching(/^0x[0-9a-f]+$/)
     })
     expect(init.players).toHaveLength(2)

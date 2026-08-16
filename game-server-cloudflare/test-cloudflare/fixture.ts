@@ -44,6 +44,7 @@ export const createMatchFixture = (
     Pick<MatchmakerStartMatchMessage, 'matchID' | 'replayID'>
   > & {
     botPlayer2?: boolean
+    gameMode?: GameMode
     proposalId?: string
     releaseVersion?: string
   } = {}
@@ -56,9 +57,11 @@ export const createMatchFixture = (
     replayID: overrides.replayID ?? 'replay-test-42',
     player1: {
       privateSeed: seed(PRINCIPAL_1, 0x31, 1),
-      gameMode: overrides.botPlayer2
-        ? GameMode.PRACTICE_BOT
-        : GameMode.RANKED_CONSTRUCTED,
+      gameMode:
+        overrides.gameMode ??
+        (overrides.botPlayer2
+          ? GameMode.PRACTICE_BOT
+          : GameMode.RANKED_CONSTRUCTED),
       account: account(1, PRINCIPAL_1, 'Player One'),
       playerSessionID: PLAYER_SESSION_ID_1,
       botSubkey: false,
@@ -85,9 +88,11 @@ export const createMatchFixture = (
         overrides.botPlayer2 ? BOT_SUBKEY_ADDRESS : 0x32,
         2
       ),
-      gameMode: overrides.botPlayer2
-        ? GameMode.PRACTICE_BOT
-        : GameMode.RANKED_CONSTRUCTED,
+      gameMode:
+        overrides.gameMode ??
+        (overrides.botPlayer2
+          ? GameMode.PRACTICE_BOT
+          : GameMode.RANKED_CONSTRUCTED),
       account: account(2, PRINCIPAL_2, 'Player Two'),
       playerSessionID: PLAYER_SESSION_ID_2,
       botSubkey: overrides.botPlayer2 ? BOT_SUBKEY_PRIVATE_KEY : false,
