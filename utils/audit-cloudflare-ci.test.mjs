@@ -48,7 +48,7 @@ test('rejects deployment authority in pull-request CI', () => {
   }
 })
 
-test('requires all generated Go JSON wire gates in the complete build', async () => {
+test('requires generated wire and browser lifecycle gates in the complete build', async () => {
   const rootPackage = JSON.parse(await readFile('package.json', 'utf8'))
   assert.deepEqual(cloudflareBuildScriptErrors(rootPackage), [])
   assert.match(
@@ -206,5 +206,18 @@ test('requires all generated Go JSON wire gates in the complete build', async ()
       }
     })[0],
     /Item wire/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:browser-cache && ',
+          ''
+        )
+      }
+    })[0],
+    /browser cache lifecycle/
   )
 })

@@ -99,6 +99,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
   if (!build.includes('pnpm check:cloudflare:item-wire')) {
     errors.push('Cloudflare build must include the generated Go Item wire gate')
   }
+  if (!build.includes('pnpm check:cloudflare:browser-cache')) {
+    errors.push(
+      'Cloudflare build must include the browser cache lifecycle gate'
+    )
+  }
   return errors
 }
 
