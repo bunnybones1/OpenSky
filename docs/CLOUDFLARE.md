@@ -1549,6 +1549,51 @@ SkyPass policy are live, while original Conquest, leaderboard, Conquest V2, and
 referral policies remain dormant. No drill capability, synthetic identity,
 match, reward, or queue authority was created by this rollout.
 
+## Match-allocation account partition — 2026-08-16
+
+Runtime milestone `35ac90821bad8022edfd55e4293f86cd8b9b6240` closes the
+remaining allocation boundary between public players and operational readiness
+identities. Migration `0114` requires every non-null participant on an ordinary
+match to be a `PLAYER`, requires both participants on a reserved
+`readiness-drill-match-` proposal to be `SYSTEM`, makes the proposal ID
+immutable, and prevents a later non-null participant substitution. The nullable
+foreign-key transition used when an account is deleted remains available.
+
+The match-service Worker independently requires `PLAYER` for public profiles,
+accepted dispatch, match construction, and reconnects. The secret-bound
+readiness builder requires `SYSTEM` for the target and every configured
+opponent before constructing a match. A mandatory static gate spans the D1,
+repository, ordinary builder, readiness builder, and dispatch layers, while
+Workers tests exercise both rejected cross-class allocations and the permitted
+player-plus-bot allocation.
+
+The complete local release contract passed 507 main-Worker tests across 84
+files, 34 game-server unit tests, 95 game-server Workers tests, 33
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every type/source/off-chain audit, and both production builds.
+Exact-head GitHub Actions run
+[`31948498307`](https://github.com/bunnybones1/OpenSky/actions/runs/31948498307),
+job `95168203645`, passed in 10m01s before deployment.
+
+Migration `0114_match_participant_classification.sql` executed three commands
+against the pinned production D1 database and left no migration pending. Only
+the service-binding-only match-service Worker was deployed, advancing it from
+`d66c439f-df49-4ae0-80d8-4695a3f0bdf4` to
+`3b1a3a1c-8980-442a-8977-919a76c35620` at 100% traffic. The main API/web
+Worker, game server, matchmaker, and tested web/game assets were not redeployed.
+
+Post-deploy D1 verification found migration `0114` exactly once, both new
+triggers present, three `PLAYER` users, zero `SYSTEM` users, and 12 historical
+matches with zero ordinary or readiness account-class violations. It also
+found zero readiness matches, drill permissions, drill operations, reward
+pools, or queue-readiness rows; the aggregate wrote zero rows and reported
+`changed_db: false`. Public Ping and authoritative mode status returned `200`
+with `Cache-Control: no-store`; both Practice modes remained enabled and both
+Conquest modes remained disabled. Game-server and matchmaker protocol-v3 health
+also returned `200` with `no-store`. Reward readiness remained error-free with
+core progression and the reviewed SkyPass policy live while all four
+unapproved reward tracks remained dormant.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
