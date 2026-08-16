@@ -1451,16 +1451,65 @@ SkyPass policy is active and all four unapproved reward tracks remain dormant.
 No synthetic player, match, reward, pool, capability, or queue authority was
 created by this rollout.
 
+## Dormant sequential Conquest drill rollout — 2026-08-16
+
+Runtime milestone `763ce9aef6037e34e108621c5887b35de9e123dc` adds an
+idempotent, separately authorized readiness-drill operation without opening a
+player queue. Migration `0112` grants no permission and requires an `ADMIN` +
+`RUN` actor distinct from both pool reviewers, an approved pool with at least
+40 hours remaining, and both Conquest modes disabled. It derives four isolated
+system identities and requires exactly four pool-pinned runs before the
+operation can enter `RUNNING`.
+
+The minute scheduler dispatches only the next one of three reserved matches
+through a secret-bound match-service endpoint. That endpoint builds both bots
+from real identity accounts, starter inventories, and active Conquest runs,
+writes the normal match ledger, and can reach only the game server's existing
+two-bot readiness boundary. Losses, failed or four-hour-expired ledgers,
+inconsistent results, missing progress receipts, and expired delivery windows
+become bounded terminal failures. Three wins must produce the real applied
+settlement and real 24-hour delayed Gold receipt before the operation completes;
+a separate verifier still owns the final readiness decision. No operation
+creates a mode flag, queue-readiness row, pool, capability, or reward policy.
+
+Exact-head GitHub Actions run
+[`31942915068`](https://github.com/bunnybones1/OpenSky/actions/runs/31942915068),
+job `95154564029`, passed in 9m08s. The deployment-time release contract passed
+502 main Worker tests, 34 game-server unit plus 95 Workers tests, 32
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, all typechecks and source/off-chain audits, and both production builds.
+Migration `0112` executed 20 commands against pinned D1 and left no migration
+pending. The match service is version
+`d66c439f-df49-4ae0-80d8-4695a3f0bdf4`; the main Worker is version
+`573313b0-e95c-42a1-9c3b-87066ae92edf`; both receive 100% traffic.
+
+The strict deployment verifier retained web entry
+`/assets/index-ca9c688d.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and
+release-safe caching on its first attempt. `Ping`, `Version`, game-mode,
+Conquest-reward, and protocol-v3 game-health probes returned `200` with
+`no-store`; both Practice modes remained enabled, both Conquest modes remained
+disabled, and `weeklyGolds` remained empty. The new list/start staff RPCs each
+returned authenticated `401` to an anonymous request.
+
+A read-only D1 aggregate found three users and zero drill permissions,
+operations, audits, matches, system runs, settlements, Gold deliveries, reward
+pools, approved pools, queue-readiness rows, verified drill receipts, or
+enabled Conquest modes. It wrote zero rows and reported `changes: 0` and
+`changed_db: false`. Reward readiness remained error-free: the reviewed SkyPass
+policy is active while original Conquest and every other policy-gated track are
+dormant. Deployment therefore installed orchestration capability in code but
+created no operator authority or synthetic production evidence.
+
 ## Suggested next slice
 
-The dormant, separately authorized readiness orchestrator is now implemented
-and locally guarded. After its exact runtime commit passes CI and the migration,
-match service, and main Worker are deployed, production should still receive no
-capability, pool, operation, synthetic account, mode change, or reward as
-deployment evidence. A later explicitly authorized exercise must use distinct
-pool proposer, pool activator, drill runner, and final verifier actors; wait for
-three real sequential matches and the unchanged 24-hour Gold delivery; and
-inspect every immutable receipt before either public queue is considered.
+The dormant, separately authorized readiness orchestrator is deployed and
+verified inert. The next Conquest step is an explicitly authorized exercise,
+not a code-path shortcut: it must use distinct pool proposer, pool activator,
+drill runner, and final verifier actors; wait for three real sequential matches
+and the unchanged 24-hour Gold delivery; and inspect every immutable receipt
+before either public queue is considered. Do not grant capabilities or create a
+production reward pool merely to manufacture deployment evidence.
 WalletConnect ownership is now independently available in account settings:
 connect a wallet, sign a session-owned nonce, persist the verified address, and
 read external wallet contents without granting the wallet authority over the

@@ -819,7 +819,36 @@ progress receipts, the real settlement path, the real 24-hour delayed Gold
 path, and independent final verification. Match-service tests additionally
 prove wrong-secret and extra-field rejection, identity-bound game principals,
 reserved bot keys, empty system quest lists, exact retry reuse, and zero public
-readiness or mode changes. Production deployment remains forbidden until the
-exact runtime commit passes the full release contract; even after deployment,
+readiness or mode changes. Production deployment was forbidden until the exact
+runtime commit passed the full release contract; after deployment,
 the workflow stays inert until a distinct administrator is granted `RUN` and
 starts an operation against an independently approved pool.
+
+Runtime commit `763ce9aef6037e34e108621c5887b35de9e123dc` passed the
+complete exact-head GitHub release contract in run
+[`31942915068`](https://github.com/bunnybones1/OpenSky/actions/runs/31942915068),
+job `95154564029`, in 9m08s. The deployment-time contract then passed 502 main
+Worker tests, 34 game-server unit plus 95 Workers tests, 32 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit and service typecheck, and both production builds.
+
+Migration `0112` executed 20 commands against the pinned production D1 database
+and left no migration pending. The match-service Worker advanced to version
+`d66c439f-df49-4ae0-80d8-4695a3f0bdf4` and the main Worker advanced to
+`573313b0-e95c-42a1-9c3b-87066ae92edf`; Cloudflare reports each at 100% traffic.
+The game server remains the already-tested guarded-bot version
+`86f87caf-b597-4550-830a-baa6a213f831`. The strict verifier matched web entry
+`/assets/index-ca9c688d.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+Post-deploy public probes returned the exact main version, protocol-v3 game
+health, both Practice modes enabled, both Conquest modes disabled, and an empty
+`weeklyGolds` list. Both new staff RPCs returned authenticated `401` responses
+to anonymous requests with `Cache-Control: no-store`. A read-only D1 aggregate
+found three users and zero drill permissions, operations, audits, matches,
+runs, settlements, deliveries, reward pools, approved pools, readiness rows,
+verified drill receipts, or enabled Conquest modes. It wrote zero rows and
+reported `changes: 0` and `changed_db: false`. Reward readiness had no errors:
+SkyPass remains the sole active reviewed policy and every Conquest-related
+reward track remains dormant.
