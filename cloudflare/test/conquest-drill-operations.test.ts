@@ -221,16 +221,33 @@ describe('dormant Conquest readiness drill operations', () => {
            (SELECT COUNT(*) FROM game_mode_status
             WHERE game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')
               AND enabled = 1) enabled_modes,
+           (SELECT COUNT(*) FROM users
+            WHERE user_kind = 'SYSTEM' AND (
+              id = ? OR id IN (SELECT value FROM json_each(?))
+            )) system_accounts,
+           (SELECT COUNT(*) FROM player_account_settings settings
+            JOIN users ON users.id = settings.user_id
+            WHERE users.user_kind = 'SYSTEM'
+              AND settings.leaderboard_eligible <> 0) visible_system_accounts,
            (SELECT COUNT(*) FROM staff_conquest_drill_audit
             WHERE operation_key = ?) audit_rows`
       )
-        .bind(version, `readiness-drill-match-${key}-%`, version, key)
+        .bind(
+          version,
+          `readiness-drill-match-${key}-%`,
+          version,
+          operation.targetUserId,
+          JSON.stringify(operation.opponentUserIds),
+          key
+        )
         .first()
     ).toEqual({
       runs: 4,
       matches: 0,
       readiness: 0,
       enabled_modes: 0,
+      system_accounts: 4,
+      visible_system_accounts: 0,
       audit_rows: 2
     })
 
@@ -259,6 +276,180 @@ describe('dormant Conquest readiness drill operations', () => {
         )
       ).failed
     ).toBe(1)
+  })
+
+  it('keeps drill principals out of player discovery while retaining staff inspection', async () => {
+    const version = await approvedPool()
+    const repository = new ConquestDrillRepository(env.AUTH_DB)
+    const operation = await repository.start(
+      actor,
+      { poolVersion: version, reason: 'System-principal visibility boundary' },
+      crypto.randomUUID()
+    )
+    const reference = `identity:${operation.targetUserId}`
+    const setting = await env.AUTH_DB.prepare(
+      `SELECT name FROM player_account_settings WHERE user_id = ?`
+    )
+      .bind(operation.targetUserId)
+      .first<{ name: string }>()
+
+    const byReference = await rpcAs(
+      actor,
+      'GetAccount',
+      { address: reference },
+      undefined,
+      false
+    )
+    expect(byReference.status).toBe(200)
+    expect(await byReference.json()).toEqual({ account: null })
+
+    const exists = await rpcAs(
+      actor,
+      'AccountExists',
+      { address: reference },
+      undefined,
+      false
+    )
+    expect(exists.status).toBe(200)
+    expect(await exists.json()).toEqual({
+      exists: false,
+      pending_migration: false
+    })
+    expect(
+      (
+        await rpcAs(
+          actor,
+          'GetAccountByUsername',
+          { username: setting!.name },
+          undefined,
+          false
+        )
+      ).status
+    ).toBe(404)
+    expect(
+      (
+        await rpcAs(
+          actor,
+          'GetAccountStats',
+          { address: reference },
+          undefined,
+          false
+        )
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpcAs(
+          actor,
+          'GetCardOwnership',
+          { accountAddress: reference },
+          undefined,
+          false
+        )
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await rpcAs(actor, 'GetFeed', {
+          req: { accountAddress: reference }
+        })
+      ).status
+    ).toBe(404)
+    expect(
+      (
+        await rpcAs(actor, 'SetInvitedBy', {
+          req: {
+            address: `identity:${actor}`,
+            invitedBy: reference
+          }
+        })
+      ).status
+    ).toBe(400)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET player_rank = 'GRANDWEAVER', score = 999999
+       WHERE user_id = ?`
+    )
+      .bind(operation.targetUserId)
+      .run()
+    const leaderboard = await rpcAs(
+      actor,
+      'ListLeaderboard',
+      { req: { gameMode: 'RANKED_CONSTRUCTED' } },
+      undefined,
+      false
+    )
+    expect(leaderboard.status).toBe(200)
+    expect(
+      (
+        await leaderboard.json<{
+          res: Array<{ account?: { address?: string } }>
+        }>()
+      ).res.some(entry => entry.account?.address === reference)
+    ).toBe(false)
+
+    const staff = await rpcAs(actor, 'GMFindAccount', {
+      accountAddress: reference
+    })
+    expect(staff.status).toBe(200)
+    expect(await staff.json()).toMatchObject({
+      account: { address: reference, name: setting!.name }
+    })
+  })
+
+  it('enforces the reserved system namespace and social/reward guards in D1', async () => {
+    const version = await approvedPool()
+    const repository = new ConquestDrillRepository(env.AUTH_DB)
+    const operation = await repository.start(
+      actor,
+      { poolVersion: version, reason: 'Database system-account guard test' },
+      crypto.randomUUID()
+    )
+    const now = new Date().toISOString()
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES ('system:forged-player', 'Forged Player',
+                 'forged-player@example.com', ?, ?)`
+      )
+        .bind(now, now)
+        .run()
+    ).rejects.toThrow('user kind does not match reserved namespace')
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES ('ordinary-forged-system', 'Forged System',
+                 'forged-system@example.com', ?, ?, 'SYSTEM')`
+      )
+        .bind(now, now)
+        .run()
+    ).rejects.toThrow('user kind does not match reserved namespace')
+    await expect(
+      env.AUTH_DB.prepare(`UPDATE users SET user_kind = 'PLAYER' WHERE id = ?`)
+        .bind(operation.targetUserId)
+        .run()
+    ).rejects.toThrow('user kind is immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings SET leaderboard_eligible = 1
+         WHERE user_id = ?`
+      )
+        .bind(operation.targetUserId)
+        .run()
+    ).rejects.toThrow('system accounts are not leaderboard eligible')
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_invites
+           (invitee_user_id, inviter_user_id, created_at)
+         VALUES (?, ?, ?)`
+      )
+        .bind(actor, operation.targetUserId, now)
+        .run()
+    ).rejects.toThrow('system accounts cannot participate in invitations')
   })
 
   it('keeps start and list RPCs behind their separate staff boundaries', async () => {

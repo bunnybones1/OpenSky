@@ -916,7 +916,7 @@ export class PlayerRpcRepository {
   ): Promise<Account | null> {
     if (!address.startsWith('identity:')) return null
     const userId = address.slice('identity:'.length)
-    if (!userId) return null
+    if (!userId || !(await this.accountReferenceExists(address))) return null
     return this.getIdentityAccount(userId, viewerUserId === userId)
   }
 
@@ -926,9 +926,11 @@ export class PlayerRpcRepository {
   ): Promise<Account | null> {
     const row = await this.database
       .prepare(
-        `SELECT user_id
-         FROM player_account_settings
-         WHERE name = ? COLLATE NOCASE`
+        `SELECT settings.user_id
+         FROM player_account_settings settings
+         JOIN users ON users.id = settings.user_id
+         WHERE settings.name = ? COLLATE NOCASE
+           AND users.user_kind = 'PLAYER'`
       )
       .bind(username.trim().toLowerCase())
       .first<{ user_id: string }>()
@@ -968,7 +970,7 @@ export class PlayerRpcRepository {
     const userId = accountAddress.slice('identity:'.length)
     if (!userId) throw invalidArgument('account_address is invalid')
     const account = await this.database
-      .prepare('SELECT 1 FROM users WHERE id = ?')
+      .prepare(`SELECT 1 FROM users WHERE id = ? AND user_kind = 'PLAYER'`)
       .bind(userId)
       .first()
     if (!account) throw notFound('account was not found')
@@ -1265,7 +1267,7 @@ export class PlayerRpcRepository {
     const userId = address.slice('identity:'.length)
     if (!userId) return false
     const row = await this.database
-      .prepare('SELECT 1 FROM users WHERE id = ?')
+      .prepare(`SELECT 1 FROM users WHERE id = ? AND user_kind = 'PLAYER'`)
       .bind(userId)
       .first()
     return !!row
@@ -1274,8 +1276,10 @@ export class PlayerRpcRepository {
   async accountNameExists(name: string): Promise<boolean> {
     const row = await this.database
       .prepare(
-        `SELECT 1 FROM player_account_settings
-         WHERE name = ? COLLATE NOCASE`
+        `SELECT 1 FROM player_account_settings settings
+         JOIN users ON users.id = settings.user_id
+         WHERE settings.name = ? COLLATE NOCASE
+           AND users.user_kind = 'PLAYER'`
       )
       .bind(name.trim())
       .first()

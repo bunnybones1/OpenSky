@@ -266,8 +266,9 @@ export class ConquestDrillRepository {
         this.database
           .prepare(
             `INSERT OR IGNORE INTO users
-               (id, display_name, primary_email, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)`
+               (id, display_name, primary_email, created_at, updated_at,
+                user_kind)
+             VALUES (?, ?, ?, ?, ?, 'SYSTEM')`
           )
           .bind(
             userId,

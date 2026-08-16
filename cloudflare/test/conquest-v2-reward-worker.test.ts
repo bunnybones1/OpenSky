@@ -26,14 +26,18 @@ const DELIVERY = new Date(FIRST_RUN.getTime() + DAY_MS)
 const SNAPSHOT_NOW = new Date(FIRST_RUN.getTime() + 60_000)
 const DELIVERY_NOW = new Date(DELIVERY.getTime() + 60_000)
 
-const setupPlayer = async (userId: string, points: number) => {
+const setupPlayer = async (
+  userId: string,
+  points: number,
+  userKind: 'PLAYER' | 'SYSTEM' = 'PLAYER'
+) => {
   const now = FIRST_RUN.toISOString()
   await env.AUTH_DB.prepare(
     `INSERT INTO users
-       (id, display_name, primary_email, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`
+       (id, display_name, primary_email, created_at, updated_at, user_kind)
+     VALUES (?, ?, ?, ?, ?, ?)`
   )
-    .bind(userId, userId, `${userId}@example.com`, now, now)
+    .bind(userId, userId, `${userId}@example.com`, now, now, userKind)
     .run()
   await new PlayerRepository(env.AUTH_DB).bootstrap(userId)
   await env.AUTH_DB.prepare(
@@ -168,7 +172,10 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_cycles'),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_schedule_activations'),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_schedule_versions'),
-    env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'treasure-%'`),
+    env.AUTH_DB.prepare(
+      `DELETE FROM users
+       WHERE id LIKE 'treasure-%' OR id LIKE 'system:treasure-%'`
+    ),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_pool_cache'),
     env.AUTH_DB.prepare(
       `UPDATE conquest_v2_pool_settings
@@ -640,6 +647,33 @@ describe('Conquest V2 off-chain weekly rewards', () => {
          WHERE user_id = 'treasure-player' AND event_id = 2`
       ).first('current_points')
     ).toBe(100)
+  })
+
+  it('does not snapshot operational system points into player reward cycles', async () => {
+    const userId = 'system:treasure-readiness-test'
+    await setupPlayer(userId, 1_600, 'SYSTEM')
+    await setWeightPerSilver(1)
+    await enableSchedule()
+
+    expect(
+      await runDueConquestV2Rewards(env.AUTH_DB, SNAPSHOT_NOW)
+    ).toMatchObject({ status: 'awaiting_delivery', delivered: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT current_points FROM player_conquest_points
+         WHERE user_id = ? AND event_id = 2`
+      )
+        .bind(userId)
+        .first('current_points')
+    ).toBe(1_600)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM conquest_v2_reward_entries
+         WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first('count')
+    ).toBe(0)
   })
 
   it('makes approval inert when settings change before a cycle starts', async () => {

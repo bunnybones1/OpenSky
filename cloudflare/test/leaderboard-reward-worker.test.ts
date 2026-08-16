@@ -29,14 +29,22 @@ const setupPlayer = async (
   userId: string,
   score: number,
   createdAt: string,
-  modes = ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY']
+  modes = ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'],
+  userKind: 'PLAYER' | 'SYSTEM' = 'PLAYER'
 ) => {
   await env.AUTH_DB.prepare(
     `INSERT INTO users
-       (id, display_name, primary_email, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`
+       (id, display_name, primary_email, created_at, updated_at, user_kind)
+     VALUES (?, ?, ?, ?, ?, ?)`
   )
-    .bind(userId, userId, `${userId}@example.com`, createdAt, createdAt)
+    .bind(
+      userId,
+      userId,
+      `${userId}@example.com`,
+      createdAt,
+      createdAt,
+      userKind
+    )
     .run()
   await new PlayerRepository(env.AUTH_DB).bootstrap(userId)
   for (const mode of modes) {
@@ -157,7 +165,10 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycles'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_schedule_activations'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_schedule_versions'),
-    env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'reward-%'`)
+    env.AUTH_DB.prepare(
+      `DELETE FROM users
+       WHERE id LIKE 'reward-%' OR id LIKE 'system:reward-%'`
+    )
   ])
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
@@ -472,6 +483,32 @@ describe('weekly leaderboard reward worker', () => {
         'SELECT COUNT(*) AS count FROM leaderboard_reward_cycles'
       ).first('count')
     ).toBe(0)
+  })
+
+  it('does not snapshot operational system scores into player rewards', async () => {
+    const userId = 'system:reward-readiness-test'
+    await setupPlayer(
+      userId,
+      9_999,
+      NOW.toISOString(),
+      ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'],
+      'SYSTEM'
+    )
+    await enableSchedule()
+
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed',
+      delivered: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM leaderboard_reward_entries
+         WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first('count')
+    ).toBe(0)
+    expect(await inventoryTotals(userId)).toEqual({ silver: 0, tickets: 0 })
   })
 
   it('lets a newer immutable disabled version supersede an enabled schedule', async () => {

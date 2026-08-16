@@ -144,7 +144,9 @@ const prepareForUser = async (
          FROM player_friend_points points
          JOIN player_account_settings settings
            ON settings.user_id = points.invitee_user_id
+         JOIN users ON users.id = points.invitee_user_id
          WHERE points.inviter_user_id = ? AND points.season = ?
+           AND users.user_kind = 'PLAYER'
            AND settings.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')
          ORDER BY points.levels + points.points_carried DESC,
                   points.invitee_user_id ASC

@@ -1181,7 +1181,9 @@ export class StaffRepository {
     const rows = await this.database
       .prepare(
         `SELECT account_status, COUNT(*) AS count
-         FROM player_account_settings
+         FROM player_account_settings settings
+         JOIN users ON users.id = settings.user_id
+         WHERE users.user_kind = 'PLAYER'
          GROUP BY account_status`
       )
       .all<StatusCountRow>()

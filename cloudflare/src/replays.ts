@@ -4,6 +4,8 @@ import { CompetitiveRepository } from './competitive'
 import type { Env } from './env'
 import { invalidArgument, notFound } from './errors'
 import { INTERNAL_AUTH_HEADER } from './multiplayer-gateway'
+import { optionalRpcPrincipal } from './rpc-principal'
+import { StaffRepository } from './staff'
 
 const REPLAY_PATH = '/api/replays/'
 const MAX_REPLAY_RECORDS = 10_000
@@ -13,9 +15,11 @@ interface ReplayTarget {
   proposalId: string
   inProgress: boolean
   startedAt: string
+  systemParticipant: boolean
 }
 
 const target = async (
+  request: Request,
   env: Env,
   matchId: number,
   replayId: string
@@ -31,6 +35,17 @@ const target = async (
     replayId
   )
   if (!found) throw notFound('match with this replay ID not found')
+  if (found.systemParticipant) {
+    const principal = await optionalRpcPrincipal(request, env)
+    if (!principal || principal.kind !== 'identity') {
+      throw notFound('match with this replay ID not found')
+    }
+    try {
+      await new StaffRepository(env.AUTH_DB).requireAdmin(principal.userId)
+    } catch {
+      throw notFound('match with this replay ID not found')
+    }
+  }
   return found
 }
 
@@ -45,7 +60,7 @@ export const replayArchive = async (
   matchId: number,
   replayId: string
 ) => {
-  const found = await target(env, matchId, replayId)
+  const found = await target(request, env, matchId, replayId)
   if (
     found.inProgress &&
     Date.parse(found.startedAt) + 120 * 60 * 1000 > Date.now()
@@ -93,7 +108,7 @@ export const handleReplayRequest = async (request: Request, env: Env) => {
   const matchId = Number(parts[0])
   const index = Number(parts[2])
   try {
-    const found = await target(env, matchId, replayId)
+    const found = await target(request, env, matchId, replayId)
     if (!Number.isSafeInteger(index) || index < 0 || index > 999_999) {
       return new Response('Not found', { status: 404 })
     }

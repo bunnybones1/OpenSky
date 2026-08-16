@@ -220,4 +220,17 @@ test('requires generated wire and browser lifecycle gates in the complete build'
     })[0],
     /browser cache lifecycle/
   )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:system-player-gate && ',
+          ''
+        )
+      }
+    })[0],
+    /system-player isolation/
+  )
 })

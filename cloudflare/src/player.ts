@@ -456,9 +456,9 @@ export class PlayerRepository {
     if (existing) return
 
     const user = await this.database
-      .prepare('SELECT display_name FROM users WHERE id = ?')
+      .prepare('SELECT display_name, user_kind FROM users WHERE id = ?')
       .bind(userId)
-      .first<{ display_name: string }>()
+      .first<{ display_name: string; user_kind: 'PLAYER' | 'SYSTEM' }>()
     if (!user) throw new Error('identity user is missing')
 
     const originalName = user.display_name.trim().slice(0, 64)
@@ -482,10 +482,11 @@ export class PlayerRepository {
         await this.database
           .prepare(
             `INSERT INTO player_account_settings
-               (user_id, name, locale, created_at, updated_at)
-             VALUES (?, ?, 'en', ?, ?)`
+               (user_id, name, locale, leaderboard_eligible,
+                created_at, updated_at)
+             VALUES (?, ?, 'en', ?, ?, ?)`
           )
-          .bind(userId, name, now, now)
+          .bind(userId, name, user.user_kind === 'SYSTEM' ? 0 : 1, now, now)
           .run()
         return
       } catch (error) {

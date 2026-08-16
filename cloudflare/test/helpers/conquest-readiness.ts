@@ -41,8 +41,8 @@ export const provisionVerifiedConquestDrill = async (
     database
       .prepare(
         `INSERT INTO users
-           (id, display_name, primary_email, created_at, updated_at)
-         VALUES (?, 'Conquest Readiness Drill', ?, ?, ?)`
+           (id, display_name, primary_email, user_kind, created_at, updated_at)
+         VALUES (?, 'Conquest Readiness Drill', ?, 'SYSTEM', ?, ?)`
       )
       .bind(
         drillUserId,
@@ -57,8 +57,8 @@ export const provisionVerifiedConquestDrill = async (
       database
         .prepare(
           `INSERT INTO users
-             (id, display_name, primary_email, created_at, updated_at)
-           VALUES (?, 'Conquest Readiness Opponent', ?, ?, ?)`
+             (id, display_name, primary_email, user_kind, created_at, updated_at)
+           VALUES (?, 'Conquest Readiness Opponent', ?, 'SYSTEM', ?, ?)`
         )
         .bind(
           match.opponentUserId,

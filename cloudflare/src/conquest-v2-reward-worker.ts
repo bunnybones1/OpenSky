@@ -482,10 +482,12 @@ const snapshotCycle = async (
            (cycle_id, user_id, points_before, points_accounted,
             points_remaining, treasure_level, treasure_weight,
             snapshotted_at)
-         SELECT ?, user_id, current_points, ${pointsSql},
-                current_points - (${pointsSql}), ${levelSql}, ${weightSql}, ?
-         FROM player_conquest_points
-         WHERE event_id = ? AND current_points >= 250
+         SELECT ?, points.user_id, points.current_points, ${pointsSql},
+                points.current_points - (${pointsSql}), ${levelSql}, ${weightSql}, ?
+         FROM player_conquest_points points
+         JOIN users ON users.id = points.user_id
+         WHERE points.event_id = ? AND points.current_points >= 250
+           AND users.user_kind = 'PLAYER'
            AND EXISTS (
              SELECT 1 FROM conquest_v2_reward_cycles
              WHERE id = ? AND status = 'PREPARING'

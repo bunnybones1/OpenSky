@@ -287,8 +287,10 @@ const snapshotCycle = async (
              FROM player_account_stats stats
              JOIN player_account_settings settings
                ON settings.user_id = stats.user_id
+             JOIN users ON users.id = stats.user_id
              WHERE stats.game_mode = ? AND stats.season = ?
                AND settings.leaderboard_eligible = 1
+               AND users.user_kind = 'PLAYER'
                AND settings.account_status NOT IN (
                  'BANNED', 'SUSPENDED', 'DELETED'
                )

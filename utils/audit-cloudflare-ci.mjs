@@ -104,6 +104,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the browser cache lifecycle gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:system-player-gate')) {
+    errors.push(
+      'Cloudflare build must include the operational system-player isolation gate'
+    )
+  }
   return errors
 }
 

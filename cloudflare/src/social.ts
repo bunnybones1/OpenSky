@@ -62,7 +62,7 @@ export class SocialRepository {
     const inviter = await this.database
       .prepare(
         `SELECT 1 FROM users
-         WHERE id = ? AND EXISTS (
+         WHERE id = ? AND user_kind = 'PLAYER' AND EXISTS (
            SELECT 1 FROM player_account_settings WHERE user_id = users.id
          )`
       )

@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import type { Env } from '../src/env'
+import {
+  createIdentitySession,
+  IDENTITY_SESSION_COOKIE
+} from '../src/identity-session'
 import { handleReplayRequest } from '../src/replays'
 
 const USER_ID = '77777777-7777-4777-8777-777777777777'
 const REPLAY_ID = '88888888-8888-4888-8888-888888888888'
 const PROPOSAL_ID = 'replay-contract-test'
 const MATCH_ID = 900001
+const SYSTEM_USER_ID = 'system:replay-contract-test'
+const ADMIN_USER_ID = '99999999-9999-4999-8999-999999999999'
 
 const service = (handler: (request: Request) => Response | Promise<Response>) =>
   ({ fetch: handler }) as unknown as Fetcher
@@ -46,13 +52,16 @@ const testEnv = {
   GAME_MATCHES: gameMatches
 } satisfies Env
 
-const rpc = (body: object) =>
+const rpc = (body: object, cookie?: string) =>
   handleApiRequest(
     new Request(
       'https://opensky.example/api/rpc/SkyWeaverAPI/GetMatchArchiveRecordsURI',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(cookie ? { cookie } : {})
+        },
         body: JSON.stringify(body)
       }
     ),
@@ -215,5 +224,58 @@ describe('source replay archive contract', () => {
       ok: true,
       match: { status: 'IN_PROGRESS', winningPlayer: null, endedAt: null }
     })
+  })
+
+  it('keeps system-player replays staff-only without changing ordinary replay capability URLs', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES (?, 'System Replay Player', 'system-replay@example.com',
+                 ?, ?, 'SYSTEM')`
+      ).bind(SYSTEM_USER_ID, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at)
+         VALUES (?, 'Replay Admin', 'replay-admin@example.com', ?, ?)`
+      ).bind(ADMIN_USER_ID, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_roles
+           (user_id, role, granted_by_user_id, reason, created_at)
+         VALUES (?, 'ADMIN', NULL, 'system replay inspection test', ?)`
+      ).bind(ADMIN_USER_ID, now)
+    ])
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET player1_user_id = ? WHERE id = ?`
+    )
+      .bind(SYSTEM_USER_ID, MATCH_ID)
+      .run()
+
+    const anonymous = await rpc({ matchID: MATCH_ID, replayID: REPLAY_ID })
+    expect(anonymous.status).toBe(404)
+
+    const adminSession = await createIdentitySession(
+      ADMIN_USER_ID,
+      testEnv.SESSION_SIGNING_KEY
+    )
+    const cookie = `${IDENTITY_SESSION_COOKIE}=${adminSession}`
+    const authorized = await rpc(
+      { matchID: MATCH_ID, replayID: REPLAY_ID },
+      cookie
+    )
+    expect(authorized.status).toBe(200)
+    const body = await authorized.json<{ recordURIs: string[] }>()
+
+    const noCookieRecord = await handleReplayRequest(
+      new Request(body.recordURIs[0]),
+      testEnv
+    )
+    expect(noCookieRecord.status).toBe(404)
+    const authorizedRecord = await handleReplayRequest(
+      new Request(body.recordURIs[0], { headers: { cookie } }),
+      testEnv
+    )
+    expect(authorizedRecord.status).toBe(200)
   })
 })

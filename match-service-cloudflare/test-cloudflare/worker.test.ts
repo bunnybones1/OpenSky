@@ -325,8 +325,9 @@ const provisionReceiptBackedConquestReadiness = async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
       `INSERT OR IGNORE INTO users
-         (id, display_name, primary_email, created_at, updated_at)
-       VALUES (?, 'Readiness Drill', 'readiness-drill@example.com', ?, ?)`
+         (id, display_name, primary_email, user_kind, created_at, updated_at)
+       VALUES (?, 'Readiness Drill', 'readiness-drill@example.com',
+               'SYSTEM', ?, ?)`
     ).bind(READINESS_USER_ID, startsAt, startsAt),
     env.AUTH_DB.prepare(
       `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
@@ -334,8 +335,8 @@ const provisionReceiptBackedConquestReadiness = async () => {
     ...matches.flatMap(match => [
       env.AUTH_DB.prepare(
         `INSERT INTO users
-           (id, display_name, primary_email, created_at, updated_at)
-         VALUES (?, 'Readiness Opponent', ?, ?, ?)`
+           (id, display_name, primary_email, user_kind, created_at, updated_at)
+         VALUES (?, 'Readiness Opponent', ?, 'SYSTEM', ?, ?)`
       ).bind(
         match.opponentUserId,
         `${crypto.randomUUID()}@example.com`,

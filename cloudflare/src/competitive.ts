@@ -926,7 +926,12 @@ export class CompetitiveRepository {
     if (!address.startsWith('identity:')) return null
     const userId = address.slice('identity:'.length)
     const profile = await this.database
-      .prepare('SELECT level, xp FROM player_profiles WHERE user_id = ?')
+      .prepare(
+        `SELECT profile.level, profile.xp
+         FROM player_profiles profile
+         JOIN users ON users.id = profile.user_id
+         WHERE profile.user_id = ? AND users.user_kind = 'PLAYER'`
+      )
       .bind(userId)
       .first<{ level: number; xp: number }>()
     if (!profile) return null
@@ -1005,6 +1010,7 @@ export class CompetitiveRepository {
          JOIN game_accounts game ON game.user_id = stats.user_id
          WHERE stats.game_mode = ? AND stats.season = ?
            AND account.leaderboard_eligible = 1
+           AND users.user_kind = 'PLAYER'
            AND account.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')`
       )
       .bind(request.gameMode, season)
@@ -1126,6 +1132,13 @@ export class CompetitiveRepository {
       throw invalidArgument('accountAddress is invalid')
     }
     const userId = request.accountAddress.slice('identity:'.length)
+    const player = await this.database
+      .prepare(`SELECT 1 FROM users WHERE id = ? AND user_kind = 'PLAYER'`)
+      .bind(userId)
+      .first()
+    if (!userId || !player) {
+      throw invalidArgument('no leaderboard entry for this player')
+    }
     await this.ensureCurrentStats(userId)
     const rows = await this.leaderboardRows({
       gameMode: request.gameMode,
@@ -1435,6 +1448,9 @@ export class CompetitiveRepository {
       .first<MatchRow>()
     if (!row) throw notFound('match not found')
 
+    const systemParticipant = await this.hasSystemParticipant(row)
+    if (systemParticipant) throw notFound('match is private')
+
     const participant =
       row.player1_user_id === userId || row.player2_user_id === userId
     const modes = storedMatchModes(row)
@@ -1463,14 +1479,33 @@ export class CompetitiveRepository {
       .bind(matchId, replayId)
       .first<MatchRow>()
     if (!row) return null
+    const systemParticipant = await this.hasSystemParticipant(row)
     const match = matchFromRow(row)
     return match
       ? {
           match,
           proposalId: row.proposal_id,
           inProgress: row.ended_at === null,
-          startedAt: row.created_at
+          startedAt: row.created_at,
+          systemParticipant
         }
       : null
+  }
+
+  private async hasSystemParticipant(row: MatchRow): Promise<boolean> {
+    const userIds = [row.player1_user_id, row.player2_user_id].filter(
+      (userId): userId is string => userId !== null
+    )
+    if (userIds.length === 0) return false
+    const system = await this.database
+      .prepare(
+        `SELECT 1 FROM users
+         WHERE user_kind = 'SYSTEM'
+           AND id IN (${userIds.map(() => '?').join(',')})
+         LIMIT 1`
+      )
+      .bind(...userIds)
+      .first()
+    return Boolean(system)
   }
 }
