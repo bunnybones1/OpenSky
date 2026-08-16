@@ -226,6 +226,30 @@ export const auditConquestDormantRewardCopy = source => {
   return errors
 }
 
+export const auditHomeConquestRewardCopy = source => {
+  const errors = []
+  if (!/const \{ data: conquestRewards \} = useConquestRewards\(\)/.test(source)) {
+    errors.push('Home Conquest feature is missing authoritative reward data')
+  }
+  if (
+    !/const hasActiveConquestRewards =\s*!!conquestRewards\?\.rewards\.weeklyGolds\.length/.test(
+      source
+    )
+  ) {
+    errors.push('Home Conquest feature is missing its active-pool boundary')
+  }
+  if (
+    !/hasActiveConquestRewards\s*\? 'home\.mainFeatureConquest\.title'\s*: 'play\.conquestRewardsInactive'/.test(
+      source
+    )
+  ) {
+    errors.push(
+      'Home Conquest reward claim is not replaced by inactive-pool copy'
+    )
+  }
+  return errors
+}
+
 export const loadWebappLocaleResources = async rootDir =>
   Object.fromEntries(
     await Promise.all(
@@ -280,6 +304,9 @@ if (isMain) {
     ...auditConquestDormantRewardCopy(
       sources['webapp/src/PlayPage/Conquest/ConquestInfo/ConquestInfo.tsx'] ??
         ''
+    ),
+    ...auditHomeConquestRewardCopy(
+      sources['webapp/src/HomePage/HomePage.tsx'] ?? ''
     )
   ]
   if (errors.length) {

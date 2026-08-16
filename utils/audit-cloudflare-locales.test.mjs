@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   CLOUD_WEASEL_LOCALE_KEYS,
   auditConquestDormantRewardCopy,
+  auditHomeConquestRewardCopy,
   auditLocaleResources,
   auditStringPluralCounts
 } from './audit-cloudflare-locales.mjs'
@@ -128,5 +129,33 @@ test('rejects dormant Conquest UI that advertises an unapproved card pool', () =
     [
       'Conquest pool-specific Gold/Silver claims are not gated by an active pool'
     ]
+  )
+})
+
+const safeHomeConquestRewardCopy = `
+  const { data: conquestRewards } = useConquestRewards()
+  const hasActiveConquestRewards =
+    !!conquestRewards?.rewards.weeklyGolds.length
+  const title = hasActiveConquestRewards
+    ? 'home.mainFeatureConquest.title'
+    : 'play.conquestRewardsInactive'
+`
+
+test('accepts the Home Conquest claim behind active-pool authority', () => {
+  assert.deepEqual(
+    auditHomeConquestRewardCopy(safeHomeConquestRewardCopy),
+    []
+  )
+})
+
+test('rejects a Home Conquest claim while the reward pool is dormant', () => {
+  assert.deepEqual(
+    auditHomeConquestRewardCopy(
+      safeHomeConquestRewardCopy.replace(
+        "hasActiveConquestRewards\n    ? 'home.mainFeatureConquest.title'\n    : 'play.conquestRewardsInactive'",
+        "'home.mainFeatureConquest.title'"
+      )
+    ),
+    ['Home Conquest reward claim is not replaced by inactive-pool copy']
   )
 })
