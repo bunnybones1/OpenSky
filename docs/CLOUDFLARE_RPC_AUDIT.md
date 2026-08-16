@@ -2266,6 +2266,58 @@ referral rewards as dormant while the independently approved SkyPass policy
 remained active. This rollout created no reward pool, account, inventory row,
 receipt, queue, capability, or economy authority.
 
+## Conquest points response fidelity rollout — 2026-08-15
+
+The generated `ConquestPoints` JSON wrapper returns two unsigned values named
+`points` and the source's misspelled `nedeed`. The source helper always uses
+legacy event `1`, calls `FindOrCreateByAddressAndEventID`, returns current—not
+lifetime—points, and exposes a fixed 30-point threshold. The Worker already
+stored current and total points separately and initialized the source row on
+first read, but its response object and threshold were inline constants that
+could drift independently of the generated contract.
+
+Runtime commit `edc608a19d0c971c248a7e7575cb414e8c590b7b` moves the
+response through an explicit two-field projector and names the 30-point source
+constant beside legacy event `1`. The source-derived Conquest gate now pins
+both generated tuple members and their spelling, the handler's event,
+find-or-create call, threshold, and current-points projection, the Worker's D1
+initialization/select behavior, and the exact API boundary. Mutation tests fail
+if `nedeed` is corrected, event or threshold changes, total points leak into
+the response, D1 initialization disappears, or the route bypasses the
+projector. Focused Worker tests cover exact metadata stripping as well as the
+existing empty, event-isolation, and populated-point RPC behavior.
+
+The complete local release contract passed 495 main-Worker tests across 83
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31925404719`, job `95112079809`, passed
+in 9m53s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`b0a64805-845b-48ef-b0e0-00a69cb59f64` to
+`b641abb4-b8e1-40a7-a748-76a031852dd4`; no migration or configuration change
+was made. Cloudflare uploaded no changed asset files. The strict verifier
+matched web entry `/assets/index-d976a081.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production `Version`, `Ping`,
+`GetGameModesStatus`, and `ConquestRewards` returned `200` with
+`Cache-Control: no-store`; the version response named the new Worker, both
+Practice modes stayed enabled, both Conquest modes stayed disabled, and
+`weeklyGolds` stayed empty.
+
+Matching read-only D1 aggregates before and after deployment retained three
+users, 94 inventory rows, zero legacy Conquest point rows, zero current or
+total Conquest points, and zero Conquest runs, settlements, Gold deliveries,
+settlement grants, Gold grants, Silver exchanges, or active reward pools. Both
+queries reported zero rows written and `changed_db: false`. The authenticated
+RPC was deliberately not called in production merely for evidence because its
+source-faithful first read can initialize a missing event row. The readiness
+audit retained original Conquest, leaderboard, Conquest V2, and referral
+rewards as dormant while the independently approved SkyPass policy remained
+active. This rollout created no point row, reward, pool, inventory row, receipt,
+queue, capability, or economy authority.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and

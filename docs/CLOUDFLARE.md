@@ -584,6 +584,21 @@ and progress are not migrated.
   stayed enabled, Conquest stayed disabled, and rewards stayed empty. Matching
   pre/post D1 aggregates retained three users, 94 inventory rows, and zero
   Conquest/reward-policy rows with zero writes and `changed_db: false`.
+- `ConquestPoints` now preserves its generated two-value response wrapper,
+  including the original `nedeed` spelling, source event `1`, current-points
+  projection, and 30-point threshold. The existing find-or-create D1 behavior
+  remains source-faithful and is never invoked merely for rollout evidence.
+  Runtime milestone `edc608a1` adds source-mutation and Worker/RPC coverage for
+  response, threshold, event, initialization, and route drift. Exact-head run
+  `31925404719` passed in 9m53s before main Worker
+  `b641abb4-b8e1-40a7-a748-76a031852dd4` deployed with web asset
+  `/assets/index-d976a081.js` and unchanged game asset
+  `/game/cloudflare/assets/index-7e9c419b.js`. Public safety probes all returned
+  `200` with `no-store`; Practice stayed enabled, Conquest stayed disabled, and
+  rewards stayed empty. Matching pre/post D1 aggregates retained zero
+  Conquest-point rows and balances in addition to three users, 94 inventory
+  rows, and zero Conquest/reward-policy rows, with zero writes and
+  `changed_db: false`.
 - Player match history preserves the source completed-mode filter, default
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes
