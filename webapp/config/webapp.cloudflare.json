@@ -13,6 +13,7 @@
   "MATCHMAKER_URL": "/api/matchmaker/",
   "ANALYTICS": false,
   "ONE_SIGNAL_APP_ID": "",
+  "PUSH_WELCOME_URL": "",
   "WALLETCONNECT_PROJECT_ID": "",
   "SEQUENCE_API_KEY": "",
   "SEQUENCE_API_HOST": "https://api.sequence.app",

@@ -84,20 +84,18 @@ export const IndexPage = memo(() => {
     if (!isIOSNativeApp()) {
       load(localTrackingAllowed)
     }
-    // Initialize Push notifications
-    try {
-      if (localTrackingAllowed) {
-        initOneSignal().then(() => {
-          isPushNotificationEnabled().then((isEnabled) => {
-            if (!isEnabled) {
-              showNativePrompt()
-            }
-          })
+    if (localTrackingAllowed) {
+      initOneSignal()
+        .then(async (initialized) => {
+          if (!initialized) return
+          if (!(await isPushNotificationEnabled())) {
+            await showNativePrompt()
+          }
         })
-      }
-    } catch (error) {
-      console.error('failed to init one signal', error)
-      captureError(error, 'failed to init One Signal')
+        .catch((error) => {
+          console.error('failed to init one signal', error)
+          captureError(error, 'failed to init One Signal')
+        })
     }
   }, [])
 

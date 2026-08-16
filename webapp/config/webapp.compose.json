@@ -12,6 +12,7 @@
   "WEBAPP_URL": "https://local.0xhorizon.net/",
   "MATCHMAKER_URL": "wss://local-matchmaker.0xhorizon.net/",
   "ANALYTICS": false,
+  "PUSH_WELCOME_URL": "https://skyweaver.net/news",
   "SEQUENCE_API_KEY": "AQAAAAAAAL1BI9qcuWdkzApPLAQuf22tF14",
   "SEQUENCE_API_HOST": "https://cors-everywhere.0xhorizon.net/https://api.sequence.app",
   "SEQUENCE_METADATA_HOST": "https://cors-everywhere.0xhorizon.net/https://metadata.sequence.app",

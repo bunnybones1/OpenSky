@@ -17,6 +17,7 @@ interface Environment {
   RELEASE_VERSION: string
 
   ONE_SIGNAL_APP_ID: string
+  PUSH_WELCOME_URL: string
   WALLETCONNECT_PROJECT_ID: string
 
   ASSETS_URL: string
@@ -104,6 +105,7 @@ const env: Environment = {
   RELEASE_VERSION: releaseVersion,
 
   ONE_SIGNAL_APP_ID: String(window.APP_CONFIG.ONE_SIGNAL_APP_ID || ''),
+  PUSH_WELCOME_URL: String(window.APP_CONFIG.PUSH_WELCOME_URL || ''),
   WALLETCONNECT_PROJECT_ID: String(window.APP_CONFIG.WALLETCONNECT_PROJECT_ID || ''),
 
   ASSETS_URL: String(

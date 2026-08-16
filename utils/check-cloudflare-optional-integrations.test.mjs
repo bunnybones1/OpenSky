@@ -13,6 +13,11 @@ import {
   LEGACY_OPENSKY_REPOSITORY_URL,
   sourceRepositoryUrl
 } from '../webapp/src/shared/components/Footer/sourceRepository.ts'
+import {
+  LEGACY_PUSH_WELCOME_URL,
+  oneSignalConfigured,
+  pushWelcomeUrl
+} from '../webapp/src/shared/helpers/oneSignalAvailability.ts'
 
 test('renders the optional Twitch surface only after live streams exist', () => {
   assert.equal(hasLiveTwitchStreams(undefined), false)
@@ -44,8 +49,35 @@ test('requires an explicit HTTPS source-repository destination', () => {
   )
 })
 
+test('requires an explicit valid OneSignal application ID', () => {
+  assert.equal(oneSignalConfigured(undefined), false)
+  assert.equal(oneSignalConfigured(''), false)
+  assert.equal(oneSignalConfigured('not-an-app-id'), false)
+  assert.equal(
+    oneSignalConfigured('11111111-1111-4111-8111-111111111111'),
+    true
+  )
+})
+
+test('requires an explicit HTTPS push welcome destination', () => {
+  assert.equal(pushWelcomeUrl(undefined), undefined)
+  assert.equal(pushWelcomeUrl(''), undefined)
+  assert.equal(pushWelcomeUrl('not a URL'), undefined)
+  assert.equal(pushWelcomeUrl('http://example.test/news'), undefined)
+  assert.equal(pushWelcomeUrl(LEGACY_PUSH_WELCOME_URL), LEGACY_PUSH_WELCOME_URL)
+})
+
 test('binds the tested fail-closed policy to the preserved browser component', async () => {
-  const [component, query, footer, cloudflareConfig, composeConfig, localConfig] =
+  const [
+    component,
+    query,
+    footer,
+    oneSignal,
+    indexPage,
+    cloudflareConfig,
+    composeConfig,
+    localConfig
+  ] =
     await Promise.all([
       readFile(
         'webapp/src/shared/components/LiveTwitchChannels/LiveTwitchChannels.tsx',
@@ -56,6 +88,8 @@ test('binds the tested fail-closed policy to the preserved browser component', a
         'utf8'
       ),
       readFile('webapp/src/shared/components/Footer/Footer.tsx', 'utf8'),
+      readFile('webapp/src/shared/helpers/one-signal.ts', 'utf8'),
+      readFile('webapp/src/IndexPage/IndexPage.tsx', 'utf8'),
       readFile('webapp/config/webapp.cloudflare.json', 'utf8').then(JSON.parse),
       readFile('webapp/config/webapp.compose.json', 'utf8').then(JSON.parse),
       readFile('webapp/config/webapp.local.json', 'utf8').then(JSON.parse)
@@ -67,6 +101,15 @@ test('binds the tested fail-closed policy to the preserved browser component', a
   assert.match(query, /retry: OPTIONAL_TWITCH_QUERY_RETRY/)
   assert.match(footer, /sourceRepositoryUrl\(env\.SOURCE_REPOSITORY_URL\)/)
   assert.doesNotMatch(footer, /github\.com\/horizon-games\/OpenSky/)
+  assert.match(oneSignal, /if \(!isConfigured\(\)\) return false/)
+  assert.match(oneSignal, /pushWelcomeUrl\(env\.PUSH_WELCOME_URL\)/)
+  assert.doesNotMatch(oneSignal, /url:\s*['"]https:\/\/skyweaver\.net\/news/)
+  assert.match(indexPage, /if \(!initialized\) return/)
+  assert.match(indexPage, /\.catch\(\(error\) =>/)
+  assert.equal(cloudflareConfig.ONE_SIGNAL_APP_ID, '')
+  assert.equal(cloudflareConfig.PUSH_WELCOME_URL, '')
+  assert.equal(composeConfig.PUSH_WELCOME_URL, LEGACY_PUSH_WELCOME_URL)
+  assert.equal(localConfig.PUSH_WELCOME_URL, LEGACY_PUSH_WELCOME_URL)
   assert.equal(cloudflareConfig.CREATOR_PROGRAM_URL, '')
   assert.equal(composeConfig.CREATOR_PROGRAM_URL, LEGACY_CREATOR_PROGRAM_URL)
   assert.equal(localConfig.CREATOR_PROGRAM_URL, LEGACY_CREATOR_PROGRAM_URL)
