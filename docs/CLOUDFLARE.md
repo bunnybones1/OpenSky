@@ -1714,6 +1714,40 @@ Reward readiness remained error-free with SkyPass as the sole active reviewed
 policy. This proof does not authorize or substitute for a real production
 three-match/24-hour exercise; production remains dormant.
 
+## Optional Twitch surface rollout — 2026-08-16
+
+Web milestone `21b7fac17bc529de54b69ea3c2a8047cea46270b` makes the
+preserved live-channel surface fail closed while Cloud Weasel's optional Twitch
+integration is unavailable. Home and Play now render the original section only
+after the ported RPC returns at least one real stream. A missing or failed
+integration renders no loading-shell placeholders, the query does not retry a
+known unavailable provider, and the legacy Skyweaver creator-program link is
+absent from the Cloudflare build. A replacement call to action requires an
+explicit HTTPS `CREATOR_PROGRAM_URL`; the compose and local source modes retain
+their original URL.
+
+The mandatory integration gate has three focused tests and is part of the
+complete Cloudflare build. The complete local release contract passed 507 main
+Worker tests across 84 files, 34 game-server unit tests, 98 game-server Workers
+tests, 33 match-service tests, 78 matchmaker tests, 27 game/browser tests, six
+analytics tests, every type/source/off-chain audit, both production builds, and
+the 594-file artifact validation. Exact-head GitHub Actions run
+[`31958527477`](https://github.com/bunnybones1/OpenSky/actions/runs/31958527477),
+job `95192834606`, passed in 10m19s before deployment.
+
+Only the main Worker and web assets were deployed. The Worker advanced from
+`f556befe-16e3-4203-9e81-b4a9539de656` to
+`1008b940-8fb7-4350-b755-a61b813603b4` at 100% traffic. The strict verifier
+matched web entry `/assets/index-24efbdd5.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six locales, and the
+release-safe cache policy after two edge-propagation attempts. Public Ping,
+Version, and game-mode probes returned `200` with `Cache-Control: no-store`;
+Practice PvP and Practice Bot remained enabled and both Conquest modes remained
+disabled. Signed-in browser checks on Home and Practice found neither the empty
+`LIVE CHANNELS` shell nor the legacy creator-program URL. No migration, D1
+mutation command, multiplayer Worker, binding, or game asset was deployed by
+this rollout.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

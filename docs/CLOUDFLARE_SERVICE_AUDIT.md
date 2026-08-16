@@ -48,6 +48,11 @@ product description or Cloudflare runtime.
 - External device push has a disabled-by-default OneSignal adapter. Activation
   needs a Cloud Weasel OneSignal app and key; in-app notification delivery stays
   authoritative and independent of the provider.
+- Twitch discovery is optional and fail closed. Without Cloud Weasel Twitch
+  client credentials the original Home/Play live-channel component renders
+  nothing, performs no query retry, and exposes no legacy creator-program call
+  to action. Activation also requires an explicitly configured HTTPS Cloud
+  Weasel creator-program URL if that call to action is desired.
 - WalletConnect ownership reads, active Conquest/leaderboard schedules, and
   marketplace behavior require explicit product configuration or decisions;
   they are not missing server processes.

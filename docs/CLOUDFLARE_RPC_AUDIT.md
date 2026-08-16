@@ -2433,7 +2433,10 @@ Twitch uses standard app client credentials directly instead of the source's
 private Skyweaver token proxy. Both return a clear `503` until Cloud Weasel's
 own server/app identifiers and Twitch secret are configured. The preserved
 live-channel component now consumes the ported Twitch RPC again and remains
-hidden while that optional integration is unavailable.
+hidden while that optional integration is unavailable. It does not retry the
+known unavailable provider, render empty stream placeholders, or expose the
+legacy Skyweaver creator-program URL; a replacement call to action requires an
+explicit HTTPS Cloud Weasel URL.
 
 ## Recommended order
 
