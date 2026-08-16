@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import { openExistingCache } from '../webapp/src/AppLayout/Widgets/GameCacheWidget/utils/openExistingCache.ts'
+import { reportCachePrune } from '../webapp/src/AppLayout/Widgets/GameCacheWidget/utils/reportCachePrune.ts'
 
 test('treats a missing optional browser cache as a normal no-op', async () => {
   let openCalls = 0
@@ -45,6 +46,24 @@ test('opens an existing browser cache for the preserved pruning pass', async () 
   assert.deepEqual(calls, ['has:game-resources', 'open:game-resources'])
 })
 
+test('does not warn when an existing cache has nothing to prune', () => {
+  const warnings = []
+
+  reportCachePrune(0, 'game-resources assets', message =>
+    warnings.push(message)
+  )
+
+  assert.deepEqual(warnings, [])
+})
+
+test('preserves the warning when stale cache entries are pruned', () => {
+  const warnings = []
+
+  reportCachePrune(2, 'asset manifests', message => warnings.push(message))
+
+  assert.deepEqual(warnings, ['Found 2 asset manifests to prune.'])
+})
+
 test('both pruning paths use the tested existing-cache boundary', async () => {
   const source = await readFile(
     'webapp/src/AppLayout/Widgets/GameCacheWidget/utils/pruneOutdatedFromCache.ts',
@@ -55,6 +74,8 @@ test('both pruning paths use the tested existing-cache boundary', async () => {
     source.match(/openExistingCache\(window\.caches, cacheName\)/g)?.length,
     2
   )
+  assert.equal(source.match(/reportCachePrune\(numPruned,/g)?.length, 2)
   assert.doesNotMatch(source, /No cache named/)
   assert.doesNotMatch(source, /window\.caches\.open\(cacheName\)/)
+  assert.doesNotMatch(source, /console\.warn\(`Found \$\{numPruned\}/)
 })
