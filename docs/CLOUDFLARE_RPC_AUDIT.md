@@ -2215,6 +2215,57 @@ Conquest as `dormant-policy` with zero verified active pools; the rollout
 created no account, ticket spend, reward, queue, capability, or economy
 authority.
 
+## Weekly Gold reward wire fidelity rollout — 2026-08-15
+
+The generated Go `WeeklyGolds` response has exactly four required, non-pointer
+fields: `startAt`, `endAt`, `tokenId`, and `totalSupply`. The source
+`ConquestRewards` handler returns the current inclusive reward pool, converts
+each pool card to the full Gold token-ID namespace, and reads its global Gold
+supply. An empty query remains an empty `weeklyGolds` list. The Worker already
+returned the same visible values, but it relied on an inline object and a
+duplicated token-ID offset, leaving future D1 pool metadata or adapter drift
+able to change the public response silently.
+
+Runtime commit `a7c0fe6519fe33a90691fdd0a8b6f14595bf6bb2` makes that
+boundary explicit. Every reward is reprojected through the exact four-field
+wire so private pool metadata is stripped. Full Gold IDs come from the shared
+source adapter, and `totalSupply` is the Cloud Weasel off-chain analog of the
+source supply row: the sum of canonical positive D1 player Gold balances for
+the approved active pool card. The source-derived gate mechanically pins the
+generated fields and pointer behavior, generated RPC wrapper, source pool and
+supply logic, source/shared token-ID encoders, Worker repository query, and API
+boundary. Mutation tests fail on omission, source or adapter drift, inline-ID
+bypass, metadata projection drift, and route bypass. Focused unit and RPC tests
+also pin metadata stripping, empty-list behavior, and a populated reward.
+
+The complete local release contract passed 494 main-Worker tests across 83
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31924397967`, job `95109555671`, passed
+in 9m56s before deployment.
+
+Only the main Worker was deployed, advancing it from
+`45c7f1c2-2ca6-4c0c-817a-0791005ded64` to
+`b0a64805-845b-48ef-b0e0-00a69cb59f64`; no migration or configuration change
+was made and Cloudflare uploaded no changed asset files. The strict verifier
+matched web entry `/assets/index-b1769b84.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Production `Version`, `Ping`,
+`GetGameModesStatus`, and `ConquestRewards` returned `200` with
+`Cache-Control: no-store`; the version response named the new Worker, both
+Practice modes stayed enabled, both Conquest modes stayed disabled, and
+`weeklyGolds` stayed empty because no pool is active.
+
+Matching read-only D1 aggregates before and after deployment retained three
+users, 94 inventory rows, and zero Conquest runs, settlements, Gold deliveries,
+settlement grants, Gold grants, Silver exchanges, or active reward pools. Both
+queries reported zero rows written and `changed_db: false`. The production
+readiness audit retained original Conquest, leaderboard, Conquest V2, and
+referral rewards as dormant while the independently approved SkyPass policy
+remained active. This rollout created no reward pool, account, inventory row,
+receipt, queue, capability, or economy authority.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and

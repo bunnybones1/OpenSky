@@ -570,6 +570,20 @@ and progress are not migrated.
   stayed enabled, Conquest stayed disabled, and rewards stayed empty. Matching
   pre/post D1 aggregates retained three users, 94 inventory rows, and zero
   Conquest/reward-policy rows with zero writes and `changed_db: false`.
+- `ConquestRewards` now projects each `WeeklyGolds` result through the exact
+  four-field generated Go wire: required `startAt`, `endAt`, `tokenId`, and
+  `totalSupply`, with no private reward-pool metadata. Gold token IDs use the
+  shared source adapter, while the off-chain supply analog sums canonical D1
+  player Gold balances for the approved active pool. Runtime milestone
+  `a7c0fe65` adds source-mutation and Worker/RPC coverage for the complete
+  boundary. Exact-head run `31924397967` passed in 9m56s before main Worker
+  `b0a64805-845b-48ef-b0e0-00a69cb59f64` deployed with unchanged web asset
+  `/assets/index-b1769b84.js` and game asset
+  `/game/cloudflare/assets/index-7e9c419b.js`. Public Version, Ping, game-mode,
+  and Conquest-reward probes all returned `200` with `no-store`; Practice
+  stayed enabled, Conquest stayed disabled, and rewards stayed empty. Matching
+  pre/post D1 aggregates retained three users, 94 inventory rows, and zero
+  Conquest/reward-policy rows with zero writes and `changed_db: false`.
 - Player match history preserves the source completed-mode filter, default
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes
