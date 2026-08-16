@@ -1401,15 +1401,64 @@ traffic allocation, so no Cloudflare deployment was performed. Both original
 Conquest queues remain disabled and no pool or synthetic rollout evidence was
 created.
 
+## Authoritative Conquest drill-match foundation — 2026-08-16
+
+Runtime milestones `d62f1788dbeb84899135d466939399156d474171`,
+`acd163852759bac3a24581ae4c71314a19054f31`, and
+`88daa72aa6d9f4f92691c95cd6c6228546c4f249` make rollout readiness depend on
+real completed match ledgers. Migration `0111` now requires exactly three
+completed `multiplayer_matches`, corresponding immutable Conquest-progression
+receipts, the expected target and three distinct system opponents, and exact
+win/result/timestamp agreement. Hand-written terminal run JSON, forfeits,
+abandonment, non-Conquest matches, and mismatched receipts cannot qualify.
+
+The game-server Worker now supports two server-controlled participants only
+for proposal IDs beginning `readiness-drill-match-` and only when both players
+use `CONQUEST_CONSTRUCTED`. It verifies each bot private key against the
+approved participant subkey and identity, persists both approval diffs in the
+normal replay record, maintains per-player hibernation state, and drives both
+participants through the real commit/reveal and action runtime. Ordinary
+bot-only dispatch remains rejected by both the game server and match service.
+No public queue, player RPC, or general match payload can invoke this path.
+
+The complete local release contract passed 495 main-Worker tests across 83
+files, 34 game-server unit tests, 95 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every source/off-chain audit, all service/browser typechecks, and both
+production builds. The first CI attempt correctly failed because an independent
+match-service fixture still fabricated drill state. After that fixture was
+converted to three authoritative match/progression ledgers, exact-head GitHub
+Actions run
+[`31940146546`](https://github.com/bunnybones1/OpenSky/actions/runs/31940146546)
+passed in 10m06s for runtime commit `88daa72a`.
+
+Migration `0111` was applied to the pinned production D1 database and reported
+no remaining migrations. Only the game-server Worker was deployed, advancing
+it from `f1bdf07f-4b35-4aff-9e78-501e58dac669` to
+`86f87caf-b597-4550-830a-baa6a213f831`. Protocol-v3 health returned `200` with
+`Cache-Control: no-store`. The strict deployment verifier retained web entry
+`/assets/index-ca9c688d.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt.
+
+The public mode probe kept both Practice modes enabled and both Conquest modes
+disabled. A read-only D1 aggregate found three users and zero readiness drill
+matches, Conquest runs, settlements, Gold deliveries, reward pools, approved
+pools, queue-readiness rows, verified drill receipts, verified queue pools,
+approved queue pools, or enabled Conquest modes. It wrote zero rows and reported
+`changed_db: false`. Reward readiness remained error-free: the reviewed
+SkyPass policy is active and all four unapproved reward tracks remain dormant.
+No synthetic player, match, reward, pool, capability, or queue authority was
+created by this rollout.
+
 ## Suggested next slice
 
-Define, independently review, and activate a versioned Conquest reward pool,
-then run the source-derived
-enablement drill in
-[`CONQUEST_SETTLEMENT_PORT.md`](./CONQUEST_SETTLEMENT_PORT.md) before enabling
-either queue. Selection, settlement, pending-card reads, and delayed delivery
-are deployed, so this is now a product-configuration and rollout gate rather
-than an unported code path.
+Add a dormant, separately authorized orchestrator that provisions and advances
+one readiness match at a time through the guarded game-server path. It must
+fail closed on any loss or inconsistent ledger and leave the final readiness
+verification to an independent actor. Only after that orchestration is tested
+should a versioned pool be independently proposed, activated, exercised through
+the full 24-hour delivery drill, and considered for public queue enablement.
 WalletConnect ownership is now independently available in account settings:
 connect a wallet, sign a session-owned nonce, persist the verified address, and
 read external wallet contents without granting the wallet authority over the

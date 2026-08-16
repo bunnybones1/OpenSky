@@ -745,3 +745,34 @@ receipts, active pools, approved active pools, or readiness rows. Both queries
 reported zero rows written and `changed_db: false`. No synthetic match, reward,
 receipt, inventory row, pool, queue, capability, or economy authority was
 created for rollout evidence.
+
+## Authoritative drill-match foundation — 2026-08-16
+
+Runtime commits `d62f1788`, `acd16385`, and `88daa72a` replace readiness based
+only on mutable run JSON with evidence from three completed authoritative match
+ledgers and their immutable Conquest-progression receipts. Each required match
+uses a reserved readiness proposal ID, the target system drill user, a distinct
+system opponent, exact completed/winner/result agreement, and timestamps inside
+the run. Abandoned, forfeited, mismatched, duplicated, or fabricated terminal
+state cannot satisfy the views created by migration `0111`.
+
+The game server can now run both sides without player sockets, but only for the
+reserved readiness prefix and two `CONQUEST_CONSTRUCTED` bot participants. Both
+private keys must derive their approved subkeys and map back to the declared
+players. Tests prove both bots approve and take real actions through the normal
+runtime; ordinary bot-only matches and non-Conquest variants remain rejected.
+The match service still cannot dispatch a general bot-only match.
+
+The full release contract passed locally, including 495 main-Worker tests, 34
+game-server unit tests, 95 game-server Workers tests, and 31 match-service
+tests. Exact-head CI run `31940146546` passed at `88daa72a`. Production D1 now
+contains migration `0111`, and only the game-server Worker was advanced to
+version `86f87caf-b597-4550-830a-baa6a213f831`. Its protocol-v3 health probe,
+the strict asset/cache verifier, and the reward-readiness audit all passed.
+
+Production remains deliberately dormant: both Conquest mode flags are false,
+and read-only D1 evidence found zero drill matches, runs, settlements,
+deliveries, pools, readiness rows, verified receipts, or approved queue pools,
+with zero writes and `changed_db: false`. The next implementation milestone is
+a separately authorized, idempotent, sequential orchestrator; neither the new
+view nor the game primitive creates rollout authority by itself.
