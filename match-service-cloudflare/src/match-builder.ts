@@ -93,7 +93,8 @@ const humanParticipant = async (
     identity.principal,
     prisms,
     currentSeason,
-    request.mode
+    request.mode,
+    'PLAYER'
   )
   const cards = normalizeCards(seed.cards, profile.unlockedCards, request.mode)
   if (
@@ -119,8 +120,7 @@ const humanParticipant = async (
     // inventory it loaded from the API. Keep this a plain object so it survives
     // the JSON service hop into the game Durable Object.
     cardRarities: Object.fromEntries(
-      [...profile.unlockedCards]
-        .map(([card, rarity]) => [String(card), rarity])
+      [...profile.unlockedCards].map(([card, rarity]) => [String(card), rarity])
     ) as never
   }
   return {

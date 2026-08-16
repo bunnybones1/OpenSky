@@ -20,6 +20,7 @@ import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
 import { ConquestDrillRepository } from '../../cloudflare/src/conquest-drill'
 import { ConquestReadinessOperationsRepository } from '../../cloudflare/src/conquest-readiness-operations'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
+import { PlayerRepository } from '../../cloudflare/src/player'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const SECOND_USER_ID = '22222222-2222-4222-8222-222222222222'
@@ -33,6 +34,7 @@ const STARTER_CARD_IDS = [
   151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
 ]
 const READINESS_USER_ID = 'system:conquest-readiness-drill:match-service-test'
+const SYSTEM_ADMISSION_USER_ID = 'system:match-service-public-admission'
 let readinessPoolVersion = 'match-service-readiness-test-v1'
 
 const privateSeed = (cards: number[] = STARTER_CARD_IDS) => ({
@@ -410,7 +412,9 @@ const provisionReceiptBackedConquestReadiness = async () => {
       READINESS_USER_ID,
       READINESS_USER_ID,
       JSON.stringify(
-        Object.fromEntries(matchRows.results.map(row => [String(row.id), 'WIN']))
+        Object.fromEntries(
+          matchRows.results.map(row => [String(row.id), 'WIN'])
+        )
       ),
       runCreatedAt,
       settledAt,
@@ -1022,7 +1026,8 @@ describe('Cloud Weasel accepted-match service', () => {
       principal,
       ['str'],
       126,
-      GameMode.CONQUEST_CONSTRUCTED
+      GameMode.CONQUEST_CONSTRUCTED,
+      'PLAYER'
     )
     expect(accepted.conquestInfo).toMatchObject({
       mode: GameMode.CONQUEST_CONSTRUCTED,
@@ -1034,7 +1039,8 @@ describe('Cloud Weasel accepted-match service', () => {
         principal,
         ['hrt'],
         126,
-        GameMode.CONQUEST_CONSTRUCTED
+        GameMode.CONQUEST_CONSTRUCTED,
+        'PLAYER'
       )
     ).rejects.toMatchObject({
       reason: 'CONQUEST_DECK_CLASS_MISMATCH'
@@ -1045,6 +1051,118 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(await forged.json()).toEqual({
       error: 'identity principal mismatch'
     })
+  })
+
+  it('partitions public match admission from operational system accounts', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, user_kind, created_at, updated_at)
+       VALUES (?, 'System Admission', 'system-admission@example.com',
+               'SYSTEM', ?, ?)`
+    )
+      .bind(SYSTEM_ADMISSION_USER_ID, now, now)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(SYSTEM_ADMISSION_USER_ID)
+    const systemPrincipal = await deriveGamePrincipal(SYSTEM_ADMISSION_USER_ID)
+
+    const systemProfile = await profile(
+      GameMode.PRACTICE_BOT,
+      systemPrincipal,
+      SYSTEM_ADMISSION_USER_ID
+    )
+    expect(systemProfile.status).toBe(404)
+    expect(await systemProfile.json()).toEqual({
+      error: 'player was not found'
+    })
+
+    const systemDispatch = dispatch()
+    systemDispatch.proposalId = 'proposal-system-public-admission'
+    systemDispatch.participants[0].player.address = systemPrincipal
+    systemDispatch.participants[0].identity!.principal = systemPrincipal
+    systemDispatch.participants[0].identity!.userId = SYSTEM_ADMISSION_USER_ID
+    const rejected = await create(systemDispatch)
+    expect(rejected.status).toBe(403)
+    expect(await rejected.json()).toEqual({
+      error: 'player account is unavailable'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT 1 FROM multiplayer_matches WHERE proposal_id = ?'
+      )
+        .bind(systemDispatch.proposalId)
+        .first()
+    ).toBeNull()
+
+    const repository = new MatchRepository(env.AUTH_DB)
+    await expect(
+      repository.humanAccount(
+        SYSTEM_ADMISSION_USER_ID,
+        systemPrincipal,
+        ['str'],
+        126,
+        GameMode.PRACTICE_BOT,
+        'PLAYER'
+      )
+    ).rejects.toMatchObject({ reason: 'INVALID_ACCOUNT' })
+
+    const insertMatch = (
+      proposalId: string,
+      replayId: string,
+      player1UserId: string | null,
+      player2UserId: string | null
+    ) =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at, dispatch_fingerprint)
+         VALUES (?, ?, 'PRACTICE_BOT', 'PRACTICE_BOT', 'PRACTICE_BOT',
+                 'test-release', ?, ?, ?, ?, '', 'creating', ?, ?, ?)`
+      ).bind(
+        proposalId,
+        replayId,
+        PRINCIPAL,
+        BOT_PLACEHOLDER,
+        player1UserId,
+        player2UserId,
+        now,
+        now,
+        null
+      )
+
+    await expect(
+      insertMatch(
+        'ordinary-system-allocation',
+        'ordinary-system-replay',
+        SYSTEM_ADMISSION_USER_ID,
+        null
+      ).run()
+    ).rejects.toThrow('match participant class does not match allocation path')
+    await expect(
+      insertMatch(
+        'readiness-drill-match-player-allocation',
+        'readiness-player-replay',
+        USER_ID,
+        SYSTEM_ADMISSION_USER_ID
+      ).run()
+    ).rejects.toThrow('match participant class does not match allocation path')
+
+    await insertMatch(
+      'ordinary-player-allocation',
+      'ordinary-player-replay',
+      USER_ID,
+      null
+    ).run()
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches SET player1_user_id = ?
+         WHERE proposal_id = 'ordinary-player-allocation'`
+      )
+        .bind(SYSTEM_ADMISSION_USER_ID)
+        .run()
+    ).rejects.toThrow('match participant identity is immutable')
   })
 
   it('enforces ranked experience on the server while leaving practice open', async () => {

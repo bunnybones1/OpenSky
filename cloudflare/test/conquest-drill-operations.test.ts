@@ -502,19 +502,35 @@ describe('dormant Conquest readiness drill operations', () => {
     const version = await approvedPool()
     const key = crypto.randomUUID()
     const now = new Date().toISOString()
+    const targetUserId = `system:conquest-readiness-drill:${key}`
+    const opponentUserId = `system:conquest-readiness-opponent:${key}:1`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, user_kind, created_at, updated_at)
+         VALUES (?, 'Blocked Readiness Target', ?, 'SYSTEM', ?, ?)`
+      ).bind(targetUserId, `blocked-target-${key}@example.com`, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, user_kind, created_at, updated_at)
+         VALUES (?, 'Blocked Readiness Opponent', ?, 'SYSTEM', ?, ?)`
+      ).bind(opponentUserId, `blocked-opponent-${key}@example.com`, now, now)
+    ])
     await env.AUTH_DB.prepare(
       `INSERT INTO multiplayer_matches
          (proposal_id, replay_id, mode, version,
-          player1_principal, player2_principal, match_payload_json,
-          status, created_at, updated_at)
+          player1_principal, player2_principal, player1_user_id,
+          player2_user_id, match_payload_json, status, created_at, updated_at)
        VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'readiness-test',
                '0x1111111111111111111111111111111111111111',
-               '0x2222222222222222222222222222222222222222', '{}',
+               '0x2222222222222222222222222222222222222222', ?, ?, '{}',
                'failed', ?, ?)`
     )
       .bind(
         conquestDrillProposalId(key, 1),
         `blocked-readiness-replay-${key}`,
+        targetUserId,
+        opponentUserId,
         now,
         now
       )

@@ -19,6 +19,7 @@ import { ConquestRepository } from '../../cloudflare/src/conquest'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
 
 type OwnedCardRarity = 'base' | 'silver' | 'gold'
+export type UserKind = 'PLAYER' | 'SYSTEM'
 
 interface HumanProfileRow {
   account_name: string
@@ -332,6 +333,17 @@ const rarityFor = (
 export class MatchRepository {
   constructor(private readonly database: D1Database) {}
 
+  async userHasKind(userId: string, expectedUserKind: UserKind) {
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM users
+         WHERE id = ? AND user_kind = ?`
+      )
+      .bind(userId, expectedUserKind)
+      .first()
+    return row !== null
+  }
+
   async matchmakingProfile(
     userId: string,
     principal: string,
@@ -350,7 +362,7 @@ export class MatchRepository {
           .prepare(
             `SELECT profile.level, profile.xp
            FROM users JOIN player_profiles profile ON profile.user_id = users.id
-           WHERE users.id = ?`
+           WHERE users.id = ? AND users.user_kind = 'PLAYER'`
           )
           .bind(userId)
           .first<MatchmakingUserRow>(),
@@ -477,8 +489,15 @@ export class MatchRepository {
     principal: string,
     prisms: string[],
     currentSeason: number,
-    gameMode: GameMode
+    gameMode: GameMode,
+    expectedUserKind: UserKind
   ): Promise<HumanMatchAccount> {
+    if (!(await this.userHasKind(userId, expectedUserKind))) {
+      throw new MatchPreconditionError(
+        'INVALID_ACCOUNT',
+        'account class does not match the match path'
+      )
+    }
     const now = new Date().toISOString()
     const isConquest =
       gameMode === GameMode.CONQUEST_CONSTRUCTED ||

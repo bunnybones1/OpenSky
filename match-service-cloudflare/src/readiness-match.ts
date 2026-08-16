@@ -96,7 +96,8 @@ const participant = async (
     principal,
     ['str'],
     currentSeason,
-    GameMode.CONQUEST_CONSTRUCTED
+    GameMode.CONQUEST_CONSTRUCTED,
+    'SYSTEM'
   )
   if (!profile.conquestInfo) {
     throw new ReadinessMatchError('readiness participant has no active run')
@@ -177,7 +178,16 @@ const validatedOperation = async (
        FROM staff_conquest_drill_operations operation
        JOIN conquest_approved_active_reward_pools pool
          ON pool.version = operation.pool_version
-       WHERE operation.operation_key = ?`
+       JOIN users target
+         ON target.id = operation.target_user_id
+        AND target.user_kind = 'SYSTEM'
+       WHERE operation.operation_key = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM json_each(operation.opponent_user_ids_json) opponent
+           LEFT JOIN users account ON account.id = opponent.value
+           WHERE account.user_kind IS NOT 'SYSTEM'
+         )`
     )
     .bind(key)
     .first<DrillRow>()

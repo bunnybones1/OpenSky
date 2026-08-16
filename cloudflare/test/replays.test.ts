@@ -14,6 +14,10 @@ const REPLAY_ID = '88888888-8888-4888-8888-888888888888'
 const PROPOSAL_ID = 'replay-contract-test'
 const MATCH_ID = 900001
 const SYSTEM_USER_ID = 'system:replay-contract-test'
+const SYSTEM_OPPONENT_USER_ID = 'system:replay-contract-test:opponent'
+const SYSTEM_MATCH_ID = 900002
+const SYSTEM_REPLAY_ID = '99999999-8888-4888-8888-888888888888'
+const SYSTEM_PROPOSAL_ID = 'readiness-drill-match-replay-contract-test'
 const ADMIN_USER_ID = '99999999-9999-4999-8999-999999999999'
 
 const service = (handler: (request: Request) => Response | Promise<Response>) =>
@@ -237,6 +241,12 @@ describe('source replay archive contract', () => {
       ).bind(SYSTEM_USER_ID, now, now),
       env.AUTH_DB.prepare(
         `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES (?, 'System Replay Opponent',
+                 'system-replay-opponent@example.com', ?, ?, 'SYSTEM')`
+      ).bind(SYSTEM_OPPONENT_USER_ID, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
            (id, display_name, primary_email, created_at, updated_at)
          VALUES (?, 'Replay Admin', 'replay-admin@example.com', ?, ?)`
       ).bind(ADMIN_USER_ID, now, now),
@@ -247,12 +257,31 @@ describe('source replay archive contract', () => {
       ).bind(ADMIN_USER_ID, now)
     ])
     await env.AUTH_DB.prepare(
-      `UPDATE multiplayer_matches SET player1_user_id = ? WHERE id = ?`
+      `INSERT INTO multiplayer_matches
+         (id, proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, winner_player,
+          result_json, ended_at, created_at, updated_at)
+       SELECT ?, ?, ?, mode, version, player1_principal, player2_principal,
+              ?, ?, match_payload_json, ?, status, winner_player, result_json,
+              ended_at, created_at, updated_at
+       FROM multiplayer_matches WHERE id = ?`
     )
-      .bind(SYSTEM_USER_ID, MATCH_ID)
+      .bind(
+        SYSTEM_MATCH_ID,
+        SYSTEM_PROPOSAL_ID,
+        SYSTEM_REPLAY_ID,
+        SYSTEM_USER_ID,
+        SYSTEM_OPPONENT_USER_ID,
+        `wss://opensky.example/api/game/matches/${SYSTEM_PROPOSAL_ID}`,
+        MATCH_ID
+      )
       .run()
 
-    const anonymous = await rpc({ matchID: MATCH_ID, replayID: REPLAY_ID })
+    const anonymous = await rpc({
+      matchID: SYSTEM_MATCH_ID,
+      replayID: SYSTEM_REPLAY_ID
+    })
     expect(anonymous.status).toBe(404)
 
     const adminSession = await createIdentitySession(
@@ -261,7 +290,7 @@ describe('source replay archive contract', () => {
     )
     const cookie = `${IDENTITY_SESSION_COOKIE}=${adminSession}`
     const authorized = await rpc(
-      { matchID: MATCH_ID, replayID: REPLAY_ID },
+      { matchID: SYSTEM_MATCH_ID, replayID: SYSTEM_REPLAY_ID },
       cookie
     )
     expect(authorized.status).toBe(200)

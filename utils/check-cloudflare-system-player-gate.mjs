@@ -31,6 +31,18 @@ export const systemPlayerGateErrors = evidence => {
     'CREATE TRIGGER leaderboard_reward_cycles_snapshot_guard',
     "account.user_kind = 'PLAYER'"
   ])
+  requireTokens(
+    errors,
+    'match participant classification migration',
+    evidence.matchMigration ?? '',
+    [
+      'CREATE TRIGGER multiplayer_matches_user_kind_insert_guard',
+      "'readiness-drill-match-'",
+      "IS NOT 'SYSTEM'",
+      "IS NOT 'PLAYER'",
+      'CREATE TRIGGER multiplayer_matches_participant_identity_update_guard'
+    ]
+  )
   requireTokens(errors, 'Conquest drill provisioning', evidence.drill ?? '', [
     'system:conquest-readiness-drill:',
     'system:conquest-readiness-opponent:',
@@ -72,6 +84,35 @@ export const systemPlayerGateErrors = evidence => {
   ]) {
     requireTokens(errors, label, source, ["users.user_kind = 'PLAYER'"])
   }
+  requireTokens(
+    errors,
+    'match-service player repository',
+    evidence.matchRepository ?? '',
+    [
+      'expectedUserKind: UserKind',
+      'WHERE id = ? AND user_kind = ?',
+      "users.user_kind = 'PLAYER'"
+    ]
+  )
+  requireTokens(errors, 'ordinary match builder', evidence.matchBuilder ?? '', [
+    "'PLAYER'"
+  ])
+  requireTokens(
+    errors,
+    'readiness match builder',
+    evidence.readinessMatch ?? '',
+    [
+      "target.user_kind = 'SYSTEM'",
+      "account.user_kind IS NOT 'SYSTEM'",
+      "'SYSTEM'"
+    ]
+  )
+  requireTokens(
+    errors,
+    'ordinary match dispatch',
+    evidence.matchService ?? '',
+    ["repository.userHasKind(identity.userId, 'PLAYER')"]
+  )
   return errors
 }
 
@@ -79,6 +120,7 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     migration,
+    matchMigration,
     drill,
     player,
     playerRpc,
@@ -87,12 +129,23 @@ const main = async () => {
     staff,
     conquestV2Rewards,
     leaderboardRewards,
-    referralRewards
+    referralRewards,
+    matchRepository,
+    matchBuilder,
+    readinessMatch,
+    matchService
   ] = await Promise.all([
     readFile(
       path.join(
         root,
         'cloudflare/migrations/0113_system_player_visibility.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0114_match_participant_classification.sql'
       ),
       'utf8'
     ),
@@ -113,10 +166,24 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare/src/referral-sticker-rewards.ts'),
       'utf8'
-    )
+    ),
+    readFile(
+      path.join(root, 'match-service-cloudflare/src/repository.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'match-service-cloudflare/src/match-builder.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'match-service-cloudflare/src/readiness-match.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'match-service-cloudflare/src/worker.ts'), 'utf8')
   ])
   const errors = systemPlayerGateErrors({
     migration,
+    matchMigration,
     drill,
     player,
     playerRpc,
@@ -125,7 +192,11 @@ const main = async () => {
     staff,
     conquestV2Rewards,
     leaderboardRewards,
-    referralRewards
+    referralRewards,
+    matchRepository,
+    matchBuilder,
+    readinessMatch,
+    matchService
   })
   if (errors.length) {
     for (const error of errors)

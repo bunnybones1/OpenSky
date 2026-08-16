@@ -402,13 +402,6 @@ export default {
       }
       throw error
     }
-    if (existing?.status === 'active' && existing.server_address) {
-      return json({
-        proposalId: existing.proposal_id,
-        matchId: existing.id,
-        serverAddress: existing.server_address
-      })
-    }
     try {
       const access = new AccountActionsRepository(env.AUTH_DB)
       await Promise.all(
@@ -426,6 +419,13 @@ export default {
                 'identity principal mismatch'
               )
             }
+            if (!(await repository.userHasKind(identity.userId, 'PLAYER'))) {
+              throw new RpcError(
+                403,
+                'webrpc.permission_denied',
+                'player account is unavailable'
+              )
+            }
             await access.enforcePlayerAccess(identity.userId)
           })
       )
@@ -434,6 +434,13 @@ export default {
         return json({ error: error.message }, 403)
       }
       throw error
+    }
+    if (existing?.status === 'active' && existing.server_address) {
+      return json({
+        proposalId: existing.proposal_id,
+        matchId: existing.id,
+        serverAddress: existing.server_address
+      })
     }
 
     const enabledModes = await currentEnabledGameModes(env)

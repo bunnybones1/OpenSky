@@ -18,6 +18,13 @@ const evidence = {
     'CREATE TRIGGER leaderboard_reward_cycles_snapshot_guard',
     "account.user_kind = 'PLAYER'"
   ].join('\n'),
+  matchMigration: [
+    'CREATE TRIGGER multiplayer_matches_user_kind_insert_guard',
+    "'readiness-drill-match-'",
+    "IS NOT 'SYSTEM'",
+    "IS NOT 'PLAYER'",
+    'CREATE TRIGGER multiplayer_matches_participant_identity_update_guard'
+  ].join('\n'),
   drill: [
     'system:conquest-readiness-drill:',
     'system:conquest-readiness-opponent:',
@@ -51,7 +58,19 @@ const evidence = {
   staff: "WHERE users.user_kind = 'PLAYER'",
   conquestV2Rewards: "users.user_kind = 'PLAYER'",
   leaderboardRewards: "users.user_kind = 'PLAYER'",
-  referralRewards: "users.user_kind = 'PLAYER'"
+  referralRewards: "users.user_kind = 'PLAYER'",
+  matchRepository: [
+    'expectedUserKind: UserKind',
+    'WHERE id = ? AND user_kind = ?',
+    "users.user_kind = 'PLAYER'"
+  ].join('\n'),
+  matchBuilder: "'PLAYER'",
+  readinessMatch: [
+    "target.user_kind = 'SYSTEM'",
+    "account.user_kind IS NOT 'SYSTEM'",
+    "'SYSTEM'"
+  ].join('\n'),
+  matchService: "repository.userHasKind(identity.userId, 'PLAYER')"
 }
 
 test('accepts the complete operational system-player isolation boundary', () => {
