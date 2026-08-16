@@ -9,6 +9,8 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
+- Last code/test checkpoint: `9237cbd23a4beffdbcb712f7d06035c04193c672`
+  (`Dead-letter failed analytics messages`)
 - Latest tested runtime commit: `38386294` (`Gate reward timing on active schedules`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
 - Last known deployed main Worker version:
@@ -19,13 +21,16 @@ provisioning, product activation, or live drills without a new user request.
 - The runtime checkpoint in `38386294` is committed and tested but is **not
   deployed**. Its local web build produced `/assets/index-fd3d9163.js`; the
   game entry remained `/game/cloudflare/assets/index-7e9c419b.js`.
+- Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
+  and correct Queue dead-letter behavior. They do not enable a producer or
+  change player-facing runtime behavior, and they are not deployed.
 - The untracked `temp/` directory is user-owned and must remain untouched.
 
 The reported Practice PvP replay enum failure was fixed earlier and is already
 deployed. Commits `24e9c8e4` and `b0271620` normalize legacy enum shapes and
 verify the exact reported replay from both player perspectives.
 
-## Last completed milestone
+## Last completed runtime milestone
 
 Commit `38386294` makes reward visibility follow the same independently
 approved D1 schedule used by the leaderboard distribution worker:
@@ -40,7 +45,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed immediately before the pause:
+Validation completed for exact head `9237cbd2` before stopping:
 
 - focused Worker regression: 54/54 tests;
 - main Worker suite: 508/508 tests across 84 files;
@@ -48,7 +53,7 @@ Validation completed immediately before the pause:
 - game server: 34 unit and 98 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
-- analytics: four unit and two Workers tests;
+- analytics: four unit and five Workers tests;
 - all TypeScript, source-parity, off-chain, release, cache, deployment, and
   production-target gates;
 - complete webapp and game production builds.
@@ -62,6 +67,29 @@ pnpm build:cloudflare
 It passed. Existing Vite chunk-size and legacy lint warnings remained warnings;
 there were no build errors.
 
+GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/31966818671> also passed
+the complete release contract for the exact 40-character head above in 9m19s.
+
+## Storage safety milestone
+
+Commit `50605dd0` pins the only reviewed production storage topology:
+
+- analytics may bind exactly one private `cloud-weasel-game-analytics` bucket
+  and exactly one bounded consumer on the queue of the same name;
+- the consumer retains 25 retries, the reviewed dead-letter queue, batch size
+  one, bounded concurrency, and no producer role;
+- the game server may have analytics completely disabled or the reviewed R2
+  and Queue producer pair together, never a partial or extra binding;
+- the main Worker may omit feedback or bind only the separate reviewed private
+  feedback bucket.
+
+Commit `9237cbd2` fixes the consumer's terminal failure path. Malformed jobs and
+jobs whose D1 receipt reaches 25 failed attempts are retried so Cloudflare can
+move them to the configured dead-letter queue; only completed receipts are
+acknowledged. Direct Workers tests cover malformed, terminal-failed, completed,
+and successful replay messages.
+
 ## R2 status at the pause
 
 R2 enablement was independently verified with an account-pinned, read-only
@@ -72,17 +100,19 @@ zero producers and zero consumers, and the analytics Worker still did not
 exist (`10007`). No Cloudflare resource was created, changed, or deployed
 after the pause request.
 
+The empty bucket list was reconfirmed after exact-head CI passed. Provisioning
+then stopped at the pause boundary: `cloud-weasel-game-analytics` was not
+created, no lifecycle or public-access setting exists, and no deploy command
+was run.
+
 R2 enablement removes an account-level blocker, but it does not by itself
 create buckets, lifecycle policies, Worker bindings, queue producers, or a
 healthy consumer. Do not enable the game-server producer first.
 
-The existing analytics Worker configuration also passed a Wrangler deployment
-dry run and its TypeScript check. Its four isolated unit tests passed. The
-Workers-runtime test process could not open its local loopback listener inside
-the filesystem/network sandbox (`listen EPERM 127.0.0.1`), so that process was
-stopped for the pause; the complete analytics suite had already passed in the
-full release-contract run documented above. Rerun the focused Workers test in
-an unrestricted local test environment before provisioning.
+The existing analytics Worker configuration passed its TypeScript check, four
+isolated unit tests, five Workers-runtime tests, the production-target gate,
+the complete local release contract, and exact-head CI. No further code or test
+repair is known before provisioning.
 
 ## Safe resume order for R2 and analytics
 
@@ -90,8 +120,9 @@ an unrestricted local test environment before provisioning.
 2. Perform read-only, account-pinned checks for R2 buckets, Queue producer and
    consumer counts, Worker inventory, D1 migration status, and existing R2
    lifecycle rules. Do not infer that dashboard enablement created resources.
-3. Agree on retention/lifecycle policy for private client feedback, replay
-   archives, dead letters, and generated analytics CSVs before creating data.
+3. Preserve the source analytics retention behavior unless an explicit product
+   retention policy is approved; do not invent successful-object expiry. Decide
+   the separate private client-feedback retention policy before storing feedback.
 4. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 5. Create a separate private client-feedback bucket and add the reviewed
@@ -137,6 +168,14 @@ production migration state.
 - Deploy and verify runtime commit `38386294`; it affects only the main API and
   original webapp. Keep leaderboard rewards hidden until a real approved
   schedule exists.
+- Provision and verify the private analytics consumer in the safe order above;
+  R2 is enabled, but the bucket and Worker do not yet exist.
+- Only after the consumer is healthy, enable and deploy the game-server
+  producer, then complete one bounded production Practice match and verify the
+  manifest, queue receipt, three CSV outputs, replay, and rewards.
+- Provision the separate private client-feedback bucket and main Worker binding
+  only as a later milestone, with authenticated JSON/JPEG and account-deletion
+  cleanup tests.
 - Refresh deployment evidence and the draft PR only after exact-head CI and
   production verification succeed.
 - Run longer production Practice PvP/bot reconnect, replay, settlement, and
@@ -178,8 +217,9 @@ At the pause audit:
 - all 108 browser RPC calls had a Worker implementation or reviewed identity
   disposition, with direct tests for all 103 Worker-backed calls;
 - every original deployable service had a reviewed Cloudflare disposition;
-- `game-analytics` was the only ported service not yet deployed, due to the R2
-  blocker that the user now reports has been removed;
+- `game-analytics` is the only ported service not yet deployed; its former R2
+  account blocker is removed, but provisioning is intentionally paused before
+  bucket creation;
 - Conquest was implemented but intentionally gated, not an unported service.
 
 The main remaining work is controlled production provisioning, activation,
