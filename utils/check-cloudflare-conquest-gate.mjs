@@ -581,6 +581,17 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'runDurableObjectAlarm(stub)',
       'botActionCounts',
       "status: 'active'",
+      "statusType: 'GameOver'",
+      "winner === undefined ? 'DRAW'",
+      "expect(result).not.toHaveProperty('winner')",
+      'JOIN multiplayer_match_conquest_progress progress',
+      'multiplayer_match_conquest_point_players',
+      'point_receipts: 1',
+      'point_player_receipts: 2',
+      'card_settlements: 0',
+      'terminal match must not be dispatched twice',
+      'advanced: 1',
+      'failed: 1',
       'readiness: 0, enabled_modes: 0'
     ]) {
       if (!evidence.crossServiceReadiness.includes(token)) {

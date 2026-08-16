@@ -27,9 +27,15 @@ interface InternalStatus {
   timers: {
     botAtMs?: number
     commitRevealAtMs?: number
+    turnAtMs?: number
     botActionCounts?: [number, number]
   }
-  state: { hasState: boolean }
+  state: {
+    hasState: boolean
+    statusType?: string
+    winner?: 0 | 1
+    turnCount?: number
+  }
 }
 
 const status = async (proposalId: string) => {
@@ -74,7 +80,7 @@ beforeEach(async () => {
 })
 
 describe('Conquest readiness cross-service boundary', () => {
-  it('dispatches the real orchestrator through match service into an authoritative dual-bot Durable Object', async () => {
+  it('runs the real orchestrator through an authoritative dual-bot terminal result', async () => {
     const now = Date.now()
     const poolVersion = `readiness-cross-service-${crypto.randomUUID()}`
     await env.AUTH_DB.batch(
@@ -204,7 +210,126 @@ describe('Conquest readiness cross-service boundary', () => {
     expect(
       current.timers.botActionCounts?.reduce((sum, value) => sum + value)
     ).toBeGreaterThan(0)
-    expect(current.ended).toBe(false)
+
+    for (let attempt = 0; attempt < 400 && !current.ended; attempt += 1) {
+      await runInDurableObject(
+        stub as DurableObjectStub,
+        async (_instance, state) => {
+          const timers =
+            (await state.storage.get<Record<string, unknown>>(
+              'match:timers'
+            )) ?? {}
+          const dueTimer =
+            typeof timers.botAtMs === 'number'
+              ? 'botAtMs'
+              : typeof timers.turnAtMs === 'number'
+                ? 'turnAtMs'
+                : typeof timers.commitRevealAtMs === 'number'
+                  ? 'commitRevealAtMs'
+                  : undefined
+          if (!dueTimer) {
+            throw new Error(
+              `real readiness match has no due timer: ${JSON.stringify({
+                current,
+                timers
+              })}`
+            )
+          }
+          await state.storage.put('match:timers', {
+            ...timers,
+            [dueTimer]: Date.now() - 1
+          })
+          await state.storage.setAlarm(Date.now() + 60_000)
+        }
+      )
+      expect(await runDurableObjectAlarm(stub)).toBe(true)
+      current = await status(proposalId)
+    }
+    expect(current).toMatchObject({
+      ended: true,
+      state: {
+        hasState: true,
+        statusType: 'GameOver',
+        turnCount: expect.any(Number)
+      }
+    })
+    const winner = current.state.winner
+    expect([undefined, 0, 1]).toContain(winner)
+
+    const terminal = await env.AUTH_DB.prepare(
+      `SELECT match.status, match.winner_player, match.result_json,
+              progress.player1_result, progress.player2_result
+       FROM multiplayer_matches match
+       JOIN multiplayer_match_conquest_progress progress
+         ON progress.proposal_id = match.proposal_id
+       WHERE match.proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{
+        status: string
+        winner_player: number | null
+        result_json: string
+        player1_result: string
+        player2_result: string
+      }>()
+    expect(terminal).not.toBeNull()
+    expect(terminal).toMatchObject({
+      status: 'ended',
+      winner_player: winner ?? null,
+      player1_result:
+        winner === undefined ? 'DRAW' : winner === 0 ? 'WIN' : 'LOSS',
+      player2_result:
+        winner === undefined ? 'DRAW' : winner === 1 ? 'WIN' : 'LOSS'
+    })
+    const result = JSON.parse(terminal!.result_json)
+    expect(result).toMatchObject({
+      status: 'COMPLETED',
+      turnCount: current.state.turnCount,
+      rewards: [expect.any(Array), expect.any(Array)]
+    })
+    if (winner === undefined) expect(result).not.toHaveProperty('winner')
+    else expect(result.winner).toBe(winner)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM multiplayer_match_conquest_points
+            WHERE proposal_id = ?) point_receipts,
+           (SELECT COUNT(*) FROM multiplayer_match_conquest_point_players
+            WHERE proposal_id = ?) point_player_receipts,
+           (SELECT COUNT(*) FROM player_conquest_settlements) card_settlements`
+      )
+        .bind(proposalId, proposalId)
+        .first()
+    ).toEqual({
+      point_receipts: 1,
+      point_player_receipts: 2,
+      card_settlements: 0
+    })
+
+    const terminalSummary = await repository.run(
+      async () => {
+        throw new Error('terminal match must not be dispatched twice')
+      },
+      new Date(now + 2_000),
+      operationKey
+    )
+    expect(terminalSummary).toEqual(
+      winner === 0
+        ? {
+            dispatched: 0,
+            advanced: 1,
+            completed: 0,
+            failed: 0,
+            waiting: 0
+          }
+        : {
+            dispatched: 0,
+            advanced: 0,
+            completed: 0,
+            failed: 1,
+            waiting: 0
+          }
+    )
 
     expect(
       await env.AUTH_DB.prepare(
@@ -219,5 +344,5 @@ describe('Conquest readiness cross-service boundary', () => {
         .bind(poolVersion)
         .first()
     ).toEqual({ readiness: 0, enabled_modes: 0 })
-  })
+  }, 60_000)
 })

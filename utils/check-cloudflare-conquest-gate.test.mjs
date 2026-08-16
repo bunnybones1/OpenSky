@@ -166,6 +166,17 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'runDurableObjectAlarm(stub)',
       'botActionCounts',
       "status: 'active'",
+      "statusType: 'GameOver'",
+      "winner === undefined ? 'DRAW'",
+      "expect(result).not.toHaveProperty('winner')",
+      'JOIN multiplayer_match_conquest_progress progress',
+      'multiplayer_match_conquest_point_players',
+      'point_receipts: 1',
+      'point_player_receipts: 2',
+      'card_settlements: 0',
+      'terminal match must not be dispatched twice',
+      'advanced: 1',
+      'failed: 1',
       'readiness: 0, enabled_modes: 0'
     ].join('\n'),
     scheduler: 'runConquestReadinessDrills(env)',
@@ -321,6 +332,33 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     ].join('\n')
   }
   assert.deepEqual(conquestGateErrors({}, evidence), [])
+  for (const token of [
+    "statusType: 'GameOver'",
+    "winner === undefined ? 'DRAW'",
+    "expect(result).not.toHaveProperty('winner')",
+    'JOIN multiplayer_match_conquest_progress progress',
+    'multiplayer_match_conquest_point_players',
+    'point_receipts: 1',
+    'point_player_receipts: 2',
+    'card_settlements: 0',
+    'terminal match must not be dispatched twice',
+    'advanced: 1',
+    'failed: 1'
+  ]) {
+    assert.ok(
+      conquestGateErrors(
+        {},
+        {
+          ...evidence,
+          crossServiceReadiness: evidence.crossServiceReadiness.replace(
+            token,
+            ''
+          )
+        }
+      ).length > 0,
+      `${token} removal must fail the release gate`
+    )
+  }
   for (const source of [
     'matchService',
     'migration',
