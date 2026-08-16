@@ -1277,6 +1277,48 @@ SkyPass policy active and all four unapproved reward tracks dormant. A fresh
 signed-in `/home?verify=68587862` navigation loaded Items, Ranks, Market, and
 Play and produced no new browser warnings or errors after eight seconds.
 
+## Home dormant Conquest claim rollout — 2026-08-16
+
+Runtime milestone `e76f36173f4dde383b1ad54ac21abce9928439e5`
+keeps the original Home-page Conquest tile, layout, and artwork while making
+its reward claim follow the authoritative `ConquestRewards.weeklyGolds`
+response. An active pool retains the original translated headline. With no
+active pool, Home now uses the existing translated inactive-state copy instead
+of promising that players can earn Hexbound Silver cards in Conquest
+treasures.
+
+The locale gate now covers this Home boundary in addition to the Conquest page
+and fails if the authoritative query, active-pool condition, or inactive
+fallback is removed. All 12 focused locale tests passed. The complete local
+release contract passed 495 main-Worker tests, 34 game-server unit tests, 94
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 27
+game/browser tests, six analytics tests, every source/off-chain audit, all
+service and browser typechecks, and both production builds. Exact-head GitHub
+Actions run `31933641367`, job `95132134754`, passed in 10m09s before
+deployment.
+
+Only the main API/web Worker and static assets were deployed, advancing it
+from `34e0bc6c-eb0a-40b9-869e-97dd3c1b024a` to
+`62c0d995-3f5f-4c42-8319-a13c3e014181`. The strict verifier matched web entry
+`/assets/index-9c268c23.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public Ping, Version,
+game-mode, Conquest-reward, and protocol-v3 game-health probes returned `200`
+with `Cache-Control: no-store`; both Practice modes remained enabled, both
+Conquest modes remained disabled, and `weeklyGolds` remained empty.
+
+The post-deploy read-only D1 aggregate retained three users, 185 combined
+identity inventory and compatibility-unlock rows, zero Conquest runs, one
+zero-balance Conquest-points row, and zero settlements, Silver grants, Gold
+deliveries, Gold grants, reward pools, approved active pools, or readiness
+rows. It reported zero rows written and `changed_db: false`, and production had
+no pending migrations. Reward readiness remained error-free with the reviewed
+SkyPass policy active and all four unapproved reward tracks dormant. A fresh
+signed-in `/home?verify=e76f3617` navigation loaded Items, Ranks, Market, and
+Play, showed “Conquest card rewards are not active right now,” omitted the
+legacy Hexbound Silver reward claim, and produced no new browser warnings or
+errors after eight seconds.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
