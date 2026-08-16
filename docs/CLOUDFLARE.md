@@ -1153,6 +1153,47 @@ and progress are not migrated.
   launches with zero users, so source burner/account migration is deliberately
   retired rather than carried into the new identity model.
 
+## Conquest default reward branch rollout — 2026-08-15
+
+Runtime milestone `67ffc7100b560be7b668ca5c18cd5465bd95aef6`
+restores the original `StateManager.exit` default branch at authoritative match
+completion. The Go switch settles only exact win counts 1, 2, and 3; every
+other terminal count completes the run with no card draw. The TypeScript
+progression path had independently treated any non-zero terminal win count as
+`REWARDS_PENDING`, so recovered or imported progress that reached a fourth win
+could be stranded waiting for a settlement bundle that correctly did not
+exist. Progression now derives its status from the same source-shaped
+`conquestRewardBundle` table used by settlement.
+
+The Workers regression starts from a deliberately anomalous three-win active
+run, records the next authoritative win, proves both players complete, and
+proves settlement performs no pool lookup or reward draw. The source-derived
+gate now rejects divergence between progression and the exact Go switch. The
+complete local release contract passed 495 main-Worker tests across 83 files,
+34 game-server unit tests, 94 game-server Workers tests, 31 match-service
+tests, 78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit, all service typechecks, and both production builds.
+Exact-head GitHub Actions run `31926933254`, job `95115862163`, passed in
+10m07s before deployment.
+
+Only the game-server Worker was deployed, advancing it from
+`a83e80fe-292d-4562-a544-e8c7949cc7f6` to
+`f1bdf07f-4b35-4aff-9e78-501e58dac669`; no migration or configuration change
+was made. Game health returned protocol version 3 with `200` and
+`Cache-Control: no-store`. The strict deployment verifier retained web entry
+`/assets/index-d976a081.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. The public game-mode response
+kept both Practice modes enabled and both Conquest modes disabled.
+
+Matching read-only D1 aggregates before and after deployment retained three
+users, 94 inventory rows, and zero Conquest runs, point rows, current or total
+points, settlements, Silver grant receipts, Gold deliveries, Gold grant
+receipts, active pools, approved active pools, or readiness rows. Both queries
+reported zero rows written and `changed_db: false`. The rollout created no
+match, reward, receipt, inventory, pool, queue, capability, or economy
+authority.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
