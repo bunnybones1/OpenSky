@@ -1237,6 +1237,46 @@ referral tracks remained dormant. A fresh signed-in `/play/conquest` navigation
 proved the inactive message and `+25% Points` label present, all dormant-pool
 claims and the raw key absent, and no new browser warnings or errors.
 
+## Browser cache lifecycle rollout — 2026-08-16
+
+Runtime milestones `1ece322586fd70b226f73152e3ea10d0dad37630` and
+`68587862d9dea0c34776ae127fc725010f9fdf18` make the optional game-resource,
+webapp-image, and asset-manifest caches follow a normal first-run lifecycle.
+Pruning now checks whether a cache exists before opening it, so an absent cache
+is a no-op instead of an error. An existing cache with no stale entries is also
+a no-op instead of emitting a zero-count warning. Existing stale-entry
+inspection, deletion, and positive-count warnings remain unchanged.
+
+Five focused browser-cache tests cover absent and existing caches, the
+zero-entry no-op, preserved positive warnings, and both production pruning
+paths. The cache test is mandatory in the fail-closed Cloudflare build, and its
+CI audit rejects removal. The complete local release contract passed 495
+main-Worker tests, 34 game-server unit tests, 94 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every source/off-chain audit, all service and browser typechecks, and
+both production builds. Exact-head GitHub Actions run `31932230081`, job
+`95128712957`, passed in 10m00s for final runtime commit `68587862` before the
+final deployment.
+
+Only the main API/web Worker and static assets were deployed, advancing the
+final production version to `34e0bc6c-eb0a-40b9-869e-97dd3c1b024a`. The strict
+verifier matched web entry `/assets/index-ed0a96c7.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy after edge propagation. Public Ping, Version,
+game-mode, Conquest-reward, and protocol-v3 game-health probes returned `200`
+with `Cache-Control: no-store`; both Practice modes remained enabled, both
+Conquest modes remained disabled, and `weeklyGolds` remained empty.
+
+Matching read-only D1 aggregates retained three users, 185 combined identity
+inventory and compatibility-unlock rows, zero Conquest runs, one zero-balance
+Conquest-points row, and zero settlements, Silver grants, Gold deliveries,
+Gold grants, reward pools, approved active pools, or readiness rows. The query
+reported zero rows written and `changed_db: false`, and production had no
+pending migrations. Reward readiness remained error-free with the reviewed
+SkyPass policy active and all four unapproved reward tracks dormant. A fresh
+signed-in `/home?verify=68587862` navigation loaded Items, Ranks, Market, and
+Play and produced no new browser warnings or errors after eight seconds.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
