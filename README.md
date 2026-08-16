@@ -1,16 +1,20 @@
-OpenSky
-=======
+Cloud Weasel
+============
 
-OpenSky is the open-source monorepo for OpenSky's webapp, game client, API, matchmaker, game server,
-and shared game logic. OpenSky is an open-source version of the original Skyweaver game,
-originally created by Horizon Blockchain Games Inc.
+Cloud Weasel is a Cloudflare-first fork of OpenSky. This monorepo preserves the
+original webapp, game client, API, matchmaker, game server, and shared game logic
+while the hosted services move to TypeScript, Google identity, optional
+WalletConnect ownership reads, and off-chain rewards. OpenSky is an open-source
+version of the original Skyweaver game, originally created by Horizon Blockchain
+Games Inc.
 
-For the phase-one Cloudflare static webapp and browser-hosted localbot build, see
+For the Cloudflare migration, deployment, and rollout status, see
 [`docs/CLOUDFLARE.md`](./docs/CLOUDFLARE.md).
 
-## OpenSky Repositories
+## Repositories
 
-- https://github.com/horizon-games/OpenSky (this one)
+- https://github.com/bunnybones1/OpenSky (Cloud Weasel fork)
+- https://github.com/horizon-games/OpenSky (upstream OpenSky)
 - https://github.com/horizon-games/Skyweaver-contracts
 
 
