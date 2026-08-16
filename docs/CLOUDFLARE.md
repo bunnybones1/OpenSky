@@ -1365,6 +1365,42 @@ match, and navigation surfaces; it showed the zero Conquest statistics, omitted
 both the `N/A` fallback and the entire false first-play claim, and produced no
 new browser warning or error.
 
+## Guarded Conquest rollout operator — 2026-08-16
+
+Milestone `42b681a003e3816704a829d7492cda3aa7eb847f` adds a guarded
+operator client for the already-deployed Conquest pool and readiness RPCs. It
+can inspect pools and verified drill evidence, or prepare `PROPOSE`, `ACTIVATE`,
+`RETIRE`, and `VERIFY` requests. Mutations are offline plans by default and
+require a second invocation with `--apply`, a caller-supplied UUID operation
+key, and the exact SHA-256 confirmation digest of the canonical RPC method and
+body.
+
+The client accepts only an explicit HTTPS Worker origin, except for loopback
+development; sends the identity-session value only as its named cookie; refuses
+unknown input fields, non-canonical timestamps, unsorted or duplicate cards,
+malformed receipt keys, oversized files, redirects, and cacheable responses;
+and never prints the session. Server capabilities, independent actors, exact
+manifest matching, immutable operation receipts, and D1 triggers remain the
+authority. The client cannot select production rewards, grant permissions,
+manufacture a drill, verify an incomplete delivery, or enable a queue.
+
+Nine focused safety tests cover deterministic plans, exact request envelopes,
+offline-by-default behavior, confirmation and idempotency requirements,
+read-only header separation, origin/session/input bounds, and error redaction.
+The complete local release contract passed 495 main-Worker tests, 34
+game-server unit tests, 94 game-server Workers tests, 31 match-service tests, 78
+matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit, all service/browser typechecks, and both production
+builds. Exact-head GitHub Actions run
+[`31937938840`](https://github.com/bunnybones1/OpenSky/actions/runs/31937938840)
+passed in 9m43s.
+
+This is a tooling-only milestone. It changed no Worker artifact, migration,
+binding, reward policy, D1 row, capability, game-mode flag, or production
+traffic allocation, so no Cloudflare deployment was performed. Both original
+Conquest queues remain disabled and no pool or synthetic rollout evidence was
+created.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
