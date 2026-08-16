@@ -7,7 +7,11 @@ import {
   hexToBytes,
   numberToInt64Bytes
 } from '../src/encoding'
-import { createOwnerSigner, ethereumMessageDigest } from '../src/signing'
+import {
+  createOwnerSigner,
+  ethereumAddressForPrivateKey,
+  ethereumMessageDigest
+} from '../src/signing'
 
 const PRIVATE_KEY = '1111111111111111111111111111111111111111111111111111111111111111'
 
@@ -34,6 +38,12 @@ describe('Cloudflare game proof primitives', () => {
     const publicKey = recoverPublicKey(digest, signature.slice(0, 64), recovery)
     expect(verify(signature.slice(0, 64), digest, publicKey)).toBe(true)
     expect(createOwnerSigner(`0x${PRIVATE_KEY}`)(message)).toHaveLength(65)
+    expect(ethereumAddressForPrivateKey(PRIVATE_KEY)).toBe(
+      '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a'
+    )
+    expect(ethereumAddressForPrivateKey(`0x${PRIVATE_KEY}`)).toBe(
+      '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a'
+    )
   })
 
   it('matches the ethers v5 signing format used by the source server', () => {

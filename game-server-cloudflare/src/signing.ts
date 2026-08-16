@@ -2,7 +2,7 @@ import { hmac } from '@noble/hashes/hmac'
 import { sha256 } from '@noble/hashes/sha256'
 import { keccak_256 } from '@noble/hashes/sha3'
 import { concatBytes } from '@noble/hashes/utils'
-import { signSync, utils } from '@noble/secp256k1'
+import { getPublicKey, signSync, utils } from '@noble/secp256k1'
 
 import { hexToBytes } from './encoding'
 
@@ -49,4 +49,15 @@ export const createOwnerSigner = (privateKey: string) => {
     )
     return [...signature, recovery + 27]
   }
+}
+
+export const ethereumAddressForPrivateKey = (privateKey: string) => {
+  assertOwnerPrivateKey(privateKey)
+  const normalized = privateKey.startsWith('0x')
+    ? hexToBytes(privateKey)
+    : hexToBytes(`0x${privateKey}`)
+  const publicKey = getPublicKey(normalized, false)
+  return `0x${[...keccak_256(publicKey.slice(1)).slice(-20)]
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')}`
 }

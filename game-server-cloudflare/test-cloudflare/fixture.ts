@@ -14,6 +14,10 @@ export const PLAYER_SESSION_ID_2 = 'a51d9958-b28c-4f0a-812f-4e622f387f31'
 export const BOT_SUBKEY_PRIVATE_KEY =
   '0x2222222222222222222222222222222222222222222222222222222222222222'
 const BOT_SUBKEY_ADDRESS = '0x1563915e194d8cfba1943570603f7606a3115508'
+const PLAYER_1_BOT_SUBKEY_PRIVATE_KEY =
+  '0x3333333333333333333333333333333333333333333333333333333333333333'
+const PLAYER_1_BOT_SUBKEY_ADDRESS =
+  '0x5cbdd86a2fa8dc4bddd8a8f69dba48572eec07fb'
 
 const seed = (principal: string, subkey: number | string, randomByte: number) =>
   ({
@@ -43,6 +47,7 @@ export const createMatchFixture = (
   overrides: Partial<
     Pick<MatchmakerStartMatchMessage, 'matchID' | 'replayID'>
   > & {
+    botPlayer1?: boolean
     botPlayer2?: boolean
     gameMode?: GameMode
     proposalId?: string
@@ -56,31 +61,39 @@ export const createMatchFixture = (
     matchID: overrides.matchID ?? 42,
     replayID: overrides.replayID ?? 'replay-test-42',
     player1: {
-      privateSeed: seed(PRINCIPAL_1, 0x31, 1),
+      privateSeed: seed(
+        PRINCIPAL_1,
+        overrides.botPlayer1 ? PLAYER_1_BOT_SUBKEY_ADDRESS : 0x31,
+        1
+      ),
       gameMode:
         overrides.gameMode ??
-        (overrides.botPlayer2
+        (overrides.botPlayer1 || overrides.botPlayer2
           ? GameMode.PRACTICE_BOT
           : GameMode.RANKED_CONSTRUCTED),
       account: account(1, PRINCIPAL_1, 'Player One'),
       playerSessionID: PLAYER_SESSION_ID_1,
-      botSubkey: false,
+      botSubkey: overrides.botPlayer1
+        ? PLAYER_1_BOT_SUBKEY_PRIVATE_KEY
+        : false,
       spectateCode: 'spectate-1',
-      quests: [
-        {
-          id: 7001,
-          position: 1,
-          questType: QuestType.Strengthweaver,
-          progress: 0,
-          endProgress: 1,
-          reward: { itemType: ItemType.SW_XP, amount: 100 },
-          periodicity: QuestPeriodicity.DAILY,
-          isRerollable: false,
-          isClaimable: false,
-          isClaimed: false,
-          isNew: true
-        }
-      ]
+      quests: overrides.botPlayer1
+        ? []
+        : [
+            {
+              id: 7001,
+              position: 1,
+              questType: QuestType.Strengthweaver,
+              progress: 0,
+              endProgress: 1,
+              reward: { itemType: ItemType.SW_XP, amount: 100 },
+              periodicity: QuestPeriodicity.DAILY,
+              isRerollable: false,
+              isClaimable: false,
+              isClaimed: false,
+              isNew: true
+            }
+          ]
     },
     player2: {
       privateSeed: seed(
@@ -90,7 +103,7 @@ export const createMatchFixture = (
       ),
       gameMode:
         overrides.gameMode ??
-        (overrides.botPlayer2
+        (overrides.botPlayer1 || overrides.botPlayer2
           ? GameMode.PRACTICE_BOT
           : GameMode.RANKED_CONSTRUCTED),
       account: account(2, PRINCIPAL_2, 'Player Two'),
@@ -119,7 +132,9 @@ export const createMatchFixture = (
       turnTimer: true,
       season: 126,
       matchmakingCode: undefined,
-      ...(overrides.botPlayer2 ? { botDifficulty: 0.34 } : {})
+      ...(overrides.botPlayer1 || overrides.botPlayer2
+        ? { botDifficulty: 0.34 }
+        : {})
     }
   }
 })

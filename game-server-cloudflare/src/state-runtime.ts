@@ -26,7 +26,10 @@ import {
 } from '@skyweaver/state-metadata'
 
 import { bytesToHex, hexToBytes, numberToInt64Bytes } from './encoding'
-import { createOwnerSigner } from './signing'
+import {
+  createOwnerSigner,
+  ethereumAddressForPrivateKey
+} from './signing'
 
 type WorkersStateBindings = typeof StateBindings & {
   __wbg_set_wasm(exports: WebAssembly.Exports): void
@@ -437,6 +440,7 @@ export class AuthoritativeMatchRuntime {
   async createBotAction(
     player: Player,
     botPrivateKey: string,
+    botSubkey: string,
     difficulty: number,
     policy: BotPolicyState
   ): Promise<BotActionResult> {
@@ -453,6 +457,12 @@ export class AuthoritativeMatchRuntime {
       secureRandom
     )
     try {
+      if (ethereumAddressForPrivateKey(botPrivateKey) !== botSubkey.toLowerCase()) {
+        throw new Error('bot private key does not match its approved subkey')
+      }
+      if (botStore.getAddressPlayer(botSubkey) !== player) {
+        throw new Error('bot subkey is not approved for its player')
+      }
       if (!botStore.hasState()) return { diffs, policy }
       const bot = new WasmMatchBotOpponent<void>(
         player,

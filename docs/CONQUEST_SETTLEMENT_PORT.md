@@ -478,6 +478,25 @@ their Conquest progression receipts, and inventory/feed/reward receipt
 agreement itself; free-form readiness rows cannot open a queue. Production
 currently has zero active pool rows and zero Conquest settlement/delivery rows.
 
+## Authoritative readiness match primitive
+
+The game Durable Object can drive both participants with the original
+TypeScript `WasmMatchBotOpponent` through the same signed action,
+commit/reveal, replay, timer, and finalization machinery used by an ordinary
+match. Bot subkeys are owner-approved into the authoritative store, their
+private keys must derive the exact approved addresses, and per-player policy
+and failure state survives Durable Object hibernation without changing the
+legacy single-bot fields.
+
+This primitive is deliberately dormant. A bot-only create request is accepted
+only for a `readiness-drill-match-*` proposal in constructed Conquest; the
+ordinary match-service protocol still rejects every bot-only dispatch and all
+public Conquest admission remains disabled. The production drill orchestrator
+must still provision isolated run identities, allocate three separately
+receipted matches, and prove their completion. This engine support does not
+create users, runs, pools, rewards, readiness rows, or queue authority by
+itself.
+
 ## Conquest rollout operator
 
 `pnpm conquest:rollout` is the guarded client for those existing staff RPCs.

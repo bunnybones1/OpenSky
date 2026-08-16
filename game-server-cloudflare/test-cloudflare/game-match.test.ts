@@ -2912,4 +2912,121 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       }
     })
   })
+
+  it('drives both server-controlled participants without a player socket', async () => {
+    const ordinaryBotOnly = await createMatch(
+      createMatchFixture({
+        botPlayer1: true,
+        botPlayer2: true,
+        proposalId: 'proposal-ordinary-dual-bot'
+      })
+    )
+    expect(ordinaryBotOnly.status).toBe(400)
+    expect(await ordinaryBotOnly.json()).toEqual({
+      error: 'bot-only matches are reserved for Conquest readiness'
+    })
+    const nonConquestDrill = await createMatch(
+      createMatchFixture({
+        botPlayer1: true,
+        botPlayer2: true,
+        proposalId: 'readiness-drill-match-practice'
+      })
+    )
+    expect(nonConquestDrill.status).toBe(400)
+    expect(await nonConquestDrill.json()).toEqual({
+      error: 'bot-only matches are reserved for Conquest readiness'
+    })
+
+    const botProposalId = 'readiness-drill-match-dual-bot-test'
+    const dualBotStub = () =>
+      runtimeEnv.GAME_MATCHES.getByName(`match:${botProposalId}`)
+    const created = await createMatch(
+      createMatchFixture({
+        botPlayer1: true,
+        botPlayer2: true,
+        gameMode: GameMode.CONQUEST_CONSTRUCTED,
+        proposalId: botProposalId
+      })
+    )
+    expect(created.status).toBe(200)
+
+    type InternalStatus = {
+      ended: boolean
+      players: Record<string, { finishedLoadingAssets: boolean }>
+      timers: {
+        botAtMs?: number
+        commitRevealAtMs?: number
+        botActionCounts?: [number, number]
+      }
+      state: {
+        hasState: boolean
+        lastActionPlayer?: 0 | 1
+        playersDoneCardSelection?: [boolean, boolean]
+      }
+    }
+    const status = async () => {
+      const response = await dualBotStub().fetch(
+        'https://match/internal/status',
+        { headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' } }
+      )
+      return response.json<InternalStatus>()
+    }
+    expect(Object.values((await status()).players)).toEqual([
+      expect.objectContaining({ finishedLoadingAssets: true }),
+      expect.objectContaining({ finishedLoadingAssets: true })
+    ])
+
+    let current = await status()
+    for (let attempt = 0; attempt < 6 && !current.state.hasState; attempt += 1) {
+      await runInDurableObject(
+        dualBotStub() as DurableObjectStub,
+        async (_instance, state) => {
+          const timers =
+            (await state.storage.get<Record<string, unknown>>(
+              'match:timers'
+            )) ?? {}
+          await state.storage.put('match:timers', {
+            ...timers,
+            commitRevealAtMs: Date.now() - 1
+          })
+          await state.storage.setAlarm(Date.now() + 60_000)
+        }
+      )
+      expect(await runDurableObjectAlarm(dualBotStub())).toBe(true)
+      current = await status()
+    }
+    expect(current.state.hasState).toBe(true)
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (
+        current.state.playersDoneCardSelection?.every(done => done) ||
+        current.ended
+      ) {
+        break
+      }
+      await runInDurableObject(
+        dualBotStub() as DurableObjectStub,
+        async (_instance, state) => {
+          const timers =
+            (await state.storage.get<Record<string, unknown>>(
+              'match:timers'
+            )) ?? {}
+          const dueTimer = current.state.hasState
+            ? 'botAtMs'
+            : 'commitRevealAtMs'
+          expect(timers[dueTimer]).toEqual(expect.any(Number))
+          await state.storage.put('match:timers', {
+            ...timers,
+            [dueTimer]: Date.now() - 1
+          })
+          await state.storage.setAlarm(Date.now() + 60_000)
+        }
+      )
+      expect(await runDurableObjectAlarm(dualBotStub())).toBe(true)
+      current = await status()
+    }
+    expect(current.state.playersDoneCardSelection).toEqual([true, true])
+    expect(current.timers.botActionCounts?.[0]).toBeGreaterThan(0)
+    expect(current.timers.botActionCounts?.[1]).toBeGreaterThan(0)
+    expect(current.ended).toBe(false)
+  })
 })

@@ -191,6 +191,9 @@ interface MatchTimers {
   botFailureCount?: number
   botActionCount?: number
   botPlayedManaVial?: boolean
+  botFailureCounts?: [number, number]
+  botActionCounts?: [number, number]
+  botPlayedManaVials?: [boolean, boolean]
 }
 
 interface PendingGameplay {
@@ -306,6 +309,16 @@ const validateCreateRequest = (request: CreateMatchRequest) => {
     ) {
       throw new Error('invalid bot subkey')
     }
+  }
+  if (
+    [match.player1, match.player2].every(
+      participant => typeof participant.botSubkey === 'string'
+    ) &&
+    (!request.proposalId.startsWith('readiness-drill-match-') ||
+      match.player1.gameMode !== GameMode.CONQUEST_CONSTRUCTED ||
+      match.player2.gameMode !== GameMode.CONQUEST_CONSTRUCTED)
+  ) {
+    throw new Error('bot-only matches are reserved for Conquest readiness')
   }
 }
 
@@ -579,6 +592,15 @@ export class GameMatch implements DurableObject {
       participants: [input.match.player1, input.match.player2]
     })
     this.runtime = runtime
+    const botApprovalDiffs = [input.match.player1, input.match.player2].flatMap(
+      participant =>
+        typeof participant.botSubkey === 'string'
+          ? runtime.approveSubkey(
+              participant.account.address,
+              addressBytesToHex(participant.privateSeed.subkey)
+            )
+          : []
+    )
     const replay = runtime.initialReplayState()
     const replayInit = this.replayJson([
       {
@@ -614,7 +636,7 @@ export class GameMatch implements DurableObject {
       [normalizedAddress(input.match.player2.account.address)]:
         emptyPlayerState(Boolean(input.match.player2.botSubkey))
     }
-    await this.state.storage.put({
+    const initialStorage: Record<string, unknown> = {
       [METADATA_KEY]: metadata,
       [SNAPSHOT_KEY]: runtime.snapshot(),
       [PLAYERS_KEY]: players,
@@ -622,9 +644,19 @@ export class GameMatch implements DurableObject {
       [PENDING_GAMEPLAY_KEY]: [] satisfies PendingGameplay[],
       [QUEST_RUNTIME_KEY]: runtime.questRuntimeState(),
       [QUEST_PROGRESS_KEY]: runtime.questProgress(),
-      [REPLAY_NEXT_INDEX_KEY]: 1,
+      [REPLAY_NEXT_INDEX_KEY]: botApprovalDiffs.length > 0 ? 2 : 1,
       [`${REPLAY_RECORD_PREFIX}000000`]: replayInit
-    })
+    }
+    if (botApprovalDiffs.length > 0) {
+      initialStorage[`${REPLAY_RECORD_PREFIX}000001`] = this.replayJson([
+        {
+          type: 'gameplay',
+          timestamp: new Date().toISOString(),
+          message: { type: 'gameplay', data: botApprovalDiffs }
+        }
+      ])
+    }
+    await this.state.storage.put(initialStorage)
     await this.afterStateChange(metadata, players, {}, Date.now())
     return this.creationResponse(metadata)
   }
@@ -1337,7 +1369,10 @@ export class GameMatch implements DurableObject {
       const stateAdvanced =
         info.turnCount !== timers.lastTurnCount ||
         info.moveCount !== timers.lastMoveCount
-      if (stateAdvanced) timers.botFailureCount = 0
+      if (stateAdvanced) {
+        timers.botFailureCount = 0
+        timers.botFailureCounts = [0, 0]
+      }
       if (metadata.match.matchSettings.turnTimer) {
         if (
           newlyLoaded ||
@@ -1361,12 +1396,14 @@ export class GameMatch implements DurableObject {
       }
       timers.lastTurnCount = info.turnCount
       timers.lastMoveCount = info.moveCount
-      const bot = this.botParticipant(metadata.match)
-      const botShouldAct =
-        bot !== undefined &&
-        (info.playersDoneCardSelection?.[bot.index] === false ||
-          info.currentPlayer === bot.index)
-      if (botShouldAct && (timers.botFailureCount ?? 0) < 3) {
+      const bot = this.botParticipant(metadata.match, info)
+      const failureCount =
+        bot === undefined
+          ? 0
+          : (timers.botFailureCounts?.[bot.index] ??
+            timers.botFailureCount ??
+            0)
+      if (bot && failureCount < 3) {
         timers.botAtMs ??= now + this.settings.botActionDelayMs
       } else {
         timers.botAtMs = undefined
@@ -1755,31 +1792,61 @@ export class GameMatch implements DurableObject {
     timers: MatchTimers,
     runtime: AuthoritativeMatchRuntime
   ) {
-    const bot = this.botParticipant(metadata.match)
+    const bot = this.botParticipant(metadata.match, runtime.stateInfo())
     if (!bot || metadata.ended) return
+    const actionCounts = timers.botActionCounts ?? [0, 0]
+    const playedManaVials = timers.botPlayedManaVials ?? [false, false]
     const result = await runtime.createBotAction(
       bot.index,
       bot.participant.botSubkey as string,
+      addressBytesToHex(bot.participant.privateSeed.subkey),
       metadata.match.matchSettings.botDifficulty ?? 0.5,
       {
-        actionCount: timers.botActionCount ?? 0,
-        playedManaVial: timers.botPlayedManaVial ?? false
+        actionCount:
+          timers.botActionCounts?.[bot.index] ??
+          timers.botActionCount ??
+          0,
+        playedManaVial:
+          timers.botPlayedManaVials?.[bot.index] ??
+          timers.botPlayedManaVial ??
+          false
       }
     )
-    timers.botActionCount = result.policy.actionCount
-    timers.botPlayedManaVial = result.policy.playedManaVial
+    actionCounts[bot.index] = result.policy.actionCount
+    playedManaVials[bot.index] = result.policy.playedManaVial
+    timers.botActionCounts = actionCounts
+    timers.botPlayedManaVials = playedManaVials
+    if (this.botParticipants(metadata.match).length === 1) {
+      // Keep the original scalar fields for Durable Objects created before
+      // per-player bot policy state and for operational status compatibility.
+      timers.botActionCount = result.policy.actionCount
+      timers.botPlayedManaVial = result.policy.playedManaVial
+    }
     if (result.diffs.length === 0) {
-      timers.botFailureCount = (timers.botFailureCount ?? 0) + 1
+      const failureCounts = timers.botFailureCounts ?? [0, 0]
+      failureCounts[bot.index] =
+        (timers.botFailureCounts?.[bot.index] ??
+          timers.botFailureCount ??
+          0) + 1
+      timers.botFailureCounts = failureCounts
+      if (this.botParticipants(metadata.match).length === 1) {
+        timers.botFailureCount = failureCounts[bot.index]
+      }
       console.error('bot did not produce an action', {
         matchId: metadata.match.matchID,
         player: bot.index,
-        failures: timers.botFailureCount
+        failures: failureCounts[bot.index]
       })
       return
     }
     const applied = runtime.applyClientDiffs(result.diffs)
     addPlayerMoveDeltas(timers, applied.playerMoveDeltas)
-    timers.botFailureCount = 0
+    const failureCounts = timers.botFailureCounts ?? [0, 0]
+    failureCounts[bot.index] = 0
+    timers.botFailureCounts = failureCounts
+    if (this.botParticipants(metadata.match).length === 1) {
+      timers.botFailureCount = 0
+    }
     this.sendToOpponent(metadata.match, bot.participant.account.address, {
       type: 'gameplay',
       data: applied.opponentDiffs
@@ -1810,17 +1877,36 @@ export class GameMatch implements DurableObject {
     return emitted
   }
 
-  private botParticipant(match: MatchmakerStartMatchMessage) {
+  private botParticipants(match: MatchmakerStartMatchMessage) {
     const participants = [match.player1, match.player2] as const
-    const index = participants.findIndex(
-      participant => typeof participant.botSubkey === 'string'
+    return participants.flatMap((participant, index) =>
+      typeof participant.botSubkey === 'string'
+        ? [{ index: index as Player, participant }]
+        : []
     )
-    return index < 0
-      ? undefined
-      : {
-          index: index as Player,
-          participant: participants[index]
-        }
+  }
+
+  private botParticipant(
+    match: MatchmakerStartMatchMessage,
+    state: {
+      currentPlayer?: Player
+      playersDoneCardSelection?: [boolean, boolean]
+    }
+  ) {
+    const bots = this.botParticipants(match)
+    if (state.playersDoneCardSelection) {
+      const current = bots.find(
+        bot =>
+          bot.index === state.currentPlayer &&
+          state.playersDoneCardSelection?.[bot.index] === false
+      )
+      if (current) return current
+      const selecting = bots.find(
+        bot => state.playersDoneCardSelection?.[bot.index] === false
+      )
+      if (selecting) return selecting
+    }
+    return bots.find(bot => bot.index === state.currentPlayer)
   }
 
   private async disconnectPlayer(socket: WebSocket) {
