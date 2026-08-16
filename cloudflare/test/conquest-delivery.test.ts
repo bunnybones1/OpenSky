@@ -159,6 +159,70 @@ describe('delayed Conquest Gold delivery', () => {
     })
   })
 
+  it('returns every source task token while skipping invalid card projections', async () => {
+    const silverCard = (1 << 16) + 136
+    const heroSkin = (3 << 16) + 136
+    const missingGoldCard = (2 << 16) + 65_535
+    const conquestId = await setupDelivery(
+      [136, 136, 65_535],
+      [silverCard, heroSkin, missingGoldCard]
+    )
+
+    expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toMatchObject([
+      {
+        cards: [{ id: 136, itemType: ItemType.UNKNOWN, isNew: null }],
+        tokenIDs: [silverCard, heroSkin, missingGoldCard],
+        mintAt: DUE_AT
+      }
+    ])
+    expect(await (await rpc('GetPendingCards')).json()).toMatchObject({
+      res: [
+        {
+          cards: [{ id: 136, itemType: ItemType.UNKNOWN, isNew: null }],
+          tokenIDs: [silverCard, heroSkin, missingGoldCard],
+          mintAt: DUE_AT
+        }
+      ]
+    })
+
+    const ownership = await new PlayerRpcRepository(env.AUTH_DB).cardOwnership(
+      USER_ID
+    )
+    expect(ownership).toMatchObject({
+      pendingCards: 1,
+      pendingCardsByClass: { STR: 1 },
+      pendingCardsByFrame: {
+        SW_SILVER_CARDS: 1,
+        SW_GOLD_CARDS: 0
+      },
+      pendingCardsByClassAndFrame: {
+        STR: { SW_SILVER_CARDS: 1, SW_GOLD_CARDS: 0 }
+      }
+    })
+
+    // Read compatibility must not weaken the off-chain grant boundary. The
+    // malformed Gold row remains retryable but grants no inventory.
+    expect(await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))).toEqual(
+      { delivered: 0, failed: 1, remaining: 1 }
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM player_conquest_gold_deliveries
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first()
+    ).toEqual({ status: 'PENDING', attempt_count: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_items
+         WHERE user_id = ? AND item_type IN ('SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
+      )
+        .bind(USER_ID)
+        .first()
+    ).toEqual({ count: 0 })
+  })
+
   it('keeps moderated Gold visible while blocking a read-to-claim race', async () => {
     const conquestId = await setupDelivery()
     await env.AUTH_DB.prepare(

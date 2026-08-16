@@ -112,7 +112,11 @@ export const pendingCardWireErrors = (
   ).replace(/\s+/g, ' ')
   for (const token of [
     'Promise<SourcePendingCardsResponseInput[]>',
-    'cards: cards.map(card => card!)',
+    'const tokenIDs = sourceTokenIds(row.token_ids_json)',
+    'const cards = tokenIDs.flatMap(tokenID =>',
+    'const pending = pendingConquestCard(tokenID)',
+    'return pending ? [pending.card] : []',
+    'cards,',
     'tokenIDs,',
     'mintAt: row.deliver_at'
   ]) {
@@ -122,10 +126,26 @@ export const pendingCardWireErrors = (
   }
   for (const invented of [
     'itemType: ItemType.SW_GOLD_CARDS',
-    'isNew: true'
+    'isNew: true',
+    'card_ids_json',
+    'cardIds.length !== tokenIDs.length'
   ]) {
     if (repository.includes(invented)) {
       errors.push(`Worker pending-card repository invents: ${invented}`)
+    }
+  }
+
+  const compactDelivery = conquestDelivery.replace(/\s+/g, ' ')
+  for (const token of [
+    'export const pendingConquestCard = (tokenID: number)',
+    'const itemTypeCode = Math.floor(tokenID / TOKEN_TYPE_OFFSET) & 0xff',
+    'itemTypeCode === 1 ? ItemType.SW_SILVER_CARDS',
+    'itemTypeCode === 2 ? ItemType.SW_GOLD_CARDS',
+    'const card = cardsById.get(tokenID & CARD_ID_MASK)',
+    'return card ? { card, itemType } : undefined'
+  ]) {
+    if (!compactDelivery.includes(token)) {
+      errors.push(`Worker pending-card token projection is missing: ${token}`)
     }
   }
 
@@ -153,8 +173,11 @@ export const pendingCardWireErrors = (
   ).replace(/\s+/g, ' ')
   for (const token of [
     'pendingConquestCards(this.database, userId)',
-    'for (const card of pending.cards ?? [])',
-    'pendingByFrame.SW_GOLD_CARDS++'
+    'for (const tokenID of pending.tokenIDs ?? [])',
+    'const pendingCard = pendingConquestCard(tokenID)',
+    'if (!pendingCard) continue',
+    'pendingByFrame[pendingCard.itemType]++',
+    'pendingByClassAndFrame[activeClass][pendingCard.itemType]++'
   ]) {
     if (!ownership.includes(token)) {
       errors.push(`Worker pending ownership projection changed: ${token}`)

@@ -26,7 +26,7 @@ import {
 } from './card-balance-wire'
 import { allLibraryCards } from './card-library'
 import type { SourceCardInput } from './card-wire'
-import { pendingConquestCards } from './conquest-delivery'
+import { pendingConquestCard, pendingConquestCards } from './conquest-delivery'
 import {
   decodeDeckString,
   encodeDeckString,
@@ -2315,8 +2315,10 @@ export class PlayerRpcRepository {
     const pendingByClassAndFrame = emptyMatrix()
     let pendingCards = 0
     for (const pending of pendingRows) {
-      for (const card of pending.cards ?? []) {
-        const cardClass = CARD_CLASS_BY_ID.get(card.id)
+      for (const tokenID of pending.tokenIDs ?? []) {
+        const pendingCard = pendingConquestCard(tokenID)
+        if (!pendingCard) continue
+        const cardClass = CARD_CLASS_BY_ID.get(pendingCard.card.id)
         if (
           !CARD_CLASSES.includes(cardClass as (typeof CARD_CLASSES)[number])
         ) {
@@ -2325,8 +2327,8 @@ export class PlayerRpcRepository {
         const activeClass = cardClass as (typeof CARD_CLASSES)[number]
         pendingCards++
         pendingByClass[activeClass]++
-        pendingByFrame.SW_GOLD_CARDS++
-        pendingByClassAndFrame[activeClass].SW_GOLD_CARDS++
+        pendingByFrame[pendingCard.itemType]++
+        pendingByClassAndFrame[activeClass][pendingCard.itemType]++
       }
     }
 

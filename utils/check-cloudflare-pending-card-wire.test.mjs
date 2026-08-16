@@ -100,8 +100,8 @@ test('rejects source drift, invented card state, and projection bypasses', async
     {
       ...value,
       conquestDelivery: value.conquestDelivery.replace(
-        'cards: cards.map(card => card!)',
-        'cards: cards.map(card => ({ ...card!, itemType: ItemType.SW_GOLD_CARDS }))'
+        'return pending ? [pending.card] : []',
+        'return pending ? [{ ...pending.card, isNew: true }] : []'
       )
     },
     {
@@ -125,8 +125,29 @@ test('rejects source drift, invented card state, and projection bypasses', async
     {
       ...value,
       playerRPC: value.playerRPC.replace(
-        'for (const card of pending.cards ?? [])',
-        'for (const card of [])'
+        'for (const tokenID of pending.tokenIDs ?? [])',
+        'for (const tokenID of [])'
+      )
+    },
+    {
+      ...value,
+      conquestDelivery: value.conquestDelivery.replace(
+        'const cards = tokenIDs.flatMap(tokenID => {',
+        'const cardIds = ids(row.card_ids_json)\n    const cards = cardIds.flatMap(tokenID => {'
+      )
+    },
+    {
+      ...value,
+      conquestDelivery: value.conquestDelivery.replace(
+        'itemTypeCode === 1',
+        'itemTypeCode === 0'
+      )
+    },
+    {
+      ...value,
+      playerRPC: value.playerRPC.replace(
+        'pendingByFrame[pendingCard.itemType]++',
+        'pendingByFrame.SW_GOLD_CARDS++'
       )
     },
     {

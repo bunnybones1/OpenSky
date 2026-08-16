@@ -1,10 +1,27 @@
 import cardLibrary from './generated/card-library.json'
+import { ItemType } from '@opensky/proto'
 import type { SourcePendingCardsResponseInput } from './pending-card-wire'
 
 const MAX_DELIVERIES_PER_RUN = 100
 const MAX_ATTEMPTS = 5
+const TOKEN_TYPE_OFFSET = 1 << 16
+const CARD_ID_MASK = 0x00ffff
 
 const cardsById = new Map(cardLibrary.cards.map(card => [card.id, card]))
+
+export const pendingConquestCard = (tokenID: number) => {
+  if (!Number.isSafeInteger(tokenID) || tokenID < 0) return undefined
+  const itemTypeCode = Math.floor(tokenID / TOKEN_TYPE_OFFSET) & 0xff
+  const itemType =
+    itemTypeCode === 1
+      ? ItemType.SW_SILVER_CARDS
+      : itemTypeCode === 2
+        ? ItemType.SW_GOLD_CARDS
+        : undefined
+  if (!itemType) return undefined
+  const card = cardsById.get(tokenID & CARD_ID_MASK)
+  return card ? { card, itemType } : undefined
+}
 
 interface DeliveryRow {
   conquest_id: number
@@ -31,14 +48,28 @@ const ids = (value: string): number[] => {
   throw new Error('Conquest Gold delivery is malformed')
 }
 
+const sourceTokenIds = (value: string): number[] => {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (
+      Array.isArray(parsed) &&
+      parsed.every(id => Number.isSafeInteger(id) && id >= 0)
+    ) {
+      return parsed as number[]
+    }
+  } catch {
+    // Match json.Unmarshal into []uint64: malformed payloads fail the RPC.
+  }
+  throw new Error('Conquest pending cards are malformed')
+}
+
 export const pendingConquestCards = async (
   database: D1Database,
   userId: string
 ): Promise<SourcePendingCardsResponseInput[]> => {
   const rows = await database
     .prepare(
-      `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
-              attempt_count
+      `SELECT conquest_id, user_id, token_ids_json, deliver_at, attempt_count
        FROM player_conquest_gold_deliveries
        WHERE user_id = ? AND status IN ('PENDING', 'DISABLED')
          AND application_status = 'READY'
@@ -47,20 +78,16 @@ export const pendingConquestCards = async (
     .bind(userId)
     .all<DeliveryRow>()
   return rows.results.map(row => {
-    const cardIds = ids(row.card_ids_json)
-    const tokenIDs = ids(row.token_ids_json)
-    const cards = cardIds.map(cardId => cardsById.get(cardId))
-    if (
-      cards.some(card => !card) ||
-      cardIds.length !== tokenIDs.length ||
-      cardIds.some((cardId, index) => tokenIDs[index] !== (2 << 16) + cardId)
-    ) {
-      throw new Error('Conquest Gold delivery contains an invalid card')
-    }
+    const tokenIDs = sourceTokenIds(row.token_ids_json)
+    const cards = tokenIDs.flatMap(tokenID => {
+      const pending = pendingConquestCard(tokenID)
+      return pending ? [pending.card] : []
+    })
     return {
-      // The source appends CardIndex's canonical card. ItemType and IsNew stay
-      // at their zero values; tokenIDs separately carry the Gold identity.
-      cards: cards.map(card => card!),
+      // The source always appends each task token ID, then independently skips
+      // invalid types and missing cards while hydrating canonical card data.
+      // Delivery below remains strict and will not grant a malformed row.
+      cards,
       tokenIDs,
       mintAt: row.deliver_at
     }
