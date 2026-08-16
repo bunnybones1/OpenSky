@@ -570,6 +570,26 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (evidence.crossServiceReadiness !== undefined) {
+    for (const token of [
+      'new ConquestDrillRepository(env.AUTH_DB)',
+      'await repository.run(',
+      'await matchService.fetch(',
+      'GAME_SERVICE: gameService',
+      'fetch: (request: Request) => SELF.fetch(request)',
+      'runtimeEnv.GAME_MATCHES.getByName',
+      'runDurableObjectAlarm(stub)',
+      'botActionCounts',
+      "status: 'active'",
+      'readiness: 0, enabled_modes: 0'
+    ]) {
+      if (!evidence.crossServiceReadiness.includes(token)) {
+        errors.push(
+          `Conquest cross-service readiness proof is missing: ${token}`
+        )
+      }
+    }
+  }
   if (evidence.scheduler !== undefined) {
     if (!evidence.scheduler.includes('runConquestReadinessDrills(env)')) {
       errors.push('Conquest drill orchestrator is missing from the scheduler')
@@ -887,6 +907,7 @@ const main = async () => {
     drillRepository,
     readinessMatch,
     gameMatch,
+    crossServiceReadiness,
     scheduler,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
@@ -1001,6 +1022,15 @@ const main = async () => {
     ]).then(sources => sources.join('\n')),
     readFile(
       path.join(root, 'game-server-cloudflare', 'src', 'game-match.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'test-cloudflare',
+        'conquest-readiness-cross-service.test.ts'
+      ),
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare', 'src', 'index.ts'), 'utf8'),
@@ -1155,6 +1185,7 @@ const main = async () => {
     drillRepository,
     readinessMatch,
     gameMatch,
+    crossServiceReadiness,
     scheduler,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,

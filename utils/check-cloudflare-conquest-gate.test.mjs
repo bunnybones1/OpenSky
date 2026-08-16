@@ -156,6 +156,18 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'match.player2.gameMode !== GameMode.CONQUEST_CONSTRUCTED',
       'bot-only matches are reserved for Conquest readiness'
     ].join('\n'),
+    crossServiceReadiness: [
+      'new ConquestDrillRepository(env.AUTH_DB)',
+      'await repository.run(',
+      'await matchService.fetch(',
+      'GAME_SERVICE: gameService',
+      'fetch: (request: Request) => SELF.fetch(request)',
+      'runtimeEnv.GAME_MATCHES.getByName',
+      'runDurableObjectAlarm(stub)',
+      'botActionCounts',
+      "status: 'active'",
+      'readiness: 0, enabled_modes: 0'
+    ].join('\n'),
     scheduler: 'runConquestReadinessDrills(env)',
     v2ScheduleActivation: [
       'CREATE TABLE conquest_v2_reward_schedule_activations',
@@ -322,6 +334,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'drillRepository',
     'readinessMatch',
     'gameMatch',
+    'crossServiceReadiness',
     'scheduler',
     'v2ScheduleActivation',
     'v2ScheduleOperationsMigration',
