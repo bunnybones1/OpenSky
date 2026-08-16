@@ -572,3 +572,50 @@ and classified original Conquest, weekly leaderboard rewards, Conquest V2, and
 referral rewards as dormant with zero enabled schedules or verified active
 pools. This rollout required no D1 migration and created no synthetic match,
 reward, receipt, inventory row, reward pool, queue, or economy authority.
+
+## Pending-card source-read rollout proof — 2026-08-15
+
+Runtime commit `1d4e7e0d74956aa6deab7086d1c6204e33d51d64` restores the
+source `GetPendingCards` and `CardOwnership` read behavior at the delayed-task
+boundary. The Go API always returns every persisted task token ID, then
+independently hydrates only Silver or Gold token types whose lower 16-bit card
+ID exists in the canonical card index. Unsupported item types and missing card
+definitions are skipped instead of turning the whole account read into an
+internal error. Pending ownership now walks those token IDs and counts the
+actual Silver or Gold frame, matching the source item-token mask.
+
+This compatibility tolerance is deliberately read-only. Delayed Gold delivery
+still requires the complete configured all-Gold bundle, exact token/card
+mapping, and canonical cards before granting inventory. A malformed row remains
+retryable, increments its attempt count, and grants zero cards. The regression
+test covers a valid Silver token, an unsupported Hero-skin token, and a missing
+Gold card in one historical task: both player reads return the source-shaped
+partial projection, while the delivery transaction remains fail closed. The
+source-derived pending-card gate pins the token mask, accepted type codes,
+canonical lookup, full token-ID response, actual-frame ownership counts, and
+the absence of a `card_ids_json` dependency on this read path.
+
+The complete local release contract passed 492 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31918941364` passed in 10m19s before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`d6e83041-2dd8-4e61-9094-dba784f5de6b` to
+`8b9794e8-3909-4519-8757-26c3c82d43bc`. Cloudflare uploaded no updated asset
+files. The deployment verifier matched web entry `/assets/index-b1769b84.js`,
+game entry `/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales,
+and release-safe cache policy on its first attempt. Production `Version` and
+`Ping` returned `200` with `Cache-Control: no-store`, and anonymous
+`GetPendingCards` retained the authenticated `401` boundary without an internal
+error.
+
+This rollout required no migration, and production reported none pending. A
+read-only D1 aggregate found three users, 94 inventory rows, and zero Conquest
+settlements, delayed Gold rows, Gold grant receipts, or Silver exchanges; it
+reported zero rows written and `changed_db: false`. The reward-readiness audit
+still classifies original Conquest as `dormant-policy` with zero verified
+active pools. No synthetic task, player reward, pool, queue, capability, or
+economy authority was created for rollout evidence.

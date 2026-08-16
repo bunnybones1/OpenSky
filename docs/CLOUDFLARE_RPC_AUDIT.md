@@ -2082,6 +2082,49 @@ identity-free D1 aggregate found zero legacy wallet accounts, zero writes, and
 changed no account, identity, inventory, deck, match, reward, wallet, queue,
 content, or staff state.
 
+## Pending-card source-read fidelity rollout — 2026-08-15
+
+The source `GetPendingCards` response preserves every delayed-task token ID but
+only projects canonical card data for recognized Silver or Gold token types
+whose lower 16-bit ID exists in `CardIndex`. `CardOwnership` performs the same
+token walk and counts the actual frame. The Worker previously required an exact
+all-Gold `card_ids_json` projection and could turn a readable historical task
+into an internal error.
+
+Runtime commit `1d4e7e0d74956aa6deab7086d1c6204e33d51d64` ports that
+tolerant source read exactly. Delivery remains a separate strict boundary: an
+invalid configured Gold bundle grants no inventory and follows the existing
+bounded retry/dead-letter path. Focused coverage combines a valid Silver token,
+an unsupported item token, and a missing canonical Gold card, then proves the
+partial read, actual-frame ownership count, failed delivery attempt, and zero
+inventory grant. The source-derived pending-card audit adds mutation coverage
+for the token mask/type codes, card projection, response token IDs, ownership
+frame, and accidental restoration of the stricter card-ID dependency.
+
+The complete local release contract passed 492 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31918941364` passed in 10m19s before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`d6e83041-2dd8-4e61-9094-dba784f5de6b` to
+`8b9794e8-3909-4519-8757-26c3c82d43bc`; Cloudflare uploaded no updated asset
+files. The strict deployment verifier matched web entry
+`/assets/index-b1769b84.js`, game entry
+`/game/cloudflare/assets/index-79a70ba2.js`, six exact locales, and the cache
+policy on its first attempt. Production `Version` and `Ping` returned `200`
+with `Cache-Control: no-store`; anonymous `GetPendingCards` returned the
+expected authenticated `401` boundary.
+
+No migration was required or pending. A read-only D1 aggregate reported three
+users, 94 inventory rows, zero Conquest settlements, delayed Gold rows, Gold
+grant receipts, or Silver exchanges, zero writes, and `changed_db: false`.
+The reward-readiness audit retained original Conquest as `dormant-policy` with
+zero verified active pools. Verification created no synthetic task, reward,
+pool, queue, capability, or economy authority.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
