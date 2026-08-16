@@ -473,6 +473,63 @@ The database now verifies inventory/feed/receipt
 agreement itself; free-form readiness rows cannot open a queue. Production
 currently has zero active pool rows and zero Conquest settlement/delivery rows.
 
+## Conquest rollout operator
+
+`pnpm conquest:rollout` is the guarded client for those existing staff RPCs.
+It does not infer a Silver list, choose a weekly Gold, grant a capability,
+manufacture drill receipts, or enable a queue. Those remain independent
+product, review, gameplay, and operator decisions.
+
+Copy `.env.conquest-operator.example` to the git-ignored
+`.env.conquest-operator.local`, then export its values into the shell running
+the command. `CLOUD_WEASEL_OPERATOR_URL` has no default and must name one exact
+HTTPS origin (plain HTTP is accepted only on loopback).
+`CLOUD_WEASEL_OPERATOR_SESSION` is only the value of the current
+`opensky_identity_session` cookie. The tool never prints it, places it in a
+request body, or accepts it on the command line.
+
+Read-only inspection is explicit and never sends an operation header:
+
+```sh
+pnpm conquest:rollout list-pools
+pnpm conquest:rollout list-readiness --version reviewed-pool-version
+```
+
+Each write takes a JSON input file. `propose` accepts exactly `version`,
+`startsAt`, `endsAt`, ascending unique `silverCardIds` and `goldCardIds`,
+`reason`, and `reviewReference`. `activate` accepts the exact independently
+echoed `version`, Silver-first `cardManifest`, and `reason`. `retire` accepts
+`version` and `reason`. `verify` accepts `poolVersion`, `conquestId`, both UUID
+receipt keys, and `drillReference`. Unknown fields, non-canonical UTC times,
+unsorted or duplicate cards, malformed receipts, unsafe origins, and inputs
+larger than 128 KiB fail locally before a request.
+
+The first invocation is always an offline plan:
+
+```sh
+pnpm conquest:rollout propose --input ./reviewed-pool.json
+```
+
+Applying it requires all three values copied deliberately into a second
+invocation: `--apply`, a caller-generated UUID `--operation-key`, and the exact
+`--confirm sha256:...` digest printed by the plan. Any edit to the RPC method or
+body changes that digest. Server-side capability checks, actor separation,
+manifest equality, immutable operation receipts, and D1 triggers still make
+the final decision.
+
+The intended sequence is:
+
+1. A proposer plans and applies the reviewed pool draft.
+2. A different authorized actor uses `list-pools`, independently compares the
+   manifest, then plans and applies activation.
+3. The isolated system drill completes three authoritative wins, immediate
+   Silver settlement, and the real 24-hour Gold delivery. The operator tool
+   cannot fabricate this step.
+4. A third authorized actor uses `list-readiness`, echoes the exact settlement
+   and delivery keys into a `verify` input, then plans and applies verification.
+5. A separately authorized game-mode operation may enable a queue only after
+   the database recognizes all of the above receipts.
+
 `pnpm deploy:cloudflare:match-service` runs the gate before Wrangler. It rejects
 deployment-level Conquest defaults and verifies that dynamic admission and the
 receipt-backed migration remain present. Rollout is a D1 receipt-gated
