@@ -1983,6 +1983,50 @@ zero writes, and `changed_db: false`; production D1 reported no pending
 migrations. Verification changed no account, cookie-policy, inventory, deck,
 match, reward, wallet, queue, content, or staff state.
 
+## Auth/session null-account fidelity rollout — 2026-08-15
+
+The generated Go auth responses always emit their nullable account pointer.
+Before wallet registration, both `GetAuthToken` and `GetSession` therefore
+return `account: null`; the Cloudflare adapter previously omitted that property.
+That sparse response could make an otherwise valid pre-registration session
+look structurally different from the source contract.
+
+Runtime commit `6bea89d5af503e3e4e1ea921ce157e00245020d4` restores the
+generated wire shape without inventing an account. Both auth methods now emit
+the stored account object when one exists and an explicit null when it does
+not. The source-derived account-wire gate pins the generated nullable pointer
+and JSON tag, source nil behavior and integration assertion, both Worker route
+projections, their tests, and mandatory release-gate inclusion. Mutation tests
+reject source, route, response, test, and gate drift.
+
+The complete local release contract passed 478 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31915565883` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`89a36662-9fdc-402b-9579-071ccc4eef5d` to
+`63039160-233d-47b7-831c-11658749cfe3`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files. The deployment verifier resolved web asset
+`/assets/index-b1769b84.js`, unchanged game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy after normal edge propagation.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+Anonymous `GetSession` returned `401 webrpc.unauthenticated` with
+`Cache-Control: no-store`. Under the existing Google session, the preserved
+Practice-vs-Bot page loaded the ADA starter deck at 30/30 without an auth
+fallback, generic failure, or enum error; no match was started. An
+identity-free D1 aggregate found zero legacy wallet accounts, zero writes, and
+`changed_db: false`; production D1 reported no pending migrations. Verification
+changed no account, identity, inventory, deck, match, reward, wallet, queue,
+content, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
