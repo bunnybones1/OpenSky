@@ -1748,6 +1748,38 @@ disabled. Signed-in browser checks on Home and Practice found neither the empty
 mutation command, multiplayer Worker, binding, or game asset was deployed by
 this rollout.
 
+## Fork-aware repository footer rollout — 2026-08-16
+
+Web milestone `21b27430d656d1c5c62043e13dceb98f5b04bfe0` removes the
+last visible hardcoded upstream repository link from the Cloudflare shell while
+preserving the original footer layout. The destination is now runtime
+configuration guarded by an explicit HTTPS parser. The Cloudflare profile
+points to the Cloud Weasel fork at `https://github.com/bunnybones1/OpenSky`;
+the source compose and local profiles retain the original OpenSky repository.
+Missing, malformed, and non-HTTPS values render no link.
+
+The mandatory optional-integration gate now has four focused tests covering
+both Twitch and repository destinations. The complete local release contract
+again passed 507 main Worker tests, 34 game-server unit tests, 98 game-server
+Workers tests, 33 match-service tests, 78 matchmaker tests, 27 game/browser
+tests, six analytics tests, every type/source/off-chain audit, both production
+builds, and the 594-file artifact validation. Exact-head GitHub Actions run
+[`31959911174`](https://github.com/bunnybones1/OpenSky/actions/runs/31959911174),
+job `95196233359`, passed in 10m33s before deployment.
+
+Only the main Worker and web assets were deployed. The Worker advanced from
+`1008b940-8fb7-4350-b755-a61b813603b4` to
+`b70f0304-352e-49a8-880f-b06070d6f053` at 100% traffic. The strict verifier
+matched web entry `/assets/index-a4223590.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six locales, and the
+release-safe cache policy after four edge-propagation attempts. Public Ping,
+Version, and game-mode probes returned `200` with `Cache-Control: no-store`;
+Practice PvP and Practice Bot remained enabled and both Conquest modes remained
+disabled. A signed-in production Home check found the Cloud Weasel fork URL,
+no upstream repository URL, no empty Twitch shell, and no legacy creator CTA.
+No migration, D1 mutation command, multiplayer Worker, binding, or game asset
+was deployed by this rollout.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

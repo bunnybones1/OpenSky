@@ -40,7 +40,7 @@ product description or Cloudflare runtime.
 - Enable R2, create `cloud-weasel-game-analytics`, deploy the analytics consumer,
   verify it, and only then deploy the game-server replay producer.
   The latest account-pinned read-only check on 2026-08-16, after runtime
-  milestone `763ce9ae`, still returned Cloudflare `10042` (“Please enable R2
+  milestone `21b27430`, still returned Cloudflare `10042` (“Please enable R2
   through the Cloudflare Dashboard”). Both queues still exist with zero
   producers and zero consumers, and the deployment inventory returns `10007`
   because no analytics Worker exists. This is account provisioning, not a
