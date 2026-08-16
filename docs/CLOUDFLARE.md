@@ -1663,6 +1663,57 @@ This is another proof-and-release-gate milestone only. No deployable runtime,
 schema, binding, configuration, or asset changed, so no Cloudflare service was
 redeployed and no production data or rollout authority changed.
 
+## Full cross-service readiness settlement proof — 2026-08-16
+
+Runtime milestone `d9beab6efd6fcab12d29c09659a0bbc03443515b` closes the
+remaining local boundary through three sequential authoritative matches and
+the real settlement/delivery repositories. The reserved drill target uses the
+source bot at difficulty `1`; each reserved opponent uses the same source bot
+at difficulty `0`. That asymmetry is accepted only for a bot-only
+`readiness-drill-match-*` in constructed Conquest. Ordinary bot matches,
+mixed player/bot matches, wrong-mode proposals, and every player-facing queue
+retain their configured difficulty. No test writes a winner, match result,
+game state, progression row, settlement, reward, or readiness receipt.
+
+All three real WASM matches must end with the target as the engine-authored
+winner before the ordinary orchestrator can reach `WAITING_DELIVERY`. The
+shared D1 state must then contain exactly three match ledgers, three Conquest
+progress receipts, three point receipts, six per-player point receipts, and a
+three-`WIN` run. The source bundle is applied as one Silver card immediately
+and one pending Gold card. The player-facing pending-card projection exposes
+that Gold and its off-chain token ID until delivery. The test calls the real
+delivery function one millisecond before the stored deadline and at the exact
+deadline, proving the unchanged 24-hour boundary without pretending to have
+waited 24 wall-clock hours. It then verifies Gold inventory, the delayed feed
+event, the immutable drill receipt, and final orchestrator completion.
+
+Five consecutive focused runs passed in 8–9 seconds each. The complete local
+release contract passed 507 main-Worker tests, 34 game-server unit tests, 98
+game-server Workers tests, 33 match-service tests, 78 matchmaker tests, 27
+game/browser tests, six analytics tests, every source/off-chain audit and
+service typecheck, both production builds, and the 594-file artifact
+validation. Exact-head GitHub Actions run
+[`31956071676`](https://github.com/bunnybones1/OpenSky/actions/runs/31956071676),
+job `95186794771`, passed in 10m12s.
+
+Only the game Worker changed. It advanced from
+`86f87caf-b597-4550-830a-baa6a213f831` to
+`cbe6364c-bc7a-4cb4-89cb-d4cd29b8c27f` at 100% traffic. Protocol-v3 health
+returned `200` with `Cache-Control: no-store`. The strict production verifier
+matched unchanged web entry `/assets/index-ca9c688d.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six locales, and the
+release-safe cache policy on its first attempt. The main Worker, match service,
+matchmaker, bindings, schema, and browser assets were not redeployed.
+
+Matching pre/post read-only D1 aggregates found zero system users, drill
+operations, readiness matches/runs, settlements, deliveries, active pools,
+queue-readiness rows, verified receipts, or enabled Conquest modes. Both
+queries wrote zero rows and reported `changed_db: false`. Public mode status
+kept Practice PvP and Practice Bot enabled and both Conquest modes disabled.
+Reward readiness remained error-free with SkyPass as the sole active reviewed
+policy. This proof does not authorize or substitute for a real production
+three-match/24-hour exercise; production remains dormant.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

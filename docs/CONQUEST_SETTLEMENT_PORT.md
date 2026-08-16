@@ -919,3 +919,48 @@ No runtime artifact, migration, binding, production capability, reward pool,
 synthetic operation, match, settlement, readiness row, mode flag, or
 production data changed. No Cloudflare deployment was appropriate for this
 proof-only milestone.
+
+## Full cross-service readiness settlement proof
+
+Runtime milestone `d9beab6efd6fcab12d29c09659a0bbc03443515b` now takes one
+reserved operation through all three sequential authoritative matches and the
+ordinary settlement/delivery path. The drill target uses the original source
+bot at difficulty `1`, while each reserved opponent uses it at difficulty `0`.
+That policy is scoped to bot-only `readiness-drill-match-*` constructed
+Conquest proposals; direct tests prove ordinary, wrong-mode, and mixed
+participant matches retain the configured difficulty. The engine still owns
+every action, diff, winner, and terminal result, and the release gate rejects
+removal of either the scope or the cross-service evidence.
+
+The shared D1 assertions require three match ledgers, three Conquest progress
+receipts, three point receipts, six per-player point receipts, and exactly
+three `WIN` results. The real settlement grants one Silver immediately and
+stores one pending Gold for the source 24-hour delay. `GetPendingCards`-backed
+projection evidence exposes the Gold card and token before delivery, the real
+delivery runner returns zero one millisecond before the deadline, and it
+delivers exactly once at the stored deadline. The final checks cover Gold
+inventory, delayed reward feed, verified drill receipt, and orchestrator
+completion while queue readiness and public Conquest modes remain zero. This
+is timestamp-boundary verification, not a claimed 24-hour wall-clock wait.
+
+Five consecutive focused Workers runs passed in 8–9 seconds. The complete
+local release contract passed 507 main-Worker tests, 34 game-server unit tests,
+98 game-server Workers tests, 33 match-service tests, 78 matchmaker tests, 27
+game/browser tests, six analytics tests, every source/off-chain audit and
+service typecheck, both production builds, and 594 artifact files. Exact-head
+GitHub Actions run
+[`31956071676`](https://github.com/bunnybones1/OpenSky/actions/runs/31956071676),
+job `95186794771`, passed in 10m12s.
+
+Only the game Worker deployed, advancing from
+`86f87caf-b597-4550-830a-baa6a213f831` to
+`cbe6364c-bc7a-4cb4-89cb-d4cd29b8c27f` at 100% traffic. Protocol-v3 health,
+the strict artifact/locale/cache verifier, and public mode status passed;
+Practice remains enabled and Conquest remains disabled. Web asset
+`/assets/index-ca9c688d.js` and game asset
+`/game/cloudflare/assets/index-7e9c419b.js` were unchanged. Matching pre/post
+read-only D1 aggregates found zero system users, drill operations, readiness
+matches/runs, settlements, deliveries, active pools, readiness rows, verified
+receipts, or enabled Conquest modes, with zero writes and
+`changed_db: false`. The production exercise and its independent approvals
+remain outstanding by design.
