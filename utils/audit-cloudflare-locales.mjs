@@ -250,6 +250,23 @@ export const auditHomeConquestRewardCopy = source => {
   return errors
 }
 
+export const auditConquestProfileFirstPlayed = source => {
+  const errors = []
+  if (
+    !/\{firstConquestDate && \([\s\S]*?profile\.playedConquestForFirstTimeOn[\s\S]*?firstConquestDate\.split\('T'\)\[0\][\s\S]*?\)\}/.test(
+      source
+    )
+  ) {
+    errors.push(
+      'Conquest profile first-play claim is not guarded by a real source date'
+    )
+  }
+  if (/firstConquestDate\s*\?[^:]+:\s*['"]N\/A['"]/.test(source)) {
+    errors.push('Conquest profile still claims an N/A first-play date')
+  }
+  return errors
+}
+
 export const loadWebappLocaleResources = async rootDir =>
   Object.fromEntries(
     await Promise.all(
@@ -307,6 +324,11 @@ if (isMain) {
     ),
     ...auditHomeConquestRewardCopy(
       sources['webapp/src/HomePage/HomePage.tsx'] ?? ''
+    ),
+    ...auditConquestProfileFirstPlayed(
+      sources[
+        'webapp/src/AccountPage/AccountIdentity/components/ConquestSection.tsx'
+      ] ?? ''
     )
   ]
   if (errors.length) {

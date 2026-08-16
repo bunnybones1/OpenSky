@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   CLOUD_WEASEL_LOCALE_KEYS,
+  auditConquestProfileFirstPlayed,
   auditConquestDormantRewardCopy,
   auditHomeConquestRewardCopy,
   auditLocaleResources,
@@ -157,5 +158,33 @@ test('rejects a Home Conquest claim while the reward pool is dormant', () => {
       )
     ),
     ['Home Conquest reward claim is not replaced by inactive-pool copy']
+  )
+})
+
+const safeConquestProfileFirstPlayed = `
+  {firstConquestDate && (
+    <ConquestFirstPlayed>
+      {t('profile.playedConquestForFirstTimeOn')}
+      {firstConquestDate.split('T')[0]}
+    </ConquestFirstPlayed>
+  )}
+`
+
+test('accepts a Conquest first-play claim only for a real source date', () => {
+  assert.deepEqual(
+    auditConquestProfileFirstPlayed(safeConquestProfileFirstPlayed),
+    []
+  )
+})
+
+test('rejects a Conquest first-play claim with an N/A date', () => {
+  assert.deepEqual(
+    auditConquestProfileFirstPlayed(
+      safeConquestProfileFirstPlayed.replace(
+        "{firstConquestDate.split('T')[0]}",
+        "{firstConquestDate ? firstConquestDate.split('T')[0] : 'N/A'}"
+      )
+    ),
+    ['Conquest profile still claims an N/A first-play date']
   )
 })
