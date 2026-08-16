@@ -1194,6 +1194,49 @@ reported zero rows written and `changed_db: false`. The rollout created no
 match, reward, receipt, inventory, pool, queue, capability, or economy
 authority.
 
+## Conquest dormant reward copy rollout — 2026-08-15
+
+Runtime milestone `0f9d13a4cf7fecdf75a3be82972fda0b67b84390`
+keeps the original Conquest layout and reward-bundle rules while making its
+player-facing claims follow the authoritative pool state. With no approved
+reward pool, the page now says that Conquest card rewards are inactive and
+hides the source copy that advertises over 100 Golds, an arbitrary Silver pool,
+and a Silver availability total. When an approved pool exists, the original
+pool-specific presentation remains available. The hero-skin bonus now uses a
+numeric i18next plural selector and renders `+25% Points` instead of the raw
+`play.rewards.points` key.
+
+The locale gate covers both messages in all six shipped locales, rejects
+non-numeric string plural selectors on unsuffixed keys, and rejects Conquest
+pool claims that lose their active-pool guard. The complete local release
+contract passed 495 main-Worker tests, 34 game-server unit tests, 94
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 27
+game/browser tests, six analytics tests, every source/off-chain audit, all
+service typechecks, and both production builds. Exact-head GitHub Actions run
+`31929282648`, job `95121580380`, passed in 9m59s before deployment.
+
+Only the main API/web Worker and static assets were deployed, advancing it
+from `b641abb4-b8e1-40a7-a748-76a031852dd4` to
+`16f73853-a0ff-456c-aaac-0494442682d8`; no D1 migration or multiplayer Worker
+deployment was required. The strict verifier matched web entry
+`/assets/index-28ca65ad.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy after edge propagation. Public Ping, Version,
+game-mode, Conquest-reward, and protocol-v3 game-health probes returned `200`
+with `Cache-Control: no-store`; both Practice modes remained enabled, both
+Conquest modes remained disabled, and `weeklyGolds` remained empty.
+
+Matching read-only D1 aggregates before and after deployment retained three
+users, 185 inventory rows, zero Conquest runs, one zero-balance Conquest-points
+row, and zero settlements, Silver grants, Gold deliveries, Gold grants, reward
+pools, approved active pools, or readiness rows. Both queries reported zero
+rows written and `changed_db: false`, and production had no pending migrations.
+The reward-readiness audit remained error-free: the one reviewed SkyPass policy
+was active and all four policy-gated Conquest, leaderboard, Conquest V2, and
+referral tracks remained dormant. A fresh signed-in `/play/conquest` navigation
+proved the inactive message and `+25% Points` label present, all dormant-pool
+claims and the raw key absent, and no new browser warnings or errors.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
