@@ -5,10 +5,7 @@ import {
 
 import { processToCSV } from './analyticsHelpers'
 import { cloudflareAnalyticsRuntime } from './cloudflareRuntime'
-import {
-  Game,
-  type AnalyticsMatchRuntimeConstructor
-} from './Match'
+import { Game, type AnalyticsMatchRuntimeConstructor } from './Match'
 
 const MAX_ERROR_LENGTH = 500
 const MAX_ATTEMPTS = 25
@@ -139,26 +136,18 @@ const complete = async (
   now: string,
   Runtime: AnalyticsMatchRuntimeConstructor
 ) => {
-  const match = await Game.loadMatch(
-    message.matchId,
-    records,
-    Runtime
-  )
+  const match = await Game.loadMatch(message.matchId, records, Runtime)
   if (match.type !== 'matchData') throw match.err
 
   const csv = processToCSV(match)
   const prefix = outputPrefix(message)
   await Promise.all([
-    env.GAME_ANALYTICS.put(
-      `${prefix}match-data.csv`,
-      csv.generalMatchData,
-      { httpMetadata: { contentType: 'text/csv; charset=utf-8' } }
-    ),
-    env.GAME_ANALYTICS.put(
-      `${prefix}game-state-data.csv`,
-      csv.gameStateData,
-      { httpMetadata: { contentType: 'text/csv; charset=utf-8' } }
-    ),
+    env.GAME_ANALYTICS.put(`${prefix}match-data.csv`, csv.generalMatchData, {
+      httpMetadata: { contentType: 'text/csv; charset=utf-8' }
+    }),
+    env.GAME_ANALYTICS.put(`${prefix}game-state-data.csv`, csv.gameStateData, {
+      httpMetadata: { contentType: 'text/csv; charset=utf-8' }
+    }),
     env.GAME_ANALYTICS.put(`${prefix}move-data.csv`, csv.moveData, {
       httpMetadata: { contentType: 'text/csv; charset=utf-8' }
     })
@@ -212,13 +201,15 @@ export const processAnalyticsMessage = async (
       message.releaseVersion
     )
     .first<{ id: number }>()
-  if (!ledger) throw new Error('Ended multiplayer match ledger row was not found')
+  if (!ledger)
+    throw new Error('Ended multiplayer match ledger row was not found')
 
   const receipt = await existingReceipt(env.AUTH_DB, message.proposalId)
   if (receipt?.status === 'completed') return { alreadyCompleted: true }
   if (
     receipt &&
-    receipt.release_version.toLowerCase() !== message.releaseVersion.toLowerCase()
+    receipt.release_version.toLowerCase() !==
+      message.releaseVersion.toLowerCase()
   ) {
     throw new Error('Analytics receipt release does not match queue message')
   }
@@ -262,22 +253,21 @@ export default {
       try {
         if (!isReplayAnalyticsMessage(message.body)) {
           console.error('invalid match analytics message', message.id)
-          message.ack()
+          message.retry({ delaySeconds: 30 })
           continue
         }
         const result = await processAnalyticsMessage(env, message.body)
-        message.ack()
         if ('alreadyFailed' in result) {
-          console.error('match analytics message is dead-lettered', message.id)
-        }
-      } catch (error) {
-        console.error('match analytics processing failed', message.id, error)
-        const value = message.body as ReplayAnalyticsMessage
-        const receipt = await existingReceipt(env.AUTH_DB, value.proposalId)
-        if (receipt !== null && receipt.attempts >= MAX_ATTEMPTS) {
-          message.ack()
+          console.error(
+            'match analytics message will be dead-lettered',
+            message.id
+          )
+          message.retry({ delaySeconds: 30 })
           continue
         }
+        message.ack()
+      } catch (error) {
+        console.error('match analytics processing failed', message.id, error)
         message.retry({ delaySeconds: 30 })
       }
     }

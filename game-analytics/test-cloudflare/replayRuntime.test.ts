@@ -2,7 +2,7 @@ import { encode, VERSION } from '@opensky/deck-string-codec'
 import { prismsToDeckClass } from '@opensky/shared/helpers'
 import { WasmMatch } from '@skyweaver/state-browser-sys'
 import { env } from 'cloudflare:test'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthoritativeMatchRuntime } from '../../game-server-cloudflare/src/state-runtime'
 import { createMatchFixture } from '../../game-server-cloudflare/test-cloudflare/fixture'
@@ -11,12 +11,87 @@ import {
   type GameAnalyticsEnv,
   processAnalyticsMessage
 } from '../src/cloudflareWorker'
+import analyticsWorker from '../src/cloudflareWorker'
 
 const runtimes: AuthoritativeMatchRuntime[] = []
 
 afterEach(() => {
   for (const runtime of runtimes.splice(0)) runtime.free()
+  vi.restoreAllMocks()
 })
+
+const replayMessage = (
+  proposalId: string,
+  matchId: number,
+  replayId: string
+) => ({
+  type: 'process-match-replay' as const,
+  proposalId,
+  matchId,
+  replayId,
+  releaseVersion: 'test-release',
+  endedAt: '2026-08-12T00:00:00.000Z',
+  archivePrefix: `replays/test-release/${proposalId}/`,
+  replayRecordCount: 1,
+  replayBytes: 1
+})
+
+const queueMessage = (body: unknown) => {
+  const ack = vi.fn()
+  const retry = vi.fn()
+  return {
+    ack,
+    retry,
+    message: {
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+      body,
+      attempts: 1,
+      ack,
+      retry
+    } as unknown as Message<unknown>
+  }
+}
+
+const runQueue = (
+  analyticsEnv: GameAnalyticsEnv,
+  ...messages: Message<unknown>[]
+) =>
+  analyticsWorker.queue(
+    {
+      queue: 'cloud-weasel-game-analytics-test',
+      messages,
+      ackAll: vi.fn(),
+      retryAll: vi.fn()
+    } as unknown as MessageBatch<unknown>,
+    analyticsEnv
+  )
+
+const insertEndedMatch = async (
+  analyticsEnv: GameAnalyticsEnv,
+  message: ReturnType<typeof replayMessage>
+) => {
+  const now = new Date().toISOString()
+  await analyticsEnv.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_matches
+       (id, proposal_id, replay_id, mode, version, player1_principal,
+        player2_principal, match_payload_json, status, created_at,
+        updated_at, ended_at)
+     VALUES (?, ?, ?, 'PRACTICE_BOT', ?, 'identity:queue-player',
+             'bot:queue-bot', '{}', 'ended', ?, ?, ?)`
+  )
+    .bind(
+      message.matchId,
+      message.proposalId,
+      message.replayId,
+      message.releaseVersion,
+      now,
+      now,
+      now
+    )
+    .run()
+  return now
+}
 
 const replayJson = (value: unknown) =>
   JSON.stringify(value, function (key, current) {
@@ -241,7 +316,9 @@ describe('Cloudflare replay analytics runtime', () => {
       replayBytes
     }
 
-    expect(await processAnalyticsMessage(analyticsEnv, message, WasmMatch)).toEqual({
+    expect(
+      await processAnalyticsMessage(analyticsEnv, message, WasmMatch)
+    ).toEqual({
       completed: true
     })
     expect(
@@ -281,6 +358,98 @@ describe('Cloudflare replay analytics runtime', () => {
         `analytics/${releaseVersion}/${proposalId}/move-data.csv`
       )
     ).not.toBeNull()
+  })
+
+  it('retries malformed messages so the platform can dead-letter them', async () => {
+    const analyticsEnv = env as unknown as GameAnalyticsEnv
+    const queued = queueMessage({ type: 'malformed' })
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await runQueue(analyticsEnv, queued.message)
+
+    expect(queued.retry).toHaveBeenCalledOnce()
+    expect(queued.retry).toHaveBeenCalledWith({ delaySeconds: 30 })
+    expect(queued.ack).not.toHaveBeenCalled()
+  })
+
+  it('retains a terminal failed receipt and retries into the dead-letter queue', async () => {
+    const analyticsEnv = env as unknown as GameAnalyticsEnv
+    const message = replayMessage(
+      'analytics-terminal-failure',
+      6262,
+      'analytics-terminal-failure-replay'
+    )
+    const now = await insertEndedMatch(analyticsEnv, message)
+    await analyticsEnv.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_analytics
+         (proposal_id, match_id, replay_id, release_version, status,
+          attempts, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'retrying', 24, ?, ?)`
+    )
+      .bind(
+        message.proposalId,
+        message.matchId,
+        message.replayId,
+        message.releaseVersion,
+        now,
+        now
+      )
+      .run()
+    const queued = queueMessage(message)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await runQueue(analyticsEnv, queued.message)
+
+    expect(queued.retry).toHaveBeenCalledOnce()
+    expect(queued.retry).toHaveBeenCalledWith({ delaySeconds: 30 })
+    expect(queued.ack).not.toHaveBeenCalled()
+    expect(
+      await analyticsEnv.AUTH_DB.prepare(
+        `SELECT status, attempts, completed_at, last_error
+         FROM multiplayer_match_analytics WHERE proposal_id = ?`
+      )
+        .bind(message.proposalId)
+        .first()
+    ).toMatchObject({
+      status: 'failed',
+      attempts: 25,
+      completed_at: expect.any(String),
+      last_error: expect.stringContaining('Replay record 0 is missing')
+    })
+  })
+
+  it('acknowledges only a completed analytics receipt', async () => {
+    const analyticsEnv = env as unknown as GameAnalyticsEnv
+    const message = replayMessage(
+      'analytics-completed-queue',
+      7272,
+      'analytics-completed-queue-replay'
+    )
+    const now = await insertEndedMatch(analyticsEnv, message)
+    await analyticsEnv.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_analytics
+         (proposal_id, match_id, replay_id, release_version, status,
+          attempts, replay_record_count, replay_bytes, output_prefix,
+          created_at, updated_at, completed_at)
+       VALUES (?, ?, ?, ?, 'completed', 1, 1, 1, ?, ?, ?, ?)`
+    )
+      .bind(
+        message.proposalId,
+        message.matchId,
+        message.replayId,
+        message.releaseVersion,
+        `analytics/${message.releaseVersion}/${message.proposalId}/`,
+        now,
+        now,
+        now
+      )
+      .run()
+    const queued = queueMessage(message)
+
+    await runQueue(analyticsEnv, queued.message)
+
+    expect(queued.ack).toHaveBeenCalledOnce()
+    expect(queued.retry).not.toHaveBeenCalled()
   })
 })
 
