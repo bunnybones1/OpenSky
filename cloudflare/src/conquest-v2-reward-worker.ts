@@ -172,6 +172,9 @@ const resumableSchedule = async (
   database: D1Database,
   now: Date
 ): Promise<ScheduleRow | null> => {
+  // A newer disabled schedule stops future snapshots, not a delivery already
+  // promised by this cycle's immutable policy receipt. Do not join or filter
+  // through the current schedule switch here.
   const schedule = await database
     .prepare(
       `${scheduleSelect}

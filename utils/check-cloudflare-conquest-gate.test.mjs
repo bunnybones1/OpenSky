@@ -5,7 +5,8 @@ import test from 'node:test'
 import {
   conquestGateErrors,
   conquestPoolCatalogErrors,
-  conquestSettlementSourceParityErrors
+  conquestSettlementSourceParityErrors,
+  conquestV2ResumeSafetyErrors
 } from './check-cloudflare-conquest-gate.mjs'
 
 test('production keeps both Conquest queues behind the settlement gate', async () => {
@@ -231,6 +232,19 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'startsAt must be in the future',
       "'x-cloud-weasel-operation-key'"
     ].join('\n'),
+    v2RewardWorker: [
+      'const resumableSchedule = async () => {',
+      'JOIN conquest_v2_reward_cycles cycle',
+      'JOIN conquest_v2_reward_cycle_policy_receipts receipt',
+      "WHERE cycle.status <> 'COMPLETED'",
+      '}',
+      'const validatedSchedule = () => {}',
+      'export const runDueConquestV2Rewards = async () => {',
+      'const schedule =',
+      '(await resumableSchedule(database, now)) ??',
+      '(await activeSchedule(database, now))',
+      '}'
+    ].join('\n'),
     staff: [
       'requireConquestRewardPoolWrite(',
       'staff_conquest_reward_pool_permissions',
@@ -434,6 +448,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'v2ScheduleActivation',
     'v2ScheduleOperationsMigration',
     'v2ScheduleOperations',
+    'v2RewardWorker',
     'staff',
     'settlement',
     'goldModerationMigration',
@@ -477,6 +492,33 @@ test('binds the reviewed Conquest card ranges to the generated catalog', () => {
     /differ/
   )
   assert.match(conquestPoolCatalogErrors('', catalog)[0], /missing/)
+})
+
+test('keeps snapshotted Conquest V2 delivery ahead of later schedule changes', async () => {
+  const worker = await readFile(
+    'cloudflare/src/conquest-v2-reward-worker.ts',
+    'utf8'
+  )
+  assert.deepEqual(conquestV2ResumeSafetyErrors(worker), [])
+
+  assert.ok(
+    conquestV2ResumeSafetyErrors(
+      worker.replace(
+        "WHERE cycle.status <> 'COMPLETED'",
+        "WHERE schedule.enabled = 1 AND cycle.status <> 'COMPLETED'"
+      )
+    ).some(error => error.includes('current schedule switch'))
+  )
+  assert.ok(
+    conquestV2ResumeSafetyErrors(
+      worker.replace(
+        `(await resumableSchedule(database, now)) ??
+    (await activeSchedule(database, now))`,
+        `(await activeSchedule(database, now)) ??
+    (await resumableSchedule(database, now))`
+      )
+    ).some(error => error.includes('resume a pinned incomplete cycle'))
+  )
 })
 
 test('derives Conquest settlement rewards and terminal behavior from source', async () => {

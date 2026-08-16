@@ -178,6 +178,48 @@ const workerRewardWireErrors = settlement => {
 }
 
 /**
+ * Once a Conquest V2 cycle snapshots player points, its immutable policy
+ * receipt must outrank later schedule changes. A newer disabled schedule may
+ * stop future cycles, but it cannot strand the already-promised delivery.
+ */
+export const conquestV2ResumeSafetyErrors = source => {
+  const errors = []
+  const resumeStart = source.indexOf('const resumableSchedule')
+  const resumeEnd = source.indexOf('const validatedSchedule', resumeStart)
+  const resume =
+    resumeStart >= 0 && resumeEnd > resumeStart
+      ? source.slice(resumeStart, resumeEnd)
+      : ''
+  for (const token of [
+    'JOIN conquest_v2_reward_cycles cycle',
+    'JOIN conquest_v2_reward_cycle_policy_receipts receipt',
+    "WHERE cycle.status <> 'COMPLETED'"
+  ]) {
+    if (!resume.includes(token)) {
+      errors.push(`Conquest V2 resumable-cycle gate is missing: ${token}`)
+    }
+  }
+  if (/\bschedule\.enabled\b/.test(resume)) {
+    errors.push(
+      'Conquest V2 resumable cycles cannot depend on the current schedule switch'
+    )
+  }
+
+  const run = bracedBlock(source, 'export const runDueConquestV2Rewards')
+  const compactRun = run?.replace(/\s+/g, ' ') ?? ''
+  if (
+    !compactRun.includes(
+      '(await resumableSchedule(database, now)) ?? (await activeSchedule(database, now))'
+    )
+  ) {
+    errors.push(
+      'Conquest V2 must resume a pinned incomplete cycle before considering a new active schedule'
+    )
+  }
+  return errors
+}
+
+/**
  * Derives the reward table and feed projection from the Go implementation,
  * then compares them with the TypeScript settlement instead of maintaining a
  * second hand-written source contract in the release gate.
@@ -679,6 +721,9 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (evidence.v2RewardWorker !== undefined) {
+    errors.push(...conquestV2ResumeSafetyErrors(evidence.v2RewardWorker))
+  }
   if (evidence.staff !== undefined) {
     for (const token of [
       'requireConquestRewardPoolWrite(',
@@ -945,6 +990,7 @@ const main = async () => {
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
+    v2RewardWorker,
     staff,
     cardLibrary,
     sourceSettlement,
@@ -1094,6 +1140,10 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-v2-reward-worker.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'staff.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare', 'src', 'generated', 'card-library.json'),
@@ -1223,6 +1273,7 @@ const main = async () => {
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
+    v2RewardWorker,
     staff,
     cardLibrary,
     sourceSettlement,

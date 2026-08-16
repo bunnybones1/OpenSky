@@ -649,6 +649,50 @@ describe('Conquest V2 off-chain weekly rewards', () => {
     ).toBe(100)
   })
 
+  it('finishes a snapshotted cycle after a newer schedule disables future rewards', async () => {
+    await setupPlayer('treasure-disabled-successor', 250)
+    await setWeightPerSilver(1)
+    await enableSchedule()
+
+    expect(
+      await runDueConquestV2Rewards(env.AUTH_DB, SNAPSHOT_NOW)
+    ).toMatchObject({ status: 'awaiting_delivery', delivered: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT current_points FROM player_conquest_points
+         WHERE user_id = 'treasure-disabled-successor' AND event_id = 2`
+      ).first('current_points')
+    ).toBe(0)
+
+    const disabledAt = new Date(SNAPSHOT_NOW.getTime() + 60_000).toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO conquest_v2_reward_schedule_versions
+         (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
+          first_season, first_week, delivery_delay_seconds,
+          reward_card_sets_json, starts_at, reason, created_at)
+       VALUES (2, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+               ?, 'test emergency disable', ?)`
+    )
+      .bind(disabledAt, disabledAt)
+      .run()
+
+    expect(
+      await runDueConquestV2Rewards(env.AUTH_DB, DELIVERY_NOW)
+    ).toMatchObject({ status: 'completed', delivered: 1 })
+    expect(await silverTotal('treasure-disabled-successor')).toBe(1)
+    expect(
+      await runDueConquestV2Rewards(
+        env.AUTH_DB,
+        new Date(FIRST_RUN.getTime() + WEEK_MS + 60_000)
+      )
+    ).toEqual({ status: 'disabled', delivered: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM conquest_v2_reward_cycles`
+      ).first('count')
+    ).toBe(1)
+  })
+
   it('does not snapshot operational system points into player reward cycles', async () => {
     const userId = 'system:treasure-readiness-test'
     await setupPlayer(userId, 1_600, 'SYSTEM')
