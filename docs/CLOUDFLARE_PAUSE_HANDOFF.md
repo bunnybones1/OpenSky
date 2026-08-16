@@ -9,8 +9,8 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9237cbd23a4beffdbcb712f7d06035c04193c672`
-  (`Dead-letter failed analytics messages`)
+- Last code/test checkpoint: `2863a23db11304dc4c169e12eda4696cfea6dbe1`
+  (`Protect snapshotted Conquest V2 delivery`)
 - Latest tested runtime commit: `38386294` (`Gate reward timing on active schedules`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
 - Last known deployed main Worker version:
@@ -22,8 +22,9 @@ provisioning, product activation, or live drills without a new user request.
   deployed**. Its local web build produced `/assets/index-fd3d9163.js`; the
   game entry remained `/game/cloudflare/assets/index-7e9c419b.js`.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
-  and correct Queue dead-letter behavior. They do not enable a producer or
-  change player-facing runtime behavior, and they are not deployed.
+  and correct Queue dead-letter behavior. Commit `2863a23d` protects an
+  already-snapshotted Conquest V2 cycle from a later schedule disable. None of
+  these commits enables a producer, activates rewards, or is deployed.
 - The untracked `temp/` directory is user-owned and must remain untouched.
 
 The reported Practice PvP replay enum failure was fixed earlier and is already
@@ -45,10 +46,11 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed for exact head `9237cbd2` before stopping:
+Validation completed locally for exact code head `2863a23d` before stopping:
 
-- focused Worker regression: 54/54 tests;
-- main Worker suite: 508/508 tests across 84 files;
+- focused Conquest V2 Worker regression: 17/17 tests;
+- focused mutation-tested Conquest gate: 6/6 tests;
+- main Worker suite: 509/509 tests across 84 files;
 - browser game suite: 27/27 tests;
 - game server: 34 unit and 98 Workers tests;
 - match service: 33/33 Workers tests;
@@ -69,7 +71,26 @@ there were no build errors.
 
 GitHub Actions run
 <https://github.com/bunnybones1/OpenSky/actions/runs/31966818671> also passed
-the complete release contract for the exact 40-character head above in 9m19s.
+the complete release contract for the earlier exact code head `9237cbd2` in
+9m19s. Before resuming production work, require a green run for the then-current
+exact branch head.
+
+## Conquest V2 resume-safety milestone
+
+Commit `2863a23d` closes a settlement edge case without enabling Conquest:
+
+- once points have been snapshotted, the incomplete cycle resumes from its
+  immutable policy receipt before the worker considers any newer schedule;
+- a newer disabled schedule still prevents future snapshots, but cannot strand
+  rewards already promised by the earlier cycle;
+- a Workers-runtime regression proves the promised Silver is delivered once,
+  the player's snapshotted points remain cleared, and no later cycle starts;
+- the Conquest release gate mutation-tests both required invariants: resumable
+  cycles cannot depend on the current schedule switch, and resume must precede
+  active-schedule lookup.
+
+This safeguard is committed and locally tested only. It has not been deployed,
+and production Conquest remains disabled.
 
 ## Storage safety milestone
 
@@ -184,11 +205,12 @@ production migration state.
 ### Conquest
 
 The TypeScript implementation, settlement receipts, operator flow, and safety
-gates are complete. Production remains deliberately disabled. Before enabling
-it, Cloud Weasel still needs authoritative eligible Silver card IDs, weekly
-Gold IDs and window, separate proposer/activator/runner/verifier identities,
-three real drill matches, and the unchanged 24-hour observation period. Do not
-create or activate pools merely to make the UI nonempty.
+gates are complete, including delivery of snapshotted cycles across a later
+schedule disable. Production remains deliberately disabled. Before enabling it,
+Cloud Weasel still needs authoritative eligible Silver card IDs, weekly Gold
+IDs and window, separate proposer/activator/runner/verifier identities, three
+real drill matches, and the unchanged 24-hour observation period. Do not create
+or activate pools merely to make the UI nonempty.
 
 ### Product configuration and decisions
 
