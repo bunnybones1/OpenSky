@@ -3,18 +3,30 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const REVIEWED_CLOUDFLARE_ACCOUNT_ID =
-  '528badc1c29c30196335df252a73c5a6'
+export const REVIEWED_CLOUDFLARE_ACCOUNT_ID = '528badc1c29c30196335df252a73c5a6'
 export const REVIEWED_AUTH_DB_ID = '2ac6fbbd-359b-407c-9d87-bd62b17a7548'
+export const REVIEWED_ANALYTICS_BUCKET = 'cloud-weasel-game-analytics'
+export const REVIEWED_ANALYTICS_QUEUE = 'cloud-weasel-game-analytics'
+export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
+  'cloud-weasel-game-analytics-dead-letter'
+export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
     'wrangler.jsonc',
-    { name: 'opensky-webapp', requiresAuthDatabase: true }
+    {
+      name: 'opensky-webapp',
+      requiresAuthDatabase: true,
+      supportsClientFeedback: true
+    }
   ],
   [
     'game-server-cloudflare/wrangler.jsonc',
-    { name: 'cloud-weasel-game-server', requiresAuthDatabase: true }
+    {
+      name: 'cloud-weasel-game-server',
+      requiresAuthDatabase: true,
+      supportsAnalyticsProducer: true
+    }
   ],
   [
     'match-service-cloudflare/wrangler.jsonc',
@@ -26,14 +38,109 @@ export const REVIEWED_PRODUCTION_TARGETS = new Map([
   ],
   [
     'game-analytics/wrangler.jsonc',
-    { name: 'cloud-weasel-game-analytics', requiresAuthDatabase: true }
+    {
+      name: 'cloud-weasel-game-analytics',
+      requiresAuthDatabase: true,
+      requiresAnalyticsConsumer: true
+    }
   ]
 ])
 
-const normalizedTargetPath = value => value.replaceAll('\\', '/').replace(/^\.\//, '')
+const normalizedTargetPath = value =>
+  value.replaceAll('\\', '/').replace(/^\.\//, '')
 
 const authDatabase = config =>
   config?.d1_databases?.filter(database => database.binding === 'AUTH_DB') ?? []
+
+const r2Bindings = (config, binding) =>
+  config?.r2_buckets?.filter(bucket => bucket.binding === binding) ?? []
+
+const queueProducers = (config, binding) =>
+  config?.queues?.producers?.filter(producer => producer.binding === binding) ??
+  []
+
+const analyticsConsumerErrors = config => {
+  const errors = []
+  const allBuckets = config?.r2_buckets ?? []
+  const buckets = r2Bindings(config, 'GAME_ANALYTICS')
+  if (
+    allBuckets.length !== 1 ||
+    buckets.length !== 1 ||
+    buckets[0]?.bucket_name !== REVIEWED_ANALYTICS_BUCKET
+  ) {
+    errors.push(
+      `game analytics must bind exactly one GAME_ANALYTICS R2 bucket named ${REVIEWED_ANALYTICS_BUCKET}`
+    )
+  }
+
+  const consumers = config?.queues?.consumers ?? []
+  const producers = config?.queues?.producers ?? []
+  const expected = {
+    queue: REVIEWED_ANALYTICS_QUEUE,
+    max_batch_size: 1,
+    max_batch_timeout: 5,
+    max_retries: 25,
+    dead_letter_queue: REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE,
+    max_concurrency: 5,
+    retry_delay: 30
+  }
+  if (
+    consumers.length !== 1 ||
+    Object.entries(expected).some(
+      ([key, value]) => consumers[0]?.[key] !== value
+    )
+  ) {
+    errors.push(
+      'game analytics must retain the reviewed bounded Queue consumer and dead-letter topology'
+    )
+  }
+  if (producers.length) {
+    errors.push('game analytics cannot publish to an unreviewed Queue')
+  }
+  if (config?.vars?.ANALYTICS_RELEASE_VERSION !== 'cloudflare') {
+    errors.push('game analytics release version must remain cloudflare')
+  }
+  return errors
+}
+
+const optionalAnalyticsProducerErrors = config => {
+  const allBuckets = config?.r2_buckets ?? []
+  const allProducers = config?.queues?.producers ?? []
+  const consumers = config?.queues?.consumers ?? []
+  const buckets = r2Bindings(config, 'GAME_ANALYTICS')
+  const producers = queueProducers(config, 'GAME_ANALYTICS_QUEUE')
+  if (!allBuckets.length && !allProducers.length && !consumers.length) return []
+  if (
+    allBuckets.length !== 1 ||
+    buckets.length !== 1 ||
+    buckets[0]?.bucket_name !== REVIEWED_ANALYTICS_BUCKET ||
+    allProducers.length !== 1 ||
+    producers.length !== 1 ||
+    producers[0]?.queue !== REVIEWED_ANALYTICS_QUEUE ||
+    consumers.length
+  ) {
+    return [
+      'game server analytics must be disabled completely or bind the reviewed R2 bucket and Queue producer together'
+    ]
+  }
+  return []
+}
+
+const optionalClientFeedbackErrors = config => {
+  const allBuckets = config?.r2_buckets ?? []
+  const buckets = r2Bindings(config, 'CLIENT_FEEDBACK')
+  if (!allBuckets.length) return []
+  if (
+    allBuckets.length !== 1 ||
+    buckets.length !== 1 ||
+    buckets[0]?.bucket_name !== REVIEWED_CLIENT_FEEDBACK_BUCKET
+  ) {
+    return [
+      `client feedback must bind exactly one private R2 bucket named ${REVIEWED_CLIENT_FEEDBACK_BUCKET}`
+    ]
+  }
+  return []
+}
 
 export const productionTargetErrors = (
   targetPath,
@@ -42,13 +149,12 @@ export const productionTargetErrors = (
 ) => {
   const normalized = normalizedTargetPath(targetPath)
   const reviewed = REVIEWED_PRODUCTION_TARGETS.get(normalized)
-  if (!reviewed) return [`unreviewed Cloudflare production config: ${normalized}`]
+  if (!reviewed)
+    return [`unreviewed Cloudflare production config: ${normalized}`]
 
   const errors = []
   if (config?.name !== reviewed.name) {
-    errors.push(
-      `${normalized} Worker name must remain ${reviewed.name}`
-    )
+    errors.push(`${normalized} Worker name must remain ${reviewed.name}`)
   }
   if (config?.account_id !== REVIEWED_CLOUDFLARE_ACCOUNT_ID) {
     errors.push(
@@ -59,9 +165,7 @@ export const productionTargetErrors = (
     environment.CLOUDFLARE_ACCOUNT_ID &&
     environment.CLOUDFLARE_ACCOUNT_ID !== config?.account_id
   ) {
-    errors.push(
-      `${normalized} account_id conflicts with CLOUDFLARE_ACCOUNT_ID`
-    )
+    errors.push(`${normalized} account_id conflicts with CLOUDFLARE_ACCOUNT_ID`)
   }
 
   const databases = authDatabase(config)
@@ -82,6 +186,15 @@ export const productionTargetErrors = (
   } else if (databases.length) {
     errors.push(`${normalized} has an unreviewed AUTH_DB binding`)
   }
+  if (reviewed.requiresAnalyticsConsumer) {
+    errors.push(...analyticsConsumerErrors(config))
+  }
+  if (reviewed.supportsAnalyticsProducer) {
+    errors.push(...optionalAnalyticsProducerErrors(config))
+  }
+  if (reviewed.supportsClientFeedback) {
+    errors.push(...optionalClientFeedbackErrors(config))
+  }
   return errors
 }
 
@@ -94,7 +207,9 @@ export const productionInvocation = (operation, targetPath, config) => {
   if (operation === 'migrate') {
     const databases = authDatabase(config)
     if (databases.length !== 1) {
-      throw new Error(`${normalized} has no unambiguous AUTH_DB migration target`)
+      throw new Error(
+        `${normalized} has no unambiguous AUTH_DB migration target`
+      )
     }
     return [
       'd1',
@@ -126,8 +241,7 @@ export const productionScriptErrors = (rootPackage, analyticsPackage) => {
       'node ./utils/run-cloudflare-production.mjs migrate wrangler.jsonc'
   }
   const errors = []
-  const hasDirectWranglerCommand = script =>
-    /\bwrangler\s/.test(script ?? '')
+  const hasDirectWranglerCommand = script => /\bwrangler\s/.test(script ?? '')
   for (const [name, token] of Object.entries(expected)) {
     const script = scripts[name]
     if (!script?.includes(token)) {
@@ -176,7 +290,9 @@ const main = async () => {
   const targetPath = normalizedTargetPath(requestedTarget)
   const absoluteTarget = path.resolve(root, targetPath)
   if (!absoluteTarget.startsWith(`${root}${path.sep}`)) {
-    throw new Error('Cloudflare production config must be inside the repository')
+    throw new Error(
+      'Cloudflare production config must be inside the repository'
+    )
   }
   const config = JSON.parse(await readFile(absoluteTarget, 'utf8'))
   const errors = productionTargetErrors(targetPath, config, process.env)

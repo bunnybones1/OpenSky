@@ -5,7 +5,11 @@ import {
   productionInvocation,
   productionScriptErrors,
   productionTargetErrors,
+  REVIEWED_ANALYTICS_BUCKET,
+  REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE,
+  REVIEWED_ANALYTICS_QUEUE,
   REVIEWED_AUTH_DB_ID,
+  REVIEWED_CLIENT_FEEDBACK_BUCKET,
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
   REVIEWED_PRODUCTION_TARGETS
 } from './run-cloudflare-production.mjs'
@@ -23,15 +27,36 @@ const configFor = target => ({
           }
         ]
       }
+    : {}),
+  ...(target.requiresAnalyticsConsumer
+    ? {
+        r2_buckets: [
+          {
+            binding: 'GAME_ANALYTICS',
+            bucket_name: REVIEWED_ANALYTICS_BUCKET
+          }
+        ],
+        queues: {
+          consumers: [
+            {
+              queue: REVIEWED_ANALYTICS_QUEUE,
+              max_batch_size: 1,
+              max_batch_timeout: 5,
+              max_retries: 25,
+              dead_letter_queue: REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE,
+              max_concurrency: 5,
+              retry_delay: 30
+            }
+          ]
+        },
+        vars: { ANALYTICS_RELEASE_VERSION: 'cloudflare' }
+      }
     : {})
 })
 
 test('accepts only the pinned production service and D1 inventory', () => {
   for (const [targetPath, target] of REVIEWED_PRODUCTION_TARGETS) {
-    assert.deepEqual(
-      productionTargetErrors(targetPath, configFor(target)),
-      []
-    )
+    assert.deepEqual(productionTargetErrors(targetPath, configFor(target)), [])
   }
   assert.match(
     productionTargetErrors('unknown/wrangler.jsonc', {})[0],
@@ -58,6 +83,135 @@ test('rejects account, environment, Worker, and database drift', () => {
       CLOUDFLARE_ACCOUNT_ID: '16b57375514eb1726a922e52bc16e4dc'
     })[0],
     /conflicts/
+  )
+})
+
+test('pins the analytics consumer bucket, release, retry, and dead-letter topology', () => {
+  const targetPath = 'game-analytics/wrangler.jsonc'
+  const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
+  const mutations = [
+    { ...baseline, r2_buckets: [] },
+    {
+      ...baseline,
+      r2_buckets: [
+        { binding: 'GAME_ANALYTICS', bucket_name: 'lookalike-analytics' }
+      ]
+    },
+    {
+      ...baseline,
+      r2_buckets: [
+        ...baseline.r2_buckets,
+        { binding: 'LOOKALIKE', bucket_name: REVIEWED_ANALYTICS_BUCKET }
+      ]
+    },
+    { ...baseline, queues: { consumers: [] } },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        producers: [{ binding: 'LOOKALIKE', queue: REVIEWED_ANALYTICS_QUEUE }]
+      }
+    },
+    {
+      ...baseline,
+      queues: {
+        consumers: [{ ...baseline.queues.consumers[0], max_retries: 100 }]
+      }
+    },
+    {
+      ...baseline,
+      queues: {
+        consumers: [
+          {
+            ...baseline.queues.consumers[0],
+            dead_letter_queue: 'lookalike-dead-letter'
+          }
+        ]
+      }
+    },
+    { ...baseline, vars: { ANALYTICS_RELEASE_VERSION: 'latest' } }
+  ]
+  for (const changed of mutations) {
+    assert.ok(productionTargetErrors(targetPath, changed).length > 0)
+  }
+})
+
+test('requires the optional game-server analytics bindings to move together', () => {
+  const targetPath = 'game-server-cloudflare/wrangler.jsonc'
+  const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
+  const enabled = {
+    ...baseline,
+    r2_buckets: [
+      { binding: 'GAME_ANALYTICS', bucket_name: REVIEWED_ANALYTICS_BUCKET }
+    ],
+    queues: {
+      producers: [
+        {
+          binding: 'GAME_ANALYTICS_QUEUE',
+          queue: REVIEWED_ANALYTICS_QUEUE
+        }
+      ]
+    }
+  }
+  assert.deepEqual(productionTargetErrors(targetPath, enabled), [])
+  for (const changed of [
+    { ...baseline, r2_buckets: enabled.r2_buckets },
+    { ...baseline, queues: enabled.queues },
+    {
+      ...baseline,
+      r2_buckets: [
+        { binding: 'LOOKALIKE', bucket_name: REVIEWED_ANALYTICS_BUCKET }
+      ]
+    },
+    {
+      ...enabled,
+      queues: {
+        producers: [
+          {
+            binding: 'GAME_ANALYTICS_QUEUE',
+            queue: 'lookalike-analytics'
+          }
+        ]
+      }
+    }
+  ]) {
+    assert.ok(productionTargetErrors(targetPath, changed).length > 0)
+  }
+})
+
+test('pins the optional player-feedback bucket when it is enabled', () => {
+  const targetPath = 'wrangler.jsonc'
+  const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
+  assert.deepEqual(
+    productionTargetErrors(targetPath, {
+      ...baseline,
+      r2_buckets: [
+        {
+          binding: 'CLIENT_FEEDBACK',
+          bucket_name: REVIEWED_CLIENT_FEEDBACK_BUCKET
+        }
+      ]
+    }),
+    []
+  )
+  assert.ok(
+    productionTargetErrors(targetPath, {
+      ...baseline,
+      r2_buckets: [
+        { binding: 'CLIENT_FEEDBACK', bucket_name: 'lookalike-feedback' }
+      ]
+    }).length > 0
+  )
+  assert.ok(
+    productionTargetErrors(targetPath, {
+      ...baseline,
+      r2_buckets: [
+        {
+          binding: 'LOOKALIKE',
+          bucket_name: REVIEWED_CLIENT_FEEDBACK_BUCKET
+        }
+      ]
+    }).length > 0
   )
 })
 
