@@ -9,9 +9,13 @@ import {
   type ConquestV2TreasureProgress,
   type WeeklyGolds
 } from '@opensky/proto'
+import { getGoldID } from '@opensky/shared/assetsIDs'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 
-import { sourceConquestWire } from './conquest-wire'
+import {
+  sourceConquestWire,
+  sourceWeeklyGoldsListWire
+} from './conquest-wire'
 import { invalidArgument } from './errors'
 import { goFloat32Percentage } from './go-numbers'
 
@@ -426,11 +430,13 @@ export class ConquestRepository {
       )
       .bind(timestamp, timestamp)
       .all<WeeklyGoldRow>()
-    return rows.results.map(row => ({
-      startAt: row.starts_at,
-      endAt: row.ends_at,
-      tokenId: (2 << 16) + row.card_id,
-      totalSupply: row.total_supply
-    }))
+    return sourceWeeklyGoldsListWire(
+      rows.results.map(row => ({
+        startAt: row.starts_at,
+        endAt: row.ends_at,
+        tokenId: getGoldID(row.card_id),
+        totalSupply: row.total_supply
+      }))
+    )
   }
 }

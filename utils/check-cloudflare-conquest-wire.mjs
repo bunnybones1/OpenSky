@@ -47,6 +47,8 @@ const bracedBlock = (source, marker) => {
 export const conquestWireErrors = (
   source,
   sourceRpc,
+  sourceItem,
+  sharedAssets,
   conquestWire,
   conquest,
   api
@@ -101,6 +103,16 @@ export const conquestWireErrors = (
     errors.push('source ConquestStats pointer contract changed')
   }
 
+  const weeklyGoldFields = ['startAt', 'endAt', 'tokenId', 'totalSupply']
+  if (!exactFields(source, 'WeeklyGolds', weeklyGoldFields)) {
+    errors.push(
+      'source WeeklyGolds JSON contract could not be derived without omission'
+    )
+  }
+  if (pointerFields(source, 'WeeklyGolds').length !== 0) {
+    errors.push('source WeeklyGolds unexpectedly gained a pointer field')
+  }
+
   const compactSource = source.replace(/\s+/g, ' ')
   const compactSourceRpc = sourceRpc.replace(/\s+/g, ' ')
   const compactEnterDecoder = (
@@ -132,6 +144,58 @@ export const conquestWireErrors = (
     }
   }
 
+  const compactRewardsDecoder = (
+    bracedBlock(
+      source,
+      'func (s *skyWeaverAPIServer) serveConquestRewardsJSON'
+    ) ?? ''
+  ).replace(/\s+/g, ' ')
+  for (const token of [
+    'var ret0 []*WeeklyGolds',
+    'Ret0 []*WeeklyGolds `json:"weeklyGolds"`',
+    '}{ret0}'
+  ]) {
+    if (!compactRewardsDecoder.includes(token)) {
+      errors.push(
+        `source ConquestRewards response contract is missing: ${token}`
+      )
+    }
+  }
+
+  const compactRewardsHandler = (
+    bracedBlock(sourceRpc, 'func (s *Server) ConquestRewards') ?? ''
+  ).replace(/\s+/g, ' ')
+  for (const token of [
+    'var pool []*proto.WeeklyGolds',
+    '}).All(&pool)',
+    'if len(pool) == 0 { return pool, nil }',
+    'data.SWTokenID2TypeAndItemID(p.TokenID)',
+    '"item_type": proto.ItemType_SW_GOLD_CARDS',
+    '"account_id": 0',
+    'g.TotalSupply = item.Balance.Uint64()'
+  ]) {
+    if (!compactRewardsHandler.includes(token)) {
+      errors.push(`source ConquestRewards handler contract is missing: ${token}`)
+    }
+  }
+
+  const compactSourceItem = sourceItem.replace(/\s+/g, ' ')
+  if (
+    !compactSourceItem.includes(
+      'case proto.ItemType_SW_GOLD_CARDS: return (2 << 16) + itemID'
+    )
+  ) {
+    errors.push('source Gold-card token-ID encoding changed')
+  }
+  const compactSharedAssets = sharedAssets.replace(/\s+/g, ' ')
+  if (
+    !compactSharedAssets.includes(
+      'export function getGoldID(id: string | number) { return getUngradedID(id) + (2 << 16) }'
+    )
+  ) {
+    errors.push('shared Gold-card token-ID adapter changed')
+  }
+
   const compactWire = conquestWire.replace(/\s+/g, ' ')
   for (const token of [
     'deckClass: conquest.deckClass ?? null',
@@ -140,6 +204,18 @@ export const conquestWireErrors = (
   ]) {
     if (!compactWire.includes(token)) {
       errors.push(`Worker Conquest wire is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'export const sourceWeeklyGoldsWire = (reward: WeeklyGolds): WeeklyGolds => ({',
+    'startAt: reward.startAt',
+    'endAt: reward.endAt',
+    'tokenId: reward.tokenId',
+    'totalSupply: reward.totalSupply',
+    'rewards.map(sourceWeeklyGoldsWire)'
+  ]) {
+    if (!compactWire.includes(token)) {
+      errors.push(`Worker WeeklyGolds wire is missing: ${token}`)
     }
   }
 
@@ -172,9 +248,23 @@ export const conquestWireErrors = (
       errors.push(`Worker ConquestStats wire is missing: ${field}`)
     }
   }
+  for (const token of [
+    "import { getGoldID } from '@opensky/shared/assetsIDs'",
+    'return sourceWeeklyGoldsListWire(',
+    'tokenId: getGoldID(row.card_id)',
+    'COALESCE(SUM(items.balance), 0) AS total_supply',
+    "items.item_type = 'SW_GOLD_CARDS'",
+    'items.token_id = cards.card_id'
+  ]) {
+    if (!compact.includes(token)) {
+      errors.push(`Worker ConquestRewards projection is missing: ${token}`)
+    }
+  }
   if (
     compact.includes('...(row.ended_at ?') ||
-    !compact.includes("import { sourceConquestWire } from './conquest-wire'")
+    !compact.includes(
+      "sourceConquestWire, sourceWeeklyGoldsListWire } from './conquest-wire'"
+    )
   ) {
     errors.push('Worker Conquest wire conditionally omits endedAt')
   }
@@ -186,6 +276,18 @@ export const conquestWireErrors = (
     if (!compactApi.includes(token)) {
       errors.push(`main Worker Conquest boundary is missing: ${token}`)
     }
+  }
+
+  const rewardsStart = api.indexOf("case 'ConquestRewards':")
+  const rewardsEnd = api.indexOf("case 'ConquestPoints':", rewardsStart)
+  const compactRewardsApi =
+    rewardsStart >= 0 && rewardsEnd > rewardsStart
+      ? api.slice(rewardsStart, rewardsEnd).replace(/\s+/g, ' ')
+      : ''
+  if (
+    !compactRewardsApi.includes('weeklyGolds: await conquest.rewards()')
+  ) {
+    errors.push('main Worker ConquestRewards boundary bypasses the repository')
   }
   const enterStart = api.indexOf("case 'EnterConquest':")
   const enterEnd = api.indexOf("case 'ConquestStatus':", enterStart)
@@ -208,9 +310,19 @@ export const conquestWireErrors = (
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [source, sourceRpc, conquestWire, conquest, api] = await Promise.all([
+  const [
+    source,
+    sourceRpc,
+    sourceItem,
+    sharedAssets,
+    conquestWire,
+    conquest,
+    api
+  ] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
     readFile(path.join(root, 'api', 'rpc', 'conquests.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'data', 'item.go'), 'utf8'),
+    readFile(path.join(root, 'lib', 'shared', 'src', 'assetsIDs.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest-wire.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
@@ -218,6 +330,8 @@ const main = async () => {
   const errors = conquestWireErrors(
     source,
     sourceRpc,
+    sourceItem,
+    sharedAssets,
     conquestWire,
     conquest,
     api
@@ -227,7 +341,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Conquest input, status, and statistics preserve the generated Go contract'
+      'Conquest input, status, statistics, and rewards preserve the generated Go contract'
     )
   }
 }

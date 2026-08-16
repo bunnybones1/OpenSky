@@ -5,14 +5,32 @@ import test from 'node:test'
 import { conquestWireErrors } from './check-cloudflare-conquest-wire.mjs'
 
 const fixtures = async () => {
-  const [source, sourceRpc, conquestWire, conquest, api] = await Promise.all([
+  const [
+    source,
+    sourceRpc,
+    sourceItem,
+    sharedAssets,
+    conquestWire,
+    conquest,
+    api
+  ] = await Promise.all([
     readFile('api/proto/api.gen.go', 'utf8'),
     readFile('api/rpc/conquests.go', 'utf8'),
+    readFile('api/data/item.go', 'utf8'),
+    readFile('lib/shared/src/assetsIDs.ts', 'utf8'),
     readFile('cloudflare/src/conquest-wire.ts', 'utf8'),
     readFile('cloudflare/src/conquest.ts', 'utf8'),
     readFile('cloudflare/src/api.ts', 'utf8')
   ])
-  return { source, sourceRpc, conquestWire, conquest, api }
+  return {
+    source,
+    sourceRpc,
+    sourceItem,
+    sharedAssets,
+    conquestWire,
+    conquest,
+    api
+  }
 }
 
 test('derives and enforces the complete Go Conquest RPC contract', async () => {
@@ -21,6 +39,8 @@ test('derives and enforces the complete Go Conquest RPC contract', async () => {
     conquestWireErrors(
       value.source,
       value.sourceRpc,
+      value.sourceItem,
+      value.sharedAssets,
       value.conquestWire,
       value.conquest,
       value.api
@@ -56,6 +76,34 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
     {
       ...value,
       source: value.source.replace(
+        'TotalSupply uint64    `json:"totalSupply" db:"-"`',
+        'TotalSupply uint64    `json:"totalSupply,omitempty" db:"-"`'
+      )
+    },
+    {
+      ...value,
+      sourceRpc: value.sourceRpc.replace(
+        'g.TotalSupply = item.Balance.Uint64()',
+        'g.TotalSupply = 0'
+      )
+    },
+    {
+      ...value,
+      sourceItem: value.sourceItem.replace(
+        'return (2 << 16) + itemID',
+        'return (3 << 16) + itemID'
+      )
+    },
+    {
+      ...value,
+      sharedAssets: value.sharedAssets.replace(
+        'return getUngradedID(id) + (2 << 16)',
+        'return getUngradedID(id) + (3 << 16)'
+      )
+    },
+    {
+      ...value,
+      source: value.source.replace(
         'EndedAt       *time.Time',
         'EndedAt       time.Time '
       )
@@ -69,11 +117,25 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
     },
     {
       ...value,
+      conquestWire: value.conquestWire.replace(
+        'totalSupply: reward.totalSupply',
+        ''
+      )
+    },
+    {
+      ...value,
       conquest: value.conquest.replace('constructedGoldCardsWon: 0,', '')
     },
     {
       ...value,
       conquest: value.conquest.replace(': Hero.UNKNOWN', ': value as Hero')
+    },
+    {
+      ...value,
+      conquest: value.conquest.replace(
+        'tokenId: getGoldID(row.card_id)',
+        'tokenId: row.card_id'
+      )
     },
     {
       ...value,
@@ -88,6 +150,13 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
         'conquest: await conquest.status(principal.userId)',
         'conquest: null'
       )
+    },
+    {
+      ...value,
+      api: value.api.replace(
+        'weeklyGolds: await conquest.rewards()',
+        'weeklyGolds: []'
+      )
     }
   ]
   for (const [index, mutation] of mutations.entries()) {
@@ -95,6 +164,8 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
       conquestWireErrors(
         mutation.source,
         mutation.sourceRpc,
+        mutation.sourceItem,
+        mutation.sharedAssets,
         mutation.conquestWire,
         mutation.conquest,
         mutation.api
