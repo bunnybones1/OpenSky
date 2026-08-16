@@ -25,6 +25,17 @@ export const provisionVerifiedConquestDrill = async (
   const drillUserId = `system:conquest-readiness-drill:${crypto.randomUUID()}`
   const entryKey = `readiness-drill:${crypto.randomUUID()}`
   const createdAt = new Date(now - 27 * 60 * 60 * 1_000).toISOString()
+  const runCreatedAt = new Date(now - 25.75 * 60 * 60 * 1_000).toISOString()
+  const drillPrincipal = randomPrincipal()
+  const matches = [0, 1, 2].map(index => ({
+    proposalId: `readiness-drill-match-${crypto.randomUUID()}`,
+    replayId: crypto.randomUUID(),
+    opponentUserId: `system:conquest-readiness-opponent:${crypto.randomUUID()}`,
+    opponentPrincipal: randomPrincipal(),
+    endedAt: new Date(
+      now - (25.5 - index * 0.2) * 60 * 60 * 1_000
+    ).toISOString()
+  }))
 
   await database.batch([
     database
@@ -42,6 +53,23 @@ export const provisionVerifiedConquestDrill = async (
     database
       .prepare(`INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`)
       .bind(drillUserId, createdAt),
+    ...matches.flatMap(match => [
+      database
+        .prepare(
+          `INSERT INTO users
+             (id, display_name, primary_email, created_at, updated_at)
+           VALUES (?, 'Conquest Readiness Opponent', ?, ?, ?)`
+        )
+        .bind(
+          match.opponentUserId,
+          `${crypto.randomUUID()}@example.com`,
+          createdAt,
+          createdAt
+        ),
+      database
+        .prepare(`INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`)
+        .bind(match.opponentUserId, createdAt)
+    ]),
     ...approvedConquestPoolStatements(database, {
       version: poolVersion,
       startsAt,
@@ -51,15 +79,75 @@ export const provisionVerifiedConquestDrill = async (
       silver: [6],
       gold: [136]
     }),
+    ...matches.map(match =>
+      database
+        .prepare(
+          `INSERT INTO multiplayer_matches
+             (proposal_id, replay_id, mode, version,
+              player1_principal, player2_principal,
+              player1_user_id, player2_user_id, match_payload_json,
+              server_address, status, created_at, updated_at,
+              winner_player, result_json, ended_at,
+              player1_mode, player2_mode, dispatch_fingerprint)
+           VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'test-readiness',
+                   ?, ?, ?, ?, '{}', 'test-authoritative-game', 'ended',
+                   ?, ?, 0, '{"status":"COMPLETED"}', ?,
+                   'CONQUEST_CONSTRUCTED', 'CONQUEST_CONSTRUCTED', NULL)`
+        )
+        .bind(
+          match.proposalId,
+          match.replayId,
+          drillPrincipal,
+          match.opponentPrincipal,
+          drillUserId,
+          match.opponentUserId,
+          runCreatedAt,
+          match.endedAt,
+          match.endedAt
+        )
+    )
+  ])
+
+  const matchRows = await database
+    .prepare(
+      `SELECT id, proposal_id FROM multiplayer_matches
+       WHERE player1_user_id = ? AND proposal_id LIKE 'readiness-drill-match-%'
+       ORDER BY ended_at, id`
+    )
+    .bind(drillUserId)
+    .all<{ id: number; proposal_id: string }>()
+  if (matchRows.results.length !== 3) {
+    throw new Error('Conquest readiness authoritative matches are missing')
+  }
+  const matchProgress = Object.fromEntries(
+    matchRows.results.map(match => [String(match.id), 'WIN'])
+  )
+  await database.batch([
+    ...matches.map(match =>
+      database
+        .prepare(
+          `INSERT INTO multiplayer_match_conquest_progress
+             (proposal_id, player1_result, player2_result, processed_at)
+           VALUES (?, 'WIN', 'LOSS', ?)`
+        )
+        .bind(match.proposalId, match.endedAt)
+    ),
     database
       .prepare(
         `INSERT INTO player_conquests
            (entry_key, user_id, status, nonce, mode, hero, deck_class,
             match_progress, created_at, ended_at, reward_pool_version)
          VALUES (?, ?, 'REWARDS_PENDING', 1, 'CONQUEST_CONSTRUCTED', 'ADA',
-                 'STR', '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?, ?)`
+                 'STR', ?, ?, ?, ?)`
       )
-      .bind(entryKey, drillUserId, settledAt, settledAt, poolVersion)
+      .bind(
+        entryKey,
+        drillUserId,
+        JSON.stringify(matchProgress),
+        runCreatedAt,
+        settledAt,
+        poolVersion
+      )
   ])
 
   const conquest = await database
@@ -99,6 +187,14 @@ export const provisionVerifiedConquestDrill = async (
     startsAt,
     endsAt
   }
+}
+
+const randomPrincipal = () => {
+  const bytes = new Uint8Array(20)
+  crypto.getRandomValues(bytes)
+  return `0x${[...bytes]
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')}`
 }
 
 export const provisionVerifiedConquestReadiness = async (

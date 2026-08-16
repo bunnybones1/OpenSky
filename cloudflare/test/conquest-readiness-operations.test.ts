@@ -88,6 +88,58 @@ describe('Conquest readiness operations', () => {
     ).toEqual({ permissions: 0, operations: 0, audits: 0, readiness: 0 })
 
     const evidence = await provisionVerifiedConquestDrill(env.AUTH_DB)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS matches,
+                COUNT(DISTINCT CASE
+                  WHEN player1_user_id = ? THEN player2_user_id
+                  ELSE player1_user_id
+                END) AS opponents
+         FROM multiplayer_matches
+         WHERE proposal_id LIKE 'readiness-drill-match-%'
+           AND (player1_user_id = ? OR player2_user_id = ?)`
+      )
+        .bind(
+          evidence.drillUserId,
+          evidence.drillUserId,
+          evidence.drillUserId
+        )
+        .first()
+    ).toEqual({ matches: 3, opponents: 3 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS evidence
+         FROM conquest_verified_drill_receipts WHERE conquest_id = ?`
+      )
+        .bind(evidence.conquestId)
+        .first()
+    ).toEqual({ evidence: 1 })
+    const completedMatch = await env.AUTH_DB.prepare(
+      `SELECT proposal_id, result_json FROM multiplayer_matches
+       WHERE player1_user_id = ? ORDER BY ended_at LIMIT 1`
+    )
+      .bind(evidence.drillUserId)
+      .first<{ proposal_id: string; result_json: string }>()
+    expect(completedMatch).not.toBeNull()
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET result_json = '{"status":"ABANDONED"}'
+       WHERE proposal_id = ?`
+    )
+      .bind(completedMatch!.proposal_id)
+      .run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS evidence
+         FROM conquest_verified_drill_receipts WHERE conquest_id = ?`
+      )
+        .bind(evidence.conquestId)
+        .first()
+    ).toEqual({ evidence: 0 })
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET result_json = ? WHERE proposal_id = ?`
+    )
+      .bind(completedMatch!.result_json, completedMatch!.proposal_id)
+      .run()
     const firstVerifier = await actor('readiness-verifier-one')
     const secondVerifier = await actor('readiness-verifier-two')
     const ordinaryPlayer = await actor('readiness-player')

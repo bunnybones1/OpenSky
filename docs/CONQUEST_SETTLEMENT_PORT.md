@@ -122,9 +122,13 @@ run only after that task settles.
 - Queue readiness is an immutable receipt link, not an operator assertion. A
   dedicated `system:conquest-readiness-drill:*` identity must complete one
   isolated three-win run through the real immediate Silver and 24-hour Gold
-  paths. D1 validates both `APPLIED` keys, all three source-shaped feed events,
-  the exact Silver/Gold inventory transitions, and the pool version before it
-  accepts readiness.
+  paths. Each win must resolve to a distinct completed authoritative match
+  against an isolated `system:conquest-readiness-opponent:*` identity, with a
+  matching winner, `COMPLETED` result, and Conquest progression receipt. D1
+  also validates both reward `APPLIED` keys, all three source-shaped feed
+  events, the exact Silver/Gold inventory transitions, and the pool version
+  before it accepts readiness. Abandoned, forfeited, or hand-written progress
+  cannot authorize a queue.
 - A valid drill can no longer be admitted with a bare readiness `INSERT`.
   The operation wrapper echoes both immutable receipt keys, keeps the drill
   identity and both pool reviewers distinct from the readiness verifier, and
@@ -469,7 +473,8 @@ pool to `GMProposeConquestRewardPool`, independently echo its exact manifest to
 `GMActivateConquestRewardPool`,
 then exercise one isolated three-win settlement through delayed delivery and
 echo the resulting settlement/delivery keys to `GMVerifyConquestReadiness`.
-The database now verifies inventory/feed/receipt
+The database verifies three distinct completed authoritative match ledgers,
+their Conquest progression receipts, and inventory/feed/reward receipt
 agreement itself; free-form readiness rows cannot open a queue. Production
 currently has zero active pool rows and zero Conquest settlement/delivery rows.
 
@@ -522,9 +527,10 @@ The intended sequence is:
 1. A proposer plans and applies the reviewed pool draft.
 2. A different authorized actor uses `list-pools`, independently compares the
    manifest, then plans and applies activation.
-3. The isolated system drill completes three authoritative wins, immediate
-   Silver settlement, and the real 24-hour Gold delivery. The operator tool
-   cannot fabricate this step.
+3. The isolated system drill completes three authoritative `COMPLETED` wins
+   against three distinct isolated opponent identities, immediate Silver
+   settlement, and the real 24-hour Gold delivery. Abandons and forfeits do
+   not qualify, and the operator tool cannot fabricate this step.
 4. A third authorized actor uses `list-readiness`, echoes the exact settlement
    and delivery keys into a `verify` input, then plans and applies verification.
 5. A separately authorized game-mode operation may enable a queue only after
