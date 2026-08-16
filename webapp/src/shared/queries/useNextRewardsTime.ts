@@ -4,7 +4,7 @@ import { APIClient } from '~/shared/clients'
 import { NEXT_REWARDS_TIME } from '~/shared/constants/react-query-keys'
 import { ONE_DAY } from '~/shared/constants/time'
 
-export const useNextRewardsTime = () => {
+export const useNextRewardsTime = (enabled = true) => {
   return useQuery(
     NEXT_REWARDS_TIME,
     async () => {
@@ -12,6 +12,8 @@ export const useNextRewardsTime = () => {
       return new Date(res).toISOString()
     },
     {
+      enabled,
+      retry: false,
       staleTime: ONE_DAY
     }
   )

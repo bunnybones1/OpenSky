@@ -233,4 +233,17 @@ test('requires generated wire and browser lifecycle gates in the complete build'
     })[0],
     /system-player isolation/
   )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:reward-timing && ',
+          ''
+        )
+      }
+    })[0],
+    /reward timing visibility/
+  )
 })

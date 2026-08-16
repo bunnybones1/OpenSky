@@ -109,6 +109,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the operational system-player isolation gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:reward-timing')) {
+    errors.push(
+      'Cloudflare build must include the reward timing visibility gate'
+    )
+  }
   return errors
 }
 

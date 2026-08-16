@@ -25,6 +25,7 @@ import { sourceCrystalIDSQL } from './account-wire'
 import { sourceLeaderboardEntryWire } from './competitive-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
+import { nextLeaderboardRewardTime } from './leaderboard-reward-worker'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
 import { sourceGMMatchListWire, sourceMatchWire } from './match-wire'
@@ -1039,8 +1040,13 @@ export class CompetitiveRepository {
     return rows
   }
 
-  private entry(row: ProjectedLeaderboardRow): LeaderboardEntry {
-    const rewards = leaderboardRewardsForRank(row.reward_rank ?? 0)
+  private entry(
+    row: ProjectedLeaderboardRow,
+    rewardsAvailable: boolean
+  ): LeaderboardEntry {
+    const rewards = rewardsAvailable
+      ? leaderboardRewardsForRank(row.reward_rank ?? 0)
+      : { silverCards: 0, conquestTickets: 0 }
     return sourceLeaderboardEntryWire({
       account: {
         id: row.account_id,
@@ -1093,6 +1099,7 @@ export class CompetitiveRepository {
       start = Math.max(0, end - size)
     }
     const slice = rows.slice(start, end)
+    const rewardsAvailable = await this.leaderboardRewardsAvailable()
     return {
       page: {
         pageSize: size,
@@ -1120,7 +1127,7 @@ export class CompetitiveRepository {
             }
           : {})
       } satisfies Page,
-      res: slice.map(row => this.entry(row))
+      res: slice.map(row => this.entry(row, rewardsAvailable))
     }
   }
 
@@ -1163,9 +1170,22 @@ export class CompetitiveRepository {
       0,
       Math.min(target - Math.floor(size / 2), rankRows.length - size)
     )
+    const rewardsAvailable = await this.leaderboardRewardsAvailable()
     return {
       page: { pageSize: Math.min(size, rankRows.length) } satisfies Page,
-      res: rankRows.slice(start, start + size).map(row => this.entry(row))
+      res: rankRows
+        .slice(start, start + size)
+        .map(row => this.entry(row, rewardsAvailable))
+    }
+  }
+
+  private async leaderboardRewardsAvailable(): Promise<boolean> {
+    try {
+      return (await nextLeaderboardRewardTime(this.database)) !== null
+    } catch {
+      // A malformed schedule must not prevent the leaderboard from loading or
+      // advertise rewards that the distribution worker cannot safely issue.
+      return false
     }
   }
 

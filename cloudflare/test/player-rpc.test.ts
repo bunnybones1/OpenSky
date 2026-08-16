@@ -11,6 +11,10 @@ import {
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
 import { seasonFromDate } from '../src/legacy-seasons'
+import {
+  LEADERBOARD_REWARD_POLICY_HASH,
+  LEADERBOARD_REWARD_POLICY_VERSION
+} from '../src/leaderboard-reward-policy'
 import { PlayerRepository, STARTER_CARD_IDS } from '../src/player'
 import { canonicalGainedRewards, PlayerRpcRepository } from '../src/player-rpc'
 import { questPeriodAt, sourceQuestSpec } from '../src/quest-library'
@@ -220,6 +224,75 @@ const setSkypassSeasonProgress = async (
          updated_at = excluded.updated_at`
     ).bind(userId, season, now, now, initialAccountLevel, achievedAccountLevel)
   ])
+}
+
+const enableLeaderboardRewardSchedule = async () => {
+  const existing = await env.AUTH_DB.prepare(
+    `SELECT schedule.version, activation.status
+     FROM leaderboard_reward_schedule_versions schedule
+     LEFT JOIN leaderboard_reward_schedule_activations activation
+       ON activation.schedule_version = schedule.version
+     ORDER BY schedule.version DESC LIMIT 1`
+  ).first<{ version: number; status: string | null }>()
+  if (existing?.status === 'ACTIVE') return
+
+  const version = (existing?.version ?? 0) + 1
+  const startsAt = '2026-08-12T00:00:00.000Z'
+  const firstRun = new Date('2099-08-12T17:30:00.000Z')
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_schedule_versions
+         (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
+          starts_at, reason, created_at)
+       VALUES (?, 1, ?, ?, ?, ?, ?, 'player RPC test schedule', ?)`
+    ).bind(
+      version,
+      firstRun.getUTCDay(),
+      firstRun.getUTCHours(),
+      firstRun.getUTCMinutes(),
+      firstRun.toISOString(),
+      startsAt,
+      startsAt
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_schedule_activations
+         (schedule_version, status, policy_version, policy_hash,
+          created_by_user_id, activated_by_user_id, reason, review_reference,
+          created_at, activated_at)
+       VALUES (?, 'DRAFT', ?, ?, 'system:test-author', NULL,
+               'player RPC policy', 'test:player-rpc-review', ?, NULL)`
+    ).bind(
+      version,
+      LEADERBOARD_REWARD_POLICY_VERSION,
+      LEADERBOARD_REWARD_POLICY_HASH,
+      startsAt
+    )
+  ])
+  await env.AUTH_DB.prepare(
+    `UPDATE leaderboard_reward_schedule_activations
+     SET status = 'ACTIVE', activated_by_user_id = 'system:test-reviewer',
+         activated_at = ? WHERE schedule_version = ?`
+  )
+    .bind(startsAt, version)
+    .run()
+}
+
+const disableLeaderboardRewardSchedule = async () => {
+  const latest = await env.AUTH_DB.prepare(
+    `SELECT COALESCE(MAX(version), 0) AS version
+     FROM leaderboard_reward_schedule_versions`
+  ).first<{ version: number }>()
+  const version = (latest?.version ?? 0) + 1
+  const now = new Date().toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO leaderboard_reward_schedule_versions
+       (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
+        starts_at, reason, created_at)
+     VALUES (?, 0, NULL, NULL, NULL, NULL, ?,
+             'player RPC dormant schedule', ?)`
+  )
+    .bind(version, now, now)
+    .run()
 }
 
 beforeEach(async () => {
@@ -989,7 +1062,54 @@ describe('legacy player RPC compatibility', () => {
     expect(text).toContain('"rankProgress":0.58')
   })
 
+  it('advertises rank rewards only while an approved schedule is active', async () => {
+    await disableLeaderboardRewardSchedule()
+    const season = seasonFromDate()
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 20, player_rank = 'WANDERER',
+           player_rank_stage = 'STAGE_I', updated_at = ?
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+         AND season = ?`
+    )
+      .bind(now, userId, season)
+      .run()
+
+    const leaderboardRequest = {
+      page: { pageSize: 10 },
+      req: { gameMode: 'RANKED_CONSTRUCTED', season }
+    }
+    const accountRequest = {
+      page: { pageSize: 10 },
+      req: {
+        accountAddress: identityReference,
+        gameMode: 'RANKED_CONSTRUCTED',
+        season
+      }
+    }
+    const expectRewards = async (expected: {
+      rankedSilverReward: number
+      rankedTicketReward: number
+    }) => {
+      const listed = await rpc('ListLeaderboard', leaderboardRequest, false)
+      expect(listed.status).toBe(200)
+      expect(await listed.json()).toMatchObject({ res: [expected] })
+
+      const centered = await rpc('AccountLeaderboard', accountRequest, false)
+      expect(centered.status).toBe(200)
+      expect(await centered.json()).toMatchObject({ res: [expected] })
+    }
+
+    await expectRewards({ rankedSilverReward: 0, rankedTicketReward: 0 })
+
+    await enableLeaderboardRewardSchedule()
+
+    await expectRewards({ rankedSilverReward: 10, rankedTicketReward: 2 })
+  })
+
   it('preserves the source Master top-100 rank adjustment and denominator', async () => {
+    await enableLeaderboardRewardSchedule()
     const season = seasonFromDate()
     const targetUpdatedAt = '2026-08-13T21:00:00.000Z'
     const earlier = '2026-08-13T20:00:00.000Z'
@@ -1132,6 +1252,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('lists and centers the source player leaderboard with stable paging', async () => {
+    await enableLeaderboardRewardSchedule()
     const season = seasonFromDate()
     const otherUsers = [
       ['leaderboard-a', 'Alpha.Weasel'],
@@ -1325,6 +1446,7 @@ describe('legacy player RPC compatibility', () => {
   })
 
   it('keeps rank buckets and reward placement stable through leaderboard filters', async () => {
+    await enableLeaderboardRewardSchedule()
     const season = seasonFromDate()
     const now = '2026-08-14T00:00:00.000Z'
     const players = [

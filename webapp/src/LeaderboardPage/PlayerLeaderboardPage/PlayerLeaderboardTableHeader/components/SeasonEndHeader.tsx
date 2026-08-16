@@ -10,8 +10,10 @@ import { Sprinkles } from '~/shared/style/Sprinkles.css'
 const FontAndIconSize = { base: '14px', tabletWide: '16px' } as const
 
 export const SeasonEndHeader = memo(() => {
-  const timeUntilRewards = useTimeUntilRewards()
+  const { timeUntilRewards, rewardScheduleUnavailable } = useTimeUntilRewards()
   const { t } = useTranslation()
+  if (rewardScheduleUnavailable) return null
+
   return (
     <div
       className={Sprinkles({

@@ -28,19 +28,14 @@ const ConquestInfo = memo(() => {
   const isTabletWide = useResponsiveQuery('tabletWide')
   const [showAllGolds, setShowAllGolds] = useState(false)
 
-  const timeUntilRewards = useTimeUntilRewards()
-
   const { data: pendingCards } = usePendingCards()
 
   const weeklyGolds = useMemo(() => {
     return shuffle(conquestRewards?.rewards.weeklyGolds)
   }, [conquestRewards])
 
-  const displayConquestCards =
-    conquestRewards &&
-    conquestRewards.rewards &&
-    conquestRewards.rewards.weeklyGolds &&
-    conquestRewards.rewards.weeklyGolds.length > 0
+  const displayConquestCards = (conquestRewards?.rewards.weeklyGolds.length ?? 0) > 0
+  const { timeUntilRewards } = useTimeUntilRewards(displayConquestCards)
 
   const renderPendingGolds = !!pendingCards && pendingCards.length > 0
 
