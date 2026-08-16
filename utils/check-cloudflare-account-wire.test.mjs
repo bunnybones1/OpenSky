@@ -16,7 +16,9 @@ const fixtures = async () => {
     competitive,
     competitiveWire,
     api,
-    authTest
+    authTest,
+    proof,
+    proofTest
   ] = await Promise.all([
     readFile('api/proto/api.gen.go', 'utf8'),
     readFile('api/rpc/auth.go', 'utf8'),
@@ -28,7 +30,9 @@ const fixtures = async () => {
     readFile('cloudflare/src/competitive.ts', 'utf8'),
     readFile('cloudflare/src/competitive-wire.ts', 'utf8'),
     readFile('cloudflare/src/api.ts', 'utf8'),
-    readFile('cloudflare/test/auth-api.test.ts', 'utf8')
+    readFile('cloudflare/test/auth-api.test.ts', 'utf8'),
+    readFile('cloudflare/src/proof.ts', 'utf8'),
+    readFile('cloudflare/test/proof.test.ts', 'utf8')
   ])
   return {
     source,
@@ -41,7 +45,9 @@ const fixtures = async () => {
     competitive,
     competitiveWire,
     api,
-    authTest
+    authTest,
+    proof,
+    proofTest
   }
 }
 
@@ -57,7 +63,9 @@ const errorsFor = value =>
     value.competitive,
     value.competitiveWire,
     value.api,
-    value.authTest
+    value.authTest,
+    value.proof,
+    value.proofTest
   )
 
 test('derives and enforces the complete Go Account JSON wire', async () => {
@@ -90,9 +98,23 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
     },
     {
       ...value,
+      source: value.source.replace(
+        'Arg0 string `json:"ethAuthProofString"`',
+        'Arg0 bool `json:"ethAuthProofString"`'
+      )
+    },
+    {
+      ...value,
       authSource: value.authSource.replace(
         'return walletAddress, respAccount, nil',
         'return walletAddress, nil, nil'
+      )
+    },
+    {
+      ...value,
+      authSource: value.authSource.replace(
+        'proto.WrapError(proto.ErrPermissionDenied, err, "failed to decode ethauth proof")',
+        'proto.WrapError(proto.ErrInvalidArgument, err, "failed to decode ethauth proof")'
       )
     },
     {
@@ -163,6 +185,21 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
     },
     {
       ...value,
+      api: value.api.replace("if (body === null) return ''", '')
+    },
+    {
+      ...value,
+      api: value.api.replace("if (typeof value !== 'string')", 'if (false)')
+    },
+    {
+      ...value,
+      api: value.api.replace(
+        "const proofString = sourceStringArgument(body, 'ethAuthProofString')",
+        'const proofString = String((body as any).ethAuthProofString)'
+      )
+    },
+    {
+      ...value,
       api: value.api.replace(
         'account: account ?? null,\n          ...(principal.kind',
         '...(principal.kind'
@@ -173,6 +210,41 @@ test('rejects source drift, sparse nulls, and bypassed projections', async () =>
       authTest: value.authTest.replace(
         'expect(body).toMatchObject({ status: true, address, account: null })',
         'expect(body).toMatchObject({ status: true, address })'
+      )
+    },
+    {
+      ...value,
+      authTest: value.authTest.replace(
+        'expect(verifyProof).not.toHaveBeenCalled()',
+        'expect(verifyProof).toHaveBeenCalled()'
+      )
+    },
+    {
+      ...value,
+      proof: value.proof.replace(
+        "throw permissionDenied('invalid ethauth proof')",
+        "throw invalidArgument('invalid ethauth proof')"
+      )
+    },
+    {
+      ...value,
+      proof: value.proof.replace(
+        '!Number.isSafeInteger(rawClaims.exp)',
+        'false'
+      )
+    },
+    {
+      ...value,
+      proof: value.proof.replace(
+        "throw invalidArgument('ethauth proof origin does not match the request')",
+        "throw permissionDenied('ethauth proof origin does not match the request')"
+      )
+    },
+    {
+      ...value,
+      proofTest: value.proofTest.replace(
+        'maps malformed proof and claim decoding to source permission-denied errors',
+        'accepts malformed proof and claims'
       )
     }
   ]

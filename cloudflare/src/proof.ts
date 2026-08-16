@@ -29,28 +29,76 @@ export const decodeProof = (
 ): VerifiedProof => {
   const parts = proofString.split('.')
   if (parts.length < 4 || parts.length > 5 || parts[0] !== 'eth') {
-    throw invalidArgument('invalid ethauth proof')
+    throw permissionDenied('invalid ethauth proof')
   }
 
   const address = parts[1].toLowerCase()
-  if (!ADDRESS_PATTERN.test(address)) throw invalidArgument('invalid wallet address')
+  if (!ADDRESS_PATTERN.test(address))
+    throw permissionDenied('invalid wallet address')
 
-  let claims: ProofClaims
+  let decodedClaims: unknown
   try {
-    claims = JSON.parse(base64UrlDecodeText(parts[2]))
+    decodedClaims = JSON.parse(base64UrlDecodeText(parts[2]))
   } catch {
-    throw invalidArgument('invalid ethauth claims')
+    throw permissionDenied('invalid ethauth claims')
   }
 
-  if (!claims.app || !claims.v || !Number.isFinite(claims.exp)) {
-    throw invalidArgument('incomplete ethauth claims')
+  if (
+    decodedClaims === null ||
+    typeof decodedClaims !== 'object' ||
+    Array.isArray(decodedClaims)
+  ) {
+    throw permissionDenied('incomplete ethauth claims')
   }
-  if (claims.exp < now - CLOCK_SKEW_SECONDS || claims.exp > now + MAX_PROOF_LIFETIME_SECONDS) {
-    throw permissionDenied('ethauth proof has expired or exceeds the maximum lifetime')
+  const rawClaims = decodedClaims as Record<string, unknown>
+  if (
+    typeof rawClaims.app !== 'string' ||
+    !rawClaims.app ||
+    typeof rawClaims.v !== 'string' ||
+    !rawClaims.v ||
+    typeof rawClaims.exp !== 'number' ||
+    !Number.isSafeInteger(rawClaims.exp) ||
+    (rawClaims.iat !== undefined &&
+      rawClaims.iat !== null &&
+      (typeof rawClaims.iat !== 'number' ||
+        !Number.isSafeInteger(rawClaims.iat))) ||
+    (rawClaims.ogn !== undefined &&
+      rawClaims.ogn !== null &&
+      typeof rawClaims.ogn !== 'string') ||
+    (rawClaims.typ !== undefined &&
+      rawClaims.typ !== null &&
+      typeof rawClaims.typ !== 'string') ||
+    (rawClaims.n !== undefined &&
+      rawClaims.n !== null &&
+      (typeof rawClaims.n !== 'number' ||
+        !Number.isSafeInteger(rawClaims.n) ||
+        rawClaims.n < 0))
+  ) {
+    throw permissionDenied('incomplete ethauth claims')
+  }
+  const claims: ProofClaims = {
+    app: rawClaims.app,
+    exp: rawClaims.exp,
+    v: rawClaims.v,
+    ...(typeof rawClaims.iat === 'number' && rawClaims.iat !== 0
+      ? { iat: rawClaims.iat }
+      : {}),
+    ...(typeof rawClaims.ogn === 'string' && rawClaims.ogn
+      ? { ogn: rawClaims.ogn }
+      : {})
+  }
+  if (
+    claims.exp < now - CLOCK_SKEW_SECONDS ||
+    claims.exp > now + MAX_PROOF_LIFETIME_SECONDS
+  ) {
+    throw permissionDenied(
+      'ethauth proof has expired or exceeds the maximum lifetime'
+    )
   }
   if (
     claims.iat &&
-    (claims.iat > now + CLOCK_SKEW_SECONDS || claims.iat < now - MAX_PROOF_LIFETIME_SECONDS)
+    (claims.iat > now + CLOCK_SKEW_SECONDS ||
+      claims.iat < now - MAX_PROOF_LIFETIME_SECONDS)
   ) {
     throw permissionDenied('ethauth proof issuance time is invalid')
   }

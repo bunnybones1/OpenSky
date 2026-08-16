@@ -61,7 +61,9 @@ export const accountWireErrors = (
   competitive,
   competitiveWire,
   api,
-  authTest
+  authTest,
+  proof,
+  proofTest
 ) => {
   const errors = []
   const accountFields = [
@@ -116,6 +118,7 @@ export const accountWireErrors = (
     )
   )
   for (const token of [
+    'Arg0 string `json:"ethAuthProofString"`',
     'Ret3 *Account `json:"account"`',
     '}{ret0, ret1, ret2, ret3}'
   ]) {
@@ -138,6 +141,7 @@ export const accountWireErrors = (
 
   const sourceAuth = compact(authSource)
   for (const token of [
+    'proto.WrapError(proto.ErrPermissionDenied, err, "failed to decode ethauth proof")',
     'var respAccount *proto.Account',
     'respAccount = account.Account',
     'return true, jwtString, proof.Address, respAccount, nil',
@@ -289,8 +293,47 @@ export const accountWireErrors = (
   const workerAuth = compact(
     section(api, "case 'GetAuthToken':", "case 'GetSession':")
   )
+  for (const token of [
+    'const body = await requestBody<unknown>(request)',
+    "const proofString = sourceStringArgument(body, 'ethAuthProofString')",
+    'services.verifyProof( proofString,'
+  ]) {
+    if (!workerAuth.includes(token)) {
+      errors.push(`GetAuthToken source decode boundary changed: ${token}`)
+    }
+  }
   if (!workerAuth.includes('account: account ?? null')) {
     errors.push('GetAuthToken does not preserve the generated null account')
+  }
+  const workerStringArgument = compact(
+    section(api, 'const sourceStringArgument =', 'const walletPrincipal =')
+  )
+  for (const token of [
+    "if (body === null) return ''",
+    "if (typeof body !== 'object' || Array.isArray(body))",
+    "throw invalidArgument('failed to unmarshal request data')",
+    "if (value === undefined || value === null) return ''",
+    "if (typeof value !== 'string')",
+    'return value'
+  ]) {
+    if (!workerStringArgument.includes(token)) {
+      errors.push(`source string argument decoder changed: ${token}`)
+    }
+  }
+  const compactProof = compact(proof)
+  for (const token of [
+    "throw permissionDenied('invalid ethauth proof')",
+    "throw permissionDenied('invalid wallet address')",
+    "throw permissionDenied('invalid ethauth claims')",
+    "throw permissionDenied('incomplete ethauth claims')",
+    '!Number.isSafeInteger(rawClaims.exp)',
+    "typeof rawClaims.iat !== 'number'",
+    "typeof rawClaims.ogn !== 'string'",
+    "throw invalidArgument('ethauth proof origin does not match the request')"
+  ]) {
+    if (!compactProof.includes(token)) {
+      errors.push(`wallet-proof error mapping changed: ${token}`)
+    }
   }
   const workerSession = compact(
     section(api, "case 'GetSession':", "case 'Ping':")
@@ -301,10 +344,27 @@ export const accountWireErrors = (
   const compactAuthTest = compact(authTest)
   for (const token of [
     'expect(body).toMatchObject({ status: true, address, account: null })',
-    'expect(await session.json()).toEqual({ address, account: null })'
+    'expect(await session.json()).toEqual({ address, account: null })',
+    'passes omitted and null proof values to the source decoder as an empty string',
+    "expect(verifyProof).toHaveBeenCalledWith('', null, env.SEQUENCE_API_HOST)",
+    'rejects non-string proof input as a generated decode error',
+    "code: 'webrpc.permission_denied'",
+    "code: 'webrpc.invalid_argument'",
+    'expect(verifyProof).not.toHaveBeenCalled()'
   ]) {
     if (!compactAuthTest.includes(token)) {
       errors.push(`auth/session null-account proof changed: ${token}`)
+    }
+  }
+  const compactProofTest = compact(proofTest)
+  for (const token of [
+    'maps malformed proof and claim decoding to source permission-denied errors',
+    "status: 403, code: 'webrpc.permission_denied'",
+    'expect(originError).toBeInstanceOf(RpcError)',
+    "status: 400, code: 'webrpc.invalid_argument'"
+  ]) {
+    if (!compactProofTest.includes(token)) {
+      errors.push(`wallet-proof regression proof changed: ${token}`)
     }
   }
   return errors
@@ -323,7 +383,9 @@ const main = async () => {
     competitive,
     competitiveWire,
     api,
-    authTest
+    authTest,
+    proof,
+    proofTest
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
     readFile(path.join(root, 'api', 'rpc', 'auth.go'), 'utf8'),
@@ -341,7 +403,9 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8'),
-    readFile(path.join(root, 'cloudflare', 'test', 'auth-api.test.ts'), 'utf8')
+    readFile(path.join(root, 'cloudflare', 'test', 'auth-api.test.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'proof.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'test', 'proof.test.ts'), 'utf8')
   ])
   const errors = accountWireErrors(
     source,
@@ -354,14 +418,16 @@ const main = async () => {
     competitive,
     competitiveWire,
     api,
-    authTest
+    authTest,
+    proof,
+    proofTest
   )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Account and auth/session projections preserve generated Go nulls and crystal priority'
+      'Account, auth/session, and wallet-proof boundaries preserve generated Go behavior'
     )
   }
 }

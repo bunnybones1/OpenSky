@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { base64UrlEncode } from '../src/encoding'
+import { RpcError } from '../src/errors'
 import { decodeProof, verifySequenceProof } from '../src/proof'
 
 const address = '0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1'
@@ -11,6 +12,15 @@ const proof = (origin?: string) =>
     JSON.stringify({ app: 'OpenSky', iat: now, exp: now + 3600, v: '1', ogn: origin })
   )}.0xsignature`
 
+const thrownBy = (operation: () => unknown): unknown => {
+  try {
+    operation()
+  } catch (error) {
+    return error
+  }
+  throw new Error('expected operation to throw')
+}
+
 describe('ethauth proof boundary', () => {
   it('decodes valid claims and rejects expired proofs', () => {
     expect(decodeProof(proof()).address).toBe(address)
@@ -19,6 +29,43 @@ describe('ethauth proof boundary', () => {
       JSON.stringify({ app: 'OpenSky', iat: now - 7200, exp: now - 3600, v: '1' })
     )}.0xsignature`
     expect(() => decodeProof(expired)).toThrow('expired')
+  })
+
+  it('maps malformed proof and claim decoding to source permission-denied errors', () => {
+    const malformed = [
+      '',
+      `eth.bad.${base64UrlEncode(
+        JSON.stringify({ app: 'OpenSky', exp: now + 3600, v: '1' })
+      )}.0xsignature`,
+      `eth.${address}.not-json.0xsignature`,
+      `eth.${address}.${base64UrlEncode(JSON.stringify(null))}.0xsignature`,
+      `eth.${address}.${base64UrlEncode(
+        JSON.stringify({ app: 'OpenSky', exp: now + 3600 })
+      )}.0xsignature`,
+      `eth.${address}.${base64UrlEncode(
+        JSON.stringify({
+          app: 'OpenSky',
+          iat: 'now',
+          exp: now + 3600,
+          v: '1'
+        })
+      )}.0xsignature`,
+      `eth.${address}.${base64UrlEncode(
+        JSON.stringify({
+          app: 'OpenSky',
+          exp: now + 3600,
+          ogn: [],
+          v: '1'
+        })
+      )}.0xsignature`
+    ]
+
+    for (const value of malformed) {
+      expect(thrownBy(() => decodeProof(value))).toMatchObject({
+        status: 403,
+        code: 'webrpc.permission_denied'
+      })
+    }
   })
 
   it('requires the signed origin to match and trusts only Sequence validation', async () => {
@@ -41,13 +88,18 @@ describe('ethauth proof boundary', () => {
       expect.objectContaining({ method: 'POST' })
     )
 
-    await expect(
-      verifySequenceProof(
-        proof('https://opensky.example'),
-        'https://attacker.example',
-        'https://api.sequence.app',
-        fetcher
-      )
-    ).rejects.toThrow('origin')
+    const originError = await verifySequenceProof(
+      proof('https://opensky.example'),
+      'https://attacker.example',
+      'https://api.sequence.app',
+      fetcher
+    ).catch(error => error)
+    expect(originError).toBeInstanceOf(RpcError)
+    expect(originError).toMatchObject({
+      status: 400,
+      code: 'webrpc.invalid_argument'
+    })
+    expect((originError as Error).message).toContain('origin')
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 })

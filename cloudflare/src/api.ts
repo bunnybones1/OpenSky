@@ -245,6 +245,20 @@ const requestBody = async <T>(request: Request): Promise<T> => {
   }
 }
 
+const sourceStringArgument = (body: unknown, field: string): string => {
+  if (body === null) return ''
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+
+  const value = (body as Record<string, unknown>)[field]
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+  return value
+}
+
 const walletPrincipal = async (
   request: Request,
   env: Env
@@ -428,11 +442,10 @@ export const handleApiRequest = async (
       }
 
       case 'GetAuthToken': {
-        const body = await requestBody<{ ethAuthProofString?: string }>(request)
-        if (!body.ethAuthProofString)
-          throw invalidArgument('ethAuthProofString is required')
+        const body = await requestBody<unknown>(request)
+        const proofString = sourceStringArgument(body, 'ethAuthProofString')
         const proof = await services.verifyProof(
-          body.ethAuthProofString,
+          proofString,
           request.headers.get('Origin'),
           env.SEQUENCE_API_HOST
         )
