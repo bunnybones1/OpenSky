@@ -1780,6 +1780,41 @@ no upstream repository URL, no empty Twitch shell, and no legacy creator CTA.
 No migration, D1 mutation command, multiplayer Worker, binding, or game asset
 was deployed by this rollout.
 
+## Optional OneSignal push rollout — 2026-08-16
+
+Web milestone `4c22b9eb7cc97b3c20a18b6673be1a3d396c37cc` makes the
+preserved external push adapter genuinely optional. An absent or malformed
+OneSignal application ID now returns before every SDK operation, including the
+permission query and native prompt. Asynchronous initialization failures are
+captured by the existing error path. The legacy Skyweaver welcome destination
+is no longer hardcoded in runtime code; a welcome link is included only when an
+explicit HTTPS `PUSH_WELCOME_URL` is configured. The Cloudflare profile keeps
+both values empty, while the compose and local source profiles preserve the
+legacy destination for an explicitly configured source OneSignal app. In-app
+notifications remain authoritative and independent of this provider.
+
+The mandatory optional-integration gate now has six focused tests covering
+Twitch, repository, OneSignal application-ID, welcome-destination, and browser
+wiring behavior. The complete local and deployment-time release contracts each
+passed 507 main-Worker tests, 34 game-server unit tests, 98 game-server Workers
+tests, 33 match-service tests, 78 matchmaker tests, 27 game/browser tests, six
+analytics tests, every type/source/off-chain audit, both production builds, and
+the 594-file artifact validation. Exact-head GitHub Actions run
+[`31962660214`](https://github.com/bunnybones1/OpenSky/actions/runs/31962660214),
+job `95202930790`, passed in 10m43s before deployment.
+
+Only the main Worker and web assets were deployed. The Worker advanced from
+`b70f0304-352e-49a8-880f-b06070d6f053` to
+`89037f40-5cda-4503-9e70-35b710cd7c2b` at 100% traffic. The strict verifier
+matched web entry `/assets/index-c324c4ff.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six locales, and the
+release-safe cache policy after four edge-propagation attempts. Public Ping,
+Version, and game-mode probes returned `200` with `Cache-Control: no-store`;
+Version named the exact deployed Worker, Practice PvP and Practice Bot remained
+enabled, and both Conquest modes remained disabled. No migration, D1 mutation
+command, multiplayer Worker, binding, or game asset was deployed by this
+rollout.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

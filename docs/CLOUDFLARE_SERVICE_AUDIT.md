@@ -45,7 +45,9 @@ product description or Cloudflare runtime.
   producers and zero consumers, and the deployment inventory returns `10007`
   because no analytics Worker exists. This is account provisioning, not a
   remaining TypeScript port.
-- External device push has a disabled-by-default OneSignal adapter. Activation
+- External device push has a disabled-by-default OneSignal adapter. An empty or
+  malformed app ID now makes every SDK operation inert, and the optional
+  welcome destination must be configured as an explicit HTTPS URL. Activation
   needs a Cloud Weasel OneSignal app and key; in-app notification delivery stays
   authoritative and independent of the provider.
 - Twitch discovery is optional and fail closed. Without Cloud Weasel Twitch
