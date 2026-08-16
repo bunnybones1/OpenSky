@@ -556,6 +556,20 @@ and progress are not migrated.
   Practice replay reached 2:59/3:00 with no enum failure or missing-selection
   diagnostic. Read-only verification wrote zero D1 rows and kept both Conquest
   modes and every unapproved reward policy dormant.
+- `EnterConquest` now preserves the generated Go pointer and enum decoder
+  exactly. A missing/null hero remains the source `must provide hero` invalid
+  argument, malformed JSON shapes retain request-unmarshal failure, and an
+  unknown or empty string decodes to the zero `UNKNOWN` enum before the source
+  handler's generic internal failure. Milestone `79cdb7e2` adds focused and
+  source-mutation coverage for every branch. Exact-head run `31922655965`
+  passed in 10m04s before main Worker
+  `45c7f1c2-2ca6-4c0c-817a-0791005ded64` deployed with web asset
+  `/assets/index-b1769b84.js` and unchanged game asset
+  `/game/cloudflare/assets/index-7e9c419b.js`. Public Version, Ping, game-mode,
+  and Conquest-reward probes all returned `200` with `no-store`; Practice
+  stayed enabled, Conquest stayed disabled, and rewards stayed empty. Matching
+  pre/post D1 aggregates retained three users, 94 inventory rows, and zero
+  Conquest/reward-policy rows with zero writes and `changed_db: false`.
 - Player match history preserves the source completed-mode filter, default
   start-time/ID ordering, optional start-time or ID sorting, and 200-row page
   cap. Source-shaped keyset cursors remain stable when a newer match completes

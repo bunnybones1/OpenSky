@@ -2166,6 +2166,55 @@ rechecked and still failed with Cloudflare code `10042`, so the private
 analytics/replay-archive pipeline remains intentionally undeployed until R2 is
 enabled on the account.
 
+## EnterConquest enum-decoding fidelity rollout — 2026-08-15
+
+The generated Go request contract declares the hero argument as nullable
+`*Hero`. Its generated enum decoder first unmarshals any JSON string and then
+looks the value up in `Hero_value`; an unknown or empty name therefore becomes
+the zero `UNKNOWN` enum rather than a request-unmarshal error. The source
+handler separately rejects a nil pointer as `must provide hero`, dereferences
+all non-nil values, and wraps the state-manager error for `UNKNOWN` as the
+generic internal `enter conquest` failure. The Worker had collapsed unknown
+strings into its invalid-argument path, so its observable status differed from
+the source even though the queue itself remained safely disabled.
+
+Runtime commit `79cdb7e2f2e9b119565af54557944b5b30a0798d` ports that
+boundary exactly. Missing or null hero pointers return the source
+invalid-argument response; non-object bodies, arrays, and non-string hero
+values retain request-unmarshal failure; known names remain unchanged; and any
+unknown or empty string reaches the source-compatible `UNKNOWN` internal-error
+path. A pure decoder keeps that distinction independently testable. The
+source-derived Conquest gate now mechanically pins the generated pointer,
+string decoder, zero-value lookup, nil check, dereference, internal-error wrap,
+and Worker route wiring, with mutations for both source and TypeScript drift.
+
+The complete local release contract passed 492 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 27 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31922655965` passed in 10m04s before
+deployment.
+
+Only the main Worker was deployed, advancing it from
+`272b5cbe-6d13-4a6a-9237-476a0e1bf535` to
+`45c7f1c2-2ca6-4c0c-817a-0791005ded64`. Cloudflare uploaded no changed asset
+files. The strict verifier matched web entry `/assets/index-b1769b84.js`, game
+entry `/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and
+the release-safe cache policy on its first attempt. Production `Version`,
+`Ping`, `GetGameModesStatus`, and `ConquestRewards` probes returned `200` with
+`Cache-Control: no-store`; the version response named the exact new Worker,
+both Practice modes stayed enabled, both Conquest modes stayed disabled, and
+`weeklyGolds` stayed empty.
+
+No migration or configuration change was required. Identical read-only D1
+aggregates before and after deployment reported three users, 94 inventory rows,
+and zero Conquest runs, settlements, Gold deliveries, settlement grants, Gold
+grants, Silver exchanges, or reward pools. Both queries reported zero rows
+written and `changed_db: false`. The reward-readiness audit retained original
+Conquest as `dormant-policy` with zero verified active pools; the rollout
+created no account, ticket spend, reward, queue, capability, or economy
+authority.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
