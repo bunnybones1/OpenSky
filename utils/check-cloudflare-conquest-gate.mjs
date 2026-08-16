@@ -563,7 +563,11 @@ export const conquestGateErrors = (config, evidence = {}) => {
       "request.proposalId.startsWith('readiness-drill-match-')",
       'match.player1.gameMode !== GameMode.CONQUEST_CONSTRUCTED',
       'match.player2.gameMode !== GameMode.CONQUEST_CONSTRUCTED',
-      'bot-only matches are reserved for Conquest readiness'
+      'bot-only matches are reserved for Conquest readiness',
+      'export const botDifficultyForParticipant',
+      'participants.every(',
+      'player === 0 ? 1 : 0',
+      'botDifficultyForParticipant('
     ]) {
       if (!evidence.gameMatch.includes(token)) {
         errors.push(`Conquest readiness game boundary is missing: ${token}`)
@@ -575,7 +579,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'new ConquestDrillRepository(env.AUTH_DB)',
       'await repository.run(',
       'await matchService.fetch(',
-      'GAME_SERVICE: gameService',
+      'GAME_SERVICE: {',
       'fetch: (request: Request) => SELF.fetch(request)',
       'runtimeEnv.GAME_MATCHES.getByName',
       'runDurableObjectAlarm(stub)',
@@ -592,6 +596,24 @@ export const conquestGateErrors = (config, evidence = {}) => {
       'terminal match must not be dispatched twice',
       'advanced: 1',
       'failed: 1',
+      'const dispatchReadinessMatch = async (',
+      'expect(terminal.state.winner).toBe(0)',
+      "status: 'WAITING_DELIVERY'",
+      'completedMatchCount: 3',
+      "settlement_status: 'APPLIED'",
+      "silver_card_ids_json: '[6]'",
+      "gold_card_ids_json: '[136]'",
+      'point_receipts: 3',
+      'point_player_receipts: 6',
+      'pendingConquestCards(',
+      'tokenIDs: [131_208]',
+      'new Date(Date.parse(settlement!.deliver_at) - 1)',
+      'deliverDueConquestGold(env.AUTH_DB, deliveredAt)',
+      'delivered: 1',
+      "event_type = 'DELAYED_REWARD_MINTED'",
+      'gold_balance: 1',
+      'verified_drill_receipts: 1',
+      'completed: 1',
       'readiness: 0, enabled_modes: 0'
     ]) {
       if (!evidence.crossServiceReadiness.includes(token)) {

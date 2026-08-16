@@ -17,6 +17,7 @@ import type {
 
 import {
   archiveReplayRecords,
+  botDifficultyForParticipant,
   GameMatch,
   GameServerEnv
 } from '../src/game-match'
@@ -365,6 +366,51 @@ afterEach(() => {
 })
 
 describe('Cloudflare authoritative game Match Durable Object', () => {
+  it('uses asymmetric source-bot difficulty only for guarded readiness matches', () => {
+    const readiness = createMatchFixture({
+      botPlayer1: true,
+      botPlayer2: true,
+      gameMode: GameMode.CONQUEST_CONSTRUCTED,
+      proposalId: 'readiness-drill-match-difficulty-contract'
+    })
+    expect(
+      botDifficultyForParticipant(readiness.proposalId, readiness.match, 0)
+    ).toBe(1)
+    expect(
+      botDifficultyForParticipant(readiness.proposalId, readiness.match, 1)
+    ).toBe(0)
+
+    const ordinary = createMatchFixture({
+      botPlayer1: true,
+      botPlayer2: true,
+      proposalId: 'ordinary-bot-difficulty-contract'
+    })
+    expect(
+      botDifficultyForParticipant(ordinary.proposalId, ordinary.match, 0)
+    ).toBe(0.34)
+    expect(
+      botDifficultyForParticipant(ordinary.proposalId, ordinary.match, 1)
+    ).toBe(0.34)
+
+    const wrongMode = createMatchFixture({
+      botPlayer1: true,
+      botPlayer2: true,
+      proposalId: 'readiness-drill-match-wrong-mode'
+    })
+    expect(
+      botDifficultyForParticipant(wrongMode.proposalId, wrongMode.match, 0)
+    ).toBe(0.34)
+    const mixed = createMatchFixture({
+      botPlayer1: true,
+      botPlayer2: false,
+      gameMode: GameMode.CONQUEST_CONSTRUCTED,
+      proposalId: 'readiness-drill-match-mixed-participants'
+    })
+    expect(botDifficultyForParticipant(mixed.proposalId, mixed.match, 0)).toBe(
+      0.34
+    )
+  })
+
   it('advances the source practice-win counter at most once per match', async () => {
     await insertExperiencePlayers()
     const now = new Date().toISOString()

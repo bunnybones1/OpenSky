@@ -271,6 +271,26 @@ const runtimeSettings = (env: GameServerEnv): RuntimeSettings => ({
 const normalizedAddress = (address: string) => address.toLowerCase()
 const MAX_SPECTATORS = 50
 
+export const botDifficultyForParticipant = (
+  proposalId: string,
+  match: MatchmakerStartMatchMessage,
+  player: Player
+) => {
+  const participants = [match.player1, match.player2]
+  const isReadinessDrill =
+    proposalId.startsWith('readiness-drill-match-') &&
+    participants.every(
+      participant =>
+        typeof participant.botSubkey === 'string' &&
+        participant.gameMode === GameMode.CONQUEST_CONSTRUCTED
+    )
+  // The synthetic drill target must traverse the three-win settlement path;
+  // opponents remain real source bots but intentionally take the easiest
+  // policy. No player-facing or ordinary bot match uses this asymmetry.
+  if (isReadinessDrill) return player === 0 ? 1 : 0
+  return match.matchSettings.botDifficulty ?? 0.5
+}
+
 const validateCreateRequest = (request: CreateMatchRequest) => {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(request.proposalId)) {
     throw new Error('invalid proposal ID')
@@ -1800,7 +1820,11 @@ export class GameMatch implements DurableObject {
       bot.index,
       bot.participant.botSubkey as string,
       addressBytesToHex(bot.participant.privateSeed.subkey),
-      metadata.match.matchSettings.botDifficulty ?? 0.5,
+      botDifficultyForParticipant(
+        metadata.proposalId,
+        metadata.match,
+        bot.index
+      ),
       {
         actionCount:
           timers.botActionCounts?.[bot.index] ??
