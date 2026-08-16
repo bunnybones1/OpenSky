@@ -2027,6 +2027,61 @@ identity-free D1 aggregate found zero legacy wallet accounts, zero writes, and
 changed no account, identity, inventory, deck, match, reward, wallet, queue,
 content, or staff state.
 
+## Wallet-proof decode fidelity rollout — 2026-08-15
+
+Generated Go decodes `ethAuthProofString` into a non-pointer string. An omitted
+field, a null field, or a null request body therefore reaches `GetAuthToken` as
+the empty string and fails the source ETHAuth decoder as
+`403 webrpc.permission_denied`. A scalar/array request body or a non-string
+field fails JSON unmarshalling first as `400 webrpc.invalid_argument`. The
+Cloudflare adapter previously returned `400` for an omitted proof and allowed a
+numeric proof to reach `.split()`, producing an internal `500`.
+
+Runtime commit `b7e10ca3418b03990ed6669eebf8b803cae8d73b` restores that
+decode boundary. The request adapter preserves Go's empty-string zero value for
+omitted and null fields, rejects incompatible JSON types before verification,
+and maps malformed proof format, address, claim JSON, primitive claims, missing
+claims, and wrong claim field types to the source permission-denied boundary.
+The signed-origin mismatch remains the source's distinct invalid-argument
+error. No malformed input can reach the Sequence verifier as a JavaScript type
+error.
+
+The source-derived account/auth gate now also pins the generated request field
+and JSON tag, the Go handler's permission-denied wrapping, Worker zero-value and
+type decoder, proof error mapping, route tests, parser tests, and complete-build
+inclusion. Mutation coverage rejects request-type, source-error, decoder,
+parser, origin, test, and gate drift.
+
+The complete local release contract passed 491 main-Worker tests across 82
+files, 34 game-server unit tests, 93 game-server Workers tests, 31
+match-service tests, 78 matchmaker tests, 25 game/browser tests, six analytics
+tests, every source/off-chain audit, all service typechecks, and both production
+builds. Exact-head GitHub Actions run `31916934051` passed before deployment.
+
+Only the main Worker was deployed, advancing it from
+`63039160-233d-47b7-831c-11658749cfe3` to
+`d6e83041-2dd8-4e61-9094-dba784f5de6b`. The game Worker remained
+`a83e80fe-292d-4562-a544-e8c7949cc7f6`, the match service remained
+`bed7174c-e5a6-44fb-8a0f-7c73b008dc90`, and the matchmaker remained
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Cloudflare uploaded no changed asset
+files. The deployment verifier resolved unchanged web asset
+`/assets/index-d976a081.js`, unchanged game asset
+`/game/cloudflare/assets/index-79a70ba2.js`, all six exact locales, and the
+release-safe cache policy after normal edge propagation.
+
+Read-only production `Version` and `Ping` returned `200` with
+`Cache-Control: no-store`, and `Version` reported the exact new Worker ID.
+Omitted, null-body, and null-field `GetAuthToken` probes returned
+`403 webrpc.permission_denied`; numeric-field and array-body probes returned
+`400 webrpc.invalid_argument`. All used `Cache-Control: no-store`, and the
+previous internal `500` was absent. Under the existing Google session, the
+preserved Practice-vs-Bot page loaded the ADA starter deck at 30/30 without an
+auth fallback, generic failure, or enum error; no match was started. An
+identity-free D1 aggregate found zero legacy wallet accounts, zero writes, and
+`changed_db: false`; production D1 reported no pending migrations. Verification
+changed no account, identity, inventory, deck, match, reward, wallet, queue,
+content, or staff state.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and
