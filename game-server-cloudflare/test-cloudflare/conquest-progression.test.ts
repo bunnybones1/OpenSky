@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { applyConquestProgress } from '../src/progression'
 import { applyConquestPoints } from '../src/conquest-points'
+import { settleConquestRewardsForMatch } from '../src/conquest-settlement'
 
 const USER_1 = 'conquest-progress-user-1'
 const USER_2 = 'conquest-progress-user-2'
@@ -278,10 +279,30 @@ describe('source Conquest authoritative match progression', () => {
       .bind(firstProposal, secondProposal)
       .all()
     expect(transitions.results).toMatchObject([
-      { user_id: USER_1, before_points: 13747, awarded_points: 3, after_points: 13750 },
-      { user_id: USER_1, before_points: 13750, awarded_points: 0, after_points: 13750 },
-      { user_id: USER_2, before_points: 13747, awarded_points: 3, after_points: 13750 },
-      { user_id: USER_2, before_points: 13750, awarded_points: 0, after_points: 13750 }
+      {
+        user_id: USER_1,
+        before_points: 13747,
+        awarded_points: 3,
+        after_points: 13750
+      },
+      {
+        user_id: USER_1,
+        before_points: 13750,
+        awarded_points: 0,
+        after_points: 13750
+      },
+      {
+        user_id: USER_2,
+        before_points: 13747,
+        awarded_points: 3,
+        after_points: 13750
+      },
+      {
+        user_id: USER_2,
+        before_points: 13750,
+        awarded_points: 0,
+        after_points: 13750
+      }
     ])
   })
 
@@ -415,6 +436,46 @@ describe('source Conquest authoritative match progression', () => {
     expect(rows.map(row => row.ended_at)).toEqual([processedAt, processedAt])
   })
 
+  it('completes the source default branch when terminal progress exceeds three wins', async () => {
+    const proposalId = 'conquest-progress-fourth-win'
+    const match = await setup(proposalId, [
+      {
+        10_001: ConquestMatchResult.WIN,
+        10_002: ConquestMatchResult.WIN,
+        10_003: ConquestMatchResult.WIN
+      },
+      {}
+    ])
+    const processedAt = '2026-08-11T12:03:30.000Z'
+
+    await applyConquestProgress(env.AUTH_DB, proposalId, 0, processedAt)
+    const rows = (await conquests()).results
+    expect(rows.map(row => row.status)).toEqual([
+      ConquestStatus.COMPLETED,
+      ConquestStatus.COMPLETED
+    ])
+    expect(JSON.parse(rows[0].match_progress)).toEqual({
+      10_001: ConquestMatchResult.WIN,
+      10_002: ConquestMatchResult.WIN,
+      10_003: ConquestMatchResult.WIN,
+      [match!.id]: ConquestMatchResult.WIN
+    })
+    expect(JSON.parse(rows[1].match_progress)).toEqual({
+      [match!.id]: ConquestMatchResult.LOSS
+    })
+    expect(rows.map(row => row.ended_at)).toEqual([processedAt, processedAt])
+    await expect(
+      settleConquestRewardsForMatch(
+        env.AUTH_DB,
+        proposalId,
+        processedAt,
+        () => {
+          throw new Error('the source default branch must not draw rewards')
+        }
+      )
+    ).resolves.toEqual([[], []])
+  })
+
   it('keeps both runs active after a draw', async () => {
     const proposalId = 'conquest-progress-draw'
     const match = await setup(proposalId)
@@ -532,9 +593,7 @@ describe('source Conquest authoritative match progression', () => {
       0,
       '2026-08-11T12:04:50.000Z'
     )
-    expect(
-      JSON.parse((await conquests()).results[0].match_progress)
-    ).toEqual({
+    expect(JSON.parse((await conquests()).results[0].match_progress)).toEqual({
       0: ConquestMatchResult.DRAW,
       1: ConquestMatchResult.UNKNOWN,
       2: ConquestMatchResult.UNKNOWN,
@@ -557,9 +616,9 @@ describe('source Conquest authoritative match progression', () => {
       0,
       '2026-08-11T12:04:55.000Z'
     )
-    expect(
-      JSON.parse((await conquests()).results[0].match_progress)
-    ).toEqual({ [match!.id]: ConquestMatchResult.WIN })
+    expect(JSON.parse((await conquests()).results[0].match_progress)).toEqual({
+      [match!.id]: ConquestMatchResult.WIN
+    })
   })
 
   it('does nothing for non-Conquest matches', async () => {

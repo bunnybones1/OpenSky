@@ -24,6 +24,7 @@ import {
   practiceExperienceCutoffLevel,
   type MatchExperiencePlayer
 } from './experience'
+import { conquestRewardBundle } from './conquest-settlement'
 import {
   applySourceRankProtections,
   lookupRankByScore,
@@ -408,18 +409,17 @@ export const applyConquestProgress = async (
 
   const statements: D1PreparedStatement[] = []
   for (const player of [0, 1] as const) {
-    const progress = parseConquestMatchProgress(
-      rows[player]!.match_progress
-    )
+    const progress = parseConquestMatchProgress(rows[player]!.match_progress)
     progress[String(match.id)] = results[player]
     const values = Object.values(progress)
     const wins = values.filter(
       value => value === ConquestMatchResult.WIN
     ).length
     const ended = wins >= 3 || values.includes(ConquestMatchResult.LOSS)
+    const rewardBundle = conquestRewardBundle(wins)
     const status = !ended
       ? ConquestStatus.IN_PROGRESS
-      : wins === 0
+      : rewardBundle.silver === 0 && rewardBundle.gold === 0
         ? ConquestStatus.COMPLETED
         : ConquestStatus.REWARDS_PENDING
     statements.push(

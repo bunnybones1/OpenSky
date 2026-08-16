@@ -235,7 +235,8 @@ export const conquestSettlementSourceParityErrors = (
   }
   for (const token of [
     'const ended = wins >= 3 || values.includes(ConquestMatchResult.LOSS)',
-    ': wins === 0 ? ConquestStatus.COMPLETED : ConquestStatus.REWARDS_PENDING'
+    'const rewardBundle = conquestRewardBundle(wins)',
+    ': rewardBundle.silver === 0 && rewardBundle.gold === 0 ? ConquestStatus.COMPLETED : ConquestStatus.REWARDS_PENDING'
   ]) {
     if (!compactProgression.includes(token)) {
       errors.push(`Worker Conquest terminal contract is missing: ${token}`)

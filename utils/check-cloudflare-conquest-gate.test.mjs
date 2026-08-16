@@ -367,6 +367,16 @@ test('derives Conquest settlement rewards and terminal behavior from source', as
   assert.ok(
     conquestSettlementSourceParityErrors(
       source,
+      settlement,
+      progression.replace(
+        'conquestRewardBundle(wins)',
+        'conquestRewardBundle(wins === 0 ? 0 : 1)'
+      )
+    ).some(error => error.includes('terminal contract is missing'))
+  )
+  assert.ok(
+    conquestSettlementSourceParityErrors(
+      source,
       settlement.replace('amount: 0', 'amount: 1'),
       progression
     ).some(error => error.includes('reward wire'))
