@@ -1501,6 +1501,54 @@ policy is active while original Conquest and every other policy-gated track are
 dormant. Deployment therefore installed orchestration capability in code but
 created no operator authority or synthetic production evidence.
 
+## Operational system-player isolation — 2026-08-16
+
+Milestone `6f53a14be68ffee70596c57b51050914515af040` makes the fully
+bootstrapped readiness-drill identities an explicit `SYSTEM` account class.
+Migration `0113` reserves the `system:` namespace, makes both the user ID and
+classification immutable, and prevents operational accounts from entering
+leaderboards or invitations. The Conquest V2 and leaderboard snapshot triggers
+were replaced with fail-closed versions that retain operational points and
+scores for drill auditing but accept only `PLAYER` reward recipients.
+
+The same boundary is enforced in the TypeScript adapters. System identities do
+not appear through public account reference/name lookup, stats, ownership,
+feeds, invitations, leaderboards, ordinary match detail, or reward snapshots.
+Matches containing a system participant are private, and their replay archive
+and individual record capabilities return not-found unless the requesting
+Google identity is an `ADMIN`. Staff account inspection remains available, and
+the drill still uses the ordinary authoritative account, match, Conquest
+settlement, and delayed-delivery path.
+
+The release adds a mandatory static system-player gate and integration coverage
+for public discovery, staff inspection, replay capabilities, D1 namespace and
+social guards, both weekly reward snapshots, and the shared match-service
+readiness fixture. The exact local and deployment release contracts passed 507
+main-Worker tests across 84 files, 34 game-server unit tests, 95 game-server
+Workers tests, 32 match-service tests, 78 matchmaker tests, 27 game/browser
+tests, six analytics tests, every type/source/off-chain gate, and both
+production builds. Exact-head GitHub Actions run
+[`31946043092`](https://github.com/bunnybones1/OpenSky/actions/runs/31946043092),
+job `95162040255`, passed in 9m52s.
+
+Migration `0113` executed 18 commands against the pinned production D1
+database. The main Worker advanced from
+`573313b0-e95c-42a1-9c3b-87066ae92edf` to
+`f556befe-16e3-4203-9e81-b4a9539de656`. The strict deployment verifier matched
+web entry `/assets/index-ca9c688d.js`, game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. The live origin returned `200`
+with both browser and CDN cache control set to `no-store`.
+
+Post-deploy D1 verification found one applied `0113` migration, three `PLAYER`
+users, zero `SYSTEM` users, and zero system-eligible leaderboard settings,
+system invitations, system Conquest V2 reward entries, or system leaderboard
+reward entries. It read five rows, wrote zero, and reported `changed_db: false`.
+Reward readiness remained error-free: core progression and the reviewed
+SkyPass policy are live, while original Conquest, leaderboard, Conquest V2, and
+referral policies remain dormant. No drill capability, synthetic identity,
+match, reward, or queue authority was created by this rollout.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
@@ -1509,7 +1557,11 @@ not a code-path shortcut: it must use distinct pool proposer, pool activator,
 drill runner, and final verifier actors; wait for three real sequential matches
 and the unchanged 24-hour Gold delivery; and inspect every immutable receipt
 before either public queue is considered. Do not grant capabilities or create a
-production reward pool merely to manufacture deployment evidence.
+production reward pool merely to manufacture deployment evidence. If that
+exercise is authorized later, its synthetic accounts and matches will remain
+quarantined from public player and reward surfaces by migration `0113` while
+staff retain audit access.
+
 WalletConnect ownership is now independently available in account settings:
 connect a wallet, sign a session-owned nonce, persist the verified address, and
 read external wallet contents without granting the wallet authority over the
