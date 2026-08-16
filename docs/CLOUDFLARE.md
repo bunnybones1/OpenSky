@@ -1625,6 +1625,44 @@ game-mode flag, or production data changed, so no Cloudflare service was
 redeployed. Production remains on the previously verified Worker versions and
 both Conquest queues remain dormant.
 
+## Cross-service terminal settlement proof — 2026-08-16
+
+Milestone `0ad4bf6da37bcfcfd52fb957ec42cee1f2b25b65` extends the real
+readiness path through an ordinary authoritative match conclusion. After the
+same orchestrator, match-service binding, game Worker, named Durable Object,
+shared D1, commit/reveal, and first-bot-action boundary, the Workers test
+advances only the runtime's actual due bot, turn, or commit/reveal alarms. Two
+real bots play until the WASM state reports `GameOver`; the test never writes a
+winner, result, or test-only completion shortcut.
+
+The terminal ledger must agree with the runtime outcome. Wins and losses are
+recorded for the correct participants, while a source-valid draw stores a null
+winner, two `DRAW` progression receipts, and no `winner` property in the result
+JSON. Every terminal outcome writes one immutable match-points receipt and two
+immutable per-player point receipts. A first match writes no card settlement,
+and the orchestrator must advance only after a target win or fail after an
+opponent win or draw; it may not dispatch the terminal match twice. Verified
+queue readiness and enabled Conquest-mode counts remain zero throughout. The
+fail-closed Conquest gate requires each of these terminal assertions and has
+mutation coverage for their removal.
+
+This proves the ordinary cross-service game-completion, Conquest-progress, and
+point-receipt pipeline. It does not manufacture three target wins and therefore
+does not replace the deterministic component coverage for exact three-win card
+settlement or delayed 24-hour Gold delivery.
+
+The complete local release contract passed 507 main-Worker tests, 34
+game-server unit tests, 96 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit and service typecheck, both production builds, and the
+594-file artifact validation. Exact-head GitHub Actions run
+[`31952771643`](https://github.com/bunnybones1/OpenSky/actions/runs/31952771643),
+job `95178715476`, passed in 10m50s.
+
+This is another proof-and-release-gate milestone only. No deployable runtime,
+schema, binding, configuration, or asset changed, so no Cloudflare service was
+redeployed and no production data or rollout authority changed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

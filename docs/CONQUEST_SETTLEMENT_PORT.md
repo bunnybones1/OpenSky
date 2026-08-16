@@ -881,3 +881,41 @@ job `95172892587`, passed in 10m34s.
 No runtime artifact, migration, binding, production capability, reward pool,
 synthetic operation, match, settlement, readiness row, or mode flag changed.
 No Cloudflare deployment was appropriate for this proof-only milestone.
+
+## Cross-service terminal settlement proof
+
+Milestone `0ad4bf6da37bcfcfd52fb957ec42cee1f2b25b65` carries the real
+cross-service readiness match through a natural authoritative conclusion. The
+test advances only timers already scheduled by the runtime, allowing the two
+real bots and WASM engine to reach `GameOver` without forcing the winner,
+result, or completion state.
+
+The shared D1 ledger must match that runtime outcome. Winner paths record the
+corresponding `WIN` and `LOSS`; a source-valid draw records a null winner, two
+`DRAW` receipts, and a result JSON object with no `winner` property. Every
+outcome writes one match-points receipt and two immutable per-player point
+receipts, while the first match correctly writes zero card settlements. The
+real orchestrator advances after a target win, fails after an opponent win or
+draw, and cannot dispatch the terminal match again. Queue readiness and public
+Conquest modes remain zero. The release gate has explicit mutation tests for
+every new terminal assertion.
+
+This closes the ordinary game-completion, Conquest-progression, and points
+boundary. It deliberately does not fabricate the three target victories
+needed for a card bundle, and it does not accelerate the 24-hour Gold delivery;
+those exact settlement contracts remain covered by deterministic component
+tests until an independently authorized production exercise can use genuine
+sequential outcomes.
+
+The complete local release contract passed 507 main-Worker tests, 34
+game-server unit tests, 96 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 27 game/browser tests, six analytics tests, every
+source/off-chain audit and service typecheck, both production builds, and the
+594-file artifact validation. Exact-head GitHub Actions run
+[`31952771643`](https://github.com/bunnybones1/OpenSky/actions/runs/31952771643),
+job `95178715476`, passed in 10m50s.
+
+No runtime artifact, migration, binding, production capability, reward pool,
+synthetic operation, match, settlement, readiness row, mode flag, or
+production data changed. No Cloudflare deployment was appropriate for this
+proof-only milestone.
