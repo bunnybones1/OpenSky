@@ -1,5 +1,12 @@
 import type { Conquest, WeeklyGolds } from '@opensky/proto'
 
+export interface SourceConquestPointsResponse {
+  points: number
+  // Preserve the generated API typo: changing this to `needed` breaks the
+  // original client contract.
+  nedeed: number
+}
+
 // The generated TypeScript declarations model RIDL pointers as optional
 // properties, but encoding/json emits every field because the Go struct does
 // not use omitempty. Keep the runtime wire exact even when a pointer is nil.
@@ -29,3 +36,10 @@ export const sourceWeeklyGoldsWire = (reward: WeeklyGolds): WeeklyGolds => ({
 export const sourceWeeklyGoldsListWire = (
   rewards: WeeklyGolds[]
 ): WeeklyGolds[] => rewards.map(sourceWeeklyGoldsWire)
+
+export const sourceConquestPointsResponseWire = (
+  response: SourceConquestPointsResponse
+): SourceConquestPointsResponse => ({
+  points: response.points,
+  nedeed: response.nedeed
+})

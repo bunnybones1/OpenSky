@@ -179,6 +179,52 @@ export const conquestWireErrors = (
     }
   }
 
+  const compactPointsDecoder = (
+    bracedBlock(
+      source,
+      'func (s *skyWeaverAPIServer) serveConquestPointsJSON'
+    ) ?? ''
+  ).replace(/\s+/g, ' ')
+  for (const token of [
+    'var ret0 uint64',
+    'var ret1 uint64',
+    'ret0, ret1, err = s.SkyWeaverAPI.ConquestPoints(ctx)',
+    'Ret0 uint64 `json:"points"`',
+    'Ret1 uint64 `json:"nedeed"`',
+    '}{ret0, ret1}'
+  ]) {
+    if (!compactPointsDecoder.includes(token)) {
+      errors.push(
+        `source ConquestPoints response contract is missing: ${token}`
+      )
+    }
+  }
+
+  const compactPointsHelper = (
+    bracedBlock(sourceRpc, 'func conquestPoints') ?? ''
+  ).replace(/\s+/g, ' ')
+  for (const token of [
+    'const eventID = 1',
+    'const pointsRequired = 30',
+    '.FindOrCreateByAddressAndEventID(accountID, uint16(eventID))',
+    'return points, uint64(pointsRequired), nil'
+  ]) {
+    if (!compactPointsHelper.includes(token)) {
+      errors.push(`source ConquestPoints helper contract is missing: ${token}`)
+    }
+  }
+  const compactPointsHandler = (
+    bracedBlock(sourceRpc, 'func (s *Server) ConquestPoints') ?? ''
+  ).replace(/\s+/g, ' ')
+  for (const token of [
+    'points, required, err := conquestPoints(ctx, nil, account.ID)',
+    'return points.CurrentPoints, required, err'
+  ]) {
+    if (!compactPointsHandler.includes(token)) {
+      errors.push(`source ConquestPoints handler contract is missing: ${token}`)
+    }
+  }
+
   const compactSourceItem = sourceItem.replace(/\s+/g, ' ')
   if (
     !compactSourceItem.includes(
@@ -216,6 +262,17 @@ export const conquestWireErrors = (
   ]) {
     if (!compactWire.includes(token)) {
       errors.push(`Worker WeeklyGolds wire is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'export interface SourceConquestPointsResponse { points: number',
+    'nedeed: number',
+    'export const sourceConquestPointsResponseWire = ( response: SourceConquestPointsResponse ): SourceConquestPointsResponse => ({',
+    'points: response.points',
+    'nedeed: response.nedeed'
+  ]) {
+    if (!compactWire.includes(token)) {
+      errors.push(`Worker ConquestPoints wire is missing: ${token}`)
     }
   }
 
@@ -260,6 +317,17 @@ export const conquestWireErrors = (
       errors.push(`Worker ConquestRewards projection is missing: ${token}`)
     }
   }
+  for (const token of [
+    'export const LEGACY_CONQUEST_EVENT_ID = 1',
+    'export const LEGACY_CONQUEST_POINTS_REQUIRED = 30',
+    'INSERT OR IGNORE INTO player_conquest_points',
+    'VALUES (?, ?, 0, 0, ?)',
+    'SELECT current_points, total_points FROM player_conquest_points'
+  ]) {
+    if (!compact.includes(token)) {
+      errors.push(`Worker ConquestPoints repository is missing: ${token}`)
+    }
+  }
   if (
     compact.includes('...(row.ended_at ?') ||
     !compact.includes(
@@ -288,6 +356,23 @@ export const conquestWireErrors = (
     !compactRewardsApi.includes('weeklyGolds: await conquest.rewards()')
   ) {
     errors.push('main Worker ConquestRewards boundary bypasses the repository')
+  }
+
+  const pointsStart = api.indexOf("case 'ConquestPoints':")
+  const pointsEnd = api.indexOf("case 'ConquestV2Pool':", pointsStart)
+  const compactPointsApi =
+    pointsStart >= 0 && pointsEnd > pointsStart
+      ? api.slice(pointsStart, pointsEnd).replace(/\s+/g, ' ')
+      : ''
+  for (const token of [
+    'const points = await conquest.points( principal.userId, LEGACY_CONQUEST_EVENT_ID )',
+    'sourceConquestPointsResponseWire({',
+    'points: points.current',
+    'nedeed: LEGACY_CONQUEST_POINTS_REQUIRED'
+  ]) {
+    if (!compactPointsApi.includes(token)) {
+      errors.push(`main Worker ConquestPoints boundary is missing: ${token}`)
+    }
   }
   const enterStart = api.indexOf("case 'EnterConquest':")
   const enterEnd = api.indexOf("case 'ConquestStatus':", enterStart)
@@ -341,7 +426,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Conquest input, status, statistics, and rewards preserve the generated Go contract'
+      'Conquest input, status, statistics, rewards, and points preserve the generated Go contract'
     )
   }
 }

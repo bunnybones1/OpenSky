@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest'
 import type { WeeklyGolds } from '@opensky/proto'
 
 import {
+  sourceConquestPointsResponseWire,
   sourceWeeklyGoldsListWire,
-  sourceWeeklyGoldsWire
+  sourceWeeklyGoldsWire,
+  type SourceConquestPointsResponse
 } from '../src/conquest-wire'
 
-describe('source Conquest reward wire', () => {
+describe('source Conquest wire', () => {
   it('emits only the four required WeeklyGolds fields', () => {
     expect(
       sourceWeeklyGoldsWire({
@@ -27,5 +29,15 @@ describe('source Conquest reward wire', () => {
 
   it('preserves the source make-backed empty list boundary', () => {
     expect(sourceWeeklyGoldsListWire([])).toEqual([])
+  })
+
+  it('preserves the generated ConquestPoints keys and strips metadata', () => {
+    expect(
+      sourceConquestPointsResponseWire({
+        points: 29,
+        nedeed: 30,
+        totalPoints: 129
+      } as SourceConquestPointsResponse & { totalPoints: number })
+    ).toEqual({ points: 29, nedeed: 30 })
   })
 })

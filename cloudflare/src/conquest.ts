@@ -66,6 +66,7 @@ const TREASURE_TOTAL_POINTS = [
 ] as const
 
 export const LEGACY_CONQUEST_EVENT_ID = 1
+export const LEGACY_CONQUEST_POINTS_REQUIRED = 30
 export const CONQUEST_V2_EVENT_ID = 2
 
 interface ConquestRow {

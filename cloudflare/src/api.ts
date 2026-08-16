@@ -73,8 +73,10 @@ import {
   ConquestRepository,
   conquestTreasureProgress,
   LEGACY_CONQUEST_EVENT_ID,
+  LEGACY_CONQUEST_POINTS_REQUIRED,
   sourceConquestHeroArgument
 } from './conquest'
+import { sourceConquestPointsResponseWire } from './conquest-wire'
 import {
   CONQUEST_READINESS_OPERATION_HEADER,
   ConquestReadinessOperationsRepository
@@ -1863,7 +1865,14 @@ export const handleApiRequest = async (
           principal.userId,
           LEGACY_CONQUEST_EVENT_ID
         )
-        return json(request, env, { points: points.current, nedeed: 30 })
+        return json(
+          request,
+          env,
+          sourceConquestPointsResponseWire({
+            points: points.current,
+            nedeed: LEGACY_CONQUEST_POINTS_REQUIRED
+          })
+        )
       }
 
       case 'ConquestV2Pool': {

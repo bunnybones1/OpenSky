@@ -89,6 +89,27 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
     },
     {
       ...value,
+      source: value.source.replace(
+        'Ret1 uint64 `json:"nedeed"`',
+        'Ret1 uint64 `json:"needed"`'
+      )
+    },
+    {
+      ...value,
+      sourceRpc: value.sourceRpc.replace(
+        'const pointsRequired = 30',
+        'const pointsRequired = 31'
+      )
+    },
+    {
+      ...value,
+      sourceRpc: value.sourceRpc.replace(
+        'return points.CurrentPoints, required, err',
+        'return points.TotalPoints, required, err'
+      )
+    },
+    {
+      ...value,
       sourceItem: value.sourceItem.replace(
         'return (2 << 16) + itemID',
         'return (3 << 16) + itemID'
@@ -124,6 +145,13 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
     },
     {
       ...value,
+      conquestWire: value.conquestWire.replace(
+        'nedeed: response.nedeed',
+        ''
+      )
+    },
+    {
+      ...value,
       conquest: value.conquest.replace('constructedGoldCardsWon: 0,', '')
     },
     {
@@ -135,6 +163,13 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
       conquest: value.conquest.replace(
         'tokenId: getGoldID(row.card_id)',
         'tokenId: row.card_id'
+      )
+    },
+    {
+      ...value,
+      conquest: value.conquest.replace(
+        'LEGACY_CONQUEST_POINTS_REQUIRED = 30',
+        'LEGACY_CONQUEST_POINTS_REQUIRED = 31'
       )
     },
     {
@@ -156,6 +191,20 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
       api: value.api.replace(
         'weeklyGolds: await conquest.rewards()',
         'weeklyGolds: []'
+      )
+    },
+    {
+      ...value,
+      api: value.api.replace(
+        'sourceConquestPointsResponseWire({',
+        '({'
+      )
+    },
+    {
+      ...value,
+      api: value.api.replace(
+        'principal.userId,\n          LEGACY_CONQUEST_EVENT_ID',
+        'principal.userId,\n          CONQUEST_V2_EVENT_ID'
       )
     }
   ]
