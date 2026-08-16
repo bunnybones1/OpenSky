@@ -17,6 +17,7 @@ import {
 import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
 import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
+import { ConquestDrillRepository } from '../../cloudflare/src/conquest-drill'
 import { ConquestReadinessOperationsRepository } from '../../cloudflare/src/conquest-readiness-operations'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
 
@@ -1751,5 +1752,146 @@ describe('Cloud Weasel accepted-match service', () => {
     )
     expect(mismatch.status).toBe(400)
     await mismatch.json()
+  })
+
+  it('dispatches only the authorized next readiness match with two identity-bound bots', async () => {
+    const now = Date.now()
+    const timestamp = new Date(now).toISOString()
+    const poolVersion = `readiness-operation-pool-${crypto.randomUUID()}`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_roles
+           (user_id, role, granted_by_user_id, reason, created_at)
+         VALUES (?, 'ADMIN', NULL, 'test readiness runner', ?)`
+      ).bind(USER_ID, timestamp),
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_conquest_drill_permissions
+           (user_id, permission, granted_by_user_id, reason, created_at)
+         VALUES (?, 'RUN', NULL, 'test readiness runner', ?)`
+      ).bind(USER_ID, timestamp),
+      ...approvedConquestPoolStatements(env.AUTH_DB, {
+        version: poolVersion,
+        createdAt: new Date(now - 60 * 60 * 1_000).toISOString(),
+        startsAt: new Date(now - 30 * 60 * 1_000).toISOString(),
+        endsAt: new Date(now + 48 * 60 * 60 * 1_000).toISOString(),
+        silver: [6],
+        gold: [136]
+      })
+    ])
+    const operationKey = crypto.randomUUID()
+    const operation = await new ConquestDrillRepository(env.AUTH_DB).start(
+      USER_ID,
+      { poolVersion, reason: 'Match-service guarded dispatch test' },
+      operationKey
+    )
+
+    const request = (body: object, secret = 'match-service-test-secret') =>
+      SELF.fetch(
+        'https://match-service.example/internal/conquest-readiness/matches',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            [INTERNAL_AUTH_HEADER]: secret
+          },
+          body: JSON.stringify(body)
+        }
+      )
+    expect(
+      (
+        await request(
+          { operationKey, matchNumber: 1 },
+          'incorrect-internal-secret'
+        )
+      ).status
+    ).toBe(404)
+    expect(
+      (await request({ operationKey, matchNumber: 1, extra: true })).status
+    ).toBe(400)
+    expect((await request({ operationKey, matchNumber: 2 })).status).toBe(409)
+
+    const created = await request({ operationKey, matchNumber: 1 })
+    expect(created.status).toBe(200)
+    const response = await created.json<{
+      match: { proposalId: string; matchId: number; serverAddress: string }
+    }>()
+    expect(response.match).toMatchObject({
+      proposalId: `readiness-drill-match-${operationKey}-1`,
+      matchId: expect.any(Number),
+      serverAddress:
+        `wss://opensky.example/api/game/matches/` +
+        `readiness-drill-match-${operationKey}-1`
+    })
+
+    const ledger = await env.AUTH_DB.prepare(
+      `SELECT player1_principal, player2_principal, player1_user_id,
+              player2_user_id, status, match_payload_json
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(response.match.proposalId)
+      .first<{
+        player1_principal: string
+        player2_principal: string
+        player1_user_id: string
+        player2_user_id: string
+        status: string
+        match_payload_json: string
+      }>()
+    expect(ledger).toMatchObject({
+      player1_principal: await deriveGamePrincipal(operation.targetUserId),
+      player2_principal: await deriveGamePrincipal(
+        operation.opponentUserIds[0]
+      ),
+      player1_user_id: operation.targetUserId,
+      player2_user_id: operation.opponentUserIds[0],
+      status: 'active'
+    })
+    const payload = JSON.parse(ledger!.match_payload_json)
+    expect(payload).toMatchObject({
+      proposalId: response.match.proposalId,
+      releaseVersion: 'cloud-weasel-conquest-readiness-v1',
+      match: {
+        matchID: response.match.matchId,
+        player1: {
+          gameMode: GameMode.CONQUEST_CONSTRUCTED,
+          account: { address: ledger!.player1_principal },
+          botSubkey: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+          quests: [],
+          conquestInfo: { matchProgress: {} }
+        },
+        player2: {
+          gameMode: GameMode.CONQUEST_CONSTRUCTED,
+          account: { address: ledger!.player2_principal },
+          botSubkey: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+          quests: [],
+          conquestInfo: { matchProgress: {} }
+        },
+        matchSettings: { botDifficulty: 0.5 }
+      }
+    })
+    expect(payload.match.player1.privateSeed.player).toEqual(
+      hexToBytes(ledger!.player1_principal)
+    )
+    expect(payload.match.player2.privateSeed.player).toEqual(
+      hexToBytes(ledger!.player2_principal)
+    )
+
+    const retried = await request({ operationKey, matchNumber: 1 })
+    expect(retried.status).toBe(200)
+    expect(await retried.json()).toEqual(response)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM multiplayer_matches
+            WHERE proposal_id = ?) matches,
+           (SELECT COUNT(*) FROM conquest_queue_readiness
+            WHERE pool_version = ?) readiness,
+           (SELECT COUNT(*) FROM game_mode_status
+            WHERE game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')
+              AND enabled = 1) enabled_modes`
+      )
+        .bind(response.match.proposalId, poolVersion)
+        .first()
+    ).toEqual({ matches: 1, readiness: 0, enabled_modes: 0 })
   })
 })

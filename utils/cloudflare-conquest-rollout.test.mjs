@@ -65,6 +65,16 @@ test('builds deterministic, canonical mutation plans', () => {
       drillReference: 'runbook:CW-CONQUEST-12'
     }
   )
+  assert.deepEqual(
+    canonicalRolloutBody('run-drill', {
+      poolVersion: proposal.version,
+      reason: 'Run three real guarded matches.'
+    }),
+    {
+      poolVersion: proposal.version,
+      reason: 'Run three real guarded matches.'
+    }
+  )
 })
 
 test('rejects ambiguous or non-canonical product configuration', () => {
@@ -206,6 +216,62 @@ test('read commands omit mutation headers and preserve version filters', async (
     poolVersion: proposal.version
   })
   assert.deepEqual(JSON.parse(outputs[0]), { evidence: [] })
+
+  await runConquestRolloutCli(
+    ['list-drills', '--version', proposal.version],
+    {
+      CLOUD_WEASEL_OPERATOR_URL: url,
+      CLOUD_WEASEL_OPERATOR_SESSION: session
+    },
+    {
+      output: value => outputs.push(value),
+      fetchImpl: async (target, init) => {
+        request = { target, init }
+        return Response.json({ operations: [] }, { headers })
+      }
+    }
+  )
+  assert.equal(
+    request.target,
+    `${url}/api/rpc/SkyWeaverAPI/GMListConquestDrills`
+  )
+  assert.equal(request.init.headers['x-cloud-weasel-operation-key'], undefined)
+  assert.deepEqual(JSON.parse(request.init.body), {
+    poolVersion: proposal.version
+  })
+  assert.deepEqual(JSON.parse(outputs[1]), { operations: [] })
+})
+
+test('drill execution keeps the same offline plan and exact confirmation boundary', async () => {
+  const input = {
+    poolVersion: proposal.version,
+    reason: 'Run source-faithful readiness matches.'
+  }
+  const plan = rolloutPlan('run-drill', input)
+  assert.equal(plan.rpcMethod, 'GMStartConquestDrill')
+  let request
+  const result = await applyRolloutPlan({
+    plan,
+    confirmation: plan.confirmation,
+    operationKey,
+    baseUrl: url,
+    sessionToken: session,
+    fetchImpl: async (target, init) => {
+      request = { target, init }
+      return Response.json(
+        { operation: { status: 'RUNNING', completedMatchCount: 0 } },
+        { headers }
+      )
+    }
+  })
+  assert.equal(
+    request.target,
+    `${url}/api/rpc/SkyWeaverAPI/GMStartConquestDrill`
+  )
+  assert.deepEqual(JSON.parse(request.init.body), input)
+  assert.deepEqual(result, {
+    operation: { status: 'RUNNING', completedMatchCount: 0 }
+  })
 })
 
 test('CLI plans are offline and apply only the exact displayed digest', async () => {

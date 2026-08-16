@@ -1453,12 +1453,14 @@ created by this rollout.
 
 ## Suggested next slice
 
-Add a dormant, separately authorized orchestrator that provisions and advances
-one readiness match at a time through the guarded game-server path. It must
-fail closed on any loss or inconsistent ledger and leave the final readiness
-verification to an independent actor. Only after that orchestration is tested
-should a versioned pool be independently proposed, activated, exercised through
-the full 24-hour delivery drill, and considered for public queue enablement.
+The dormant, separately authorized readiness orchestrator is now implemented
+and locally guarded. After its exact runtime commit passes CI and the migration,
+match service, and main Worker are deployed, production should still receive no
+capability, pool, operation, synthetic account, mode change, or reward as
+deployment evidence. A later explicitly authorized exercise must use distinct
+pool proposer, pool activator, drill runner, and final verifier actors; wait for
+three real sequential matches and the unchanged 24-hour Gold delivery; and
+inspect every immutable receipt before either public queue is considered.
 WalletConnect ownership is now independently available in account settings:
 connect a wallet, sign a session-owned nonce, persist the verified address, and
 read external wallet contents without granting the wallet authority over the

@@ -74,6 +74,29 @@ run only after that task settles.
   to readiness through another dormant `VERIFY` capability and immutable
   idempotent audit. They cannot create the drill, mutate its rewards, or change
   either Conquest mode switch.
+- A separately dormant `RUN` capability now starts an idempotent readiness-drill
+  operation only for an independently reviewed active pool with at least 40
+  hours remaining. That covers three sequential four-hour match timeouts, the
+  source's 24-hour Gold delay, and a four-hour final-verification margin. The
+  runner must be an admin and cannot be either pool
+  reviewer. D1 derives the four reserved system identities from the operation
+  UUID, requires exactly four isolated pool-pinned runs, and records immutable
+  `PREPARING` -> `RUNNING` audit transitions without enabling a public mode.
+- The minute scheduler advances at most one sequential readiness match per
+  operation. A secret-bound match-service endpoint accepts only the next
+  expected match, builds both participants from their real bootstrapped
+  accounts and active Conquest runs, persists the normal match ledger, and
+  dispatches only the game server's reserved two-bot Conquest path. Ordinary
+  bot-only matches remain rejected. Any dispatch failure, failed/expired
+  ledger, loss, malformed result, or missing progression receipt makes the
+  operation terminal with a bounded failure reason; upstream detail never
+  becomes operator state.
+- After three authoritative target wins, D1 requires the final applied
+  settlement and then waits for the unchanged 24-hour Gold delivery. The
+  operation can become `COMPLETED` only through the independently consumed
+  verified-drill view. Completion still creates no queue-readiness row and
+  changes no mode flag: a different `VERIFY` actor must bind the exact
+  settlement/delivery tuple in the existing final readiness operation.
 - The zero-through-three-win source bundle, independent Silver draws, sorted
   token IDs, immutable settlement receipt, inventory grants, feed receipts,
   and terminal status update share an atomic D1 batch.
@@ -776,3 +799,27 @@ deliveries, pools, readiness rows, verified receipts, or approved queue pools,
 with zero writes and `changed_db: false`. The next implementation milestone is
 a separately authorized, idempotent, sequential orchestrator; neither the new
 view nor the game primitive creates rollout authority by itself.
+
+## Dormant sequential drill orchestration
+
+Migration `0112_conquest_readiness_drill_operations.sql` adds the separately
+authorized operation and immutable state/audit guards described above. It
+grants no capability and creates no operation. The main Worker exposes
+admin-only list and `ADMIN` + `RUN` start adapters, then its existing minute
+schedule polls only already-started operations. The match service exposes a
+secret-bound internal creation boundary for one exact operation/match sequence;
+it cannot be reached through normal player matchmaking and it rechecks the
+approved pool, dormant modes, sequence number, system identities, real account
+inventory, and active runs before writing a normal ledger.
+
+The guarded lifecycle tests cover RPC authorization, idempotent provisioning,
+terminal provisioning failures, strict sequencing, dispatch error redaction,
+unexpected losses, forged completion rejection, three authoritative match and
+progress receipts, the real settlement path, the real 24-hour delayed Gold
+path, and independent final verification. Match-service tests additionally
+prove wrong-secret and extra-field rejection, identity-bound game principals,
+reserved bot keys, empty system quest lists, exact retry reuse, and zero public
+readiness or mode changes. Production deployment remains forbidden until the
+exact runtime commit passes the full release contract; even after deployment,
+the workflow stays inert until a distinct administrator is granted `RUN` and
+starts an operation against an independently approved pool.

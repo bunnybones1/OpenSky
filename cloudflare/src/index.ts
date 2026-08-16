@@ -2,6 +2,7 @@ import { handleApiRequest } from './api'
 import { AccountDeletionRepository } from './account-deletion'
 import { applyAssetCachePolicy } from './asset-cache'
 import { deliverDueConquestGold } from './conquest-delivery'
+import { runConquestReadinessDrills } from './conquest-drill'
 import { runDueConquestV2Rewards } from './conquest-v2-reward-worker'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
@@ -37,6 +38,7 @@ export default {
     ctx.waitUntil(
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
+        runConquestReadinessDrills(env),
         runDueConquestV2Rewards(env.AUTH_DB),
         runDueLeaderboardRewards(env.AUTH_DB),
         runReferralStickerRewards(env.AUTH_DB),

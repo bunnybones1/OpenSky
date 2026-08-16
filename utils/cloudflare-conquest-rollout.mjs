@@ -40,6 +40,10 @@ const operations = {
       'deliveryKey',
       'drillReference'
     ]
+  },
+  'run-drill': {
+    method: 'GMStartConquestDrill',
+    fields: ['poolVersion', 'reason']
   }
 }
 
@@ -189,6 +193,11 @@ export const canonicalRolloutBody = (operation, input) => {
         deliveryKey: receiptKey(input.deliveryKey, 'deliveryKey'),
         drillReference: text(input.drillReference, 'drillReference')
       }
+    case 'run-drill':
+      return {
+        poolVersion: version(input.poolVersion, 'poolVersion'),
+        reason: text(input.reason, 'reason')
+      }
   }
 }
 
@@ -332,8 +341,9 @@ const parseArgs = argv => {
 const usage = `Usage:
   node utils/cloudflare-conquest-rollout.mjs list-pools [--version VERSION]
   node utils/cloudflare-conquest-rollout.mjs list-readiness [--version VERSION]
-  node utils/cloudflare-conquest-rollout.mjs propose|activate|retire|verify --input FILE
-  node utils/cloudflare-conquest-rollout.mjs propose|activate|retire|verify --input FILE --apply --operation-key UUID --confirm SHA256
+  node utils/cloudflare-conquest-rollout.mjs list-drills [--version VERSION]
+  node utils/cloudflare-conquest-rollout.mjs propose|activate|retire|run-drill|verify --input FILE
+  node utils/cloudflare-conquest-rollout.mjs propose|activate|retire|run-drill|verify --input FILE --apply --operation-key UUID --confirm SHA256
 
 Reads and writes require CLOUD_WEASEL_OPERATOR_URL and
 CLOUD_WEASEL_OPERATOR_SESSION. Mutations print a deterministic plan by default;
@@ -352,7 +362,11 @@ export const runConquestRolloutCli = async (
     output(usage)
     return
   }
-  if (command === 'list-pools' || command === 'list-readiness') {
+  if (
+    command === 'list-pools' ||
+    command === 'list-readiness' ||
+    command === 'list-drills'
+  ) {
     const allowed = new Set(['version'])
     for (const key of options.keys()) {
       if (!allowed.has(key)) fail(`unexpected option for ${command}: --${key}`)
@@ -368,7 +382,9 @@ export const runConquestRolloutCli = async (
       method:
         command === 'list-pools'
           ? 'GMListConquestRewardPools'
-          : 'GMListConquestReadiness',
+          : command === 'list-readiness'
+            ? 'GMListConquestReadiness'
+            : 'GMListConquestDrills',
       body,
       fetchImpl
     })

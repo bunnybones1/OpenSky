@@ -16,6 +16,7 @@ import {
   MatchPreconditionError,
   MatchRepository
 } from './repository'
+import { createReadinessMatch, ReadinessMatchError } from './readiness-match'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
 import { ConquestRepository } from '../../cloudflare/src/conquest'
 import {
@@ -283,6 +284,59 @@ export default {
       if (!authorized(request, env)) return json({ error: 'not found' }, 404)
       return matchmakingProfile(request, env)
     }
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/internal/conquest-readiness/matches'
+    ) {
+      if (!authorized(request, env)) return json({ error: 'not found' }, 404)
+      const declaredLength = Number(request.headers.get('content-length') ?? 0)
+      if (declaredLength > 4 * 1024) {
+        return json({ error: 'request too large' }, 413)
+      }
+      let body: unknown
+      try {
+        const text = await request.text()
+        if (new TextEncoder().encode(text).byteLength > 4 * 1024) {
+          return json({ error: 'request too large' }, 413)
+        }
+        body = JSON.parse(text)
+      } catch {
+        return json({ error: 'invalid readiness match JSON' }, 400)
+      }
+      if (
+        !record(body) ||
+        Object.keys(body).some(
+          key => key !== 'operationKey' && key !== 'matchNumber'
+        ) ||
+        Object.keys(body).length !== 2 ||
+        typeof body.operationKey !== 'string' ||
+        typeof body.matchNumber !== 'number'
+      ) {
+        return json({ error: 'invalid readiness match request' }, 400)
+      }
+      try {
+        return json({
+          match: await createReadinessMatch(
+            {
+              operationKey: body.operationKey,
+              matchNumber: body.matchNumber
+            },
+            env
+          )
+        })
+      } catch (error) {
+        console.error('readiness match creation failed', error)
+        return json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : 'readiness match creation failed'
+          },
+          error instanceof ReadinessMatchError ? error.status : 502
+        )
+      }
+    }
     if (request.method !== 'POST' || url.pathname !== '/internal/matches') {
       return json({ error: 'not found' }, 404)
     }
@@ -402,9 +456,7 @@ export default {
     }
 
     try {
-      let row =
-        existing ??
-        (await repository.allocateIfMissing(allocation))
+      let row = existing ?? (await repository.allocateIfMissing(allocation))
 
       if (!row.match_payload_json) {
         const built = await buildMatch(

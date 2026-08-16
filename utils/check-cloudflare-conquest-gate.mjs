@@ -499,6 +499,82 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
   }
+  if (evidence.drillMigration !== undefined) {
+    for (const token of [
+      'CREATE TABLE staff_conquest_drill_permissions',
+      "permission = 'RUN'",
+      'CREATE TABLE staff_conquest_drill_operations',
+      'CREATE UNIQUE INDEX staff_conquest_drill_operations_active_pool_idx',
+      "status <> 'FAILED'",
+      'unixepoch(NEW.created_at) + 144000',
+      "'CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'",
+      'CREATE TRIGGER staff_conquest_drill_operation_start_guard',
+      'CREATE TRIGGER staff_conquest_drill_operation_match_guard',
+      'CREATE TRIGGER staff_conquest_drill_operation_complete_guard',
+      'CREATE TRIGGER staff_conquest_drill_operation_failure_guard',
+      'CREATE TABLE staff_conquest_drill_audit',
+      'Conquest drill audit rows are immutable',
+      'operation.actor_user_id = NEW.actor_user_id'
+    ]) {
+      if (!evidence.drillMigration.includes(token)) {
+        errors.push(`Conquest drill operations migration is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.drillRepository !== undefined) {
+    for (const token of [
+      'class ConquestDrillRepository',
+      'system:conquest-readiness-drill:',
+      'system:conquest-readiness-opponent:',
+      'MATCH_TIMEOUT_MS',
+      "status IN ('RUNNING', 'WAITING_DELIVERY')",
+      'MATCH_OUTCOME_INVALID',
+      'FROM conquest_verified_drill_receipts',
+      'DELIVERY_WINDOW_EXPIRED',
+      '/internal/conquest-readiness/matches'
+    ]) {
+      if (!evidence.drillRepository.includes(token)) {
+        errors.push(`Conquest drill orchestrator is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.readinessMatch !== undefined) {
+    for (const token of [
+      "'/internal/conquest-readiness/matches'",
+      "row.status !== 'RUNNING'",
+      'row.completed_match_count !== request.matchNumber - 1',
+      'JOIN conquest_approved_active_reward_pools pool',
+      "'CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'",
+      'repository.humanAccount(',
+      'deriveGamePrincipal(userId)',
+      'addressForBotPrivateKey(subkey)',
+      'quests: []',
+      'conquest-readiness-v1:',
+      'repository.allocateIfMissing(allocation)',
+      'repository.activate(proposalId, serverAddress)'
+    ]) {
+      if (!evidence.readinessMatch.includes(token)) {
+        errors.push(`Conquest readiness match boundary is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.gameMatch !== undefined) {
+    for (const token of [
+      "request.proposalId.startsWith('readiness-drill-match-')",
+      'match.player1.gameMode !== GameMode.CONQUEST_CONSTRUCTED',
+      'match.player2.gameMode !== GameMode.CONQUEST_CONSTRUCTED',
+      'bot-only matches are reserved for Conquest readiness'
+    ]) {
+      if (!evidence.gameMatch.includes(token)) {
+        errors.push(`Conquest readiness game boundary is missing: ${token}`)
+      }
+    }
+  }
+  if (evidence.scheduler !== undefined) {
+    if (!evidence.scheduler.includes('runConquestReadinessDrills(env)')) {
+      errors.push('Conquest drill orchestrator is missing from the scheduler')
+    }
+  }
   if (evidence.v2ScheduleActivation !== undefined) {
     for (const token of [
       'CREATE TABLE conquest_v2_reward_schedule_activations',
@@ -565,6 +641,14 @@ export const conquestGateErrors = (config, evidence = {}) => {
     ]) {
       if (!evidence.staff.includes(token)) {
         errors.push(`Conquest readiness staff authority is missing: ${token}`)
+      }
+    }
+    for (const token of [
+      'requireConquestDrillRun(',
+      'staff_conquest_drill_permissions'
+    ]) {
+      if (!evidence.staff.includes(token)) {
+        errors.push(`Conquest drill staff authority is missing: ${token}`)
       }
     }
     for (const token of [
@@ -748,6 +832,15 @@ export const conquestGateErrors = (config, evidence = {}) => {
       }
     }
     for (const token of [
+      "case 'GMListConquestDrills'",
+      "case 'GMStartConquestDrill'",
+      'requireConquestDrillRun(principal.userId)'
+    ]) {
+      if (!evidence.gateway.includes(token)) {
+        errors.push(`Conquest drill RPC surface is missing: ${token}`)
+      }
+    }
+    for (const token of [
       "case 'GMListConquestV2RewardSchedules'",
       "case 'GMProposeConquestV2RewardSchedule'",
       "case 'GMActivateConquestV2RewardSchedule'",
@@ -790,6 +883,11 @@ const main = async () => {
     poolWindowSafety,
     readinessOperationsMigration,
     readinessOperations,
+    drillMigration,
+    drillRepository,
+    readinessMatch,
+    gameMatch,
+    scheduler,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
@@ -876,6 +974,36 @@ const main = async () => {
       path.join(root, 'cloudflare', 'src', 'conquest-readiness-operations.ts'),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0112_conquest_readiness_drill_operations.sql'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'conquest-drill.ts'), 'utf8'),
+    Promise.all([
+      readFile(
+        path.join(root, 'match-service-cloudflare', 'src', 'worker.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'match-service-cloudflare',
+          'src',
+          'readiness-match.ts'
+        ),
+        'utf8'
+      )
+    ]).then(sources => sources.join('\n')),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'game-match.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'index.ts'), 'utf8'),
     readFile(
       path.join(
         root,
@@ -1023,6 +1151,11 @@ const main = async () => {
     poolWindowSafety,
     readinessOperationsMigration,
     readinessOperations,
+    drillMigration,
+    drillRepository,
+    readinessMatch,
+    gameMatch,
+    scheduler,
     v2ScheduleActivation,
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,

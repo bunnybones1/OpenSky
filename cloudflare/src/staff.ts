@@ -961,6 +961,20 @@ export class StaffRepository {
     }
   }
 
+  async requireConquestDrillRun(userId: string): Promise<void> {
+    await this.requireAdmin(userId)
+    const row = await this.database
+      .prepare(
+        `SELECT 1 FROM staff_conquest_drill_permissions
+         WHERE user_id = ? AND permission = 'RUN'`
+      )
+      .bind(userId)
+      .first()
+    if (!row) {
+      throw permissionDenied('Conquest drill run access required')
+    }
+  }
+
   async requireConquestV2RewardScheduleWrite(
     userId: string,
     permission: ConquestV2RewardScheduleOperation

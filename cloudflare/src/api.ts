@@ -82,6 +82,10 @@ import {
   ConquestReadinessOperationsRepository
 } from './conquest-readiness-operations'
 import {
+  CONQUEST_DRILL_OPERATION_HEADER,
+  ConquestDrillRepository
+} from './conquest-drill'
+import {
   CONQUEST_REWARD_POOL_OPERATION_HEADER,
   ConquestRewardPoolOperationsRepository
 } from './conquest-reward-pool-operations'
@@ -385,6 +389,7 @@ export const handleApiRequest = async (
   const conquestReadiness = new ConquestReadinessOperationsRepository(
     env.AUTH_DB
   )
+  const conquestDrills = new ConquestDrillRepository(env.AUTH_DB)
   const conquestV2Economy = new ConquestV2EconomyRepository(env.AUTH_DB)
   const conquestV2RewardSchedules =
     new ConquestV2RewardScheduleOperationsRepository(env.AUTH_DB)
@@ -1423,6 +1428,31 @@ export const handleApiRequest = async (
             principal.userId,
             body,
             request.headers.get(CONQUEST_READINESS_OPERATION_HEADER)
+          )
+        })
+      }
+
+      case 'GMListConquestDrills': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireAdmin(principal.userId)
+        const body = await requestBody<{ poolVersion?: unknown }>(request)
+        return json(request, env, {
+          operations: await conquestDrills.list(body.poolVersion)
+        })
+      }
+
+      case 'GMStartConquestDrill': {
+        const principal = await identityPrincipal(request, env)
+        await staff.requireConquestDrillRun(principal.userId)
+        const body = await requestBody<{
+          poolVersion?: unknown
+          reason?: unknown
+        }>(request)
+        return json(request, env, {
+          operation: await conquestDrills.start(
+            principal.userId,
+            body,
+            request.headers.get(CONQUEST_DRILL_OPERATION_HEADER)
           )
         })
       }

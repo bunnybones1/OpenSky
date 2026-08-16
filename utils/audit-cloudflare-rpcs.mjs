@@ -324,6 +324,7 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMListLeaderboardRewardSchedules',
   'GMProposeLeaderboardRewardSchedule',
   'GMListConquestRewardPools',
+  'GMListConquestDrills',
   'GMListConquestReadiness',
   'GMProposeConquestRewardPool',
   'GMRetireConquestRewardPool',
@@ -334,6 +335,7 @@ export const REVIEWED_CLOUDFLARE_RPC_ADAPTERS = new Set([
   'GMActivateReferralStickerSchedule',
   'GMListReferralStickerSchedules',
   'GMProposeReferralStickerSchedule',
+  'GMStartConquestDrill',
   'GMVerifyConquestReadiness'
 ])
 

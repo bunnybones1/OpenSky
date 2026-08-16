@@ -25,14 +25,14 @@ const randomBytes = (length: number) => {
   return bytes
 }
 
-const privateKey = () => {
+export const createBotPrivateKey = () => {
   for (;;) {
     const candidate = randomBytes(32)
     if (utils.isValidPrivateKey(candidate)) return candidate
   }
 }
 
-const addressForPrivateKey = (key: Uint8Array) => {
+export const addressForBotPrivateKey = (key: Uint8Array) => {
   const publicKey = getPublicKey(key, false)
   return bytesToHex(keccak_256(publicKey.slice(1)).slice(-20)).toLowerCase()
 }
@@ -44,10 +44,10 @@ export const createBotParticipant = (
   mode: MatchStartPlayerInfo['gameMode'],
   opponentLevel: number
 ): MatchStartPlayerInfo => {
-  const walletKey = privateKey()
-  const subkey = privateKey()
-  const address = addressForPrivateKey(walletKey)
-  const subkeyAddress = addressForPrivateKey(subkey)
+  const walletKey = createBotPrivateKey()
+  const subkey = createBotPrivateKey()
+  const address = addressForBotPrivateKey(walletKey)
+  const subkeyAddress = addressForBotPrivateKey(subkey)
   const difficulty = botDifficultyForLevel(opponentLevel)
   const createdAt = '2020-01-01T00:00:00.000Z'
   const privateSeed: PrivateSeed = {
