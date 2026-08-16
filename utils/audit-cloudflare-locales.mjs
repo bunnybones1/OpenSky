@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -41,6 +41,7 @@ identityAuth.walletOptional
 play.completedDeliveryNumCards
 play.completedDeliverySpecificCard
 play.conquestDeckPointsTooltipMessageOffchain
+play.conquestRewardsInactive
 play.conquestWeeklyGoldsOffchain
 play.delayedDelivery_one
 play.delayedDelivery_other
@@ -51,6 +52,7 @@ play.exchangeRate
 play.gameModes.CONQUEST.pendingGoldsOffchain
 play.noDeliveriesPending
 play.rewards.levelWeeklyTreasureLineTwoOffchain
+play.rewards.percentagePoints
 play.silverExchangeFinal
 play.silverExchangeFinalTooltip
 play.silverExchangeRate
@@ -177,6 +179,53 @@ export const auditLocaleResources = (
   return errors
 }
 
+const I18NEXT_PLURAL_SUFFIX = /_(?:zero|one|two|few|many|other)$/
+const STRING_COUNT_CALL =
+  /\bt\(\s*(['"])([^'"]+)\1\s*,\s*\{[^}]{0,200}\bcount\s*:\s*(['"])([^'"]*)\3/g
+
+/**
+ * i18next uses `count` to select a plural suffix. A non-numeric literal such
+ * as `25%` cannot select `key_one` or `key_other`, so the UI renders the raw
+ * base key. Explicit plural keys remain valid because `count` is then only an
+ * interpolation value.
+ */
+export const auditStringPluralCounts = sources => {
+  const errors = []
+  for (const [file, source] of Object.entries(sources)) {
+    for (const match of source.matchAll(STRING_COUNT_CALL)) {
+      const [, , key, , count] = match
+      if (!I18NEXT_PLURAL_SUFFIX.test(key) && !Number.isFinite(Number(count))) {
+        errors.push(
+          `${file} passes non-numeric plural count ${JSON.stringify(count)} ` +
+            `to unsuffixed key ${key}`
+        )
+      }
+    }
+  }
+  return errors
+}
+
+export const auditConquestDormantRewardCopy = source => {
+  const errors = []
+  if (
+    !/\{!displayConquestCards && \([\s\S]*?play\.conquestRewardsInactive[\s\S]*?\)\}/.test(
+      source
+    )
+  ) {
+    errors.push('Conquest reward UI is missing its inactive-pool message')
+  }
+  if (
+    !/\{displayConquestCards && \(\s*<>[\s\S]*?<GoldMintWarning[\s\S]*?play\.over100Golds[\s\S]*?play\.silversAvailable[\s\S]*?<\/InnerContainer>\s*<\/>\s*\)\}/.test(
+      source
+    )
+  ) {
+    errors.push(
+      'Conquest pool-specific Gold/Silver claims are not gated by an active pool'
+    )
+  }
+  return errors
+}
+
 export const loadWebappLocaleResources = async rootDir =>
   Object.fromEntries(
     await Promise.all(
@@ -192,6 +241,26 @@ export const loadWebappLocaleResources = async rootDir =>
     )
   )
 
+export const loadWebappSourceFiles = async rootDir => {
+  const sourceRoot = path.join(rootDir, 'webapp', 'src')
+  const sources = {}
+  const visit = async directory => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        await visit(absolute)
+      } else if (/\.tsx?$/.test(entry.name)) {
+        sources[path.relative(rootDir, absolute)] = await readFile(
+          absolute,
+          'utf8'
+        )
+      }
+    }
+  }
+  await visit(sourceRoot)
+  return sources
+}
+
 const isMain =
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
@@ -201,8 +270,18 @@ if (isMain) {
     path.dirname(fileURLToPath(import.meta.url)),
     '..'
   )
-  const resources = await loadWebappLocaleResources(rootDir)
-  const errors = auditLocaleResources(resources)
+  const [resources, sources] = await Promise.all([
+    loadWebappLocaleResources(rootDir),
+    loadWebappSourceFiles(rootDir)
+  ])
+  const errors = [
+    ...auditLocaleResources(resources),
+    ...auditStringPluralCounts(sources),
+    ...auditConquestDormantRewardCopy(
+      sources['webapp/src/PlayPage/Conquest/ConquestInfo/ConquestInfo.tsx'] ??
+        ''
+    )
+  ]
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1

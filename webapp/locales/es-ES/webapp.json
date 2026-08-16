@@ -592,6 +592,7 @@
     "conquestCostExplanationiOS": "1 Carta Plateada",
     "conquestEntry": "Usa Tickets para entrar al modo Conquista",
     "conquestPointsPerMatch": "Puntos por partida",
+    "conquestRewardsInactive": "Las recompensas de cartas de Conquista no están activas en este momento.",
     "conquestSilverRewards": "¡HAS GANADO CARTAS DE PLATA DE EXPANSIÓN EN CONQUISTA!",
     "conquestWarningLineOne": "Advertencia: Conquista no está disponible para",
     "conquestWeeklyGolds": "Estas cartas Doradas solo están disponibles para acuñar por tiempo limitado.",
@@ -665,7 +666,8 @@
     "rewards": {
       "levelWeeklyTreasureLineOne": "SUBE DE NIVEL TU TESORO SEMANAL CON PUNTOS DE CONQUISTA",
       "levelWeeklyTreasureLineTwo": "AGREGANDO ARTÍCULOS COMERCIALIZABLES A TU MAZO",
-      "levelWeeklyTreasureLineTwoOffchain": "AÑADIENDO OBJETOS COLECCIONABLES A TU MAZO"
+      "levelWeeklyTreasureLineTwoOffchain": "AÑADIENDO OBJETOS COLECCIONABLES A TU MAZO",
+      "percentagePoints": "+{{ count }}% Puntos"
     },
     "selectDeck": "SELECCIONAR MAZO",
     "silversAvailable": "PLATAS DISPONIBLES",

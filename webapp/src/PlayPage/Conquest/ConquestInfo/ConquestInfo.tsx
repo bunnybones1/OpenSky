@@ -246,85 +246,99 @@ const ConquestInfo = memo(() => {
                 />
               )
             })}
+          {!displayConquestCards && (
+            <Text
+              color="purple9"
+              fontSize={[16, 16, 16, 22]}
+              textAlign="center"
+              style={{ gridColumn: '1 / -1' }}
+            >
+              {t('play.conquestRewardsInactive')}
+            </Text>
+          )}
         </Grid>
       </InnerContainer>
-      <GoldMintWarning
-        margin={['48px 0px', '48px 0px', '48px 0px', '80px 0px 48px 0px']}
-      >
-        <Icon
-          height="20px"
-          type="arrow-up"
-          color="warm7"
-          style={{
-            marginRight: '12px',
-            left: '3px',
-            position: 'relative'
-          }}
-        />
-        <Text color="warm6" fontSize={[12, 12, 12, 16]}>
-          {t('play.over100Golds')}
-        </Text>
-        <Box height="100%" position="relative">
-          <GoldMintGradient />
-          {!!getAssetUrl && (
-            <img
-              src={getAssetUrl('webapp/misc/goldmint.webp')}
-              style={{ height: '100%', marginLeft: '12px' }}
-            />
-          )}
-        </Box>
-      </GoldMintWarning>
-      <InnerContainer
-        height={['200px', '200px', '200px', '239px']}
-        flexDirection="column"
-        position="relative"
-        mb={['0px', '0px', '0px', '48px']}
-      >
-        <Box
-          style={{
-            backgroundImage: !!getAssetUrl
-              ? `url(${getAssetUrl('/webapp/misc/conquestv2silvers.webp')})`
-              : undefined,
-            backgroundSize: '100%',
-            backgroundRepeat: 'no-repeat',
-            height: '100%',
-            width: '100%',
-            position: 'absolute',
-            backgroundPosition: 'center center'
-          }}
-        />
-        <Box zIndex={3}>
-          <Text
-            color="white"
-            fontSize={[24]}
-            fontWeight="bold"
-            fontFamily="condensed"
-            textAlign="center"
+      {displayConquestCards && (
+        <>
+          <GoldMintWarning
+            margin={['48px 0px', '48px 0px', '48px 0px', '80px 0px 48px 0px']}
           >
-            ~{cardTotals.TOTAL} {t('play.silversAvailable')}*
-          </Text>
-          <Box pt={'6px'}>
-            <Text
-              color="white"
-              fontSize={[16]}
-              fontWeight="400"
-              fontFamily="condensed"
-              textAlign="center"
-            >
-              {t('play.silversCanBeWon')}
+            <Icon
+              height="20px"
+              type="arrow-up"
+              color="warm7"
+              style={{
+                marginRight: '12px',
+                left: '3px',
+                position: 'relative'
+              }}
+            />
+            <Text color="warm6" fontSize={[12, 12, 12, 16]}>
+              {t('play.over100Golds')}
             </Text>
-            <Text
-              color="white"
-              fontSize={[16]}
-              fontWeight="400"
-              fontFamily="condensed"
-              textAlign="center"
-            >
-              *{t('play.excludesLastSet')}
-            </Text>
-          </Box>
-        </Box>
-      </InnerContainer>
+            <Box height="100%" position="relative">
+              <GoldMintGradient />
+              {!!getAssetUrl && (
+                <img
+                  src={getAssetUrl('webapp/misc/goldmint.webp')}
+                  style={{ height: '100%', marginLeft: '12px' }}
+                />
+              )}
+            </Box>
+          </GoldMintWarning>
+          <InnerContainer
+            height={['200px', '200px', '200px', '239px']}
+            flexDirection="column"
+            position="relative"
+            mb={['0px', '0px', '0px', '48px']}
+          >
+            <Box
+              style={{
+                backgroundImage: !!getAssetUrl
+                  ? `url(${getAssetUrl('/webapp/misc/conquestv2silvers.webp')})`
+                  : undefined,
+                backgroundSize: '100%',
+                backgroundRepeat: 'no-repeat',
+                height: '100%',
+                width: '100%',
+                position: 'absolute',
+                backgroundPosition: 'center center'
+              }}
+            />
+            <Box zIndex={3}>
+              <Text
+                color="white"
+                fontSize={[24]}
+                fontWeight="bold"
+                fontFamily="condensed"
+                textAlign="center"
+              >
+                ~{cardTotals.TOTAL} {t('play.silversAvailable')}*
+              </Text>
+              <Box pt={'6px'}>
+                <Text
+                  color="white"
+                  fontSize={[16]}
+                  fontWeight="400"
+                  fontFamily="condensed"
+                  textAlign="center"
+                >
+                  {t('play.silversCanBeWon')}
+                </Text>
+                <Text
+                  color="white"
+                  fontSize={[16]}
+                  fontWeight="400"
+                  fontFamily="condensed"
+                  textAlign="center"
+                >
+                  *{t('play.excludesLastSet')}
+                </Text>
+              </Box>
+            </Box>
+          </InnerContainer>
+        </>
+      )}
       {!!getAssetUrl && (
         <img
           src={getAssetUrl('webapp/misc/end-of-list.webp')}
@@ -802,7 +816,7 @@ const ConquestInfo = memo(() => {
               fontWeight="700"
               style={{ display: 'inline-block', zIndex: 1 }}
             >
-              {t('play.rewards.points', { count: '25%' })}
+              {t('play.rewards.percentagePoints', { count: 25 })}
             </Text>
           </FlexBox>
         </FlexBox>

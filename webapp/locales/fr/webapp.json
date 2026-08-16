@@ -124,11 +124,13 @@
       "WIS": {}
     },
     "rewards": {
-      "levelWeeklyTreasureLineTwoOffchain": "EN AJOUTANT DES OBJETS DE COLLECTION À VOTRE DECK"
+      "levelWeeklyTreasureLineTwoOffchain": "EN AJOUTANT DES OBJETS DE COLLECTION À VOTRE DECK",
+      "percentagePoints": "+{{ count }} % de points"
     },
     "completedDeliveryNumCards": "Félicitations ! <white>{{ count }}</white> cartes ont été livrées !",
     "completedDeliverySpecificCard": "Félicitations ! La carte <white>{{ name }}</white> a été livrée !",
     "conquestDeckPointsTooltipMessageOffchain": "Obtenez suffisamment de points de Conquête avant la fin de la semaine pour gagner un Trésor. Lorsque les récompenses hebdomadaires sont actives, les Trésors livrent des cartes Argent dans votre inventaire Cloud Weasel. Améliorez votre Trésor pour gagner davantage de cartes !",
+    "conquestRewardsInactive": "Les récompenses de cartes de Conquête ne sont pas actives pour le moment.",
     "conquestWeeklyGoldsOffchain": "Ces cartes Or sont disponibles comme récompenses hors chaîne pendant une durée limitée.",
     "delayedDelivery_one": "Dans 24 heures, cette carte sera livrée dans votre bibliothèque.",
     "delayedDelivery_other": "Dans 24 heures, ces cartes seront livrées dans votre bibliothèque.",

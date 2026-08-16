@@ -36,6 +36,7 @@
     "completedDeliveryNumCards": "恭喜！<white>{{ count }}</white> 张卡牌已送达！",
     "completedDeliverySpecificCard": "恭喜！<white>{{ name }}</white> 卡牌已送达！",
     "conquestDeckPointsTooltipMessageOffchain": "在本周结束前获得足够的征服点数即可赢得宝藏。每周奖励启用时，宝藏会将银卡发送到你的 Cloud Weasel 库存。提升宝藏等级可获得更多卡牌！",
+    "conquestRewardsInactive": "征服模式卡牌奖励目前未开放。",
     "conquestWeeklyGoldsOffchain": "这些金卡会在限定时间内作为链下奖励提供。",
     "delayedDelivery_one": "这张卡牌将在 24 小时后发送到你的牌库。",
     "delayedDelivery_other": "这些卡牌将在 24 小时后发送到你的牌库。",
@@ -50,7 +51,8 @@
     },
     "noDeliveriesPending": "目前没有等待发放的卡牌。",
     "rewards": {
-      "levelWeeklyTreasureLineTwoOffchain": "将收藏品加入你的牌组"
+      "levelWeeklyTreasureLineTwoOffchain": "将收藏品加入你的牌组",
+      "percentagePoints": "+{{ count }}% 点"
     },
     "silverExchangeFinal": "库存兑换不可撤销",
     "silverExchangeFinalTooltip": "兑换为征服门票的银卡无法恢复。",
