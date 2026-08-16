@@ -64,16 +64,25 @@ there were no build errors.
 
 ## R2 status at the pause
 
-The user reported that R2 was enabled on the Cloudflare account after the last
-account audit. This is new external state and has **not** been independently
-verified from this checkout. Previous read-only checks returned Cloudflare
-error `10042`; both analytics queues had zero producers and consumers, and the
-analytics Worker did not exist (`10007`). Treat those observations as stale
-until rechecked.
+R2 enablement was independently verified with an account-pinned, read-only
+Wrangler check against the reviewed Cloud Weasel account
+`528badc1c29c30196335df252a73c5a6`. The bucket list succeeded and was empty:
+no production R2 buckets have been created. Both analytics queues still had
+zero producers and zero consumers, and the analytics Worker still did not
+exist (`10007`). No Cloudflare resource was created, changed, or deployed
+after the pause request.
 
 R2 enablement removes an account-level blocker, but it does not by itself
 create buckets, lifecycle policies, Worker bindings, queue producers, or a
 healthy consumer. Do not enable the game-server producer first.
+
+The existing analytics Worker configuration also passed a Wrangler deployment
+dry run and its TypeScript check. Its four isolated unit tests passed. The
+Workers-runtime test process could not open its local loopback listener inside
+the filesystem/network sandbox (`listen EPERM 127.0.0.1`), so that process was
+stopped for the pause; the complete analytics suite had already passed in the
+full release-contract run documented above. Rerun the focused Workers test in
+an unrestricted local test environment before provisioning.
 
 ## Safe resume order for R2 and analytics
 
