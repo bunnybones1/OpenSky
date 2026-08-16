@@ -1319,6 +1319,52 @@ Play, showed “Conquest card rewards are not active right now,” omitted the
 legacy Hexbound Silver reward claim, and produced no new browser warnings or
 errors after eight seconds.
 
+## Profile Conquest null-state rollout — 2026-08-16
+
+Runtime milestone `8ddb46e84b12a0cffa8d2632a8d68bb001df6057`
+keeps the original account identity layout and Conquest statistics while making
+the first-play sentence follow the nullable source contract. A real
+`firstConquestDate` is formatted exactly as before. A player with no Conquest
+run now omits the sentence instead of making the false claim “Played Conquest
+for the first time on N/A.” No API, queue, reward, inventory, or economy
+behavior changed.
+
+The fail-closed locale gate now covers this profile boundary, preserves the
+real-date path, and rejects restoration of the `N/A` fallback. All 14 focused
+locale and mutation tests passed. The complete local release contract passed
+495 main-Worker tests across 83 files, 34 game-server unit tests, 94
+game-server Workers tests, 31 match-service tests, 78 matchmaker tests, 27
+game/browser tests, six analytics tests, every source/off-chain audit, all
+service and browser typechecks, and both production builds. Exact-head GitHub
+Actions run `31935646521`, job `95136999094`, passed in 10m10s before
+deployment.
+
+Only the main API/web Worker and static assets were deployed, advancing it
+from `62c0d995-3f5f-4c42-8319-a13c3e014181` to
+`65716f15-55c7-4619-bd4d-986942526436`. The strict verifier matched web entry
+`/assets/index-ca9c688d.js`, unchanged game entry
+`/game/cloudflare/assets/index-7e9c419b.js`, all six exact locales, and the
+release-safe cache policy on its first attempt. Public Ping, Version,
+game-mode, Conquest-reward, and protocol-v3 game-health probes returned `200`
+with `Cache-Control: no-store`; both Practice modes remained enabled, both
+Conquest modes remained disabled, and `weeklyGolds` remained empty.
+
+The post-deploy read-only D1 aggregate retained three users, 185 combined
+identity inventory and compatibility-unlock rows, zero Conquest runs, one
+zero-balance Conquest-points row, and zero settlements, Silver grants, Gold
+deliveries, Gold grants, reward pools, approved active pools, or readiness
+rows. It reported zero rows written and `changed_db: false`, and production had
+no pending migrations. Reward readiness remained error-free with the reviewed
+SkyPass policy active and all four unapproved reward tracks dormant.
+
+A signed-in crawl first covered 28 original product routes without a 404,
+error copy, raw translation key, wallet prompt, or fresh browser warning or
+error. After deployment, a fresh eight-second navigation to the zero-run
+account profile retained the full identity, inventory, rank, Conquest, reward,
+match, and navigation surfaces; it showed the zero Conquest statistics, omitted
+both the `N/A` fallback and the entire false first-play claim, and produced no
+new browser warning or error.
+
 ## Suggested next slice
 
 Define, independently review, and activate a versioned Conquest reward pool,
