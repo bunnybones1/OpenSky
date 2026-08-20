@@ -9,8 +9,9 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `ecde30c0` (`Pin Conquest V2 point authority`)
-- Latest tested runtime commit: `ecde30c0` (`Pin Conquest V2 point authority`)
+- Last code/test checkpoint: `f5869e53` (`Pin Conquest match deck authority`)
+- Latest tested runtime commit: `f5869e53`
+  (`Pin Conquest match deck authority`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -19,9 +20,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `ecde30c0` are committed and
+- The runtime changes from `38386294` through `f5869e53` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-fd3d9163.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
@@ -50,13 +51,13 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `ecde30c0`:
+Validation completed locally for exact code head `f5869e53`:
 
-- focused Conquest V2 point/runtime regression: 21/21 tests;
+- focused Conquest V2 point/runtime regression: 27/27 tests;
 - focused mutation-tested Conquest gate: 8/8 tests;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
-- game server: 34 unit and 101 Workers tests;
+- game server: 34 unit and 107 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
 - analytics: four unit and five Workers tests;
@@ -81,8 +82,10 @@ checkpoint `470a79c5`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32399815459> passed the
 branding plus handoff head `e5b0c120` in 10m51s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32401856996> passed the
-later game-error-branding head `80bf451d` in 10m14s. Commit `ecde30c0` must
-receive exact-head CI before any production mutation.
+later game-error-branding head `80bf451d` in 10m14s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32404576690> passed the
+point-authority documentation head `edffd7b3` in 10m19s. Commit `f5869e53`
+must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -174,6 +177,32 @@ main Worker passed 510 tests, the game server passed 34 unit and 101 Workers
 tests, and all other service, browser, source-contract, off-chain, and build
 gates remained green. The milestone is committed and locally tested; it is not
 deployed, and production Conquest remains disabled.
+
+## Conquest match-deck authority milestone
+
+Commit `f5869e53` closes the remaining mixed-authority point calculation
+without enabling Conquest:
+
+- both owned-card points and the 25% hero-skin bonus now derive from the
+  canonical cards and prisms persisted in the settled match payload, matching
+  the source use of `Player1DeckString` and `Player2DeckString`;
+- settlement no longer reads the mutable active-run hero to choose a skin
+  token ID;
+- malformed JSON, missing decks, noncanonical or unknown card IDs, and
+  card/class mismatches fail closed before any balance or receipt write;
+- one shared TypeScript map now supplies the source hero-skin token identity
+  to match participant construction and point settlement;
+- the mutation-tested gate derives all fifteen deck-class/hero assignments
+  and hero-skin IDs from Go enums/maps and the source SQL seed;
+- Workers regressions prove immutable match-deck skin authority and zero writes
+  across five malformed-deck cases.
+
+The exact code head passed the complete local Cloudflare release contract: the
+main Worker passed 510 tests, the game server passed 34 unit and 107 Workers
+tests, the match service passed 33 tests, and every other service, browser,
+source-contract, off-chain, production-target, and build gate remained green.
+The milestone is committed and locally tested; it is not deployed, and
+production Conquest remains disabled.
 
 ## Storage safety milestone
 
@@ -273,7 +302,7 @@ production migration state.
 
 ### Production rollout
 
-- Deploy and verify the tested runtime changes through `ecde30c0`. Keep
+- Deploy and verify the tested runtime changes through `f5869e53`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.

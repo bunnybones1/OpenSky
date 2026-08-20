@@ -50,6 +50,14 @@ run only after that task settles.
   Go. Workers tests preserve the source boundary: before turn eight an
   abandonment or forfeit rewards only its winner; at turn eight both players
   are eligible; a match without a winner rewards neither player.
+- Owned-card and hero-skin points now share the settled match deck as their
+  authority, matching the source use of `Player1DeckString` and
+  `Player2DeckString`. The game Worker strictly validates canonical cards and
+  prisms, source card/class compatibility, and the deck-derived hero skin
+  before writing any point balance or receipt. It cannot substitute the
+  mutable active-run hero. The shared fifteen-entry source hero-skin map is
+  also used by match participant construction and is mutation-checked against
+  the Go hero enum, Go deck-class/hero map, and SQL hero-skin seed.
 - Production Conquest modes are false in both the match service and API status.
 - Versioned Silver/Gold pool storage fails closed for missing, unapproved, or
   malformed pools and for new admission after the inclusive expiry boundary.
@@ -971,3 +979,32 @@ matches/runs, settlements, deliveries, active pools, readiness rows, verified
 receipts, or enabled Conquest modes, with zero writes and
 `changed_db: false`. The production exercise and its independent approvals
 remain outstanding by design.
+
+## Match-deck point-authority proof
+
+Milestone `f5869e53` removes the final mixed authority from Conquest V2 point
+settlement. The original Go updater passes each settled match deck string to
+both the card-point decoder and the hero-skin lookup. The TypeScript game
+Worker now reconstructs that same boundary from the canonical persisted match
+payload: card ownership queries use its card IDs and the skin query uses its
+prism-derived source hero-skin ID. The active Conquest row is consulted only
+to require an in-progress run; its hero cannot change the earned bonus.
+
+Malformed JSON, a missing private seed, numeric rather than canonical string
+card IDs, unknown cards, and card/class mismatches all produce the stable
+`Conquest match deck is malformed` failure before any point balance, player
+receipt, or match receipt is written. A separate Workers regression gives a
+player an AGY skin while deliberately leaving the active-run hero at ADA and
+proves the match deck still earns the source rounded-up 25% bonus.
+
+The source gate derives the fifteen hero-skin IDs from the generated Go Hero
+enum and original SQL seed, derives all deck-class/hero assignments from
+`api/data/hero.go`, requires both Go deck-string call sites, and mutation-tests
+the shared map, match-service consumer, fail-closed boundary, and game-server
+consumer. The complete local release contract passed 510 main-Worker tests,
+34 game-server unit tests, 107 game-server Workers tests, 33 match-service
+tests, 78 matchmaker tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, and both production builds.
+
+No deployment, migration, storage provisioning, reward activation, live
+match, or production mutation was performed. Conquest remains disabled.
