@@ -63,6 +63,7 @@ export interface MatchmakerEnv {
   MATCHMAKER_POOLS: DurableObjectNamespace
   INTERNAL_AUTH_SECRET: string
   ALLOWED_ORIGINS?: string
+  AUTHENTICATION_TIMEOUT_MS?: string
   MATCH_ACCEPTANCE_TIMEOUT_MS?: string
   MATCH_ACCEPTANCE_PENALTY_MS?: string
   MATCH_REFUSAL_WINDOW_MS?: string
@@ -131,6 +132,7 @@ interface StoredProposal {
 }
 
 interface RuntimeConfig {
+  authenticationTimeoutMs: number
   acceptanceTimeoutMs: number
   tickMs: number
   relaxIntervalMs: number
@@ -193,6 +195,11 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
     )
   }
   return {
+    authenticationTimeoutMs: parsePositiveInteger(
+      env.AUTHENTICATION_TIMEOUT_MS,
+      10_000,
+      120_000
+    ),
     acceptanceTimeoutMs: parsePositiveInteger(
       env.MATCH_ACCEPTANCE_TIMEOUT_MS,
       30_000,
@@ -322,6 +329,9 @@ export class MatchmakerPool implements DurableObject {
     const [client, server] = Object.values(pair)
     server.serializeAttachment(attachment)
     this.state.acceptWebSocket(server, [attachment.principal])
+    await this.scheduleAlarmAt(
+      attachment.connectedAtMs + this.config.authenticationTimeoutMs
+    )
 
     return new Response(null, { status: 101, webSocket: client })
   }
@@ -388,6 +398,7 @@ export class MatchmakerPool implements DurableObject {
 
   async alarm() {
     const now = Date.now()
+    this.expireUnauthenticatedSockets(now)
     await this.processProposalTimers(now)
     await this.attemptMatches(now)
     await this.rescheduleAlarm(now)
@@ -1305,6 +1316,21 @@ export class MatchmakerPool implements DurableObject {
       this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX })
     ])
     const candidates: number[] = []
+    for (const socket of this.state.getWebSockets()) {
+      const attachment =
+        socket.deserializeAttachment() as SocketAttachment | null
+      if (
+        socket.readyState === WebSocket.OPEN &&
+        attachment?.subscribed === false
+      ) {
+        candidates.push(
+          Math.max(
+            now + 1,
+            attachment.connectedAtMs + this.config.authenticationTimeoutMs
+          )
+        )
+      }
+    }
     const proposalValues = [...proposals.values()]
     for (const proposal of proposalValues) {
       if (proposal.status === 'FOUND') {
@@ -1337,6 +1363,37 @@ export class MatchmakerPool implements DurableObject {
       .sort((a, b) => a - b)[0]
     if (next !== undefined) await this.state.storage.setAlarm(next)
     else await this.state.storage.deleteAlarm()
+  }
+
+  private async scheduleAlarmAt(deadline: number) {
+    await this.state.storage.transaction(async transaction => {
+      const current = await transaction.getAlarm()
+      if (current === null || deadline < current) {
+        await transaction.setAlarm(deadline)
+      }
+    })
+  }
+
+  private expireUnauthenticatedSockets(now: number) {
+    for (const socket of this.state.getWebSockets()) {
+      const attachment =
+        socket.deserializeAttachment() as SocketAttachment | null
+      if (
+        socket.readyState !== WebSocket.OPEN ||
+        attachment?.subscribed !== false ||
+        attachment.connectedAtMs + this.config.authenticationTimeoutMs > now
+      ) {
+        continue
+      }
+      try {
+        // Source websocketHandler returns without an error when a client has no
+        // player channel at the authentication deadline. Its deferred Client
+        // cleanup closes the connection without sending an application error.
+        socket.close()
+      } catch {
+        // A close/error event may race the Durable Object alarm.
+      }
+    }
   }
 
   private async proposalForPrincipal(principal: string) {

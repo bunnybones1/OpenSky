@@ -12,7 +12,12 @@ const fixtures = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceWebsocketHandler,
+    sourceConfig,
+    sourceComposeConfig,
     worker,
+    workerWrangler,
+    workerTestWrangler,
     rootPackage
   ] = await Promise.all([
     readFile('matchmaker/lib/frontend/findmatch/handler.go', 'utf8'),
@@ -21,7 +26,12 @@ const fixtures = async () => {
     readFile('matchmaker/lib/playerchannel/notifier.go', 'utf8'),
     readFile('matchmaker/lib/playerchannel/factory.go', 'utf8'),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
+    readFile('matchmaker/lib/frontend/websocket_handler.go', 'utf8'),
+    readFile('matchmaker/config/config.go', 'utf8'),
+    readFile('matchmaker/etc/matchmaker.compose.conf', 'utf8'),
     readFile('matchmaker-ts/src/runtime.ts', 'utf8'),
+    readFile('matchmaker-ts/wrangler.jsonc', 'utf8'),
+    readFile('matchmaker-ts/wrangler.test.jsonc', 'utf8'),
     readFile('package.json', 'utf8').then(JSON.parse)
   ])
   return {
@@ -31,7 +41,12 @@ const fixtures = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceWebsocketHandler,
+    sourceConfig,
+    sourceComposeConfig,
     worker,
+    workerWrangler,
+    workerTestWrangler,
     rootPackage
   }
 }
@@ -44,7 +59,12 @@ const errorsFor = value =>
     value.sourceNotifier,
     value.sourceFactory,
     value.sourceBrowserClient,
+    value.sourceWebsocketHandler,
+    value.sourceConfig,
+    value.sourceComposeConfig,
     value.worker,
+    value.workerWrangler,
+    value.workerTestWrangler,
     value.rootPackage
   )
 
@@ -113,6 +133,69 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'ticker := time.NewTicker(h.authenticationTimeout)',
+        'ticker := time.NewTicker(time.Hour)'
+      )
+    },
+    {
+      ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'if !client.HasChannel() {',
+        'if client.HasChannel() {'
+      )
+    },
+    {
+      ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'ticker.Stop()\n\t\t\t\tlogger.Info()',
+        'h.messageSender.SendErrorMessage(client, *mmerrors.ErrServerError)\n\t\t\t\tticker.Stop()\n\t\t\t\tlogger.Info()'
+      )
+    },
+    {
+      ...value,
+      sourceConfig: value.sourceConfig.replace(
+        'cfg.MatchMaker.AuthenticationTimeout = secondsToDuration(cfg.MatchMaker.AuthenticationTimeoutSeconds)',
+        'cfg.MatchMaker.AuthenticationTimeout = time.Hour'
+      )
+    },
+    {
+      ...value,
+      sourceComposeConfig: value.sourceComposeConfig.replace(
+        'authentication_timeout_seconds = 10.0',
+        'authentication_timeout_seconds = 5.0'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'env.AUTHENTICATION_TIMEOUT_MS,',
+        'undefined,'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'env.AUTHENTICATION_TIMEOUT_MS,\n      10_000,',
+        'env.AUTHENTICATION_TIMEOUT_MS,\n      5_000,'
+      )
+    },
+    {
+      ...value,
+      workerWrangler: value.workerWrangler.replace(
+        '"AUTHENTICATION_TIMEOUT_MS": "10000"',
+        '"AUTHENTICATION_TIMEOUT_MS": "5000"'
+      )
+    },
+    {
+      ...value,
+      workerTestWrangler: value.workerTestWrangler.replace(
+        '"AUTHENTICATION_TIMEOUT_MS": "10000"',
+        '"AUTHENTICATION_TIMEOUT_MS": "5000"'
+      )
+    },
+    {
+      ...value,
       worker: value.worker.replace('subscribed: false', 'subscribed: true')
     },
     {
@@ -120,6 +203,55 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       worker: value.worker.replace(
         'this.state.acceptWebSocket(server, [attachment.principal])',
         "this.state.acceptWebSocket(server, [attachment.principal])\n    this.safeSend(server, errorMessage('DUPLICATE_CONNECTION'))"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'await this.scheduleAlarmAt(',
+        'await Promise.resolve('
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'this.expireUnauthenticatedSockets(now)',
+        'this.ignoreUnauthenticatedSockets(now)'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'attachment?.subscribed !== false',
+        'attachment?.subscribed !== true'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'socket.close()\n      } catch {',
+        "socket.close(1008, 'Authentication timeout')\n      } catch {"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'socket.close()\n      } catch {',
+        "this.safeSend(socket, errorMessage('SERVER_ERROR'))\n        socket.close()\n      } catch {"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'attachment?.subscribed === false',
+        'attachment?.subscribed === true'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'if (current === null || deadline < current) {',
+        'if (current !== null && deadline > current) {'
       )
     },
     {

@@ -26,6 +26,7 @@
   ],
   "vars": {
     "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787",
+    "AUTHENTICATION_TIMEOUT_MS": "10000",
     "MATCH_ACCEPTANCE_TIMEOUT_MS": "30000",
     "MATCH_ACCEPTANCE_PENALTY_MS": "20000",
     "MATCH_REFUSAL_WINDOW_MS": "86400000",

@@ -55,6 +55,30 @@ const connect = async (principal: string, ip: string) => {
   return webSocket!
 }
 
+const connectDirectlyToPool = async (
+  stub: DurableObjectStub<MatchmakerPool>,
+  principal: string,
+  ip: string
+) => {
+  const response = await stub.fetch(
+    'https://matchmaker.example/v1/matchmaker',
+    {
+      headers: {
+        Upgrade: 'websocket',
+        [TRUSTED_PRINCIPAL_HEADER]: principal,
+        [TRUSTED_USER_ID_HEADER]: `user-${principal.slice(2, 6)}`,
+        [TRUSTED_DISPLAY_NAME_HEADER]: `Player ${principal.slice(2, 4)}`,
+        [TRUSTED_CLIENT_IP_HEADER]: ip
+      }
+    }
+  )
+  expect(response.status).toBe(101)
+  const webSocket = response.webSocket
+  expect(webSocket).not.toBeNull()
+  webSocket?.accept()
+  return webSocket!
+}
+
 const nextMessage = (webSocket: WebSocket) =>
   new Promise<Record<string, unknown>>((resolve, reject) => {
     const timeout = setTimeout(
@@ -101,6 +125,11 @@ const expectNoMessage = (webSocket: WebSocket, durationMs = 75) =>
     }, durationMs)
     webSocket.addEventListener('message', listener, { once: true })
   })
+
+const nextClose = (webSocket: WebSocket) =>
+  new Promise<CloseEvent>(resolve =>
+    webSocket.addEventListener('close', resolve, { once: true })
+  )
 
 const setGameModeStatus = async (field: string, enabled: boolean) => {
   const response = await runtimeEnv.MATCH_SERVICE?.fetch(
@@ -200,7 +229,10 @@ afterEach(async () => {
     .toBe(0)
   await runInDurableObject(
     pool() as DurableObjectStub<MatchmakerPool>,
-    async (_instance, state) => state.storage.deleteAll()
+    async (_instance, state) => {
+      await state.storage.deleteAll()
+      await state.storage.deleteAlarm()
+    }
   )
 })
 
@@ -1078,6 +1110,152 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await firstFound).toMatchObject({ type: 'match_found' })
     expect(await secondFound).toMatchObject({ type: 'match_found' })
     await pendingStayedSilent
+  })
+
+  it('closes a socket that does not establish a channel within the source authentication window', async () => {
+    // A dedicated object keeps Miniflare's forced-alarm cancellation state
+    // from earlier cases from masking the hibernation assertion in this case.
+    const timeoutPool = runtimeEnv.MATCHMAKER_POOLS.getByName(
+      `${CLOUDFLARE_MATCHMAKER_POOL_NAME}-authentication-timeout`
+    ) as DurableObjectStub<MatchmakerPool>
+    const [pending] = track(
+      await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
+    )
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as
+        | { connectedAtMs: number; subscribed: boolean }
+        | undefined
+      expect(attachment?.subscribed).toBe(false)
+      expect(
+        (await state.storage.getAlarm())! - attachment!.connectedAtMs
+      ).toBe(10_000)
+    })
+
+    await evictDurableObject(timeoutPool)
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as {
+        connectedAtMs: number
+        subscribed: boolean
+      }
+      socket?.serializeAttachment({
+        ...attachment,
+        connectedAtMs: Date.now() - 10_001
+      })
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+
+    const closed = nextClose(pending)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+  })
+
+  it('does not replace an earlier Durable Object alarm when another socket connects', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    const earlierAlarm = Date.now() + 1_000
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => state.storage.setAlarm(earlierAlarm)
+    )
+
+    const second = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) =>
+        expect(await state.storage.getAlarm()).toBe(earlierAlarm)
+    )
+  })
+
+  it('does not expire a socket after it establishes a player channel', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const [socket] = state.getWebSockets(PRINCIPAL_1)
+        const attachment = socket?.deserializeAttachment() as {
+          connectedAtMs: number
+          subscribed: boolean
+        }
+        socket?.serializeAttachment({
+          ...attachment,
+          connectedAtMs: Date.now() - 10_001
+        })
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const stayedSilent = expectNoMessage(player)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    await stayedSilent
+    expect(player.readyState).toBe(WebSocket.OPEN)
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      queuedPlayers: 1,
+      connectedSockets: 1
+    })
+  })
+
+  it('expires a stale pending duplicate without disturbing the active subscriber', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+    const pending = await connect(PRINCIPAL_1, '192.0.2.1')
+    track(first, pending)
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        for (const socket of state.getWebSockets(PRINCIPAL_1)) {
+          const attachment = socket.deserializeAttachment() as {
+            connectedAtMs: number
+            subscribed: boolean
+          }
+          if (!attachment.subscribed) {
+            socket.serializeAttachment({
+              ...attachment,
+              connectedAtMs: Date.now() - 10_001
+            })
+          }
+        }
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const pendingClosed = nextClose(pending)
+    const firstStayedSilent = expectNoMessage(first)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await pendingClosed).toMatchObject({ code: 1005, reason: '' })
+    await firstStayedSilent
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({
+      queuedPlayers: 1,
+      connectedSockets: 1
+    })
   })
 
   it('notifies the prior subscriber only after valid replacement admission and lets the client close it', async () => {

@@ -33,7 +33,12 @@ export const matchmakerSessionErrors = (
   sourceNotifier,
   sourceFactory,
   sourceBrowserClient,
+  sourceWebsocketHandler,
+  sourceConfig,
+  sourceComposeConfig,
   worker,
+  workerWrangler,
+  workerTestWrangler,
   rootPackage
 ) => {
   const errors = []
@@ -124,6 +129,86 @@ export const matchmakerSessionErrors = (
     'this.ws.manual_disconnect(code)'
   ])
 
+  const sourceWebsocketConstructor = bodyBetween(
+    sourceWebsocketHandler,
+    'func NewWebsocketHandler(',
+    'func (h *websocketHandler) Run('
+  )
+  if (
+    !sourceWebsocketConstructor.includes(
+      'authenticationTimeout: cfg.MatchMaker.AuthenticationTimeout'
+    )
+  ) {
+    errors.push('Source websocket authentication timeout is not config-backed')
+  }
+  const sourceWebsocketSession = bodyBetween(
+    sourceWebsocketHandler,
+    'func (h *websocketHandler) Handle(',
+    'func (h *websocketHandler) listenOnMessage('
+  )
+  requireOrdered(
+    errors,
+    'Source websocket authentication deadline',
+    sourceWebsocketSession,
+    [
+      'ticker := time.NewTicker(h.authenticationTimeout)',
+      'case <-ticker.C:',
+      'if !client.HasChannel() {',
+      'ticker.Stop()',
+      'return nil'
+    ]
+  )
+  const sourceAuthenticationTimeout = bodyBetween(
+    sourceWebsocketSession,
+    'case <-ticker.C:',
+    'case <-client.Done():'
+  )
+  if (sourceAuthenticationTimeout.includes('SendErrorMessage')) {
+    errors.push('Source authentication timeout now sends an application error')
+  }
+  requireOrdered(errors, 'Source authentication timeout config', sourceConfig, [
+    'AuthenticationTimeoutSeconds float32',
+    'if cfg.MatchMaker.AuthenticationTimeoutSeconds <= 0 {',
+    'cfg.MatchMaker.AuthenticationTimeoutSeconds = 5.0',
+    'cfg.MatchMaker.AuthenticationTimeout = secondsToDuration(cfg.MatchMaker.AuthenticationTimeoutSeconds)'
+  ])
+  if (
+    !/^\s*authentication_timeout_seconds\s*=\s*10\.0\s*$/m.test(
+      sourceComposeConfig
+    )
+  ) {
+    errors.push(
+      'Checked-in source matchmaker configuration no longer pins a 10-second authentication timeout'
+    )
+  }
+
+  if (!worker.includes('AUTHENTICATION_TIMEOUT_MS?: string')) {
+    errors.push(
+      'Worker authentication timeout environment authority is missing'
+    )
+  }
+  const workerConfig = bodyBetween(
+    worker,
+    'const readConfig = (env: MatchmakerEnv): RuntimeConfig => {',
+    'const serializePlayer = ('
+  )
+  requireOrdered(errors, 'Worker authentication timeout config', workerConfig, [
+    'authenticationTimeoutMs: parsePositiveInteger(',
+    'env.AUTHENTICATION_TIMEOUT_MS,',
+    '10_000,',
+    '120_000'
+  ])
+  for (const [label, wrangler] of [
+    ['production', workerWrangler],
+    ['test', workerTestWrangler]
+  ]) {
+    if (!/^\s*"AUTHENTICATION_TIMEOUT_MS":\s*"10000",?\s*$/m.test(wrangler)) {
+      errors.push(
+        `Worker ${label} configuration does not pin the source 10-second authentication timeout`
+      )
+    }
+  }
+
   const workerConnect = bodyBetween(
     worker,
     'async fetch(request: Request)',
@@ -138,6 +223,29 @@ export const matchmakerSessionErrors = (
       errors.push(`Worker socket connect must not perform: ${forbidden}`)
     }
   }
+  requireOrdered(
+    errors,
+    'Worker hibernation-safe authentication deadline',
+    workerConnect,
+    [
+      'this.state.acceptWebSocket(server, [attachment.principal])',
+      'await this.scheduleAlarmAt(',
+      'attachment.connectedAtMs + this.config.authenticationTimeoutMs'
+    ]
+  )
+
+  const workerAlarm = bodyBetween(
+    worker,
+    'async alarm() {',
+    'private attachmentFromRequest('
+  )
+  requireOrdered(errors, 'Worker alarm authentication cleanup', workerAlarm, [
+    'const now = Date.now()',
+    'this.expireUnauthenticatedSockets(now)',
+    'await this.processProposalTimers(now)',
+    'await this.attemptMatches(now)',
+    'await this.rescheduleAlarm(now)'
+  ])
 
   const workerAttachment = bodyBetween(
     worker,
@@ -273,6 +381,64 @@ export const matchmakerSessionErrors = (
     errors.push('Worker cleanup can be preserved by an unsubscribed socket')
   }
 
+  const workerReschedule = bodyBetween(
+    worker,
+    'private async rescheduleAlarm(',
+    'private async scheduleAlarmAt('
+  )
+  requireOrdered(
+    errors,
+    'Worker pending-socket alarm rescheduling',
+    workerReschedule,
+    [
+      'for (const socket of this.state.getWebSockets()) {',
+      'socket.readyState === WebSocket.OPEN',
+      'attachment?.subscribed === false',
+      'attachment.connectedAtMs + this.config.authenticationTimeoutMs'
+    ]
+  )
+  const workerAlarmSchedule = bodyBetween(
+    worker,
+    'private async scheduleAlarmAt(',
+    'private expireUnauthenticatedSockets('
+  )
+  requireOrdered(
+    errors,
+    'Worker earlier-alarm preservation',
+    workerAlarmSchedule,
+    [
+      'this.state.storage.transaction(',
+      'const current = await transaction.getAlarm()',
+      'if (current === null || deadline < current) {',
+      'await transaction.setAlarm(deadline)'
+    ]
+  )
+  const workerAuthenticationExpiry = bodyBetween(
+    worker,
+    'private expireUnauthenticatedSockets(',
+    'private async proposalForPrincipal('
+  )
+  requireOrdered(
+    errors,
+    'Worker authentication-timeout eligibility',
+    workerAuthenticationExpiry,
+    [
+      'socket.readyState !== WebSocket.OPEN',
+      'attachment?.subscribed !== false',
+      'attachment.connectedAtMs + this.config.authenticationTimeoutMs > now',
+      'socket.close()'
+    ]
+  )
+  if (
+    workerAuthenticationExpiry.includes('safeSend(') ||
+    workerAuthenticationExpiry.includes('errorMessage(') ||
+    !/socket\.close\(\s*\)/.test(workerAuthenticationExpiry)
+  ) {
+    errors.push(
+      'Worker authentication timeout invents an application error or close payload'
+    )
+  }
+
   const scripts = rootPackage?.scripts ?? {}
   if (
     !String(scripts['build:cloudflare'] ?? '').includes(
@@ -301,7 +467,12 @@ const main = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceWebsocketHandler,
+    sourceConfig,
+    sourceComposeConfig,
     worker,
+    workerWrangler,
+    workerTestWrangler,
     rootPackage
   ] = await Promise.all([
     readFile(
@@ -331,7 +502,15 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(root, 'matchmaker/lib/frontend/websocket_handler.go'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'matchmaker/config/config.go'), 'utf8'),
+    readFile(path.join(root, 'matchmaker/etc/matchmaker.compose.conf'), 'utf8'),
     readFile(path.join(root, 'matchmaker-ts/src/runtime.ts'), 'utf8'),
+    readFile(path.join(root, 'matchmaker-ts/wrangler.jsonc'), 'utf8'),
+    readFile(path.join(root, 'matchmaker-ts/wrangler.test.jsonc'), 'utf8'),
     readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse)
   ])
   const errors = matchmakerSessionErrors(
@@ -341,7 +520,12 @@ const main = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceWebsocketHandler,
+    sourceConfig,
+    sourceComposeConfig,
     worker,
+    workerWrangler,
+    workerTestWrangler,
     rootPackage
   )
   if (errors.length > 0) {
@@ -349,7 +533,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber contract'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber and authentication-timeout contracts'
     )
   }
 }
