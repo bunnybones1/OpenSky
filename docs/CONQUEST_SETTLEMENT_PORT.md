@@ -1229,3 +1229,35 @@ browser-game tests, nine analytics tests, all typechecks and source/off-chain
 gates, both builds, and 594-file artifact validation. No deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed. Production Conquest remains disabled.
+
+## Source matchmaker authentication-timeout proof
+
+Follow-up milestone `456c817b` completes the source pre-channel lifetime that
+surrounds the subscriber lifecycle. The Go `websocketHandler` starts a timer
+from `MatchMaker.AuthenticationTimeout`; the checked-in compose profile sets
+that value to ten seconds. If the client still has no channel when it fires,
+the handler returns without sending an application error and its deferred
+cleanup closes the connection.
+
+The Durable Object now pins the same ten-second window in production and test
+configuration, records the connection time in the hibernating WebSocket
+attachment, and transactionally schedules the earliest alarm. Expiry targets
+only open sockets that are still explicitly unsubscribed and uses an empty
+close. Established channels survive regardless of age, an expired pending
+duplicate cannot alter an active subscriber or ticket, pending deadlines are
+restored during alarm rescheduling, and later connections preserve earlier
+proposal or matching alarms. Legacy attachments without the subscription bit
+remain established for rolling-upgrade safety.
+
+Workers regressions cover the configured deadline, Durable Object eviction,
+empty close semantics, active-channel immunity, duplicate isolation, and
+earlier-alarm preservation. The mutation-tested session gate derives the Go
+timer and config path, checked-in ten-second profile, Worker scheduling and
+expiry order, both Wrangler values, and absence of an invented error or close
+payload. The exact complete local contract passed at `456c817b`: 510
+main-Worker tests, 34 game-server unit and 117 Workers tests, 33 match-service
+tests, 47 matchmaker unit and 40 Workers tests, 30 browser-game tests, nine
+analytics tests, all typechecks and source/off-chain gates, both builds, and
+594-file artifact validation. No deployment, migration, provisioning,
+activation, live match, or production mutation was performed. Production
+Conquest remains disabled.

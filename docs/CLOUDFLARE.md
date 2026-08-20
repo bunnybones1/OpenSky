@@ -1082,6 +1082,12 @@ and progress are not migrated.
   proposal events, cannot accept or decline another channel's proposal, and do
   not prevent last-subscriber queue cleanup. The hibernating attachment stores
   that subscription authority explicitly.
+- Connect-only matchmaker sockets retain the source ten-second authentication
+  deadline. The Durable Object schedules that deadline at WebSocket acceptance,
+  restores it across hibernation, and closes only sockets that still lack a
+  player channel without sending an application error or inventing a close
+  payload. Established channels and their queue state survive, and a later
+  socket cannot overwrite an earlier proposal or matching alarm.
 - Ranked/Conquest abandon counts and cooldowns use the source fixed-window,
   release-scoped policy in D1 and are combined with matchmaker refusal and
   acceptance penalties. The production penalty map remains the source default
@@ -1822,6 +1828,38 @@ Version named the exact deployed Worker, Practice PvP and Practice Bot remained
 enabled, and both Conquest modes remained disabled. No migration, D1 mutation
 command, multiplayer Worker, binding, or game asset was deployed by this
 rollout.
+
+## Source matchmaker authentication-timeout parity — 2026-08-20
+
+Milestone `456c817b` ports the final pre-channel lifetime enforced by the Go
+`websocketHandler`. The source timer uses configured
+`AuthenticationTimeout`; the checked-in matchmaker compose profile sets it to
+ten seconds and returns without an application error when no player channel
+exists at the deadline. The Worker now pins `AUTHENTICATION_TIMEOUT_MS=10000`
+in both production and test profiles and uses a Durable Object alarm rather
+than an in-memory timer.
+
+Every accepted socket persists its connection time and schedules the earliest
+alarm transactionally. Alarm processing expires only open, explicitly
+unsubscribed sockets with an empty close, then processes proposal and matching
+timers. Established channels survive regardless of age, connect-only
+duplicates cannot disturb an active search, pending deadlines are included
+when the alarm is rescheduled, and a new socket cannot replace an earlier
+alarm. Attachments from the previously deployed runtime that lack the explicit
+subscription bit remain treated as established during a rolling upgrade.
+
+The Workers suite covers deadline scheduling, Durable Object eviction,
+error-free close behavior, established-channel immunity, duplicate isolation,
+and earlier-alarm preservation. The mutation-tested matchmaker session gate
+now pins the Go timeout branch, config conversion, checked-in ten-second
+profile, Worker alarm order and eligibility, both Wrangler profiles, and the
+existing subscriber lifecycle. The exact complete local contract passed at
+`456c817b`: 510 main-Worker tests, 34 game-server unit and 117 Workers tests,
+33 match-service tests, 47 matchmaker unit and 40 Workers tests, 30
+browser-game tests, nine analytics tests, all typechecks and source/off-chain
+gates, both builds, and 594-file artifact validation. No deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
 
 ## Suggested next slice
 

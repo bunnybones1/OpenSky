@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `fb30fb0a`
-  (`Preserve source matchmaker subscriber lifecycle`)
-- Latest tested runtime commit: `fb30fb0a`
-  (`Preserve source matchmaker subscriber lifecycle`)
+- Last code/test checkpoint: `456c817b`
+  (`Preserve source matchmaker authentication timeout`)
+- Latest tested runtime commit: `456c817b`
+  (`Preserve source matchmaker authentication timeout`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `fb30fb0a` are committed and
+- The runtime changes from `38386294` through `456c817b` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -493,6 +493,46 @@ artifact validation. The assembled web and game entries remain
 No deployment, migration, provisioning, activation, live match, or production
 mutation was performed.
 
+## Source matchmaker authentication-timeout milestone
+
+Commit `456c817b` restores the original matchmaker's bounded pre-channel
+session lifetime without inventing a new browser protocol:
+
+- the Go handler derives its authentication timer from matchmaker config and
+  the checked-in compose profile sets that window to ten seconds;
+- a new Worker socket schedules the earliest Durable Object alarm for its
+  serialized `connectedAtMs` plus that exact ten-second window, so hibernation
+  cannot silently turn an unauthenticated connection into an unbounded one;
+- when the deadline is reached, only an open socket that is still explicitly
+  unsubscribed is closed. The Worker sends no application error and supplies
+  no invented close code or reason, matching the source handler's error-free
+  return and deferred connection cleanup;
+- an established player channel survives regardless of connection age, and an
+  expired connect-only duplicate cannot disturb its subscriber, queue ticket,
+  or proposal state; and
+- pending-socket deadlines participate in normal alarm rescheduling, while a
+  new connection transactionally preserves any earlier proposal or matching
+  alarm. Legacy attachments without the new subscription field remain treated
+  as established during a rolling upgrade.
+
+Workers regressions cover the exact configured deadline, Durable Object
+eviction, empty close semantics, established-channel immunity, duplicate
+isolation, and earlier-alarm preservation. The mutation-tested
+`check:cloudflare:matchmaker-session` gate now derives the timeout branch,
+configuration conversion, ten-second source profile, Worker alarm order,
+rescheduling, close behavior, and both Wrangler profiles alongside the existing
+subscriber contract.
+
+The exact complete local release contract passed at committed runtime head
+`456c817b` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 47 matchmaker unit tests, 40
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and `/game/cloudflare/assets/index-ccb53c4b.js`.
+No deployment, migration, provisioning, activation, live match, or production
+mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -595,9 +635,9 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 ### Production rollout
 
-- Push the `fb30fb0a` milestone and refreshed handoff, then wait for exact-head
-  CI.
-- Deploy and verify the tested runtime changes through `fb30fb0a`. Keep
+- Keep the pushed milestone and refreshed handoff behind green exact-head PR
+  CI before any production work resumes.
+- Deploy and verify the tested runtime changes through `456c817b`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
