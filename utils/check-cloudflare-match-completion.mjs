@@ -31,6 +31,7 @@ export const matchCompletionErrors = (
   sourceServerMatch,
   sourceMatchCollection,
   sourceMatchProxy,
+  sourceMatchManager,
   gameMatch,
   publication,
   progression
@@ -92,6 +93,35 @@ export const matchCompletionErrors = (
       'Source terminal player signal no longer follows match recording'
     )
   }
+  requireOrdered(
+    errors,
+    'Source recorded-match socket lifecycle',
+    sourceRecordedSignal,
+    ["type: 'match_ended'", 'p?.connection.close(WEBSOCKET_FORCED_CLOSE_CODE)']
+  )
+
+  const sourceRecentReconnect = bodyBetween(
+    sourceMatchManager,
+    'private handleJoinServer = async (',
+    'private handleSpectate = async ('
+  )
+  requireOrdered(
+    errors,
+    'Source recent-match reconnect',
+    sourceRecentReconnect,
+    [
+      "'rewards' in registeredOrRecentMatch",
+      "type: 'reconnect'",
+      'if (rewards) {',
+      "type: 'rewards'"
+    ]
+  )
+  if (
+    sourceRecentReconnect.includes("type: 'match_ended'") ||
+    sourceRecentReconnect.includes('WEBSOCKET_FORCED_CLOSE_CODE')
+  ) {
+    errors.push('Source recent-match reconnect became terminal')
+  }
 
   const workerCompletion = bodyBetween(
     gameMatch,
@@ -112,7 +142,7 @@ export const matchCompletionErrors = (
     'metadata.completionRecorded = true',
     'await this.state.storage.put(METADATA_KEY, metadata)',
     "type: 'rewards'",
-    "this.broadcast({ type: 'match_ended' })"
+    'this.finishMatchSockets()'
   ])
   for (const token of [
     'rankedStats: isRankedMatchModes(gameModes)',
@@ -150,9 +180,14 @@ export const matchCompletionErrors = (
   )
   requireOrdered(errors, 'Worker completed reconnect', join, [
     'if (metadata.completionRecorded) {',
-    "type: 'rewards'",
-    "type: 'match_ended'"
+    "type: 'rewards'"
   ])
+  if (
+    join.includes("type: 'match_ended'") ||
+    join.includes('finishMatchSockets(')
+  ) {
+    errors.push('Worker recent-match reconnect became terminal')
+  }
 
   const gameplay = bodyBetween(
     gameMatch,
@@ -161,7 +196,7 @@ export const matchCompletionErrors = (
   )
   if (
     !gameplay.includes('if (metadata.completionRecorded) {') ||
-    !gameplay.includes("type: 'match_ended'")
+    !gameplay.includes('this.finishMatchSockets(principal)')
   ) {
     errors.push('Worker terminal gameplay response is not settlement-gated')
   }
@@ -187,7 +222,23 @@ export const matchCompletionErrors = (
       "SET status = 'ended'",
       'metadata.completionRecorded = true',
       'await this.state.storage.put(METADATA_KEY, metadata)',
-      "this.broadcast({ type: 'match_ended' })"
+      'this.finishMatchSockets()'
+    ]
+  )
+
+  const socketCompletion = bodyBetween(
+    gameMatch,
+    'private finishMatchSockets(',
+    'private safeSend('
+  )
+  requireOrdered(
+    errors,
+    'Worker completed socket lifecycle',
+    socketCompletion,
+    [
+      "this.safeSend(socket, { type: 'match_ended' })",
+      "(attachment.role ?? 'player') === 'player'",
+      'socket.close(WEBSOCKET_FORCED_CLOSE_CODE)'
     ]
   )
 
@@ -243,6 +294,7 @@ const main = async () => {
     sourceServerMatch,
     sourceMatchCollection,
     sourceMatchProxy,
+    sourceMatchManager,
     gameMatch,
     publication,
     progression
@@ -257,6 +309,10 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'server', 'src', 'core', 'MatchProxy.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'server', 'src', 'core', 'MatchManager.ts'),
+      'utf8'
+    ),
     readFile(
       path.join(root, 'game-server-cloudflare', 'src', 'game-match.ts'),
       'utf8'
@@ -280,6 +336,7 @@ const main = async () => {
     sourceServerMatch,
     sourceMatchCollection,
     sourceMatchProxy,
+    sourceMatchManager,
     gameMatch,
     publication,
     progression

@@ -15,6 +15,7 @@ import {
   isRankedMatchModes
 } from '@opensky/shared/match-modes'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
+import { WEBSOCKET_FORCED_CLOSE_CODE } from '@opensky/shared/constants'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
@@ -988,7 +989,6 @@ export class GameMatch implements DurableObject {
           type: 'rewards',
           data: await this.completedRewards(metadata.proposalId, index)
         })
-        this.safeSend(socket, { type: 'match_ended' })
       }
       return
     }
@@ -1215,7 +1215,7 @@ export class GameMatch implements DurableObject {
     const metadata = await this.metadataRequired()
     if (metadata.ended) {
       if (metadata.completionRecorded) {
-        this.sendToPrincipal(principal, { type: 'match_ended' })
+        this.finishMatchSockets(principal)
       }
       return
     }
@@ -1625,7 +1625,7 @@ export class GameMatch implements DurableObject {
           data: rewards[player]
         })
       }
-      this.broadcast({ type: 'match_ended' })
+      this.finishMatchSockets()
       await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
     } catch (error) {
       console.error(
@@ -1754,7 +1754,7 @@ export class GameMatch implements DurableObject {
       }
       metadata.completionRecorded = true
       await this.state.storage.put(METADATA_KEY, metadata)
-      this.broadcast({ type: 'match_ended' })
+      this.finishMatchSockets()
       await this.state.storage.deleteAlarm()
     } catch (error) {
       console.error(
@@ -2263,6 +2263,21 @@ export class GameMatch implements DurableObject {
       const attachment =
         socket.deserializeAttachment() as SocketAttachment | null
       if (attachment?.joined) this.safeSend(socket, message)
+    }
+  }
+
+  private finishMatchSockets(principal?: string) {
+    const sockets = principal
+      ? this.state.getWebSockets(principal)
+      : this.state.getWebSockets()
+    for (const socket of sockets) {
+      const attachment =
+        socket.deserializeAttachment() as SocketAttachment | null
+      if (!attachment?.joined) continue
+      this.safeSend(socket, { type: 'match_ended' })
+      if ((attachment.role ?? 'player') === 'player') {
+        socket.close(WEBSOCKET_FORCED_CLOSE_CODE)
+      }
     }
   }
 

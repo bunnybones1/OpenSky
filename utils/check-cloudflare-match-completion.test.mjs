@@ -10,6 +10,7 @@ const fixtures = async () => {
     sourceServerMatch,
     sourceMatchCollection,
     sourceMatchProxy,
+    sourceMatchManager,
     gameMatch,
     publication,
     progression
@@ -18,6 +19,7 @@ const fixtures = async () => {
     readFile('server/src/worker/match/Match.ts', 'utf8'),
     readFile('server/src/worker/match/MatchCollection.ts', 'utf8'),
     readFile('server/src/core/MatchProxy.ts', 'utf8'),
+    readFile('server/src/core/MatchManager.ts', 'utf8'),
     readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
     readFile('game-server-cloudflare/src/completion-publication.ts', 'utf8'),
     readFile('game-server-cloudflare/src/progression.ts', 'utf8')
@@ -27,6 +29,7 @@ const fixtures = async () => {
     sourceServerMatch,
     sourceMatchCollection,
     sourceMatchProxy,
+    sourceMatchManager,
     gameMatch,
     publication,
     progression
@@ -41,6 +44,7 @@ test('pins source transaction semantics and the Worker publication barrier', asy
       value.sourceServerMatch,
       value.sourceMatchCollection,
       value.sourceMatchProxy,
+      value.sourceMatchManager,
       value.gameMatch,
       value.publication,
       value.progression
@@ -75,6 +79,13 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        "type: 'rewards',\n            data: rewards",
+        "type: 'match_ended',\n            data: rewards"
+      )
+    },
+    {
+      ...value,
       gameMatch: value.gameMatch.replace(
         'await publishMatchCompletion(this.env.AUTH_DB, {',
         'await skippedMatchPublication(this.env.AUTH_DB, {'
@@ -85,6 +96,20 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       gameMatch: value.gameMatch.replace(
         'rankedStats: isRankedMatchModes(gameModes)',
         'rankedStats: false'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'socket.close(WEBSOCKET_FORCED_CLOSE_CODE)',
+        'socket.close(1000)'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'data: await this.completedRewards(metadata.proposalId, index)\n        })',
+        "data: await this.completedRewards(metadata.proposalId, index)\n        })\n        this.safeSend(socket, { type: 'match_ended' })"
       )
     },
     {
@@ -152,6 +177,7 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
         mutation.sourceServerMatch,
         mutation.sourceMatchCollection,
         mutation.sourceMatchProxy,
+        mutation.sourceMatchManager,
         mutation.gameMatch,
         mutation.publication,
         mutation.progression

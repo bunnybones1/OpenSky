@@ -7,6 +7,7 @@ import {
 } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GameMode, MatchStatus } from '@opensky/proto'
+import { WEBSOCKET_FORCED_CLOSE_CODE } from '@opensky/shared/constants'
 import { gameStateParse } from '@opensky/shared/gameStateSerializer'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import * as StateBindings from '@skyweaver/state-browser-sys'
@@ -2636,6 +2637,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await env.AUTH_DB.prepare(
       'DROP TRIGGER test_match_completion_publication_failure'
     ).run()
+    const completedClose = new Promise<CloseEvent>(resolve =>
+      second.addEventListener('close', resolve, { once: true })
+    )
     const completionMessages = collectMessages(second, 2)
     expect(await runDurableObjectAlarm(stub())).toBe(true)
     const completed = await completionMessages
@@ -2644,6 +2648,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       'match_ended'
     ])
     expect(completed[0]).toMatchObject({ type: 'rewards' })
+    await expect(completedClose).resolves.toMatchObject({
+      code: WEBSOCKET_FORCED_CLOSE_CODE,
+      reason: ''
+    })
     const endedStatus = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
     })
@@ -2726,9 +2734,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     await evictDurableObject(stub())
     const reconnected = await connectAs(PRINCIPAL_2, USER_ID_2)
-    const recentMessages = collectMessages(reconnected, 3)
+    const recentMessages = collectMessages(reconnected, 2)
     join(reconnected, 0x32)
-    const [recentReconnect, recentRewards, recentEnded] = await recentMessages
+    const [recentReconnect, recentRewards] = await recentMessages
     expect(recentReconnect).toMatchObject({
       type: 'reconnect',
       isGameStart: false,
@@ -2741,7 +2749,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       type: 'rewards',
       data: storedResult.rewards[1]
     })
-    expect(recentEnded).toEqual({ type: 'match_ended' })
+    expect(reconnected.readyState).toBe(WebSocket.OPEN)
 
     const recentInfoResponse = await stub().fetch(
       'https://match/internal/recent-match-info',
