@@ -2594,20 +2594,62 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         await state.storage.setAlarm(Date.now() + 60_000)
       }
     )
-    const completionMessages = collectMessages(second, 3)
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_match_completion_publication_failure
+       BEFORE UPDATE OF status ON multiplayer_matches
+       WHEN NEW.status = 'ended'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected match publication failure');
+       END`
+    ).run()
+    const terminalGameplay = nextMessage(second)
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
+    expect(await terminalGameplay).toMatchObject({ type: 'gameplay' })
+
+    const pendingStatus = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    expect(await pendingStatus.json()).toMatchObject({
+      ended: true,
+      completionRecorded: false,
+      state: { statusType: 'GameOver', winner: 1 }
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM multiplayer_matches WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('status')
+    ).toBe('active')
+    const pendingRecent = await stub().fetch(
+      'https://match/internal/recent-match-info',
+      {
+        headers: {
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]: PRINCIPAL_2
+        }
+      }
+    )
+    expect(pendingRecent.status).toBe(404)
+    await pendingRecent.text()
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER test_match_completion_publication_failure'
+    ).run()
+    const completionMessages = collectMessages(second, 2)
     expect(await runDurableObjectAlarm(stub())).toBe(true)
     const completed = await completionMessages
     expect(completed.map(message => message.type)).toEqual([
-      'gameplay',
-      'match_ended',
-      'rewards'
+      'rewards',
+      'match_ended'
     ])
-    expect(completed[2]).toMatchObject({ type: 'rewards' })
+    expect(completed[0]).toMatchObject({ type: 'rewards' })
     const endedStatus = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
     })
     expect(await endedStatus.json()).toMatchObject({
       ended: true,
+      completionRecorded: true,
       state: { statusType: 'GameOver', winner: 1 },
       questProgress: [{ 7001: 0 }, { 7002: 1 }]
     })
@@ -2684,9 +2726,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     await evictDurableObject(stub())
     const reconnected = await connectAs(PRINCIPAL_2, USER_ID_2)
-    const recentMessages = collectMessages(reconnected, 2)
+    const recentMessages = collectMessages(reconnected, 3)
     join(reconnected, 0x32)
-    const [recentReconnect, recentRewards] = await recentMessages
+    const [recentReconnect, recentRewards, recentEnded] = await recentMessages
     expect(recentReconnect).toMatchObject({
       type: 'reconnect',
       isGameStart: false,
@@ -2699,6 +2741,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       type: 'rewards',
       data: storedResult.rewards[1]
     })
+    expect(recentEnded).toEqual({ type: 'match_ended' })
 
     const recentInfoResponse = await stub().fetch(
       'https://match/internal/recent-match-info',

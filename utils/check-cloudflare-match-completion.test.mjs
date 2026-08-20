@@ -5,14 +5,32 @@ import test from 'node:test'
 import { matchCompletionErrors } from './check-cloudflare-match-completion.mjs'
 
 const fixtures = async () => {
-  const [sourceMatches, gameMatch, publication, progression] =
-    await Promise.all([
-      readFile('api/rpc/matches.go', 'utf8'),
-      readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
-      readFile('game-server-cloudflare/src/completion-publication.ts', 'utf8'),
-      readFile('game-server-cloudflare/src/progression.ts', 'utf8')
-    ])
-  return { sourceMatches, gameMatch, publication, progression }
+  const [
+    sourceMatches,
+    sourceServerMatch,
+    sourceMatchCollection,
+    sourceMatchProxy,
+    gameMatch,
+    publication,
+    progression
+  ] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('server/src/worker/match/Match.ts', 'utf8'),
+    readFile('server/src/worker/match/MatchCollection.ts', 'utf8'),
+    readFile('server/src/core/MatchProxy.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/completion-publication.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/progression.ts', 'utf8')
+  ])
+  return {
+    sourceMatches,
+    sourceServerMatch,
+    sourceMatchCollection,
+    sourceMatchProxy,
+    gameMatch,
+    publication,
+    progression
+  }
 }
 
 test('pins source transaction semantics and the Worker publication barrier', async () => {
@@ -20,6 +38,9 @@ test('pins source transaction semantics and the Worker publication barrier', asy
   assert.deepEqual(
     matchCompletionErrors(
       value.sourceMatches,
+      value.sourceServerMatch,
+      value.sourceMatchCollection,
+      value.sourceMatchProxy,
       value.gameMatch,
       value.publication,
       value.progression
@@ -40,6 +61,20 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     },
     {
       ...value,
+      sourceServerMatch: value.sourceServerMatch.replaceAll(
+        'this.sendRewards(',
+        'this.skipRewards('
+      )
+    },
+    {
+      ...value,
+      sourceMatchProxy: value.sourceMatchProxy.replace(
+        "case 'internal_match_recorded':",
+        "case 'internal_match_recorded_removed':"
+      )
+    },
+    {
+      ...value,
       gameMatch: value.gameMatch.replace(
         'await publishMatchCompletion(this.env.AUTH_DB, {',
         'await skippedMatchPublication(this.env.AUTH_DB, {'
@@ -50,6 +85,27 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       gameMatch: value.gameMatch.replace(
         'rankedStats: isRankedMatchModes(gameModes)',
         'rankedStats: false'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replaceAll(
+        'if (metadata.completionRecorded) {',
+        'if (true) {'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        '!metadata?.ended ||\n      !metadata.completionRecorded ||\n      metadata.expiredBeforeLoad',
+        '!metadata?.ended || metadata.expiredBeforeLoad'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'timers.botAtMs = undefined\n    } else if (!info.hasState) {',
+        "timers.botAtMs = undefined\n      this.broadcast({ type: 'match_ended' })\n    } else if (!info.hasState) {"
       )
     },
     {
@@ -93,6 +149,9 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     assert.notDeepEqual(
       matchCompletionErrors(
         mutation.sourceMatches,
+        mutation.sourceServerMatch,
+        mutation.sourceMatchCollection,
+        mutation.sourceMatchProxy,
         mutation.gameMatch,
         mutation.publication,
         mutation.progression

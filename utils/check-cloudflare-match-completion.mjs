@@ -13,11 +13,14 @@ const bodyBetween = (source, start, end) => {
 const requireOrdered = (errors, label, source, tokens) => {
   let prior = -1
   for (const token of tokens) {
-    const index = source.indexOf(token)
+    const index = source.indexOf(token, prior + 1)
     if (index < 0) {
-      errors.push(`${label} is missing: ${token}`)
-    } else if (index <= prior) {
-      errors.push(`${label} order changed at: ${token}`)
+      errors.push(
+        source.includes(token)
+          ? `${label} order changed at: ${token}`
+          : `${label} is missing: ${token}`
+      )
+      continue
     }
     prior = index
   }
@@ -25,6 +28,9 @@ const requireOrdered = (errors, label, source, tokens) => {
 
 export const matchCompletionErrors = (
   sourceMatches,
+  sourceServerMatch,
+  sourceMatchCollection,
+  sourceMatchProxy,
   gameMatch,
   publication,
   progression
@@ -50,6 +56,43 @@ export const matchCompletionErrors = (
     }
   }
 
+  const sourceServerEnd = bodyBetween(
+    sourceServerMatch,
+    'private end = async (',
+    'private turnTimerExpired'
+  )
+  requireOrdered(
+    errors,
+    'Source player completion notification',
+    sourceServerEnd,
+    [
+      'apiClient.recordMatchEnd(this, winner, status)',
+      'this.sendRewards(',
+      'await this.logger.close()',
+      'await this.saveRecentMatch(rewards)'
+    ]
+  )
+  const sourceCallbacks = bodyBetween(
+    sourceMatchCollection,
+    'const onMatchGameEnd = () => {',
+    'const startAbandonCountdownForNotLoadingAssets'
+  )
+  requireOrdered(errors, 'Source match callback', sourceCallbacks, [
+    "type: 'internal_match_ended'",
+    'const onMatchRecordEnd = () => {',
+    "type: 'internal_match_recorded'"
+  ])
+  const sourceRecordedSignal = bodyBetween(
+    sourceMatchProxy,
+    "case 'internal_match_recorded':",
+    "case 'match_status_info':"
+  )
+  if (!sourceRecordedSignal.includes("type: 'match_ended'")) {
+    errors.push(
+      'Source terminal player signal no longer follows match recording'
+    )
+  }
+
   const workerCompletion = bodyBetween(
     gameMatch,
     'private async recordCompletionWithRetry(',
@@ -65,7 +108,11 @@ export const matchCompletionErrors = (
     'DECK_RANK_COORDINATOR.getByName(',
     'applyMatchExperience(',
     'recordAbandonPenalty(',
-    'publishMatchCompletion('
+    'publishMatchCompletion(',
+    'metadata.completionRecorded = true',
+    'await this.state.storage.put(METADATA_KEY, metadata)',
+    "type: 'rewards'",
+    "this.broadcast({ type: 'match_ended' })"
   ])
   for (const token of [
     'rankedStats: isRankedMatchModes(gameModes)',
@@ -77,6 +124,72 @@ export const matchCompletionErrors = (
       errors.push(`Worker publication requirement is missing: ${token}`)
     }
   }
+
+  const engineGameOver = bodyBetween(
+    gameMatch,
+    "if (info.statusType === 'GameOver') {",
+    '} else if (!info.hasState) {'
+  )
+  if (engineGameOver.includes("type: 'match_ended'")) {
+    errors.push('Worker exposes match_ended before settlement publication')
+  }
+
+  const recentMatchInfo = bodyBetween(
+    gameMatch,
+    'private async recentMatchInfo(',
+    'private async replayIndex('
+  )
+  if (!recentMatchInfo.includes('!metadata.completionRecorded')) {
+    errors.push('Worker recent-match projection is not settlement-gated')
+  }
+
+  const join = bodyBetween(
+    gameMatch,
+    'private async join(',
+    'private async spectate('
+  )
+  requireOrdered(errors, 'Worker completed reconnect', join, [
+    'if (metadata.completionRecorded) {',
+    "type: 'rewards'",
+    "type: 'match_ended'"
+  ])
+
+  const gameplay = bodyBetween(
+    gameMatch,
+    'private async gameplay(',
+    'private async applyGameplay('
+  )
+  if (
+    !gameplay.includes('if (metadata.completionRecorded) {') ||
+    !gameplay.includes("type: 'match_ended'")
+  ) {
+    errors.push('Worker terminal gameplay response is not settlement-gated')
+  }
+
+  const unloadedExpiry = bodyBetween(
+    gameMatch,
+    'private async expireUnloadedMatch(',
+    'private async recordUnloadedExpiryWithRetry('
+  )
+  if (unloadedExpiry.includes("type: 'match_ended'")) {
+    errors.push('Worker exposes unloaded match_ended before ledger publication')
+  }
+  const unloadedPublication = bodyBetween(
+    gameMatch,
+    'private async recordUnloadedExpiryWithRetry(',
+    'private reconnectMessage('
+  )
+  requireOrdered(
+    errors,
+    'Worker unloaded completion notification',
+    unloadedPublication,
+    [
+      "SET status = 'ended'",
+      'metadata.completionRecorded = true',
+      'await this.state.storage.put(METADATA_KEY, metadata)',
+      "this.broadcast({ type: 'match_ended' })"
+    ]
+  )
 
   const compactPublication = publication.replace(/\s+/g, ' ')
   for (const token of [
@@ -125,29 +238,48 @@ export const matchCompletionErrors = (
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [sourceMatches, gameMatch, publication, progression] =
-    await Promise.all([
-      readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
-      readFile(
-        path.join(root, 'game-server-cloudflare', 'src', 'game-match.ts'),
-        'utf8'
+  const [
+    sourceMatches,
+    sourceServerMatch,
+    sourceMatchCollection,
+    sourceMatchProxy,
+    gameMatch,
+    publication,
+    progression
+  ] = await Promise.all([
+    readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
+    readFile(
+      path.join(root, 'server', 'src', 'worker', 'match', 'Match.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'server', 'src', 'worker', 'match', 'MatchCollection.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'server', 'src', 'core', 'MatchProxy.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'game-match.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'src',
+        'completion-publication.ts'
       ),
-      readFile(
-        path.join(
-          root,
-          'game-server-cloudflare',
-          'src',
-          'completion-publication.ts'
-        ),
-        'utf8'
-      ),
-      readFile(
-        path.join(root, 'game-server-cloudflare', 'src', 'progression.ts'),
-        'utf8'
-      )
-    ])
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'progression.ts'),
+      'utf8'
+    )
+  ])
   const errors = matchCompletionErrors(
     sourceMatches,
+    sourceServerMatch,
+    sourceMatchCollection,
+    sourceMatchProxy,
     gameMatch,
     publication,
     progression

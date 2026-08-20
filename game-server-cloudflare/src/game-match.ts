@@ -762,6 +762,7 @@ export class GameMatch implements DurableObject {
       timers,
       state: stateInfo,
       questProgress: runtime.questProgress(),
+      completionRecorded: metadata.completionRecorded === true,
       analyticsEnqueuedAt: metadata.analyticsEnqueuedAt,
       sockets: this.state.getWebSockets().length
     })
@@ -777,7 +778,11 @@ export class GameMatch implements DurableObject {
       return new Response('Invalid player', { status: 400 })
     }
     const metadata = await this.metadata()
-    if (!metadata?.ended || metadata.expiredBeforeLoad) {
+    if (
+      !metadata?.ended ||
+      !metadata.completionRecorded ||
+      metadata.expiredBeforeLoad
+    ) {
       return new Response('Recent match not found', { status: 404 })
     }
     let index: Player
@@ -978,10 +983,13 @@ export class GameMatch implements DurableObject {
           false
         )
       )
-      this.safeSend(socket, {
-        type: 'rewards',
-        data: await this.completedRewards(metadata.proposalId, index)
-      })
+      if (metadata.completionRecorded) {
+        this.safeSend(socket, {
+          type: 'rewards',
+          data: await this.completedRewards(metadata.proposalId, index)
+        })
+        this.safeSend(socket, { type: 'match_ended' })
+      }
       return
     }
     const subkey = addressBytesToHex(message.subkeyCertification.subkey)
@@ -1206,7 +1214,9 @@ export class GameMatch implements DurableObject {
   private async gameplay(principal: string, diffs: string[]) {
     const metadata = await this.metadataRequired()
     if (metadata.ended) {
-      this.sendToPrincipal(principal, { type: 'match_ended' })
+      if (metadata.completionRecorded) {
+        this.sendToPrincipal(principal, { type: 'match_ended' })
+      }
       return
     }
     const players = await this.players()
@@ -1379,7 +1389,6 @@ export class GameMatch implements DurableObject {
       timers.loadExpiryAtMs = undefined
       timers.turnAtMs = undefined
       timers.botAtMs = undefined
-      this.broadcast({ type: 'match_ended' })
     } else if (!info.hasState) {
       metadata.started = false
       timers.turnAtMs = undefined
@@ -1604,6 +1613,11 @@ export class GameMatch implements DurableObject {
             isLeavePenaltyMode(gameModes[loser])
         }
       })
+      // The source does not send rewards or its terminal client signal until
+      // InternalMatchEnd returns. Persist this retry boundary first so a
+      // reconnect can safely replay both messages after an interrupted send.
+      metadata.completionRecorded = true
+      await this.state.storage.put(METADATA_KEY, metadata)
       const principals = this.playerAddresses(metadata.match)
       for (const player of [0, 1] as const) {
         this.sendToPrincipal(principals[player], {
@@ -1611,8 +1625,7 @@ export class GameMatch implements DurableObject {
           data: rewards[player]
         })
       }
-      metadata.completionRecorded = true
-      await this.state.storage.put(METADATA_KEY, metadata)
+      this.broadcast({ type: 'match_ended' })
       await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
     } catch (error) {
       console.error(
@@ -1709,7 +1722,6 @@ export class GameMatch implements DurableObject {
     timers.commitRevealAtMs = undefined
     timers.turnAtMs = undefined
     timers.botAtMs = undefined
-    this.broadcast({ type: 'match_ended' })
     await this.state.storage.put({
       [METADATA_KEY]: metadata,
       [PLAYERS_KEY]: players,
@@ -1742,6 +1754,7 @@ export class GameMatch implements DurableObject {
       }
       metadata.completionRecorded = true
       await this.state.storage.put(METADATA_KEY, metadata)
+      this.broadcast({ type: 'match_ended' })
       await this.state.storage.deleteAlarm()
     } catch (error) {
       console.error(
