@@ -90,6 +90,7 @@ interface SocketAttachment {
   displayName: string
   clientIp: string
   connectedAtMs: number
+  subscribed: boolean
 }
 
 interface StoredPlayer extends Omit<MatchmakerPlayer, 'cards'> {
@@ -114,11 +115,7 @@ interface StoredParticipant {
   identity?: StoredIdentity
 }
 
-type StoredProposalStatus =
-  | 'FOUND'
-  | 'ACCEPTED'
-  | 'DISPATCHING'
-  | 'ALLOCATED'
+type StoredProposalStatus = 'FOUND' | 'ACCEPTED' | 'DISPATCHING' | 'ALLOCATED'
 
 interface StoredProposal {
   id: string
@@ -321,20 +318,10 @@ export class MatchmakerPool implements DurableObject {
     if (!attachment)
       return new Response('Missing trusted identity', { status: 401 })
 
-    const previousSockets = this.state.getWebSockets(attachment.principal)
     const pair = new WebSocketPair()
     const [client, server] = Object.values(pair)
     server.serializeAttachment(attachment)
     this.state.acceptWebSocket(server, [attachment.principal])
-
-    for (const previous of previousSockets) {
-      this.safeSend(previous, errorMessage('DUPLICATE_CONNECTION'))
-      try {
-        previous.close(4001, 'Duplicate connection')
-      } catch {
-        // Hibernating sockets can race with their close event.
-      }
-    }
 
     return new Response(null, { status: 101, webSocket: client })
   }
@@ -359,14 +346,20 @@ export class MatchmakerPool implements DurableObject {
           // would make the preserved browser client attempt to parse it.
           return
         case 'find_match':
-          await this.findMatch(attachment, command)
+          await this.findMatch(webSocket, attachment, command)
           return
         case 'accept_match':
+          if (attachment.subscribed === false) {
+            throw new ProtocolError('SERVER_ERROR', 'player channel is missing')
+          }
           // The command's playerID is intentionally ignored. The authenticated
           // WebSocket principal is the sole authority for this transition.
           await this.acceptMatch(attachment.principal)
           return
         case 'decline_match':
+          if (attachment.subscribed === false) {
+            throw new ProtocolError('SERVER_ERROR', 'player channel is missing')
+          }
           await this.declineMatch(attachment.principal)
           return
       }
@@ -415,34 +408,21 @@ export class MatchmakerPool implements DurableObject {
         0,
         128
       ),
-      connectedAtMs: Date.now()
+      connectedAtMs: Date.now(),
+      subscribed: false
     }
   }
 
   private async findMatch(
+    webSocket: WebSocket,
     attachment: SocketAttachment,
     rawCommand: FindMatchCommand
   ) {
-    let command = rawCommand
-    const pendingProposalId = await this.state.storage.get<string>(
-      pendingKey(attachment.principal)
-    )
-    if (pendingProposalId) {
-      const proposal = await this.state.storage.get<StoredProposal>(
-        proposalKey(pendingProposalId)
-      )
-      if (proposal) {
-        if (proposal.status === 'FOUND' && proposal.expiresAtMs <= Date.now()) {
-          await this.expireProposal(proposal)
-        } else {
-          this.replayProposal(attachment.principal, proposal)
-          return
-        }
-      } else {
-        await this.state.storage.delete(pendingKey(attachment.principal))
-      }
-    }
+    // Source frontend/findmatch/handler.go treats an established player
+    // channel as authoritative and ignores repeated find_match commands.
+    if (attachment.subscribed) return
 
+    let command = rawCommand
     // Source oracle: frontend/findmatch/validators/version.go rejects a stale
     // release before authentication, captcha, profile hydration, or queueing.
     if (command.versionHash !== this.config.expectedReleaseVersion) {
@@ -474,15 +454,34 @@ export class MatchmakerPool implements DurableObject {
       command.versionHash
     )
     if (profile.activeMatch) {
-      this.sendToPrincipal(attachment.principal, {
+      this.safeSend(webSocket, {
         type: 'match_made',
         serverAddress: profile.activeMatch.serverAddress
       })
-      this.sendToPrincipal(attachment.principal, {
+      this.safeSend(webSocket, {
         type: 'match_ready_to_start',
         mode: profile.activeMatch.mode
       })
       return
+    }
+
+    // The source pending-match validator runs before the penalty validator and
+    // before duplicate notification. A second, not-yet-subscribed socket must
+    // therefore fail without disturbing or replaying another live channel.
+    const pendingProposalId = await this.state.storage.get<string>(
+      pendingKey(attachment.principal)
+    )
+    if (pendingProposalId) {
+      const proposal = await this.state.storage.get<StoredProposal>(
+        proposalKey(pendingProposalId)
+      )
+      if (proposal?.status === 'FOUND' && proposal.expiresAtMs <= Date.now()) {
+        await this.expireProposal(proposal)
+      } else if (proposal) {
+        throw new ProtocolError('SERVER_ERROR', 'pending match already exists')
+      } else {
+        await this.state.storage.delete(pendingKey(attachment.principal))
+      }
     }
 
     const penaltyMs = Math.max(
@@ -493,7 +492,7 @@ export class MatchmakerPool implements DurableObject {
       })
     )
     if (penaltyMs > 0) {
-      this.sendToPrincipal(attachment.principal, {
+      this.safeSend(webSocket, {
         type: 'match_refusal_cooldown',
         durationSeconds: Math.floor(penaltyMs / 1_000)
       })
@@ -549,6 +548,13 @@ export class MatchmakerPool implements DurableObject {
         displayName: attachment.displayName
       }
     }
+    // Source order: notify existing subscribers only after every validator
+    // succeeds, then create the new player channel and queue entry. Publishing
+    // the duplicate notice does not close or unsubscribe the earlier channel;
+    // the preserved browser client closes itself with its forced-close code.
+    this.notifyDuplicateSubscribers(webSocket, attachment.principal)
+    attachment.subscribed = true
+    webSocket.serializeAttachment(attachment)
     await this.state.storage.put(ticketKey(attachment.principal), ticket)
     console.log('matchmaker ticket accepted', command.mode)
     await this.attemptMatches(Date.now())
@@ -794,7 +800,7 @@ export class MatchmakerPool implements DurableObject {
       prefix: TICKET_PREFIX
     })
     const tickets = [...storedTickets.values()].filter(ticket =>
-      this.hasSocket(ticket.player.address)
+      this.hasSubscribedSocket(ticket.player.address)
     )
     const byAddress = new Map(
       tickets.map(ticket => [ticket.player.address, ticket])
@@ -1180,7 +1186,7 @@ export class MatchmakerPool implements DurableObject {
       if (
         participant.request &&
         participant.identity &&
-        this.hasSocket(participant.player.address)
+        this.hasSubscribedSocket(participant.player.address)
       ) {
         tickets[ticketKey(participant.player.address)] = {
           player: participant.player,
@@ -1305,9 +1311,7 @@ export class MatchmakerPool implements DurableObject {
         candidates.push(proposal.expiresAtMs)
         if (proposal.botAcceptAtMs !== undefined)
           candidates.push(proposal.botAcceptAtMs)
-      } else if (
-        this.env.MATCH_SERVICE !== undefined
-      ) {
+      } else if (this.env.MATCH_SERVICE !== undefined) {
         candidates.push(proposal.nextDispatchAtMs ?? now + 1)
       }
     }
@@ -1342,37 +1346,6 @@ export class MatchmakerPool implements DurableObject {
       : undefined
   }
 
-  private replayProposal(principal: string, proposal: StoredProposal) {
-    const participant = proposal.participants.find(
-      current => current.player.address === principal
-    )
-    if (!participant) return
-    if (proposal.status === 'FOUND') {
-      this.sendToPrincipal(principal, {
-        type: 'match_found',
-        mode: participant.player.mode,
-        timeoutMs: Math.max(0, proposal.expiresAtMs - Date.now()),
-        playerIDs: proposal.participants.map(current => current.player.address)
-      })
-    }
-    for (const accepted of proposal.accepted) {
-      this.sendToPrincipal(principal, {
-        type: 'accept_match',
-        playerID: accepted
-      })
-    }
-    if (proposal.status === 'ALLOCATED' && proposal.serverAddress) {
-      this.sendToPrincipal(principal, {
-        type: 'match_made',
-        serverAddress: proposal.serverAddress
-      })
-      this.sendToPrincipal(principal, {
-        type: 'match_ready_to_start',
-        mode: participant.player.mode
-      })
-    }
-  }
-
   private async deleteProposal(proposal: StoredProposal) {
     await this.state.storage.delete([
       proposalKey(proposal.id),
@@ -1392,7 +1365,9 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private sendToPrincipal(principal: string, message: object) {
-    const sockets = this.state.getWebSockets(principal)
+    const sockets = this.state
+      .getWebSockets(principal)
+      .filter(socket => this.isSubscribedSocket(socket))
     console.log(
       'matchmaker message delivery',
       (message as { type?: unknown }).type,
@@ -1401,6 +1376,21 @@ export class MatchmakerPool implements DurableObject {
     for (const socket of sockets) {
       this.safeSend(socket, message)
     }
+  }
+
+  private notifyDuplicateSubscribers(current: WebSocket, principal: string) {
+    for (const socket of this.state.getWebSockets(principal)) {
+      if (socket === current || !this.isSubscribedSocket(socket)) continue
+      this.safeSend(socket, errorMessage('DUPLICATE_CONNECTION'))
+    }
+  }
+
+  private isSubscribedSocket(socket: WebSocket) {
+    const attachment = socket.deserializeAttachment() as SocketAttachment | null
+    // Attachments written by the previously deployed runtime predate this
+    // field. Treat them as established channels during a rolling upgrade;
+    // every newly accepted socket explicitly serializes false.
+    return attachment !== null && attachment.subscribed !== false
   }
 
   private safeSend(socket: WebSocket, message: object) {
@@ -1412,17 +1402,21 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
-  private hasSocket(principal: string) {
+  private hasSubscribedSocket(principal: string) {
     return this.state
       .getWebSockets(principal)
-      .some(socket => socket.readyState === WebSocket.OPEN)
+      .some(
+        socket =>
+          socket.readyState === WebSocket.OPEN &&
+          this.isSubscribedSocket(socket)
+      )
   }
 
   private async cleanupSocket(webSocket: WebSocket) {
     const attachment =
       webSocket.deserializeAttachment() as SocketAttachment | null
     if (!attachment) return
-    if (this.hasSocket(attachment.principal)) return
+    if (this.hasSubscribedSocket(attachment.principal)) return
     await this.state.storage.delete(ticketKey(attachment.principal))
     const proposal = await this.proposalForPrincipal(attachment.principal)
     if (proposal?.status === 'FOUND') {

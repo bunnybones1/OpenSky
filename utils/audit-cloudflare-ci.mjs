@@ -55,6 +55,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the transactional match completion gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:matchmaker-session')) {
+    errors.push(
+      'Cloudflare build must include the matchmaker session source gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:match-reward-wire')) {
     errors.push(
       'Cloudflare build must include the generated Go match reward wire gate'

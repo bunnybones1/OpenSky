@@ -89,10 +89,20 @@ const collectMessages = (webSocket: WebSocket, count: number) =>
     webSocket.addEventListener('message', listener)
   })
 
-const setGameModeStatus = async (
-  field: string,
-  enabled: boolean
-) => {
+const expectNoMessage = (webSocket: WebSocket, durationMs = 75) =>
+  new Promise<void>((resolve, reject) => {
+    const listener = (event: MessageEvent) => {
+      clearTimeout(timeout)
+      reject(new Error(`unexpected message: ${String(event.data)}`))
+    }
+    const timeout = setTimeout(() => {
+      webSocket.removeEventListener('message', listener)
+      resolve()
+    }, durationMs)
+    webSocket.addEventListener('message', listener, { once: true })
+  })
+
+const setGameModeStatus = async (field: string, enabled: boolean) => {
   const response = await runtimeEnv.MATCH_SERVICE?.fetch(
     new Request('https://match-service.example/__test/game-modes', {
       method: 'POST',
@@ -377,9 +387,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const error = nextMessage(player)
     player.send(
       JSON.stringify(
-        findCommand(GameMode.RANKED_DISCOVERY, '', 'release-1', ['str'], [
-          '6'
-        ])
+        findCommand(GameMode.RANKED_DISCOVERY, '', 'release-1', ['str'], ['6'])
       )
     )
     expect(await error).toEqual({
@@ -397,9 +405,7 @@ describe('Cloudflare matchmaker Worker', () => {
   it('rejects an empty challenge session before queueing', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const error = nextMessage(player)
-    player.send(
-      JSON.stringify(findCommand(GameMode.CHALLENGE_CONSTRUCTED, ''))
-    )
+    player.send(JSON.stringify(findCommand(GameMode.CHALLENGE_CONSTRUCTED, '')))
     expect(await error).toEqual({
       type: 'error',
       reason: 'SESSION_IS_EMPTY',
@@ -479,10 +485,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     player.send(
       JSON.stringify(
-        findCommand(
-          GameMode.CHALLENGE_CONSTRUCTED,
-          'CLOUD-WEASEL-CHALLENGE'
-        )
+        findCommand(GameMode.CHALLENGE_CONSTRUCTED, 'CLOUD-WEASEL-CHALLENGE')
       )
     )
     await expect
@@ -548,9 +551,7 @@ describe('Cloudflare matchmaker Worker', () => {
   })
 
   it('drains an accepted proposal when its mode is disabled', async () => {
-    const { first, second } = await pairPlayers(
-      GameMode.CHALLENGE_CONSTRUCTED
-    )
+    const { first, second } = await pairPlayers(GameMode.CHALLENGE_CONSTRUCTED)
     track(first, second)
     const firstAccepted = nextMessage(first)
     const secondSawFirst = nextMessage(second)
@@ -684,9 +685,9 @@ describe('Cloudflare matchmaker Worker', () => {
         runInDurableObject(
           pool() as DurableObjectStub<MatchmakerPool>,
           async (_instance, state) => {
-            const proposals = await state.storage.list<
-              Record<string, unknown>
-            >({ prefix: 'proposal:' })
+            const proposals = await state.storage.list<Record<string, unknown>>(
+              { prefix: 'proposal:' }
+            )
             const proposal = [...proposals.values()][0]
             return proposal
               ? {
@@ -1019,6 +1020,17 @@ describe('Cloudflare matchmaker Worker', () => {
     first.send(JSON.stringify(findCommand()))
     await evictDurableObject(pool())
 
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const [socket] = state.getWebSockets(PRINCIPAL_1)
+        expect(socket?.deserializeAttachment()).toMatchObject({
+          principal: PRINCIPAL_1,
+          subscribed: true
+        })
+      }
+    )
+
     const firstFound = nextMessage(first)
     const secondFound = nextMessage(second)
     second.send(JSON.stringify(findCommand()))
@@ -1026,24 +1038,250 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await secondFound).toMatchObject({ type: 'match_found' })
   })
 
-  it('evicts an older duplicate socket without trusting a legacy wallet token', async () => {
+  it('does not notify or subscribe a duplicate until it sends a valid find_match', async () => {
     const first = await connect(PRINCIPAL_1, '192.0.2.1')
     first.send(JSON.stringify(findCommand()))
-    const duplicateNotice = nextMessage(first)
-    const replacement = await connect(PRINCIPAL_1, '192.0.2.1')
-    const second = await connect(PRINCIPAL_2, '192.0.2.2')
-    track(replacement, second)
-    expect(await duplicateNotice).toMatchObject({
-      type: 'error',
-      reason: 'DUPLICATE_CONNECTION'
-    })
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
 
-    replacement.send(JSON.stringify(findCommand()))
-    const replacementFound = nextMessage(replacement)
+    const noConnectNotice = expectNoMessage(first)
+    const pending = await connect(PRINCIPAL_1, '192.0.2.1')
+    await noConnectNotice
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const attachments = state
+          .getWebSockets(PRINCIPAL_1)
+          .map(
+            socket => socket.deserializeAttachment() as { subscribed?: boolean }
+          )
+          .map(attachment => attachment.subscribed)
+          .sort()
+        expect(attachments).toEqual([false, true])
+      }
+    )
+
+    const second = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, pending, second)
+    const firstFound = nextMessage(first)
     const secondFound = nextMessage(second)
+    const pendingStayedSilent = expectNoMessage(pending)
+    second.send(JSON.stringify(findCommand()))
+    expect(await firstFound).toMatchObject({ type: 'match_found' })
+    expect(await secondFound).toMatchObject({ type: 'match_found' })
+    await pendingStayedSilent
+  })
+
+  it('notifies the prior subscriber only after valid replacement admission and lets the client close it', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const noConnectNotice = expectNoMessage(first)
+    const replacement = await connect(PRINCIPAL_1, '192.0.2.1')
+    await noConnectNotice
+
+    const duplicateNotice = nextMessage(first)
+    replacement.send(JSON.stringify(findCommand()))
+    expect(await duplicateNotice).toEqual({
+      type: 'error',
+      reason: 'DUPLICATE_CONNECTION',
+      message: 'DUPLICATE_CONNECTION',
+      level: 'server'
+    })
+    expect(first.readyState).toBe(WebSocket.OPEN)
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const attachments = state
+          .getWebSockets(PRINCIPAL_1)
+          .map(
+            socket => socket.deserializeAttachment() as { subscribed?: boolean }
+          )
+        expect(attachments).toHaveLength(2)
+        expect(attachments.every(attachment => attachment.subscribed)).toBe(
+          true
+        )
+      }
+    )
+
+    // MatchMakerClient closes itself with this code after receiving the source
+    // DUPLICATE_CONNECTION error. The server deliberately leaves it open.
+    first.close(4004, 'client handled duplicate')
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return await status.json<{
+          queuedPlayers: number
+          connectedSockets: number
+        }>()
+      })
+      .toMatchObject({ queuedPlayers: 1, connectedSockets: 1 })
+
+    const replacementFound = nextMessage(replacement)
+    const second = await connect(PRINCIPAL_2, '192.0.2.2')
+    const secondFound = nextMessage(second)
+    track(first, replacement, second)
     second.send(JSON.stringify(findCommand()))
     expect(await replacementFound).toMatchObject({ type: 'match_found' })
     expect(await secondFound).toMatchObject({ type: 'match_found' })
+  })
+
+  it('does not displace a subscribed search when replacement validation fails', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const replacement = await connect(PRINCIPAL_1, '192.0.2.1')
+    const firstStayedSilent = expectNoMessage(first)
+    const rejected = nextMessage(replacement)
+    replacement.send(
+      JSON.stringify(
+        findCommand(GameMode.RANKED_CONSTRUCTED, '', 'stale-release')
+      )
+    )
+    expect(await rejected).toMatchObject({
+      type: 'error',
+      reason: 'OUTDATED_CLIENT'
+    })
+    await firstStayedSilent
+
+    const second = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, replacement, second)
+    const firstFound = nextMessage(first)
+    const secondFound = nextMessage(second)
+    const replacementStayedSilent = expectNoMessage(replacement)
+    second.send(JSON.stringify(findCommand()))
+    expect(await firstFound).toMatchObject({ type: 'match_found' })
+    expect(await secondFound).toMatchObject({ type: 'match_found' })
+    await replacementStayedSilent
+  })
+
+  it('does not let an unsubscribed duplicate preserve an abandoned queue ticket', async () => {
+    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const pending = await connect(PRINCIPAL_1, '192.0.2.1')
+    track(first, pending)
+    first.close(1000, 'active subscriber left')
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return await status.json<{
+          queuedPlayers: number
+          connectedSockets: number
+        }>()
+      })
+      .toMatchObject({ queuedPlayers: 0, connectedSockets: 1 })
+  })
+
+  it('does not let an unsubscribed duplicate accept or decline another channel proposal', async () => {
+    const { first, second } = await pairPlayers()
+    const pendingAccept = await connect(PRINCIPAL_1, '192.0.2.1')
+    const pendingDecline = await connect(PRINCIPAL_1, '192.0.2.1')
+    track(first, second, pendingAccept, pendingDecline)
+
+    const acceptError = nextMessage(pendingAccept)
+    const firstStayedSilent = expectNoMessage(first)
+    const secondStayedSilent = expectNoMessage(second)
+    pendingAccept.send(JSON.stringify({ type: 'accept_match' }))
+    expect(await acceptError).toEqual({
+      type: 'error',
+      reason: 'SERVER_ERROR',
+      message: 'player channel is missing',
+      level: 'server'
+    })
+    await Promise.all([firstStayedSilent, secondStayedSilent])
+
+    const declineError = nextMessage(pendingDecline)
+    pendingDecline.send(JSON.stringify({ type: 'decline_match' }))
+    expect(await declineError).toEqual({
+      type: 'error',
+      reason: 'SERVER_ERROR',
+      message: 'player channel is missing',
+      level: 'server'
+    })
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<{
+          accepted: string[]
+        }>({ prefix: 'proposal:' })
+        expect(proposals.size).toBe(1)
+        expect([...proposals.values()][0].accepted).toEqual([])
+        expect(await state.storage.get(`pending:${PRINCIPAL_1}`)).toEqual(
+          expect.any(String)
+        )
+      }
+    )
+  })
+
+  it('ignores repeated find_match commands after the socket has subscribed', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const initial = findCommand()
+    player.send(JSON.stringify(initial))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    player.send(JSON.stringify(findCommand()))
+    await expectNoMessage(player)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const ticket = await state.storage.get<{
+          request: { playerSessionID: string }
+        }>(`ticket:${PRINCIPAL_1}`)
+        expect(ticket?.request.playerSessionID).toBe(initial.playerSessionID)
+      }
+    )
   })
 
   it('creates a practice proposal and auto-accepts its bot through an alarm', async () => {
@@ -1079,9 +1317,7 @@ describe('Cloudflare matchmaker Worker', () => {
           const [human, bot] = proposal.participants
           expect(human.player.clientVersionHash).toBe('release-1')
           expect(bot.player.clientVersionHash).toBe('release-1')
-          expect(bot.player.initTimestampMs).toBe(
-            human.player.initTimestampMs
-          )
+          expect(bot.player.initTimestampMs).toBe(human.player.initTimestampMs)
           await state.storage.put(key, {
             ...proposal,
             botAcceptAtMs: Date.now() - 1
@@ -1124,8 +1360,15 @@ describe('Cloudflare matchmaker Worker', () => {
       playerID: PRINCIPAL_1
     })
 
-    const cooldown = nextMessage(first)
-    first.send(JSON.stringify(findCommand()))
+    // The preserved browser closes its matchmaker socket on decline. A source
+    // Client with an established channel intentionally ignores another
+    // find_match on that same connection.
+    first.close(1000, 'client handled decline')
+    second.close(1000, 'client handled decline')
+    const reconnect = await connect(PRINCIPAL_1, '192.0.2.1')
+    track(first, second, reconnect)
+    const cooldown = nextMessage(reconnect)
+    reconnect.send(JSON.stringify(findCommand()))
     const cooldownMessage = await cooldown
     expect(cooldownMessage).toMatchObject({ type: 'match_refusal_cooldown' })
     expect(cooldownMessage.durationSeconds).toEqual(expect.any(Number))
@@ -1147,14 +1390,19 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await firstDeclined).toMatchObject({ type: 'decline_match' })
     expect(await secondDeclined).toMatchObject({ type: 'decline_match' })
 
-    first.send(
+    first.close(1000, 'client handled decline')
+    second.close(1000, 'client handled decline')
+    const firstReconnect = await connect(PRINCIPAL_1, '192.0.2.1')
+    const secondReconnect = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, second, firstReconnect, secondReconnect)
+    firstReconnect.send(
       JSON.stringify(
         findCommand(GameMode.CHALLENGE_DISCOVERY, 'CLOUD-WEASEL-CHALLENGE')
       )
     )
-    const firstFound = nextMessage(first)
-    const secondFound = nextMessage(second)
-    second.send(
+    const firstFound = nextMessage(firstReconnect)
+    const secondFound = nextMessage(secondReconnect)
+    secondReconnect.send(
       JSON.stringify(
         findCommand(GameMode.CHALLENGE_DISCOVERY, 'CLOUD-WEASEL-CHALLENGE')
       )
@@ -1202,7 +1450,12 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await firstTimedOut).toEqual({ type: 'timed_out' })
     expect(await secondTimedOut).toEqual({ type: 'timed_out' })
 
-    first.send(JSON.stringify(findCommand()))
+    first.close(1000, 'client handled timeout')
+    second.close(1000, 'client handled timeout')
+    const firstReconnect = await connect(PRINCIPAL_1, '192.0.2.1')
+    const secondReconnect = await connect(PRINCIPAL_2, '192.0.2.2')
+    track(first, second, firstReconnect, secondReconnect)
+    firstReconnect.send(JSON.stringify(findCommand()))
     await expect
       .poll(async () => {
         const status = await pool().fetch(
@@ -1213,8 +1466,8 @@ describe('Cloudflare matchmaker Worker', () => {
       })
       .toBe(1)
 
-    const cooldown = nextMessage(second)
-    second.send(JSON.stringify(findCommand()))
+    const cooldown = nextMessage(secondReconnect)
+    secondReconnect.send(JSON.stringify(findCommand()))
     const cooldownMessage = await cooldown
     expect(cooldownMessage).toMatchObject({ type: 'match_refusal_cooldown' })
     expect(cooldownMessage.durationSeconds).toEqual(expect.any(Number))
