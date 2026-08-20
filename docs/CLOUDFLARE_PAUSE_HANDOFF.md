@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `fe14a14f`
-  (`Persist authoritative filled match decks`)
-- Latest tested runtime commit: `fe14a14f`
-  (`Persist authoritative filled match decks`)
+- Last code/test checkpoint: `8adff767`
+  (`Project authoritative decks in match history`)
+- Latest tested runtime commit: `8adff767`
+  (`Project authoritative decks in match history`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,9 +21,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `fe14a14f` are committed and
+- The runtime changes from `38386294` through `8adff767` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-fd3d9163.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -56,11 +56,11 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `fe14a14f`:
+Validation completed locally for exact code head `8adff767`:
 
-- focused authoritative-deck, Conquest V2 point, and deck-rank Workers
-  regressions: 44/44 tests;
-- focused mutation-tested Conquest gate: 9/9 tests;
+- focused player match-history, replay, and staff projections: 90/90 tests;
+- mutation-tested match-wire source contract: 2/2 tests plus the executable
+  source gate;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
 - game server: 34 unit and 113 Workers tests;
@@ -93,7 +93,10 @@ later game-error-branding head `80bf451d` in 10m14s. Run
 point-authority documentation head `edffd7b3` in 10m19s. Commit `f5869e53`
 and its pause handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32407579807>. Commit
-`fe14a14f` must receive exact-head CI before any production mutation.
+`fe14a14f` and its pause handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32411310241> at commit
+`076244ed`. The newer `8adff767` checkpoint must receive exact-head CI before
+any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -240,6 +243,28 @@ tests, every source/off-chain gate and typecheck, and both production builds.
 No deployment, migration, storage provisioning, reward activation, or live
 match was performed. Production Conquest remains disabled.
 
+## Player-facing authoritative deck projection milestone
+
+Commit `8adff767` carries the same final-deck authority through every original
+match read without changing the preserved webapp:
+
+- `ListMatches`, `GetMatch`, replay metadata, and `GMListMatches` now expose
+  the engine-filled 30-card string as `deckString` and preserve the submitted
+  match seed separately as `initDeckString`, matching `api/rpc/feeds.go`;
+- both final rows must exist as a pair and each must decode to 30 unique,
+  canonical, class-compatible cards before either player is projected;
+- a partial, malformed, unknown-card, or wrong-class ledger fails closed,
+  while pre-`0115` matches with no ledger retain their legacy submitted-deck
+  fallback;
+- the mutation-tested match-wire gate pins the two Go assignments, both player
+  indices, all four Worker queries, semantic validation, pair completeness,
+  and the immutable migration schema.
+
+The exact code state passed 90 focused Workers tests, all 510 main-Worker
+tests, the complete multi-service release contract, both production builds,
+and 594-file artifact validation. It is committed locally but not deployed;
+migration `0115` remains unapplied and production behavior is unchanged.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -339,8 +364,8 @@ production migration state.
 ### Production rollout
 
 - Commit/push the refreshed handoff and wait for exact-head CI at or after
-  `fe14a14f`.
-- Deploy and verify the tested runtime changes through `fe14a14f`. Keep
+  `8adff767`.
+- Deploy and verify the tested runtime changes through `8adff767`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

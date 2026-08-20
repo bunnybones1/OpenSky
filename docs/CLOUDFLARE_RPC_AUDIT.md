@@ -2318,6 +2318,30 @@ rewards as dormant while the independently approved SkyPass policy remained
 active. This rollout created no point row, reward, pool, inventory row, receipt,
 queue, capability, or economy authority.
 
+## Authoritative final-deck match projection — 2026-08-20
+
+Milestone `8adff767` closes the player-facing difference between a submitted
+match seed and the original server's final deck. The Go feed adapter assigns
+`Player1DeckString`/`Player2DeckString` to `deckString` and keeps
+`InitPlayer1DeckString`/`InitPlayer2DeckString` in `initDeckString`. The
+Cloudflare match list, detail, replay, and staff list now make that identical
+distinction from migration `0115`'s immutable two-row ledger.
+
+The shared projector requires either no legacy ledger rows or a complete pair.
+Every present final string must decode to 30 unique cards that exist in the
+canonical library and match the encoded deck class. Partial, malformed,
+unknown-card, short, or class-incompatible snapshots fail closed instead of
+mixing submitted and final authority. Pre-migration matches with no rows keep
+the prior submitted-deck fallback.
+
+The source-derived match-wire gate pins all four Go assignments, both ledger
+indices, semantic deck validation, pair completeness, all four SQL consumers,
+and the immutable schema. Its mutation tests and executable audit passed;
+90 focused player/replay/staff Workers tests and the complete 510-test main
+Worker suite passed as part of the full local Cloudflare release contract.
+No migration, deployment, provisioning, live match, or production mutation
+was performed.
+
 ## Completed source surface
 
 There are no mechanically actionable Go RPC gaps. Google Play, Samsung, and

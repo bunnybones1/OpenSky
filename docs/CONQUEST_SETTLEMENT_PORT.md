@@ -1048,3 +1048,25 @@ source/off-chain gate and typecheck, both production builds, and the 594-file
 artifact validation. No deployment, migration, storage provisioning, reward
 activation, live match, or production mutation was performed. Production
 Conquest remains disabled.
+
+## Player-facing final-deck projection proof
+
+Milestone `8adff767` carries the same immutable filled-deck pair into the
+original player and staff match projections. This follows
+`api/rpc/feeds.go`: `deckString` is the final `Player*DeckString`, while
+`initDeckString` remains the submitted `InitPlayer*DeckString`. Match lists,
+detail, replay metadata, and staff match lists all share one query projection.
+
+Both final rows must be present and each must decode to exactly 30 unique,
+canonical, class-compatible cards. A partial or malformed ledger fails closed;
+matches created before migration `0115` retain their submitted-deck fallback
+when neither final row exists. This read milestone changes no Conquest reward
+calculation—the settlement and deck-rank consumers were already pinned to the
+same ledger—but it makes the source authority observable to the preserved
+webapp and replay flow.
+
+Focused player, replay, and staff tests passed 90/90, the mutation-tested
+match-wire contract passed, and the complete local Cloudflare release contract
+passed with 510 main-Worker tests and 594 validated artifact files. No
+deployment, migration, provisioning, activation, live match, or production
+mutation was performed.
