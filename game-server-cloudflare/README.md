@@ -41,7 +41,12 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - a final player-visible publication barrier that requires the authoritative
   deck pair and every applicable progression, rank, experience, warm-up,
   Conquest, and abandon receipt before the match ledger can become `ended`.
-  A Conquest run still awaiting card settlement also blocks publication.
+  A Conquest run still awaiting card settlement also blocks publication; and
+- source-ordered client completion: recent-match state, reward messages, and
+  the terminal `match_ended` signal remain unavailable until that publication
+  barrier succeeds. Completed reconnects replay rewards before the terminal
+  signal, while settlement retries expose only the authoritative final game
+  state.
 
 The gateway, not the browser, is the identity authority. It validates a Google
 session and maps the user to the stable 20-byte game principal for player and

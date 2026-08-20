@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `b4eb53c0`
-  (`Gate match completion on settlement receipts`)
-- Latest tested runtime commit: `b4eb53c0`
-  (`Gate match completion on settlement receipts`)
+- Last code/test checkpoint: `e6d72b8a`
+  (`Gate terminal match signals on settlement`)
+- Latest tested runtime commit: `e6d72b8a`
+  (`Gate terminal match signals on settlement`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,9 +21,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `b4eb53c0` are committed and
+- The runtime changes from `38386294` through `e6d72b8a` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-874772de.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -56,7 +56,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `b4eb53c0`:
+Validation completed locally for exact code head `e6d72b8a`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
@@ -100,8 +100,11 @@ and its pause handoff passed exact-head run
 `adbe7380` in 10m17s. The replay-analytics checkpoint and its handoff passed
 exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32415594311> at commit
-`e39a62f0` in 10m18s. The newer `b4eb53c0` checkpoint must receive exact-head
-CI before any production mutation.
+`e39a62f0` in 10m18s. The receipt-publication checkpoint and its handoff passed
+exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32417571445> at commit
+`e0766a65` in 11m06s. The newer `e6d72b8a` checkpoint must receive exact-head CI
+before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -322,6 +325,36 @@ guard, and build/CI inclusion. The complete local release contract passed with
 all other service suites, both production builds, and 594-file artifact
 validation. No production resource or behavior changed.
 
+## Settlement-gated terminal notification milestone
+
+Commit `e6d72b8a` closes the player-visible ordering gap after the receipt
+barrier. The original server waits for `InternalMatchEnd`, sends the resulting
+rewards, saves its reconnectable recent-match state, and only then emits the
+terminal `match_ended` signal. The Worker previously broadcast that signal as
+soon as WASM reached `GameOver`, before the D1 publication barrier ran.
+
+The authoritative engine still persists its final state immediately, but now:
+
+- recent-match projection stays unavailable while settlement is pending;
+- a connected client receives rewards only after the ended ledger and every
+  applicable receipt have published, followed by `match_ended`;
+- a reconnect during settlement receives the final authoritative state but no
+  premature reward or terminal signal, while a completed reconnect replays
+  rewards before `match_ended`; and
+- an unloaded match likewise emits its terminal signal only after its ended
+  ledger row and durable completion marker are stored.
+
+The Workers regression injects a D1 publication failure after the authoritative
+game ends. It proves the ledger remains active, the internal recent-match read
+returns `404`, and no reward or terminal message leaks; after removing the
+failure, the same alarm retries idempotently and emits exactly `rewards` then
+`match_ended`. The mutation-tested source gate now pins the original server's
+record/reward/recent/signal order plus every Worker reconnect and expiry
+boundary. The complete local release contract passed with 510 main-Worker
+tests, 34 game-server unit tests, 116 game-server Workers tests, all other
+service suites, both production builds, and 594-file artifact validation. No
+production resource or behavior changed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -425,8 +458,8 @@ not and must precede both the tested game-server runtime and analytics Worker.
 ### Production rollout
 
 - Commit/push the refreshed handoff and wait for exact-head CI at or after
-  `b4eb53c0`.
-- Deploy and verify the tested runtime changes through `b4eb53c0`. Keep
+  `e6d72b8a`.
+- Deploy and verify the tested runtime changes through `e6d72b8a`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

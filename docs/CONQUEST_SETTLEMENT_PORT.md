@@ -1070,3 +1070,37 @@ match-wire contract passed, and the complete local Cloudflare release contract
 passed with 510 main-Worker tests and 594 validated artifact files. No
 deployment, migration, provisioning, activation, live match, or production
 mutation was performed.
+
+## Settlement-gated client completion proof
+
+Milestone `e6d72b8a` extends the receipt-gated match publication boundary to
+the original player's terminal protocol. In the source server,
+`recordMatchEnd` returns before rewards are sent and recent-match state is
+saved; `match_ended` is emitted only by the later `internal_match_recorded`
+callback. The Cloudflare game Worker now preserves that ordering instead of
+broadcasting `match_ended` immediately when WASM reaches `GameOver`.
+
+Until `publishMatchCompletion` has verified all universal and conditional
+settlement receipts, the D1 match row remains active, internal recent-match
+projection returns `404`, and both reward and terminal client messages remain
+withheld. The final authoritative WASM state is still durable and reconnectable.
+After publication, the Durable Object stores its completion marker, sends each
+player's source-shaped rewards, and then broadcasts `match_ended`; a completed
+reconnect replays the same order. Unloaded-match expiry follows the same
+publish-before-signal rule.
+
+The Workers regression injects a failing D1 ended-row update after a real
+authoritative abandonment. It proves the first alarm exposes only the final
+gameplay diff and cannot expose recent-match data, then removes the fault and
+proves the retry emits exactly `rewards` followed by `match_ended`. The
+mutation-tested source gate pins the Go transaction, the original TypeScript
+record/reward/recent/signal order, every Worker receipt requirement, reconnect
+gating, and unloaded-expiry gating.
+
+The complete local release contract passed 510 main-Worker tests, 34
+game-server unit tests, 116 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 30 browser-game tests, nine analytics tests, every source
+and off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. No deployment, migration, provisioning, activation, live
+match, or production mutation was performed. Production Conquest remains
+disabled.
