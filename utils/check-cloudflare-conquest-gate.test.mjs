@@ -594,16 +594,43 @@ test('derives every Conquest V2 treasure consumer from Go and bounds large deliv
 })
 
 test('derives Conquest V2 point earning and turn eligibility from Go', async () => {
-  const [sourceParts, worker] = await Promise.all([
-    Promise.all([
-      readFile('api/lib/conquest/conquestv2/points_updater.go', 'utf8'),
-      readFile('api/lib/conquest/conquestv2/points_calculator.go', 'utf8'),
-      readFile('api/lib/conquest/conquestv2/card_points_calculator.go', 'utf8')
-    ]),
-    readFile('game-server-cloudflare/src/conquest-points.ts', 'utf8')
-  ])
+  const [sourceParts, worker, sharedHeroSkins, sharedConstants, repository] =
+    await Promise.all([
+      Promise.all([
+        readFile('api/lib/conquest/conquestv2/points_updater.go', 'utf8'),
+        readFile('api/lib/conquest/conquestv2/points_calculator.go', 'utf8'),
+        readFile(
+          'api/lib/conquest/conquestv2/card_points_calculator.go',
+          'utf8'
+        ),
+        readFile('api/data/hero_skin.go', 'utf8'),
+        readFile('api/data/hero.go', 'utf8'),
+        readFile('api/proto/api.gen.go', 'utf8'),
+        readFile(
+          'api/data/schema/migrations/30000000000181_create_hero_skins_table.sql',
+          'utf8'
+        )
+      ]),
+      readFile('game-server-cloudflare/src/conquest-points.ts', 'utf8'),
+      readFile('lib/shared/src/source-hero-skins.ts', 'utf8'),
+      readFile('lib/shared/src/constants.ts', 'utf8'),
+      readFile('match-service-cloudflare/src/repository.ts', 'utf8')
+    ])
   const source = sourceParts.join('\n')
-  assert.deepEqual(conquestV2PointsSourceParityErrors(source, worker), [])
+  const errors = (
+    workerSource = worker,
+    heroSkinSource = sharedHeroSkins,
+    constantSource = sharedConstants,
+    repositorySource = repository
+  ) =>
+    conquestV2PointsSourceParityErrors(
+      source,
+      workerSource,
+      heroSkinSource,
+      constantSource,
+      repositorySource
+    )
+  assert.deepEqual(errors(), [])
 
   for (const mutation of [
     worker.replace('const EVENT_ID = 2', 'const EVENT_ID = 1'),
@@ -614,10 +641,42 @@ test('derives Conquest V2 point earning and turn eligibility from Go', async () 
       'byCard.set(item.token_id, 2)'
     ),
     worker.replace('Math.ceil(earned * 0.25)', 'Math.ceil(earned * 0.2)'),
-    worker.replace('if (winner !== undefined)', 'if (winner === 0)')
+    worker.replace('if (winner !== undefined)', 'if (winner === 0)'),
+    worker.replace(
+      "throw new Error('Conquest match deck is malformed')",
+      'return { cardIds: [], deckClass: DeckClass.STR, heroSkinId: 1 }'
+    ),
+    worker.replace('deck.heroSkinId)', '1)')
   ]) {
-    assert.ok(conquestV2PointsSourceParityErrors(source, mutation).length > 0)
+    assert.ok(errors(mutation).length > 0)
   }
+  assert.ok(
+    errors(
+      worker,
+      sharedHeroSkins.replace('[Hero.SAMYA]: 2', '[Hero.SAMYA]: 22')
+    ).some(error => error.includes('hero-skin IDs drifted'))
+  )
+  assert.ok(
+    errors(
+      worker,
+      sharedHeroSkins,
+      sharedConstants.replace(
+        '[DeckClass.AGY]: Hero.SAMYA',
+        '[DeckClass.AGY]: Hero.ADA'
+      )
+    ).some(error => error.includes('deck-class heroes drifted'))
+  )
+  assert.ok(
+    errors(
+      worker,
+      sharedHeroSkins,
+      sharedConstants,
+      repository.replaceAll(
+        'sourceHeroSkinIdForDeckClass',
+        'localHeroSkinForDeckClass'
+      )
+    ).some(error => error.includes('match service'))
+  )
 })
 
 test('derives Conquest settlement rewards and terminal behavior from source', async () => {

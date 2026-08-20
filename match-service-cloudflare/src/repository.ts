@@ -15,6 +15,7 @@ import {
   hasUnlockedRanked,
   INITIAL_RANK_STATE_JSON
 } from '@opensky/shared/ranked-progression'
+import { sourceHeroSkinIdForDeckClass } from '@opensky/shared/source-hero-skins'
 import { ConquestRepository } from '../../cloudflare/src/conquest'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
 
@@ -219,24 +220,6 @@ const currentStatModes = [
   GameMode.CONQUEST_CONSTRUCTED,
   GameMode.CONQUEST_DISCOVERY
 ] as const
-
-const heroSkinForDeckClass: Record<string, number> = {
-  STR: 1,
-  AGY: 2,
-  STA: 3,
-  WIS: 4,
-  STW: 5,
-  AGW: 6,
-  HRT: 7,
-  STH: 8,
-  HRA: 9,
-  HRW: 10,
-  INT: 11,
-  STI: 12,
-  AGI: 13,
-  INW: 14,
-  HRI: 15
-}
 
 const crystalPriority = new Map([
   [7, 1],
@@ -676,7 +659,9 @@ export class MatchRepository {
     const cardBacks = equipped.results
       .filter(item => item.item_type === ItemType.SW_CARD_BACKS)
       .map(item => item.token_id)
-    const heroSkin = heroSkinForDeckClass[deckClassForPrisms(prisms)]
+    const heroSkin = sourceHeroSkinIdForDeckClass(
+      deckClassForPrisms(prisms) as DeckClass
+    )
     const ownsHeroSkin = inventory.results.some(
       item =>
         item.item_type === ItemType.SW_HERO_SKINS && item.token_id === heroSkin

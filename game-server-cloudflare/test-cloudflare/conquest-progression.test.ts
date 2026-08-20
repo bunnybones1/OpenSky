@@ -15,6 +15,23 @@ import { settleConquestRewardsForMatch } from '../src/conquest-settlement'
 const USER_1 = 'conquest-progress-user-1'
 const USER_2 = 'conquest-progress-user-2'
 
+const matchPayload = (
+  player1: { cards: string[]; prisms: string[] } = {
+    cards: [],
+    prisms: ['str']
+  },
+  player2: { cards: string[]; prisms: string[] } = {
+    cards: [],
+    prisms: ['str']
+  }
+) =>
+  JSON.stringify({
+    match: {
+      player1: { privateSeed: player1 },
+      player2: { privateSeed: player2 }
+    }
+  })
+
 const setup = async (
   proposalId: string,
   progress: [
@@ -47,9 +64,18 @@ const setup = async (
           player2_principal, player1_user_id, player2_user_id,
           match_payload_json, status, created_at, updated_at)
        VALUES (?, ?, ?, 'test', '0x1111111111111111111111111111111111111111',
-               '0x2222222222222222222222222222222222222222', ?, ?, '{}',
+               '0x2222222222222222222222222222222222222222', ?, ?, ?,
                'active', ?, ?)`
-    ).bind(proposalId, `replay-${proposalId}`, mode, USER_1, USER_2, now, now),
+    ).bind(
+      proposalId,
+      `replay-${proposalId}`,
+      mode,
+      USER_1,
+      USER_2,
+      matchPayload(),
+      now,
+      now
+    ),
     env.AUTH_DB.prepare(
       `INSERT INTO player_conquests
          (entry_key, user_id, status, nonce, mode, hero, deck_class,
@@ -118,8 +144,10 @@ describe('source Conquest authoritative match progression', () => {
       ).bind(
         JSON.stringify({
           match: {
-            player1: { privateSeed: { cards: [10, 11, 10] } },
-            player2: { privateSeed: { cards: [] } }
+            player1: {
+              privateSeed: { cards: ['10', '11', '10'], prisms: ['str'] }
+            },
+            player2: { privateSeed: { cards: [], prisms: ['str'] } }
           }
         }),
         proposalId
@@ -198,6 +226,107 @@ describe('source Conquest authoritative match progression', () => {
       ).first<{ points: number }>()
     ).toEqual({ points: 14 })
   })
+
+  it('derives the hero-skin bonus from the immutable match deck', async () => {
+    const proposalId = 'conquest-points-match-deck-skin'
+    await setup(proposalId)
+    const now = '2026-08-11T12:01:31.000Z'
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches SET match_payload_json = ?
+         WHERE proposal_id = ?`
+      ).bind(
+        matchPayload(
+          { cards: [], prisms: ['agy'] },
+          { cards: [], prisms: ['str'] }
+        ),
+        proposalId
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_HERO_SKINS', 2, 1, 0, 'test', ?, ?)`
+      ).bind(USER_1, now, now)
+    ])
+
+    const receipt = await applyConquestPoints(
+      env.AUTH_DB,
+      proposalId,
+      0,
+      MatchStatus.COMPLETED,
+      5,
+      now
+    )
+
+    expect(receipt.points).toEqual([5, 4])
+  })
+
+  it.each([
+    ['invalid JSON', '{'],
+    ['missing deck', JSON.stringify({ match: {} })],
+    [
+      'noncanonical card IDs',
+      JSON.stringify({
+        match: {
+          player1: { privateSeed: { cards: [10], prisms: ['str'] } },
+          player2: { privateSeed: { cards: [], prisms: ['str'] } }
+        }
+      })
+    ],
+    [
+      'an unknown card',
+      matchPayload(
+        { cards: ['999999'], prisms: ['str'] },
+        { cards: [], prisms: ['str'] }
+      )
+    ],
+    [
+      'a card/class mismatch',
+      matchPayload(
+        { cards: ['10'], prisms: ['agy'] },
+        { cards: [], prisms: ['str'] }
+      )
+    ]
+  ])(
+    'fails closed without point writes for %s',
+    async (description, payload) => {
+      const proposalId = `conquest-points-malformed-${description.replaceAll(
+        ' ',
+        '-'
+      )}`
+      await setup(proposalId)
+      await env.AUTH_DB.prepare(
+        `UPDATE multiplayer_matches SET match_payload_json = ?
+       WHERE proposal_id = ?`
+      )
+        .bind(payload, proposalId)
+        .run()
+
+      await expect(
+        applyConquestPoints(
+          env.AUTH_DB,
+          proposalId,
+          0,
+          MatchStatus.COMPLETED,
+          5,
+          '2026-08-11T12:01:32.000Z'
+        )
+      ).rejects.toThrow('Conquest match deck is malformed')
+
+      for (const table of [
+        'player_conquest_points',
+        'multiplayer_match_conquest_point_players',
+        'multiplayer_match_conquest_points'
+      ]) {
+        expect(
+          await env.AUTH_DB.prepare(
+            `SELECT COUNT(*) AS count FROM ${table}`
+          ).first('count')
+        ).toBe(0)
+      }
+    }
+  )
 
   it('only awards a short abandoned match to its winner', async () => {
     const proposalId = 'conquest-points-short-abandon'

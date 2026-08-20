@@ -373,13 +373,77 @@ const goDecimalConstant = (source, name) => {
   return match ? numericLiteral(match[1]) : undefined
 }
 
+const sortedMap = values =>
+  [...values.entries()].sort(([left], [right]) => left.localeCompare(right))
+
+const sourceHeroSkinIds = source => {
+  const heroById = new Map(
+    [...source.matchAll(/Hero_(\w+)\s+Hero\s*=\s*(\d+)/g)].map(match => [
+      Number(match[2]),
+      match[1]
+    ])
+  )
+  const values = new Map()
+  for (const match of source.matchAll(
+    /INSERT INTO hero_skins \(id, hero\) VALUES \((\d+), (\d+)\)/g
+  )) {
+    const hero = heroById.get(Number(match[2]))
+    if (!hero || hero === 'UNKNOWN') return undefined
+    values.set(hero, Number(match[1]))
+  }
+  return values.size === 15 ? values : undefined
+}
+
+const workerHeroSkinIds = source => {
+  const block = bracedBlock(source, 'SOURCE_HERO_SKIN_ID_BY_HERO')
+  if (block === undefined) return undefined
+  const values = new Map(
+    [...block.matchAll(/\[Hero\.(\w+)\]:\s*(\d+)/g)].map(match => [
+      match[1],
+      Number(match[2])
+    ])
+  )
+  return values.size === 15 ? values : undefined
+}
+
+const sourceDeckClassHeroes = source => {
+  const block = bracedBlock(source, 'deckClassHero = map')
+  if (block === undefined) return undefined
+  const values = new Map(
+    [...block.matchAll(/proto\.DeckClass_(\w+):\s*proto\.Hero_(\w+)/g)].map(
+      match => [match[1], match[2]]
+    )
+  )
+  return values.size === 15 ? values : undefined
+}
+
+const workerDeckClassHeroes = source => {
+  const marker = source.indexOf('export const DECKCLASS_HEROES')
+  const assignment = marker < 0 ? -1 : source.indexOf('= {', marker)
+  const block =
+    assignment < 0 ? undefined : bracedBlock(source.slice(assignment), '=')
+  if (block === undefined) return undefined
+  const values = new Map(
+    [...block.matchAll(/\[DeckClass\.(\w+)\]:\s*Hero\.(\w+)/g)]
+      .map(match => [match[1], match[2]])
+      .filter(([deckClass]) => deckClass !== 'UNKNOWN_CLASS')
+  )
+  return values.size === 15 ? values : undefined
+}
+
 /**
  * Derives the V2 points constants and the unusual winner/turn eligibility
  * boundary from Go. The source's TurnNonce is the TypeScript engine's
  * turnCount: before nonce eight, an abandonment/forfeit rewards only the
  * winner; at nonce eight both players become eligible.
  */
-export const conquestV2PointsSourceParityErrors = (source, worker) => {
+export const conquestV2PointsSourceParityErrors = (
+  source,
+  worker,
+  sharedHeroSkins,
+  sharedConstants,
+  matchRepository
+) => {
   const errors = []
   const compactSource = source.replace(/\s+/g, ' ')
   const compactWorker = worker.replace(/\s+/g, ' ')
@@ -397,6 +461,10 @@ export const conquestV2PointsSourceParityErrors = (source, worker) => {
       /case\s+proto\.ItemType_SW_GOLD_CARDS:[\s\S]*?pointsByCardID\[item\.TokenID\]\s*=\s*(\d+)/
     )?.[1]
   )
+  const sourceSkinIds = sourceHeroSkinIds(source)
+  const workerSkinIds = workerHeroSkinIds(sharedHeroSkins)
+  const sourceHeroes = sourceDeckClassHeroes(source)
+  const workerHeroes = workerDeckClassHeroes(sharedConstants)
 
   for (const [label, value] of [
     ['event ID', eventId],
@@ -421,6 +489,60 @@ export const conquestV2PointsSourceParityErrors = (source, worker) => {
     if (!compactSource.includes(token)) {
       errors.push(`source Conquest V2 eligibility is missing: ${token}`)
     }
+  }
+  for (const token of [
+    'match.Player1DeckString',
+    'match.Player2DeckString',
+    'DecodeDeckString(deckString)',
+    'DeckClassHero(deckClass)'
+  ]) {
+    if (!compactSource.includes(token)) {
+      errors.push(`source Conquest V2 deck authority is missing: ${token}`)
+    }
+  }
+  if (!sourceSkinIds) {
+    errors.push('source Conquest V2 hero-skin IDs could not be derived')
+  }
+  if (!workerSkinIds) {
+    errors.push('shared Conquest V2 hero-skin IDs could not be derived')
+  }
+  if (
+    sourceSkinIds &&
+    workerSkinIds &&
+    JSON.stringify(sortedMap(sourceSkinIds)) !==
+      JSON.stringify(sortedMap(workerSkinIds))
+  ) {
+    errors.push('shared Conquest V2 hero-skin IDs drifted from Go/SQL')
+  }
+  if (!sourceHeroes) {
+    errors.push('source Conquest V2 deck-class heroes could not be derived')
+  }
+  if (!workerHeroes) {
+    errors.push('shared Conquest V2 deck-class heroes could not be derived')
+  }
+  if (
+    sourceHeroes &&
+    workerHeroes &&
+    JSON.stringify(sortedMap(sourceHeroes)) !==
+      JSON.stringify(sortedMap(workerHeroes))
+  ) {
+    errors.push('shared Conquest V2 deck-class heroes drifted from Go')
+  }
+  for (const token of [
+    'SOURCE_HERO_SKIN_ID_BY_HERO',
+    'DECKCLASS_HEROES[deckClass]'
+  ]) {
+    if (!sharedHeroSkins.includes(token)) {
+      errors.push(`shared Conquest V2 hero-skin authority is missing: ${token}`)
+    }
+  }
+  if (
+    !matchRepository.includes('sourceHeroSkinIdForDeckClass(') ||
+    matchRepository.includes('heroSkinForDeckClass')
+  ) {
+    errors.push(
+      'match service does not use the shared source hero-skin authority'
+    )
   }
 
   if (
@@ -474,6 +596,27 @@ export const conquestV2PointsSourceParityErrors = (source, worker) => {
     if (!compactWorker.includes(token)) {
       errors.push(`Worker Conquest V2 points contract is missing: ${token}`)
     }
+  }
+  for (const token of [
+    'const sourceMatchDeck = (',
+    'const cards = privateSeed?.cards',
+    'const prisms = privateSeed?.prisms',
+    'CardLibrary.has(canonicalCards[index] as BaseCard)',
+    'const deckClass = prismsToDeckClass(prisms as Prism[])',
+    'CODE_PRISMS[deckClass]',
+    'const heroSkinId = sourceHeroSkinIdForDeckClass(deckClass)',
+    "throw new Error('Conquest match deck is malformed')",
+    'const ids = deck.cardIds',
+    '.bind(userIds[player], ...ids, deck.heroSkinId)'
+  ]) {
+    if (!compactWorker.includes(token)) {
+      errors.push(`Worker Conquest V2 deck contract is missing: ${token}`)
+    }
+  }
+  if (/\bHERO_ID\b|conquest\.hero|players\[player\]!\.hero/.test(worker)) {
+    errors.push(
+      'Worker Conquest V2 skin points cannot use mutable active-run hero state'
+    )
   }
   return errors
 }
@@ -1293,6 +1436,9 @@ const main = async () => {
     v2TreasureSql,
     sourceV2Points,
     gameConquestPoints,
+    sharedHeroSkins,
+    sharedConstants,
+    matchRepository,
     v2RewardPolicy,
     v2Economy,
     staff,
@@ -1500,10 +1646,33 @@ const main = async () => {
           'card_points_calculator.go'
         ),
         'utf8'
+      ),
+      readFile(path.join(root, 'api', 'data', 'hero_skin.go'), 'utf8'),
+      readFile(path.join(root, 'api', 'data', 'hero.go'), 'utf8'),
+      readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
+      readFile(
+        path.join(
+          root,
+          'api',
+          'data',
+          'schema',
+          'migrations',
+          '30000000000181_create_hero_skins_table.sql'
+        ),
+        'utf8'
       )
     ]).then(sources => sources.join('\n')),
     readFile(
       path.join(root, 'game-server-cloudflare', 'src', 'conquest-points.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'lib', 'shared', 'src', 'source-hero-skins.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'lib', 'shared', 'src', 'constants.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'match-service-cloudflare', 'src', 'repository.ts'),
       'utf8'
     ),
     readFile(
@@ -1674,7 +1843,13 @@ const main = async () => {
       economy: v2Economy,
       worker: v2RewardWorker
     }),
-    ...conquestV2PointsSourceParityErrors(sourceV2Points, gameConquestPoints),
+    ...conquestV2PointsSourceParityErrors(
+      sourceV2Points,
+      gameConquestPoints,
+      sharedHeroSkins,
+      sharedConstants,
+      matchRepository
+    ),
     ...conquestV2DeliveryBatchErrors(v2RewardWorker)
   ]
   if (errors.length) {
