@@ -970,9 +970,9 @@ export class GameMatch implements DurableObject {
       throw new GameProtocolError('match ended or cannot be found.')
     }
     if (metadata.ended) {
-      attachment.joined = true
-      socket.serializeAttachment(attachment)
-      this.displaceOtherSockets(socket, attachment.principal)
+      // The source authenticates a recent-match connection but does not link
+      // it to the live MatchProxy. Keep this socket detached so another recent
+      // connection cannot displace it or turn it into a live player session.
       const index = this.playerIndex(metadata.match, attachment.principal)
       this.safeSend(
         socket,

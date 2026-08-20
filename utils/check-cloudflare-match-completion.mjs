@@ -105,22 +105,28 @@ export const matchCompletionErrors = (
     'private handleJoinServer = async (',
     'private handleSpectate = async ('
   )
-  requireOrdered(
-    errors,
-    'Source recent-match reconnect',
+  const sourceRecentSession = bodyBetween(
     sourceRecentReconnect,
-    [
-      "'rewards' in registeredOrRecentMatch",
-      "type: 'reconnect'",
-      'if (rewards) {',
-      "type: 'rewards'"
-    ]
+    'if (!match) {',
+    '// TODO: validate private seed signature off chain'
   )
+  requireOrdered(errors, 'Source recent-match reconnect', sourceRecentSession, [
+    "'rewards' in registeredOrRecentMatch",
+    "type: 'reconnect'",
+    'if (rewards) {',
+    "type: 'rewards'"
+  ])
   if (
-    sourceRecentReconnect.includes("type: 'match_ended'") ||
-    sourceRecentReconnect.includes('WEBSOCKET_FORCED_CLOSE_CODE')
+    sourceRecentSession.includes("type: 'match_ended'") ||
+    sourceRecentSession.includes('WEBSOCKET_FORCED_CLOSE_CODE')
   ) {
     errors.push('Source recent-match reconnect became terminal')
+  }
+  if (
+    sourceRecentSession.includes('linkContextToMatch(') ||
+    sourceRecentSession.includes('setMatchWorker(')
+  ) {
+    errors.push('Source recent-match reconnect became a live match session')
   }
 
   const workerCompletion = bodyBetween(
@@ -178,15 +184,26 @@ export const matchCompletionErrors = (
     'private async join(',
     'private async spectate('
   )
-  requireOrdered(errors, 'Worker completed reconnect', join, [
+  const workerRecentSession = bodyBetween(
+    join,
+    'if (metadata.ended) {',
+    'const subkey ='
+  )
+  requireOrdered(errors, 'Worker completed reconnect', workerRecentSession, [
     'if (metadata.completionRecorded) {',
     "type: 'rewards'"
   ])
   if (
-    join.includes("type: 'match_ended'") ||
-    join.includes('finishMatchSockets(')
+    workerRecentSession.includes("type: 'match_ended'") ||
+    workerRecentSession.includes('finishMatchSockets(')
   ) {
     errors.push('Worker recent-match reconnect became terminal')
+  }
+  if (
+    workerRecentSession.includes('attachment.joined = true') ||
+    workerRecentSession.includes('displaceOtherSockets(')
+  ) {
+    errors.push('Worker recent-match reconnect became a live match session')
   }
 
   const gameplay = bodyBetween(

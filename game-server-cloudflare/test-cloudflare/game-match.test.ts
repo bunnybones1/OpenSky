@@ -2751,6 +2751,28 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
     expect(reconnected.readyState).toBe(WebSocket.OPEN)
 
+    const originalRecentContinuation = nextMessage(reconnected)
+    const parallelRecent = await connectAs(PRINCIPAL_2, USER_ID_2)
+    const parallelRecentMessages = collectMessages(parallelRecent, 2)
+    join(parallelRecent, 0x32)
+    expect(await parallelRecentMessages).toEqual([
+      expect.objectContaining({
+        type: 'reconnect',
+        store: recentReconnect.store
+      }),
+      recentRewards
+    ])
+    expect(parallelRecent.readyState).toBe(WebSocket.OPEN)
+    reconnected.send(
+      JSON.stringify({ type: 'timesync', clientTime: 1_234_567 })
+    )
+    expect(await originalRecentContinuation).toMatchObject({
+      type: 'timesync',
+      clientTime: 1_234_567,
+      serverTime: expect.any(Number)
+    })
+    expect(reconnected.readyState).toBe(WebSocket.OPEN)
+
     const recentInfoResponse = await stub().fetch(
       'https://match/internal/recent-match-info',
       {

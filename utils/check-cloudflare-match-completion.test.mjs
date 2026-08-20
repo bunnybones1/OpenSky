@@ -86,6 +86,13 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        "context.send({\n          type: 'reconnect',",
+        "context.setMatchWorker(match)\n        context.send({\n          type: 'reconnect',"
+      )
+    },
+    {
+      ...value,
       gameMatch: value.gameMatch.replace(
         'await publishMatchCompletion(this.env.AUTH_DB, {',
         'await skippedMatchPublication(this.env.AUTH_DB, {'
@@ -110,6 +117,20 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       gameMatch: value.gameMatch.replace(
         'data: await this.completedRewards(metadata.proposalId, index)\n        })',
         "data: await this.completedRewards(metadata.proposalId, index)\n        })\n        this.safeSend(socket, { type: 'match_ended' })"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'if (metadata.ended) {\n      // The source authenticates a recent-match connection',
+        'if (metadata.ended) {\n      attachment.joined = true\n      // The source authenticates a recent-match connection'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'const index = this.playerIndex(metadata.match, attachment.principal)',
+        'this.displaceOtherSockets(socket, attachment.principal)\n      const index = this.playerIndex(metadata.match, attachment.principal)'
       )
     },
     {
