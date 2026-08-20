@@ -79,6 +79,20 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     },
     {
       ...value,
+      sourceMatchProxy: value.sourceMatchProxy.replace(
+        'oldContext.setMatchWorker(undefined)',
+        'oldContext.setMatchWorker(undefined)\n    oldContext.connection.close()'
+      )
+    },
+    {
+      ...value,
+      sourceMatchProxy: value.sourceMatchProxy.replace(
+        'You connected in another session, please play there.',
+        'connected elsewhere'
+      )
+    },
+    {
+      ...value,
       sourceMatchManager: value.sourceMatchManager.replace(
         "type: 'rewards',\n            data: rewards",
         "type: 'match_ended',\n            data: rewards"
@@ -89,6 +103,20 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       sourceMatchManager: value.sourceMatchManager.replace(
         "context.send({\n          type: 'reconnect',",
         "context.setMatchWorker(match)\n        context.send({\n          type: 'reconnect',"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        'existing.context.connection.close()',
+        "existing.context.connection.close(4001, 'Duplicate connection')"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        'You have no game in progress!',
+        'join_server is required first'
       )
     },
     {
@@ -131,6 +159,48 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       gameMatch: value.gameMatch.replace(
         'const index = this.playerIndex(metadata.match, attachment.principal)',
         'this.displaceOtherSockets(socket, attachment.principal)\n      const index = this.playerIndex(metadata.match, attachment.principal)'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        "message: 'You connected in another session, please play there.'",
+        "message: 'connected elsewhere'"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        "message: 'You connected in another session, please play there.'\n      })",
+        "message: 'You connected in another session, please play there.'\n      })\n      previous.close()"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        "(attachment.role ?? 'player') !== 'player'",
+        'false'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'previous.close()',
+        "previous.close(4001, 'Duplicate connection')"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        "message: 'You have no game in progress!'",
+        "message: 'join_server is required first'"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        "message: 'You have no game in progress!'\n            })\n            socket.close()",
+        "message: 'You have no game in progress!'\n            })\n            socket.close(4001, 'Duplicate connection')"
       )
     },
     {

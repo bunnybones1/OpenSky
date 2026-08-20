@@ -1951,14 +1951,50 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     const displaced = nextMessage(first)
     const replacementJoined = collectMessages(replacement, 2)
     join(replacement, 0x31)
-    expect(await displaced).toMatchObject({
+    expect(await displaced).toEqual({
       type: 'error',
-      message: 'connected in another location'
+      level: 'server',
+      message: 'You connected in another session, please play there.'
     })
     expect(await replacementJoined).toEqual([
       expect.objectContaining({ type: 'reconnect' }),
       expect.objectContaining({ type: 'opponent_loading_progress' })
     ])
+    const displacedTimeSync = nextMessage(first)
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 778 }))
+    expect(await displacedTimeSync).toMatchObject({
+      type: 'timesync',
+      clientTime: 778
+    })
+    expect(first.readyState).toBe(WebSocket.OPEN)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        expect(
+          state
+            .getWebSockets(PRINCIPAL_1)
+            .map(
+              socket =>
+                (socket.deserializeAttachment() as { joined: boolean }).joined
+            )
+            .sort()
+        ).toEqual([false, true])
+      }
+    )
+    const displacedGameplay = nextMessage(first)
+    const displacedClosed = new Promise<CloseEvent>(resolve =>
+      first.addEventListener('close', resolve, { once: true })
+    )
+    first.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
+    expect(await displacedGameplay).toEqual({
+      type: 'error',
+      level: 'user',
+      message: 'You have no game in progress!'
+    })
+    await expect(displacedClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
     await new Promise(resolve => setTimeout(resolve, 50))
     const afterHandoff = await stub().fetch('https://match/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
@@ -2197,6 +2233,52 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(await stickerError).toMatchObject({
       type: 'error',
       message: 'Error: player used unowned sticker'
+    })
+  })
+
+  it('replaces only the prior joined spectator with the source close frame', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const player = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const playerJoined = collectMessages(player, 2)
+    join(player, 0x31)
+    await playerJoined
+
+    const firstViewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const firstMessages = collectMessages(firstViewer, 2)
+    spectate(firstViewer, `identity:${USER_ID_1}`)
+    await firstMessages
+
+    const firstDisplaced = nextMessage(firstViewer)
+    const firstClosed = new Promise<CloseEvent>(resolve =>
+      firstViewer.addEventListener('close', resolve, { once: true })
+    )
+    const replacement = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const replacementMessages = collectMessages(replacement, 2)
+    spectate(replacement, `identity:${USER_ID_1}`)
+    expect(await firstDisplaced).toEqual({
+      type: 'error',
+      level: 'user',
+      message: 'connected in another location'
+    })
+    expect(await replacementMessages).toEqual([
+      expect.objectContaining({ type: 'reconnect' }),
+      {
+        type: 'spectators_list',
+        spectators: [
+          {
+            id: 0,
+            address: `identity:${SPECTATOR_USER_ID}`,
+            canSeeHand: false
+          }
+        ]
+      }
+    ])
+    await expect(firstClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
     })
   })
 
@@ -2807,6 +2889,21 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
     expect(privateInfo.status).toBe(404)
     await privateInfo.text()
+
+    const detachedGameplay = nextMessage(parallelRecent)
+    const detachedClosed = new Promise<CloseEvent>(resolve =>
+      parallelRecent.addEventListener('close', resolve, { once: true })
+    )
+    parallelRecent.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
+    expect(await detachedGameplay).toEqual({
+      type: 'error',
+      level: 'user',
+      message: 'You have no game in progress!'
+    })
+    await expect(detachedClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
 
     const abandonPenalty = await env.AUTH_DB.prepare(
       `SELECT abandon_count, cooldown_expires_at

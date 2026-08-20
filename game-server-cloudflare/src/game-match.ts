@@ -230,6 +230,10 @@ interface SocketAttachment {
   // Optional for sockets hibernated before spectator roles were introduced.
   role?: 'player' | 'spectator'
   joined: boolean
+  // Mirrors an authenticated source PlayerContext whose live MatchProxy was
+  // absent or detached. It may time-sync or join again, but gameplay gets the
+  // source no-active-game response before the otherwise open socket closes.
+  detachedPlayerSession?: boolean
   connectedAtMs: number
   spectatedPrincipal?: string
   spectatedPlayer?: Player
@@ -447,6 +451,19 @@ export class GameMatch implements DurableObject {
         const message = parseClientMessage(raw)
         const role = attachment.role ?? 'player'
         if (!attachment.joined) {
+          if (
+            role === 'player' &&
+            attachment.detachedPlayerSession &&
+            message.type === 'gameplay'
+          ) {
+            this.safeSend(socket, {
+              type: 'error',
+              level: 'user',
+              message: 'You have no game in progress!'
+            })
+            socket.close()
+            return
+          }
           // Source MatchManager.handleLoadingProgress returns while the socket
           // has no linked match context. Ignore this bootstrap race without
           // mutating durable loading state or closing the connection.
@@ -990,6 +1007,8 @@ export class GameMatch implements DurableObject {
           data: await this.completedRewards(metadata.proposalId, index)
         })
       }
+      attachment.detachedPlayerSession = true
+      socket.serializeAttachment(attachment)
       return
     }
     const subkey = addressBytesToHex(message.subkeyCertification.subkey)
@@ -1007,9 +1026,10 @@ export class GameMatch implements DurableObject {
       await this.replayGameplay(emitted)
     }
 
+    this.replacePlayerSession(socket, attachment.principal)
+    delete attachment.detachedPlayerSession
     attachment.joined = true
     socket.serializeAttachment(attachment)
-    this.displaceOtherSockets(socket, attachment.principal)
     const players = await this.players()
     const player = players[attachment.principal]
     player.connected = true
@@ -1105,13 +1125,12 @@ export class GameMatch implements DurableObject {
       if (setting.user_id === ledger.player2_user_id) knowledge |= 2
     }
 
+    this.replaceSpectatorSession(socket, attachment.principal)
     attachment.joined = true
     attachment.spectatedPrincipal = principalTargets[targetIndex]
     attachment.spectatedPlayer = targetIndex as Player
     attachment.knowledge = knowledge as 0 | 1 | 2 | 3
     socket.serializeAttachment(attachment)
-    this.displaceOtherSockets(socket, attachment.principal)
-
     const runtime = await this.ensureRuntime()
     const timers = await this.timers()
     const reconnect: GameServerMessage = {
@@ -2246,15 +2265,38 @@ export class GameMatch implements DurableObject {
       throw new GameProtocolError('spectator cannot send player actions')
   }
 
-  private displaceOtherSockets(current: WebSocket, principal: string) {
+  private replacePlayerSession(current: WebSocket, principal: string) {
     for (const previous of this.state.getWebSockets(principal)) {
       if (previous === current) continue
+      const attachment =
+        previous.deserializeAttachment() as SocketAttachment | null
+      if (!attachment?.joined || (attachment.role ?? 'player') !== 'player')
+        continue
+      attachment.joined = false
+      attachment.detachedPlayerSession = true
+      previous.serializeAttachment(attachment)
+      this.safeSend(previous, {
+        type: 'error',
+        level: 'server',
+        message: 'You connected in another session, please play there.'
+      })
+    }
+  }
+
+  private replaceSpectatorSession(current: WebSocket, principal: string) {
+    for (const previous of this.state.getWebSockets(principal)) {
+      if (previous === current) continue
+      const attachment =
+        previous.deserializeAttachment() as SocketAttachment | null
+      if (!attachment?.joined || attachment.role !== 'spectator') continue
+      attachment.joined = false
+      previous.serializeAttachment(attachment)
       this.safeSend(previous, {
         type: 'error',
         level: 'user',
         message: 'connected in another location'
       })
-      previous.close(4001, 'Duplicate connection')
+      previous.close()
     }
   }
 

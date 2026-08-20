@@ -100,6 +100,45 @@ export const matchCompletionErrors = (
     ["type: 'match_ended'", 'p?.connection.close(WEBSOCKET_FORCED_CLOSE_CODE)']
   )
 
+  const sourcePlayerReplacement = bodyBetween(
+    sourceMatchProxy,
+    'private updateContext = (',
+    '\n  }\n}'
+  )
+  requireOrdered(
+    errors,
+    'Source active-player session replacement',
+    sourcePlayerReplacement,
+    [
+      'oldContext.setMatchWorker(undefined)',
+      'oldContext.send({',
+      "level: 'server'",
+      "message: 'You connected in another session, please play there.'",
+      'newContext.setMatchWorker(this)',
+      'this.playerContexts.set(playerID, newContext)'
+    ]
+  )
+  if (sourcePlayerReplacement.includes('oldContext.connection.close(')) {
+    errors.push('Source active-player replacement became terminal')
+  }
+  const sourceDetachedGameplay = bodyBetween(
+    sourceMatchManager,
+    'private handleGameplayAction = (',
+    'private handleTimeSync = ('
+  )
+  requireOrdered(
+    errors,
+    'Source detached-player gameplay response',
+    sourceDetachedGameplay,
+    [
+      'if (!context.matchProxy) {',
+      "type: 'error'",
+      "level: 'user'",
+      "message: 'You have no game in progress!'",
+      'context.connection.close()'
+    ]
+  )
+
   const sourceRecentReconnect = bodyBetween(
     sourceMatchManager,
     'private handleJoinServer = async (',
@@ -128,6 +167,22 @@ export const matchCompletionErrors = (
   ) {
     errors.push('Source recent-match reconnect became a live match session')
   }
+  const sourceSpectatorReplacement = bodyBetween(
+    sourceMatchManager,
+    'const existing = match.spectators.get(spectatorPlayerID)',
+    'const MAX_SPECTATORS = 50'
+  )
+  requireOrdered(
+    errors,
+    'Source spectator session replacement',
+    sourceSpectatorReplacement,
+    [
+      'existing.context.send({',
+      "level: 'user'",
+      "message: 'connected in another location'",
+      'existing.context.connection.close()'
+    ]
+  )
 
   const workerCompletion = bodyBetween(
     gameMatch,
@@ -204,6 +259,70 @@ export const matchCompletionErrors = (
     workerRecentSession.includes('displaceOtherSockets(')
   ) {
     errors.push('Worker recent-match reconnect became a live match session')
+  }
+
+  const workerPlayerReplacement = bodyBetween(
+    gameMatch,
+    'private replacePlayerSession(',
+    'private replaceSpectatorSession('
+  )
+  requireOrdered(
+    errors,
+    'Worker active-player session replacement',
+    workerPlayerReplacement,
+    [
+      "(attachment.role ?? 'player') !== 'player'",
+      'attachment.joined = false',
+      'attachment.detachedPlayerSession = true',
+      'previous.serializeAttachment(attachment)',
+      "level: 'server'",
+      "message: 'You connected in another session, please play there.'"
+    ]
+  )
+  if (workerPlayerReplacement.includes('previous.close(')) {
+    errors.push('Worker active-player replacement closes the detached socket')
+  }
+  const workerDetachedGameplay = bodyBetween(
+    gameMatch,
+    'if (!attachment.joined) {',
+    'await this.handleMessage(socket, attachment, message)'
+  )
+  requireOrdered(
+    errors,
+    'Worker detached-player gameplay response',
+    workerDetachedGameplay,
+    [
+      'attachment.detachedPlayerSession',
+      "message.type === 'gameplay'",
+      "type: 'error'",
+      "level: 'user'",
+      "message: 'You have no game in progress!'",
+      'socket.close()'
+    ]
+  )
+  const workerSpectatorReplacement = bodyBetween(
+    gameMatch,
+    'private replaceSpectatorSession(',
+    'private broadcast('
+  )
+  requireOrdered(
+    errors,
+    'Worker spectator session replacement',
+    workerSpectatorReplacement,
+    [
+      "attachment.role !== 'spectator'",
+      'attachment.joined = false',
+      'previous.serializeAttachment(attachment)',
+      "level: 'user'",
+      "message: 'connected in another location'",
+      'previous.close()'
+    ]
+  )
+  if (
+    workerSpectatorReplacement.includes('4001') ||
+    workerSpectatorReplacement.includes('Duplicate connection')
+  ) {
+    errors.push('Worker spectator replacement invents a close code or reason')
   }
 
   const gameplay = bodyBetween(
