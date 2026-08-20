@@ -13,6 +13,10 @@ import {
   sourceConquestV2SummaryWire,
   type SourceConquestV2PoolConfigDataInput
 } from './conquest-v2-wire'
+import {
+  CONQUEST_V2_TREASURE_LEVEL_SQL,
+  CONQUEST_V2_TREASURE_TOTAL_WEIGHTS
+} from './conquest-v2-treasure'
 
 const EVENT_ID = 2
 const MAX_INT32 = 2_147_483_647
@@ -29,10 +33,6 @@ const DEFAULT_CONFIG: SourceConquestV2PoolConfigDataInput = {
   weightPerSilverCard: 0
 }
 const POOL_TTL_SECONDS = 0
-
-const TREASURE_TOTAL_WEIGHTS = [
-  0, 1, 3.19, 6.9, 12.65, 21.32, 34.29, 53.99, 84.67, 134.32, 218.69
-] as const
 
 interface SettingsRow {
   pool_ceiling: number
@@ -232,19 +232,7 @@ export class ConquestV2EconomyRepository {
   async treasureLevels(): Promise<ConquestV2TreasureLevelSummary[]> {
     const rows = await this.database
       .prepare(
-        `SELECT CASE
-                  WHEN current_points >= 13750 THEN 10
-                  WHEN current_points >= 11250 THEN 9
-                  WHEN current_points >= 9000 THEN 8
-                  WHEN current_points >= 7000 THEN 7
-                  WHEN current_points >= 5250 THEN 6
-                  WHEN current_points >= 3750 THEN 5
-                  WHEN current_points >= 2500 THEN 4
-                  WHEN current_points >= 1500 THEN 3
-                  WHEN current_points >= 750 THEN 2
-                  WHEN current_points >= 250 THEN 1
-                  ELSE 0
-                END AS level,
+        `SELECT ${CONQUEST_V2_TREASURE_LEVEL_SQL} AS level,
                 COUNT(*) AS number_of_players
          FROM player_conquest_points
          WHERE event_id = ? AND current_points >= 250
@@ -263,7 +251,7 @@ export class ConquestV2EconomyRepository {
         numberOfPlayers: counts[level],
         totalWeight: goFloat32(
           Math.fround(counts[level]) *
-            Math.fround(TREASURE_TOTAL_WEIGHTS[level])
+            Math.fround(CONQUEST_V2_TREASURE_TOTAL_WEIGHTS[level])
         )
       }
     })

@@ -16,6 +16,10 @@ import {
   CONQUEST_V2_REWARD_POLICY_HASH,
   CONQUEST_V2_REWARD_POLICY_VERSION
 } from '../src/conquest-v2-reward-policy'
+import {
+  CONQUEST_V2_TREASURE_TOTAL_POINTS,
+  CONQUEST_V2_TREASURE_TOTAL_WEIGHTS
+} from '../src/conquest-v2-treasure'
 import { PlayerRepository } from '../src/player'
 import { PlayerRpcRepository } from '../src/player-rpc'
 
@@ -647,6 +651,40 @@ describe('Conquest V2 off-chain weekly rewards', () => {
          WHERE user_id = 'treasure-player' AND event_id = 2`
       ).first('current_points')
     ).toBe(100)
+  })
+
+  it('settles the source level-ten band in one bounded set-based grant batch', async () => {
+    await setupPlayer(
+      'treasure-level-ten',
+      CONQUEST_V2_TREASURE_TOTAL_POINTS[10]
+    )
+    await setWeightPerSilver(1)
+    await enableSchedule(0)
+
+    expect(
+      await runDueConquestV2Rewards(env.AUTH_DB, SNAPSHOT_NOW)
+    ).toMatchObject({ status: 'completed', delivered: 1 })
+    expect(await silverTotal('treasure-level-ten')).toBe(218)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT points_before, points_accounted, points_remaining,
+                treasure_level, treasure_weight
+         FROM conquest_v2_reward_entries
+         WHERE user_id = 'treasure-level-ten'`
+      ).first()
+    ).toEqual({
+      points_before: CONQUEST_V2_TREASURE_TOTAL_POINTS[10],
+      points_accounted: CONQUEST_V2_TREASURE_TOTAL_POINTS[10],
+      points_remaining: 0,
+      treasure_level: 10,
+      treasure_weight: CONQUEST_V2_TREASURE_TOTAL_WEIGHTS[10]
+    })
+    const grants = await env.AUTH_DB.prepare(
+      `SELECT COUNT(*) AS distinct_cards, SUM(quantity) AS total_cards
+       FROM player_conquest_v2_reward_inventory_grants`
+    ).first<{ distinct_cards: number; total_cards: number }>()
+    expect(grants!.total_cards).toBe(218)
+    expect(grants!.distinct_cards).toBeLessThanOrEqual(75)
   })
 
   it('finishes a snapshotted cycle after a newer schedule disables future rewards', async () => {

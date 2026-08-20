@@ -178,9 +178,9 @@ const workerRewardWireErrors = settlement => {
 }
 
 /**
- * Once a Conquest V2 cycle snapshots player points, its immutable policy
- * receipt must outrank later schedule changes. A newer disabled schedule may
- * stop future cycles, but it cannot strand the already-promised delivery.
+ * Once a Conquest V2 cycle and immutable policy receipt exist, that receipt
+ * must outrank later schedule changes. A newer disabled schedule may stop
+ * future cycles, but it cannot strand preparation or promised delivery.
  */
 export const conquestV2ResumeSafetyErrors = source => {
   const errors = []
@@ -214,6 +214,171 @@ export const conquestV2ResumeSafetyErrors = source => {
   ) {
     errors.push(
       'Conquest V2 must resume a pinned incomplete cycle before considering a new active schedule'
+    )
+  }
+  return errors
+}
+
+const numericLiteral = value => {
+  const parsed = Number(value.replaceAll('_', ''))
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const goTreasureValues = (source, mapName) => {
+  const constants = new Map(
+    [
+      ...source.matchAll(
+        /\bconst\s+(\w+)(?:\s+\w+)?\s*=\s*([\d_]+(?:\.[\d_]+)?)/g
+      )
+    ].map(match => [match[1], numericLiteral(match[2])])
+  )
+  const body = bracedBlock(source, `var ${mapName}`)
+  if (body === undefined) return undefined
+  const values = new Map()
+  for (const match of body.matchAll(/^\s*(\d+):\s*([\w.]+),?\s*$/gm)) {
+    const value = numericLiteral(match[2]) ?? constants.get(match[2])
+    if (value === undefined) return undefined
+    values.set(Number(match[1]), value)
+  }
+  return values
+}
+
+const typescriptNumericArray = (source, name) => {
+  const match = source.match(
+    new RegExp(
+      `(?:export\\s+)?const\\s+${name}\\s*=\\s*\\[([\\s\\S]*?)\\]\\s*as const`
+    )
+  )
+  if (!match) return undefined
+  const values = match[1].split(',').map(value => numericLiteral(value.trim()))
+  return values.every(value => value !== undefined) ? values : undefined
+}
+
+/**
+ * Derives all ten treasure bands from the Go maps and requires every
+ * TypeScript consumer to use one shared authority. This prevents a coordinated
+ * local edit from changing player progress, pool weight, rollover, and reward
+ * size while still satisfying a name-only policy check.
+ */
+export const conquestV2TreasureSourceParityErrors = (
+  source,
+  treasure,
+  consumers = {}
+) => {
+  const errors = []
+  const sourcePoints = goTreasureValues(source, 'treasureLevelToTotalPointsMap')
+  const sourceWeights = goTreasureValues(
+    source,
+    'treasureLevelToTotalWeightMap'
+  )
+  const expectedPoints = sourcePoints
+    ? Array.from({ length: 11 }, (_, level) => sourcePoints.get(level))
+    : undefined
+  const expectedWeights = sourceWeights
+    ? Array.from({ length: 11 }, (_, level) => sourceWeights.get(level) ?? 0)
+    : undefined
+  if (!expectedPoints || expectedPoints.some(value => value === undefined)) {
+    errors.push('source Conquest V2 treasure points could not be derived')
+  }
+  if (!expectedWeights || expectedWeights.some(value => value === undefined)) {
+    errors.push('source Conquest V2 treasure weights could not be derived')
+  }
+
+  const actualPoints = typescriptNumericArray(
+    treasure,
+    'CONQUEST_V2_TREASURE_TOTAL_POINTS'
+  )
+  const actualWeights = typescriptNumericArray(
+    treasure,
+    'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
+  )
+  if (
+    expectedPoints &&
+    JSON.stringify(actualPoints) !== JSON.stringify(expectedPoints)
+  ) {
+    errors.push('TypeScript Conquest V2 treasure points drifted from Go')
+  }
+  if (
+    expectedWeights &&
+    JSON.stringify(actualWeights) !== JSON.stringify(expectedWeights)
+  ) {
+    errors.push('TypeScript Conquest V2 treasure weights drifted from Go')
+  }
+
+  for (const [consumer, tokens] of Object.entries({
+    policy: [
+      'CONQUEST_V2_TREASURE_TOTAL_POINTS',
+      'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
+    ],
+    progress: ['CONQUEST_V2_TREASURE_TOTAL_POINTS'],
+    economy: [
+      'CONQUEST_V2_TREASURE_LEVEL_SQL',
+      'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
+    ],
+    worker: [
+      'CONQUEST_V2_TREASURE_LEVEL_SQL',
+      'CONQUEST_V2_TREASURE_POINTS_ACCOUNTED_SQL',
+      'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS',
+      'CONQUEST_V2_TREASURE_WEIGHT_SQL'
+    ]
+  })) {
+    if (consumers[consumer] === undefined) continue
+    for (const token of tokens) {
+      if (!consumers[consumer].includes(token)) {
+        errors.push(
+          `Conquest V2 ${consumer} does not use shared treasure authority: ${token}`
+        )
+      }
+    }
+  }
+  for (const [consumer, pattern] of [
+    ['progress', /const\s+TREASURE_TOTAL_POINTS\s*=\s*\[/],
+    ['economy', /const\s+TREASURE_TOTAL_WEIGHTS\s*=\s*\[/],
+    ['worker', /const\s+(?:levelSql|pointsSql|weightSql)\s*=/]
+  ]) {
+    if (
+      consumers[consumer] !== undefined &&
+      pattern.test(consumers[consumer])
+    ) {
+      errors.push(`Conquest V2 ${consumer} duplicates the treasure map`)
+    }
+  }
+  return errors
+}
+
+/**
+ * The minimum safe off-chain policy gives a level-ten player hundreds of
+ * cards. Delivery must aggregate that frozen draw in SQL, not spend two D1
+ * statements per distinct card inside the bounded player loop.
+ */
+export const conquestV2DeliveryBatchErrors = source => {
+  const delivery = bracedBlock(source, 'const deliverPlayer') ?? ''
+  const errors = []
+  for (const token of [
+    'INSERT INTO player_conquest_v2_reward_inventory_grants',
+    'INSERT INTO player_items',
+    'GROUP BY award.id, selected.value, item.balance',
+    'GROUP BY award.user_id, selected.value'
+  ]) {
+    if (!delivery.includes(token)) {
+      errors.push(`Conquest V2 set-based delivery is missing: ${token}`)
+    }
+  }
+  if (
+    occurrences(
+      delivery,
+      /JOIN json_each\(award\.silver_card_ids_json\) selected/g
+    ) !== 2
+  ) {
+    errors.push(
+      'Conquest V2 delivery must aggregate both receipts and inventory from the frozen draw'
+    )
+  }
+  if (
+    /for\s*\(const\s*\[cardId,\s*count\]\s+of\s+cardCounts\)/.test(delivery)
+  ) {
+    errors.push(
+      'Conquest V2 delivery cannot issue statements per distinct card'
     )
   }
   return errors
@@ -991,6 +1156,10 @@ const main = async () => {
     v2ScheduleOperationsMigration,
     v2ScheduleOperations,
     v2RewardWorker,
+    sourceV2Treasure,
+    v2Treasure,
+    v2RewardPolicy,
+    v2Economy,
     staff,
     cardLibrary,
     sourceSettlement,
@@ -1144,6 +1313,29 @@ const main = async () => {
       path.join(root, 'cloudflare', 'src', 'conquest-v2-reward-worker.ts'),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'api',
+        'lib',
+        'conquest',
+        'conquestv2',
+        'treasure_map.go'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-v2-treasure.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-v2-reward-policy.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'conquest-v2-economy.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'cloudflare', 'src', 'staff.ts'), 'utf8'),
     readFile(
       path.join(root, 'cloudflare', 'src', 'generated', 'card-library.json'),
@@ -1255,46 +1447,55 @@ const main = async () => {
       'utf8'
     )
   ])
-  const errors = conquestGateErrors(config, {
-    matchService,
-    migration,
-    poolActivation,
-    poolOperationsMigration,
-    poolOperations,
-    poolWindowSafety,
-    readinessOperationsMigration,
-    readinessOperations,
-    drillMigration,
-    drillRepository,
-    readinessMatch,
-    gameMatch,
-    crossServiceReadiness,
-    scheduler,
-    v2ScheduleActivation,
-    v2ScheduleOperationsMigration,
-    v2ScheduleOperations,
-    v2RewardWorker,
-    staff,
-    cardLibrary,
-    sourceSettlement,
-    settlement,
-    progression,
-    goldModerationMigration,
-    goldDelivery,
-    sourceDelayedMinting,
-    settlementPinning,
-    drainMigration,
-    drainRepository,
-    matchmaker,
-    api,
-    playerConquest,
-    playerConquestButton,
-    gameModesQuery,
-    gateway,
-    readiness,
-    sourceRewardPool,
-    boundaryMigration
-  })
+  const errors = [
+    ...conquestGateErrors(config, {
+      matchService,
+      migration,
+      poolActivation,
+      poolOperationsMigration,
+      poolOperations,
+      poolWindowSafety,
+      readinessOperationsMigration,
+      readinessOperations,
+      drillMigration,
+      drillRepository,
+      readinessMatch,
+      gameMatch,
+      crossServiceReadiness,
+      scheduler,
+      v2ScheduleActivation,
+      v2ScheduleOperationsMigration,
+      v2ScheduleOperations,
+      v2RewardWorker,
+      staff,
+      cardLibrary,
+      sourceSettlement,
+      settlement,
+      progression,
+      goldModerationMigration,
+      goldDelivery,
+      sourceDelayedMinting,
+      settlementPinning,
+      drainMigration,
+      drainRepository,
+      matchmaker,
+      api,
+      playerConquest,
+      playerConquestButton,
+      gameModesQuery,
+      gateway,
+      readiness,
+      sourceRewardPool,
+      boundaryMigration
+    }),
+    ...conquestV2TreasureSourceParityErrors(sourceV2Treasure, v2Treasure, {
+      policy: v2RewardPolicy,
+      progress: drainRepository,
+      economy: v2Economy,
+      worker: v2RewardWorker
+    }),
+    ...conquestV2DeliveryBatchErrors(v2RewardWorker)
+  ]
   if (errors.length) {
     for (const error of errors)
       process.stderr.write(`Conquest gate: ${error}\n`)

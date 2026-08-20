@@ -6,6 +6,8 @@ import {
   conquestGateErrors,
   conquestPoolCatalogErrors,
   conquestSettlementSourceParityErrors,
+  conquestV2DeliveryBatchErrors,
+  conquestV2TreasureSourceParityErrors,
   conquestV2ResumeSafetyErrors
 } from './check-cloudflare-conquest-gate.mjs'
 
@@ -518,6 +520,64 @@ test('keeps snapshotted Conquest V2 delivery ahead of later schedule changes', a
     (await resumableSchedule(database, now))`
       )
     ).some(error => error.includes('resume a pinned incomplete cycle'))
+  )
+})
+
+test('derives every Conquest V2 treasure consumer from Go and bounds large delivery batches', async () => {
+  const [source, treasure, policy, progress, economy, worker] =
+    await Promise.all([
+      readFile('api/lib/conquest/conquestv2/treasure_map.go', 'utf8'),
+      readFile('cloudflare/src/conquest-v2-treasure.ts', 'utf8'),
+      readFile('cloudflare/src/conquest-v2-reward-policy.ts', 'utf8'),
+      readFile('cloudflare/src/conquest.ts', 'utf8'),
+      readFile('cloudflare/src/conquest-v2-economy.ts', 'utf8'),
+      readFile('cloudflare/src/conquest-v2-reward-worker.ts', 'utf8')
+    ])
+  const consumers = { policy, progress, economy, worker }
+  assert.deepEqual(
+    conquestV2TreasureSourceParityErrors(source, treasure, consumers),
+    []
+  )
+  assert.deepEqual(conquestV2DeliveryBatchErrors(worker), [])
+
+  assert.ok(
+    conquestV2TreasureSourceParityErrors(
+      source.replace('10: conquestPointsCap', '10: 13749'),
+      treasure,
+      consumers
+    ).some(error => error.includes('points drifted from Go'))
+  )
+  assert.ok(
+    conquestV2TreasureSourceParityErrors(
+      source,
+      treasure.replace('218.69', '218.68'),
+      consumers
+    ).some(error => error.includes('weights drifted from Go'))
+  )
+  assert.ok(
+    conquestV2TreasureSourceParityErrors(source, treasure, {
+      ...consumers,
+      progress: progress.replaceAll(
+        'CONQUEST_V2_TREASURE_TOTAL_POINTS',
+        'DRIFTED_TREASURE_POINTS'
+      )
+    }).some(error => error.includes('progress does not use shared'))
+  )
+  assert.ok(
+    conquestV2DeliveryBatchErrors(
+      worker.replace(
+        'GROUP BY award.id, selected.value, item.balance',
+        'GROUP BY award.id, selected.value'
+      )
+    ).some(error => error.includes('set-based delivery is missing'))
+  )
+  assert.ok(
+    conquestV2DeliveryBatchErrors(
+      worker.replace(
+        'const statements: D1PreparedStatement[] = [',
+        'for (const [cardId, count] of cardCounts) {}\n  const statements: D1PreparedStatement[] = ['
+      )
+    ).some(error => error.includes('statements per distinct card'))
   )
 })
 

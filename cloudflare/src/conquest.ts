@@ -16,6 +16,7 @@ import {
   sourceConquestWire,
   sourceWeeklyGoldsListWire
 } from './conquest-wire'
+import { CONQUEST_V2_TREASURE_TOTAL_POINTS } from './conquest-v2-treasure'
 import { invalidArgument } from './errors'
 import { goFloat32Percentage } from './go-numbers'
 
@@ -60,10 +61,6 @@ export const sourceConquestHeroArgument = (
     ? (value as Hero)
     : Hero.UNKNOWN
 }
-
-const TREASURE_TOTAL_POINTS = [
-  0, 250, 750, 1_500, 2_500, 3_750, 5_250, 7_000, 9_000, 11_250, 13_750
-] as const
 
 export const LEGACY_CONQUEST_EVENT_ID = 1
 export const LEGACY_CONQUEST_POINTS_REQUIRED = 30
@@ -129,20 +126,24 @@ export const conquestTreasureProgress = (
   currentPoints: number
 ): ConquestV2TreasureProgress => {
   const points = Math.max(0, Math.trunc(currentPoints))
-  let level = TREASURE_TOTAL_POINTS.length - 1
-  for (let index = 0; index < TREASURE_TOTAL_POINTS.length - 1; index++) {
-    if (points < TREASURE_TOTAL_POINTS[index + 1]) {
+  let level = CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1
+  for (
+    let index = 0;
+    index < CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1;
+    index++
+  ) {
+    if (points < CONQUEST_V2_TREASURE_TOTAL_POINTS[index + 1]) {
       level = index
       break
     }
   }
-  const accounted = TREASURE_TOTAL_POINTS[level]
+  const accounted = CONQUEST_V2_TREASURE_TOTAL_POINTS[level]
   return {
     treasureLevel: level,
     treasurePoints: points - accounted,
     treasurePointsRequired:
-      level < TREASURE_TOTAL_POINTS.length - 1
-        ? TREASURE_TOTAL_POINTS[level + 1] - points
+      level < CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1
+        ? CONQUEST_V2_TREASURE_TOTAL_POINTS[level + 1] - points
         : 0
   }
 }

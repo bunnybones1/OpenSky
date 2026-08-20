@@ -2,10 +2,15 @@ import { ConquestV2EconomyRepository } from './conquest-v2-economy'
 import {
   CONQUEST_V2_REWARD_POLICY_HASH,
   CONQUEST_V2_REWARD_POLICY_VERSION,
-  CONQUEST_V2_TREASURE_TOTAL_WEIGHTS,
   conquestV2RewardCardIds,
   conquestV2SilverCardCount
 } from './conquest-v2-reward-policy'
+import {
+  CONQUEST_V2_TREASURE_LEVEL_SQL,
+  CONQUEST_V2_TREASURE_POINTS_ACCOUNTED_SQL,
+  CONQUEST_V2_TREASURE_TOTAL_WEIGHTS,
+  CONQUEST_V2_TREASURE_WEIGHT_SQL
+} from './conquest-v2-treasure'
 
 const EVENT_ID = 2
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -433,45 +438,6 @@ const ensureCycle = async (
   return cycle
 }
 
-const levelSql = `CASE
-  WHEN current_points >= 13750 THEN 10
-  WHEN current_points >= 11250 THEN 9
-  WHEN current_points >= 9000 THEN 8
-  WHEN current_points >= 7000 THEN 7
-  WHEN current_points >= 5250 THEN 6
-  WHEN current_points >= 3750 THEN 5
-  WHEN current_points >= 2500 THEN 4
-  WHEN current_points >= 1500 THEN 3
-  WHEN current_points >= 750 THEN 2
-  WHEN current_points >= 250 THEN 1
-  ELSE 0 END`
-
-const pointsSql = `CASE
-  WHEN current_points >= 13750 THEN 13750
-  WHEN current_points >= 11250 THEN 11250
-  WHEN current_points >= 9000 THEN 9000
-  WHEN current_points >= 7000 THEN 7000
-  WHEN current_points >= 5250 THEN 5250
-  WHEN current_points >= 3750 THEN 3750
-  WHEN current_points >= 2500 THEN 2500
-  WHEN current_points >= 1500 THEN 1500
-  WHEN current_points >= 750 THEN 750
-  WHEN current_points >= 250 THEN 250
-  ELSE 0 END`
-
-const weightSql = `CASE
-  WHEN current_points >= 13750 THEN 218.69
-  WHEN current_points >= 11250 THEN 134.32
-  WHEN current_points >= 9000 THEN 84.67
-  WHEN current_points >= 7000 THEN 53.99
-  WHEN current_points >= 5250 THEN 34.29
-  WHEN current_points >= 3750 THEN 21.32
-  WHEN current_points >= 2500 THEN 12.65
-  WHEN current_points >= 1500 THEN 6.9
-  WHEN current_points >= 750 THEN 3.19
-  WHEN current_points >= 250 THEN 1
-  ELSE 0 END`
-
 const snapshotCycle = async (
   database: D1Database,
   cycle: CycleRow,
@@ -485,8 +451,11 @@ const snapshotCycle = async (
            (cycle_id, user_id, points_before, points_accounted,
             points_remaining, treasure_level, treasure_weight,
             snapshotted_at)
-         SELECT ?, points.user_id, points.current_points, ${pointsSql},
-                points.current_points - (${pointsSql}), ${levelSql}, ${weightSql}, ?
+         SELECT ?, points.user_id, points.current_points,
+                ${CONQUEST_V2_TREASURE_POINTS_ACCOUNTED_SQL},
+                points.current_points - (${CONQUEST_V2_TREASURE_POINTS_ACCOUNTED_SQL}),
+                ${CONQUEST_V2_TREASURE_LEVEL_SQL},
+                ${CONQUEST_V2_TREASURE_WEIGHT_SQL}, ?
          FROM player_conquest_points points
          JOIN users ON users.id = points.user_id
          WHERE points.event_id = ? AND points.current_points >= 250
@@ -619,54 +588,53 @@ const deliverPlayer = async (
         cycle.id
       )
   ]
-  for (const [cardId, count] of cardCounts) {
-    statements.push(
-      database
-        .prepare(
-          `INSERT INTO player_conquest_v2_reward_inventory_grants
-             (award_id, item_type, token_id, quantity, before_balance,
-              after_balance)
-           SELECT award.id, 'SW_SILVER_CARDS', ?, ?,
-                  COALESCE(item.balance, 0), COALESCE(item.balance, 0) + ?
-           FROM player_conquest_v2_reward_awards award
-           LEFT JOIN player_items item
-             ON item.user_id = award.user_id
-            AND item.item_type = 'SW_SILVER_CARDS'
-            AND item.token_id = ?
-           WHERE award.award_key = ? AND award.delivery_key = ?
-             AND award.application_status = 'PREPARING'`
-        )
-        .bind(cardId, count, count, cardId, awardKey, deliveryKey)
-    )
-    statements.push(
-      database
-        .prepare(
-          `INSERT INTO player_items
-             (user_id, item_type, token_id, balance, is_new, unlock_source,
-              created_at, updated_at)
-           SELECT ?, 'SW_SILVER_CARDS', ?, ?, 1, ?, ?, ?
-           WHERE EXISTS (
-             SELECT 1 FROM player_conquest_v2_reward_awards
-             WHERE award_key = ? AND delivery_key = ?
-               AND application_status = 'PREPARING'
-           )
-           ON CONFLICT(user_id, item_type, token_id)
-           DO UPDATE SET balance = balance + excluded.balance,
-                         is_new = 1, updated_at = excluded.updated_at`
-        )
-        .bind(
-          entry.user_id,
-          cardId,
-          count,
-          `conquest-v2:${cycle.id}`,
-          awardedAt,
-          awardedAt,
-          awardKey,
-          deliveryKey
-        )
-    )
-  }
   statements.push(
+    // Keep the settlement batch bounded by aggregating the frozen draw in SQL.
+    // Level ten can contain hundreds of cards, but still costs two statements
+    // instead of two statements per distinct card.
+    database
+      .prepare(
+        `INSERT INTO player_conquest_v2_reward_inventory_grants
+           (award_id, item_type, token_id, quantity, before_balance,
+            after_balance)
+         SELECT award.id, 'SW_SILVER_CARDS',
+                CAST(selected.value AS INTEGER), COUNT(*),
+                COALESCE(item.balance, 0),
+                COALESCE(item.balance, 0) + COUNT(*)
+         FROM player_conquest_v2_reward_awards award
+         JOIN json_each(award.silver_card_ids_json) selected
+         LEFT JOIN player_items item
+           ON item.user_id = award.user_id
+          AND item.item_type = 'SW_SILVER_CARDS'
+          AND item.token_id = CAST(selected.value AS INTEGER)
+         WHERE award.award_key = ? AND award.delivery_key = ?
+           AND award.application_status = 'PREPARING'
+         GROUP BY award.id, selected.value, item.balance`
+      )
+      .bind(awardKey, deliveryKey),
+    database
+      .prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         SELECT award.user_id, 'SW_SILVER_CARDS',
+                CAST(selected.value AS INTEGER), COUNT(*), 1, ?, ?, ?
+         FROM player_conquest_v2_reward_awards award
+         JOIN json_each(award.silver_card_ids_json) selected
+         WHERE award.award_key = ? AND award.delivery_key = ?
+           AND award.application_status = 'PREPARING'
+         GROUP BY award.user_id, selected.value
+         ON CONFLICT(user_id, item_type, token_id)
+         DO UPDATE SET balance = player_items.balance + excluded.balance,
+                       is_new = 1, updated_at = excluded.updated_at`
+      )
+      .bind(
+        `conquest-v2:${cycle.id}`,
+        awardedAt,
+        awardedAt,
+        awardKey,
+        deliveryKey
+      ),
     database
       .prepare(
         `INSERT OR IGNORE INTO player_conquest_v2_reward_feed_events
