@@ -42,10 +42,12 @@ wire messages. It is a separate service from `matchmaker-ts`.
   deck pair and every applicable progression, rank, experience, warm-up,
   Conquest, and abandon receipt before the match ledger can become `ended`.
   A Conquest run still awaiting card settlement also blocks publication; and
-- source-ordered client completion: recent-match state, reward messages, and
-  the terminal `match_ended` signal remain unavailable until that publication
-  barrier succeeds. Completed reconnects replay rewards before the terminal
-  signal, while settlement retries expose only the authoritative final game
+- source-ordered client completion: recent-match projection, reward messages,
+  and the terminal `match_ended` signal remain unavailable until that
+  publication barrier succeeds. An attached player then receives rewards,
+  `match_ended`, and the source forced close code `4004`; a later recent-match
+  reconnect instead receives `reconnect` plus optional rewards and remains
+  open, while settlement retries expose only the authoritative final game
   state.
 
 The gateway, not the browser, is the identity authority. It validates a Google

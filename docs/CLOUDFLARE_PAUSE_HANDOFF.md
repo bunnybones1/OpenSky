@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `e6d72b8a`
-  (`Gate terminal match signals on settlement`)
-- Latest tested runtime commit: `e6d72b8a`
-  (`Gate terminal match signals on settlement`)
+- Last code/test checkpoint: `5fefcc2b`
+  (`Preserve terminal match socket lifecycle`)
+- Latest tested runtime commit: `5fefcc2b`
+  (`Preserve terminal match socket lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,9 +21,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `e6d72b8a` are committed and
+- The runtime changes from `38386294` through `5fefcc2b` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -41,7 +41,7 @@ The reported Practice PvP replay enum failure was fixed earlier and is already
 deployed. Commits `24e9c8e4` and `b0271620` normalize legacy enum shapes and
 verify the exact reported replay from both player perspectives.
 
-## Last completed runtime milestone
+## Leaderboard reward-visibility milestone
 
 Commit `38386294` makes reward visibility follow the same independently
 approved D1 schedule used by the leaderboard distribution worker:
@@ -56,7 +56,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `e6d72b8a`:
+Validation completed locally for exact code head `5fefcc2b`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
@@ -103,8 +103,11 @@ exact-head run
 `e39a62f0` in 10m18s. The receipt-publication checkpoint and its handoff passed
 exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32417571445> at commit
-`e0766a65` in 11m06s. The newer `e6d72b8a` checkpoint must receive exact-head CI
-before any production mutation.
+`e0766a65` in 11m06s. The settlement-terminal checkpoint and its handoff passed
+exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32419219533> at commit
+`4519fd28` in 10m46s. The newer `5fefcc2b` checkpoint and its refreshed handoff
+must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -339,8 +342,8 @@ The authoritative engine still persists its final state immediately, but now:
 - a connected client receives rewards only after the ended ledger and every
   applicable receipt have published, followed by `match_ended`;
 - a reconnect during settlement receives the final authoritative state but no
-  premature reward or terminal signal, while a completed reconnect replays
-  rewards before `match_ended`; and
+  premature reward or terminal signal, while a completed recent-match
+  reconnect replays `reconnect` then rewards and remains open; and
 - an unloaded match likewise emits its terminal signal only after its ended
   ledger row and durable completion marker are stored.
 
@@ -354,6 +357,34 @@ boundary. The complete local release contract passed with 510 main-Worker
 tests, 34 game-server unit tests, 116 game-server Workers tests, all other
 service suites, both production builds, and 594-file artifact validation. No
 production resource or behavior changed.
+
+## Source terminal socket lifecycle milestone
+
+Follow-up commit `5fefcc2b` closes the remaining live-versus-recent socket
+distinction from the original TypeScript server:
+
+- after a live match publishes, an attached player receives rewards, then
+  `match_ended`, and the server closes that player socket with the source
+  forced-close code `4004` and no invented reason;
+- the close occurs only after the durable completion marker, so a failed
+  settlement attempt still leaks neither rewards nor a terminal signal;
+- a player who connects to an already saved recent match instead receives the
+  source `reconnect` message and optional rewards, with no `match_ended` and no
+  forced close; and
+- live spectator sockets retain their existing terminal notification behavior
+  but are not forced closed by the player-only source lifecycle.
+
+The Workers regression now asserts the exact live message order and close
+event, then evicts and reloads the Durable Object to prove a recent-match
+connection receives only `reconnect` plus rewards and stays open. The
+mutation-tested completion gate reads both source `MatchProxy.ts` and
+`MatchManager.ts`, rejects a weakened close code, and rejects making recent
+reconnects terminal. The exact complete local release contract passed with 510
+main-Worker tests, 34 game-server unit tests, 116 game-server Workers tests, all
+other service and browser suites, every source/off-chain gate and typecheck,
+both production builds, and 594-file artifact validation. No deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
 
 ## Storage safety milestone
 
@@ -457,9 +488,9 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 ### Production rollout
 
-- Commit/push the refreshed handoff and wait for exact-head CI at or after
-  `e6d72b8a`.
-- Deploy and verify the tested runtime changes through `e6d72b8a`. Keep
+- Push the `5fefcc2b` milestone and refreshed handoff, then wait for exact-head
+  CI.
+- Deploy and verify the tested runtime changes through `5fefcc2b`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

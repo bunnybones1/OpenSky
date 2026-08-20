@@ -1085,9 +1085,10 @@ settlement receipts, the D1 match row remains active, internal recent-match
 projection returns `404`, and both reward and terminal client messages remain
 withheld. The final authoritative WASM state is still durable and reconnectable.
 After publication, the Durable Object stores its completion marker, sends each
-player's source-shaped rewards, and then broadcasts `match_ended`; a completed
-reconnect replays the same order. Unloaded-match expiry follows the same
-publish-before-signal rule.
+player's source-shaped rewards, then sends `match_ended` and closes attached
+player sockets with the source forced-close code `4004`. A later recent-match
+reconnect instead receives `reconnect` and optional rewards and remains open.
+Unloaded-match expiry follows the same publish-before-signal rule.
 
 The Workers regression injects a failing D1 ended-row update after a real
 authoritative abandonment. It proves the first alarm exposes only the final
@@ -1098,6 +1099,39 @@ record/reward/recent/signal order, every Worker receipt requirement, reconnect
 gating, and unloaded-expiry gating.
 
 The complete local release contract passed 510 main-Worker tests, 34
+game-server unit tests, 116 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 30 browser-game tests, nine analytics tests, every source
+and off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. No deployment, migration, provisioning, activation, live
+match, or production mutation was performed. Production Conquest remains
+disabled.
+
+## Source terminal socket lifecycle proof
+
+Follow-up milestone `5fefcc2b` pins the live and recent-match socket paths that
+the first settlement-gating milestone had treated as one path. Source
+`MatchProxy.ts` sends `match_ended` to attached players only after
+`internal_match_recorded`, then closes those player sockets with code `4004`.
+Source `MatchManager.ts` handles an already saved recent match separately: it
+sends `reconnect` and optional rewards, without a terminal message or forced
+close.
+
+The Cloudflare Durable Object now preserves that distinction. Its shared live
+completion helper sends `match_ended` after rewards and the durable completion
+marker, then closes only joined player sockets with exact code `4004` and no
+invented reason. The ended-match join path sends only reconnect state and
+optional persisted rewards and leaves the socket open. Spectators retain the
+existing Worker terminal notification without inheriting the player-only
+forced close.
+
+The Workers regression injects and recovers from the settlement publication
+failure, asserts `rewards` then `match_ended` then the exact close event, evicts
+the Durable Object, and proves the subsequent recent connection receives only
+`reconnect` plus rewards and stays open. The mutation-tested gate now reads
+both source socket paths and fails if the close code is weakened or the recent
+path becomes terminal.
+
+The exact complete local release contract passed 510 main-Worker tests, 34
 game-server unit tests, 116 game-server Workers tests, 33 match-service tests,
 78 matchmaker tests, 30 browser-game tests, nine analytics tests, every source
 and off-chain gate, all typechecks, both production builds, and 594-file
