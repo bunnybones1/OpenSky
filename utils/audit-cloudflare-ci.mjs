@@ -114,6 +114,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the reward timing visibility gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:branding')) {
+    errors.push(
+      'Cloudflare build must include the original-game branding gate'
+    )
+  }
   return errors
 }
 

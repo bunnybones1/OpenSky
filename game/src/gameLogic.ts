@@ -48,6 +48,7 @@ import {
 } from './helpers/envGameModeHelpers'
 import { getTimeMarker } from './helpers/timeMarker'
 import { fetchIdentityGamePrincipal } from './identitySession'
+import { productDocumentTitle } from './productBrand'
 import queryParams from './queryParams'
 import { matchEnded, store } from './state'
 import { statePlayer } from './state/StatePlayer'
@@ -265,7 +266,7 @@ export async function startGame() {
   ) {
     quickLoadFromQueryParams()
   } else if (gameMode === LocalGameMode.LOCAL_BOT) {
-    document.title = 'OpenSky | Local Bot'
+    document.title = productDocumentTitle('Local Bot')
 
     const defaultParams: GameParams = {
       season: 999,
@@ -430,7 +431,7 @@ export async function startGame() {
       }
     )
   } else if (gameMode === LocalGameMode.SANDBOX) {
-    document.title = 'OpenSky | Sandbox'
+    document.title = productDocumentTitle('Sandbox')
     const gameParams: GameParams = {
       season: queryParams.skipAuth
         ? 9999

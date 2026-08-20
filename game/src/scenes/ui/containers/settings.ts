@@ -19,6 +19,7 @@ import {
 import { Pin, ReadonlyPin } from '~/helpers/LayoutHelpers'
 import { playSound, playSoundLoop, stopSoundLoop } from '~/helpers/soundHelpers'
 import Object2D from '~/meshes/Object2D'
+import { productVersionLabel } from '~/productBrand'
 import queryParams from '~/queryParams'
 import { store } from '~/state'
 import { takeAction } from '~/systems/input/StateInteractions'
@@ -295,7 +296,7 @@ export default class SettingsContainer extends UIContainer {
     settingsModal.mesh.add(textMesh)
 
     const versionString = new UITextMesh(
-      `OpenSky v${env.GITCOMMIT.slice(0, 10)}`,
+      productVersionLabel(env.GITCOMMIT),
       {
         ...textOptions.generic,
         vAlign: 'top',
