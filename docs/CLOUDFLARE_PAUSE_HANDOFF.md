@@ -9,8 +9,8 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `27842268` (`Brand original game failure paths`)
-- Latest tested runtime commit: `27842268` (`Brand original game failure paths`)
+- Last code/test checkpoint: `ecde30c0` (`Pin Conquest V2 point authority`)
+- Latest tested runtime commit: `ecde30c0` (`Pin Conquest V2 point authority`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -19,7 +19,7 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `27842268` are committed and
+- The runtime changes from `38386294` through `ecde30c0` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -50,13 +50,13 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `27842268`:
+Validation completed locally for exact code head `ecde30c0`:
 
-- focused Conquest V2 Worker regression: 18/18 tests;
-- focused mutation-tested Conquest gate: 7/7 tests;
+- focused Conquest V2 point/runtime regression: 21/21 tests;
+- focused mutation-tested Conquest gate: 8/8 tests;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
-- game server: 34 unit and 98 Workers tests;
+- game server: 34 unit and 101 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
 - analytics: four unit and five Workers tests;
@@ -79,8 +79,10 @@ Exact-head GitHub Actions runs
 complete release contract for `7f1f2ce6` and the later storage-evidence
 checkpoint `470a79c5`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32399815459> passed the
-branding plus handoff head `e5b0c120` in 10m51s. Commit `27842268` must receive
-exact-head CI before any production mutation.
+branding plus handoff head `e5b0c120` in 10m51s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32401856996> passed the
+later game-error-branding head `80bf451d` in 10m14s. Commit `ecde30c0` must
+receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -147,6 +149,31 @@ changing player rewards or enabling Conquest:
 
 The exact milestone passed the complete local Cloudflare release contract. It
 is committed and pushed but not deployed; production Conquest remains disabled.
+
+## Conquest V2 point-authority milestone
+
+Commit `ecde30c0` closes a cross-Worker source-parity gap without enabling
+Conquest:
+
+- the game server no longer keeps its own copy of the eleven Go treasure
+  thresholds or the 13,750-point cap;
+- main-Worker progress reads, game-server before/after reward receipts, cap
+  enforcement, reward policy, point rollover, and delivery now share one
+  TypeScript authority;
+- the Conquest gate derives event 2, four completed-match points, one Silver
+  point, three Gold points, the 25% rounded-up hero-skin bonus, and the
+  winner/turn rule directly from the Go implementation;
+- Workers tests prove that a short abandonment rewards only its winner, turn
+  eight rewards both players for both abandonment and forfeiture, and a match
+  without a winner rewards neither player;
+- the growing suite can no longer collide with synthetic prior match IDs in
+  the third-win settlement scenario.
+
+The exact code head passed the complete local Cloudflare release contract: the
+main Worker passed 510 tests, the game server passed 34 unit and 101 Workers
+tests, and all other service, browser, source-contract, off-chain, and build
+gates remained green. The milestone is committed and locally tested; it is not
+deployed, and production Conquest remains disabled.
 
 ## Storage safety milestone
 
@@ -246,7 +273,7 @@ production migration state.
 
 ### Production rollout
 
-- Deploy and verify the tested runtime changes through `27842268`. Keep
+- Deploy and verify the tested runtime changes through `ecde30c0`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.

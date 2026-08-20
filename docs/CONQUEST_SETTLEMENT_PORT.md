@@ -43,6 +43,13 @@ run only after that task settles.
   `COMPLETED`, while earned bundles become `REWARDS_PENDING`.
 - Event-2 treasure points and their retry receipt are independent of card
   settlement.
+- Event-2 point cap and before/after progress receipts share the same
+  cross-Worker TypeScript treasure authority as player reads, pool summaries,
+  rollover, and V2 reward delivery. A mutation-tested gate derives the event
+  ID, base/card/hero-skin formula, and winner/turn eligibility directly from
+  Go. Workers tests preserve the source boundary: before turn eight an
+  abandonment or forfeit rewards only its winner; at turn eight both players
+  are eligible; a match without a winner rewards neither player.
 - Production Conquest modes are false in both the match service and API status.
 - Versioned Silver/Gold pool storage fails closed for missing, unapproved, or
   malformed pools and for new admission after the inclusive expiry boundary.
