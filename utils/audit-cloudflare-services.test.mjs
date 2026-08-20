@@ -73,6 +73,27 @@ test('rejects an analytics deploy command without the reviewed target runner', (
   ])
 })
 
+test('rejects the obsolete account-level R2 blocker as analytics evidence', () => {
+  const input = validInput()
+  input.evidenceSources['game-analytics'] = [
+    'Cloudflare adapter',
+    'waiting for R2 to be enabled'
+  ].join('\n')
+  const errors = auditServices(input).errors
+  for (const evidence of [
+    'R2 is enabled',
+    'paused before bucket creation',
+    'zero producers and zero consumers',
+    'no analytics Worker exists yet'
+  ]) {
+    assert.ok(
+      errors.includes(
+        `game-analytics is missing ported-blocked evidence: ${evidence}`
+      )
+    )
+  }
+})
+
 test('rejects a target runner without its explicit account and pinned Wrangler child', () => {
   const input = validInput()
   input.productionRunnerSource = ''

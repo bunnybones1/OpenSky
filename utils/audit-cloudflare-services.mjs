@@ -30,7 +30,13 @@ export const EXPECTED_DOCKER_WORKLOADS = {
   'game-analytics': {
     disposition: 'ported-blocked',
     evidenceFile: 'docs/CLOUDFLARE_GAME_ANALYTICS.md',
-    evidence: ['Cloudflare adapter', 'waiting for R2 to be enabled']
+    evidence: [
+      'Cloudflare adapter',
+      'R2 is enabled',
+      'paused before bucket creation',
+      'zero producers and zero consumers',
+      'no analytics Worker exists yet'
+    ]
   },
   matchmaker: {
     disposition: 'ported',

@@ -1,6 +1,6 @@
 # Cloud Weasel Cloudflare pause handoff
 
-Status date: 2026-08-16
+Status date: 2026-08-20
 
 Work is intentionally paused at the user's request. Do not resume deployment,
 provisioning, product activation, or live drills without a new user request.
@@ -9,22 +9,25 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `2863a23db11304dc4c169e12eda4696cfea6dbe1`
-  (`Protect snapshotted Conquest V2 delivery`)
-- Latest tested runtime commit: `38386294` (`Gate reward timing on active schedules`)
+- Last code/test checkpoint: `7f1f2ce634d04c849a05b2b38934abd04a69202f`
+  (`Bound Conquest V2 reward delivery`)
+- Latest tested runtime commit: `7f1f2ce6` (`Bound Conquest V2 reward delivery`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
 - Last known deployed main Worker version:
   `89037f40-5cda-4503-9e70-35b710cd7c2b`
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime checkpoint in `38386294` is committed and tested but is **not
-  deployed**. Its local web build produced `/assets/index-fd3d9163.js`; the
-  game entry remained `/game/cloudflare/assets/index-7e9c419b.js`.
+- The runtime changes from `38386294` through `7f1f2ce6` are committed and
+  tested but are **not deployed**. The exact local build produced web entry
+  `/assets/index-874772de.js`; the game entry remained
+  `/game/cloudflare/assets/index-7e9c419b.js`.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
-  already-snapshotted Conquest V2 cycle from a later schedule disable. None of
-  these commits enables a producer, activates rewards, or is deployed.
+  already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
+  `7f1f2ce6` bounds large Conquest V2 deliveries and pins every treasure band
+  to the Go source. None of these commits enables a producer, activates
+  rewards, or is deployed.
 - The untracked `temp/` directory is user-owned and must remain untouched.
 
 The reported Practice PvP replay enum failure was fixed earlier and is already
@@ -46,11 +49,11 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `2863a23d` before stopping:
+Validation completed locally for exact code head `7f1f2ce6`:
 
-- focused Conquest V2 Worker regression: 17/17 tests;
-- focused mutation-tested Conquest gate: 6/6 tests;
-- main Worker suite: 509/509 tests across 84 files;
+- focused Conquest V2 Worker regression: 18/18 tests;
+- focused mutation-tested Conquest gate: 7/7 tests;
+- main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 27/27 tests;
 - game server: 34 unit and 98 Workers tests;
 - match service: 33/33 Workers tests;
@@ -69,11 +72,10 @@ pnpm build:cloudflare
 It passed. Existing Vite chunk-size and legacy lint warnings remained warnings;
 there were no build errors.
 
-GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/31966818671> also passed
-the complete release contract for the earlier exact code head `9237cbd2` in
-9m19s. Before resuming production work, require a green run for the then-current
-exact branch head.
+Exact-head GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32396596729> passed the
+complete release contract for `7f1f2ce6` in 10m29s. Any later commit must also
+receive exact-head CI before a production mutation.
 
 ## Conquest V2 resume-safety milestone
 
@@ -91,6 +93,25 @@ Commit `2863a23d` closes a settlement edge case without enabling Conquest:
 
 This safeguard is committed and locally tested only. It has not been deployed,
 and production Conquest remains disabled.
+
+## Conquest V2 bounded-delivery milestone
+
+Commit `7f1f2ce6` closes the remaining known settlement-size risk without
+changing player rewards or enabling Conquest:
+
+- one shared TypeScript authority now drives progress, pool summaries, point
+  rollover, and settlement treasure levels/weights;
+- a mutation-tested release gate derives all eleven bands directly from
+  `api/lib/conquest/conquestv2/treasure_map.go` and rejects local drift or a
+  duplicated consumer map;
+- the frozen Silver draw is aggregated with D1 `json_each`, so a level-ten
+  award uses two set-based grant statements instead of two statements per
+  distinct card;
+- a Workers-runtime regression settles the source level-ten 13,750-point band,
+  delivers exactly 218 Silver cards, and proves the points/weight receipt.
+
+The exact milestone passed the complete local Cloudflare release contract. It
+is committed and pushed but not deployed; production Conquest remains disabled.
 
 ## Storage safety milestone
 
@@ -111,20 +132,23 @@ move them to the configured dead-letter queue; only completed receipts are
 acknowledged. Direct Workers tests cover malformed, terminal-failed, completed,
 and successful replay messages.
 
-## R2 status at the pause
+## Production storage status at the pause
 
-R2 enablement was independently verified with an account-pinned, read-only
-Wrangler check against the reviewed Cloud Weasel account
-`528badc1c29c30196335df252a73c5a6`. The bucket list succeeded and was empty:
-no production R2 buckets have been created. Both analytics queues still had
-zero producers and zero consumers, and the analytics Worker still did not
-exist (`10007`). No Cloudflare resource was created, changed, or deployed
-after the pause request.
+R2 enablement was independently reconfirmed on 2026-08-20 with an explicitly
+account-pinned, read-only Wrangler check against the reviewed Cloud Weasel
+account `528badc1c29c30196335df252a73c5a6`. The bucket list succeeded and was
+empty: no production R2 buckets have been created. Both analytics queues still
+had zero producers and zero consumers, the analytics Worker still did not exist
+(`10007`), and production D1 reported no migrations to apply. No Cloudflare
+resource was created, changed, or deployed.
 
-The empty bucket list was reconfirmed after exact-head CI passed. Provisioning
-then stopped at the pause boundary: `cloud-weasel-game-analytics` was not
-created, no lifecycle or public-access setting exists, and no deploy command
-was run.
+The deployed Worker versions were also reconfirmed read-only: main
+`89037f40-5cda-4503-9e70-35b710cd7c2b`, game server
+`cbe6364c-bc7a-4cb4-89cb-d4cd29b8c27f`, match service
+`3b1a3a1c-8980-442a-8977-919a76c35620`, and matchmaker
+`a0663ea9-6fbb-49ac-9d7c-e2e530a9baea`. Provisioning remains stopped at the
+pause boundary: `cloud-weasel-game-analytics` was not created, no lifecycle or
+public-access setting exists, and no deploy command was run.
 
 R2 enablement removes an account-level blocker, but it does not by itself
 create buckets, lifecycle policies, Worker bindings, queue producers, or a
@@ -132,8 +156,9 @@ healthy consumer. Do not enable the game-server producer first.
 
 The existing analytics Worker configuration passed its TypeScript check, four
 isolated unit tests, five Workers-runtime tests, the production-target gate,
-the complete local release contract, and exact-head CI. No further code or test
-repair is known before provisioning.
+the complete local release contract, and exact-code-head CI. No further code or
+test repair is known before provisioning; exact-head CI remains a required
+production gate after any later commit.
 
 ## Safe resume order for R2 and analytics
 
@@ -205,12 +230,13 @@ production migration state.
 ### Conquest
 
 The TypeScript implementation, settlement receipts, operator flow, and safety
-gates are complete, including delivery of snapshotted cycles across a later
-schedule disable. Production remains deliberately disabled. Before enabling it,
-Cloud Weasel still needs authoritative eligible Silver card IDs, weekly Gold
-IDs and window, separate proposer/activator/runner/verifier identities, three
-real drill matches, and the unchanged 24-hour observation period. Do not create
-or activate pools merely to make the UI nonempty.
+gates are complete, including bounded level-ten delivery and delivery of
+snapshotted cycles across a later schedule disable. Production remains
+deliberately disabled. Before enabling it, Cloud Weasel still needs
+authoritative eligible Silver card IDs, weekly Gold IDs and window, separate
+proposer/activator/runner/verifier identities, three real drill matches, and
+the unchanged 24-hour observation period. Do not create or activate pools
+merely to make the UI nonempty.
 
 ### Product configuration and decisions
 

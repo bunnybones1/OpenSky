@@ -7,16 +7,16 @@ without reviewing this inventory fails the Cloudflare build.
 
 ## Product workloads
 
-| Original workload | Cloudflare disposition |
-| --- | --- |
-| `webapp` | Original Vite client served by the main Worker Assets binding. |
-| `game` | Original Vite game client served beneath the main Worker asset tree. |
-| `api` API target | TypeScript API and Google identity gateway backed by D1. |
-| `api` worker target | Main Worker cron plus Durable Object alarms; each registered source runner also has a separate mechanical audit. |
-| `matchmaker` | `matchmaker-ts`, using Durable Objects and a separate match service. |
-| `server` | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`. The source server was already TypeScript. |
-| `game-analytics` | TypeScript Worker/Queue/R2 port is complete and tested. Production activation is blocked only by R2 not being enabled on the account. |
-| `chain` | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional. |
+| Original workload   | Cloudflare disposition                                                                                                                                         |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webapp`            | Original Vite client served by the main Worker Assets binding.                                                                                                 |
+| `game`              | Original Vite game client served beneath the main Worker asset tree.                                                                                           |
+| `api` API target    | TypeScript API and Google identity gateway backed by D1.                                                                                                       |
+| `api` worker target | Main Worker cron plus Durable Object alarms; each registered source runner also has a separate mechanical audit.                                               |
+| `matchmaker`        | `matchmaker-ts`, using Durable Objects and a separate match service.                                                                                           |
+| `server`            | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`. The source server was already TypeScript.                   |
+| `game-analytics`    | TypeScript Worker/Queue/R2 port is complete and tested. R2 is enabled; production activation is paused before private bucket creation and consumer deployment. |
+| `chain`             | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional.   |
 
 `sheets` is an internal Tauri/Vite content tool, not a hosted player service.
 `asset-pipeline`, `bot`, and the Go GM/stress/migration utilities are operator,
@@ -37,14 +37,13 @@ product description or Cloudflare runtime.
 
 ## Remaining operational work
 
-- Enable R2, create `cloud-weasel-game-analytics`, deploy the analytics consumer,
-  verify it, and only then deploy the game-server replay producer.
-  The latest account-pinned read-only check on 2026-08-16, after runtime
-  milestone `21b27430`, still returned Cloudflare `10042` (“Please enable R2
-  through the Cloudflare Dashboard”). Both queues still exist with zero
-  producers and zero consumers, and the deployment inventory returns `10007`
-  because no analytics Worker exists. This is account provisioning, not a
-  remaining TypeScript port.
+- Create the private `cloud-weasel-game-analytics` bucket, deploy and verify the
+  analytics consumer, and only then deploy the game-server replay producer.
+  The latest explicitly account-pinned read-only check on 2026-08-20 confirmed
+  that R2 is enabled but the bucket list remains empty. Both queues still exist
+  with zero producers and zero consumers, the deployment inventory returns
+  `10007` because no analytics Worker exists, and D1 has no pending migrations.
+  This is paused production provisioning, not a remaining TypeScript port.
 - External device push has a disabled-by-default OneSignal adapter. An empty or
   malformed app ID now makes every SDK operation inert, and the optional
   welcome destination must be configured as an explicit HTTPS URL. Activation
