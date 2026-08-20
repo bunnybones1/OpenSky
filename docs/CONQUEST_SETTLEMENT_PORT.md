@@ -1138,3 +1138,29 @@ and off-chain gate, all typechecks, both production builds, and 594-file
 artifact validation. No deployment, migration, provisioning, activation, live
 match, or production mutation was performed. Production Conquest remains
 disabled.
+
+## Saved recent-match session detachment proof
+
+Follow-up milestone `fb551525` pins another source lifecycle boundary adjacent
+to settlement publication. In source `MatchManager.ts`, a player retrieving an
+already saved recent match is authenticated and receives `reconnect` plus
+optional rewards, but that context is not linked to the live `MatchProxy` and
+does not receive a match worker. It is therefore distinct from an active player
+join even though both enter through the same client message.
+
+The Cloudflare ended-match join branch now preserves that distinction: it does
+not mark the socket joined and does not displace another connection for the
+same principal. The Workers regression opens two saved-match sockets for one
+player, verifies both receive identical authoritative reconnect state and
+rewards, then proves the first remains open and answers `timesync` after the
+second connects. Active-match duplicate-session eviction is unchanged.
+
+The mutation-tested completion gate scopes both source and Worker checks to the
+saved-match branches and fails if either becomes live-linked, joined, or
+displacing. The exact complete local release contract passed at committed
+runtime head `fb551525` with 510 main-Worker tests, 34 game-server unit tests,
+116 game-server Workers tests, 33 match-service tests, 78 matchmaker tests, 30
+browser-game tests, nine analytics tests, every source and off-chain gate, all
+typechecks, both production builds, and 594-file artifact validation. No
+deployment, migration, provisioning, activation, live match, or production
+mutation was performed. Production Conquest remains disabled.

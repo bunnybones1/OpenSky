@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `5fefcc2b`
-  (`Preserve terminal match socket lifecycle`)
-- Latest tested runtime commit: `5fefcc2b`
-  (`Preserve terminal match socket lifecycle`)
+- Last code/test checkpoint: `fb551525`
+  (`Detach saved recent match sessions`)
+- Latest tested runtime commit: `fb551525`
+  (`Detach saved recent match sessions`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,7 +21,7 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `5fefcc2b` are committed and
+- The runtime changes from `38386294` through `fb551525` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -56,7 +56,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `5fefcc2b`:
+Validation completed locally for exact code head `fb551525`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
@@ -106,7 +106,10 @@ exact-head run
 `e0766a65` in 11m06s. The settlement-terminal checkpoint and its handoff passed
 exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32419219533> at commit
-`4519fd28` in 10m46s. The newer `5fefcc2b` checkpoint and its refreshed handoff
+`4519fd28` in 10m46s. The terminal-socket checkpoint and its refreshed handoff
+passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32421253747> at commit
+`8732a9fd` in 10m56s. The newer `fb551525` checkpoint and this refreshed handoff
 must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -386,6 +389,30 @@ both production builds, and 594-file artifact validation. No deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Saved recent-match session detachment milestone
+
+Follow-up commit `fb551525` closes the remaining source distinction between an
+active player session and a player retrieving an already saved recent match:
+
+- source `MatchManager.ts` authenticates the saved-match request and sends
+  `reconnect` plus optional rewards, but does not link that context to the live
+  `MatchProxy` or install a match worker;
+- the Durable Object therefore keeps the corresponding attachment unjoined and
+  does not run active-session duplicate eviction for that branch;
+- two saved-match connections for the same player can coexist, both receive the
+  same authoritative reconnect state and reward payload, and the first remains
+  responsive to `timesync` after the second connects; and
+- active-match joins retain the existing source-compatible displacement path.
+
+The mutation-tested completion gate now rejects either source linkage or
+Worker joined/displacement behavior in the recent-match branch. The exact
+complete local release contract passed at committed runtime head `fb551525`
+with 510 main-Worker tests, 34 game-server unit tests, 116 game-server Workers
+tests, all other service and browser suites, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. No
+deployment, migration, provisioning, activation, live match, or production
+mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -488,9 +515,9 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 ### Production rollout
 
-- Push the `5fefcc2b` milestone and refreshed handoff, then wait for exact-head
+- Push the `fb551525` milestone and refreshed handoff, then wait for exact-head
   CI.
-- Deploy and verify the tested runtime changes through `5fefcc2b`. Keep
+- Deploy and verify the tested runtime changes through `fb551525`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

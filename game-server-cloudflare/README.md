@@ -47,8 +47,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
   publication barrier succeeds. An attached player then receives rewards,
   `match_ended`, and the source forced close code `4004`; a later recent-match
   reconnect instead receives `reconnect` plus optional rewards and remains
-  open, while settlement retries expose only the authoritative final game
-  state.
+  open. Saved recent-match sockets stay detached from live-session duplicate
+  eviction, so parallel history/replay retrieval does not displace an earlier
+  connection, while settlement retries expose only the authoritative final
+  game state.
 
 The gateway, not the browser, is the identity authority. It validates a Google
 session and maps the user to the stable 20-byte game principal for player and
