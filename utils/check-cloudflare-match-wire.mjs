@@ -35,10 +35,12 @@ const pointerFields = (source, name) =>
 export const matchWireErrors = (
   source,
   sourceHandler,
+  sourceFeeds,
   matchWire,
   competitive,
   replays,
-  api
+  api,
+  authoritativeDeckMigration
 ) => {
   const errors = []
   const matchFields = [
@@ -139,6 +141,52 @@ export const matchWireErrors = (
     }
   }
 
+  for (const token of [
+    'm.Player1.DeckString = m.Player1DeckString',
+    'm.Player1.InitDeckString = m.InitPlayer1DeckString',
+    'm.Player2.DeckString = m.Player2DeckString',
+    'm.Player2.InitDeckString = m.InitPlayer2DeckString'
+  ]) {
+    if (!sourceFeeds.includes(token)) {
+      errors.push(`source match deck projection changed: ${token}`)
+    }
+  }
+
+  const compactCompetitive = competitive.replace(/\s+/g, ' ')
+  for (const token of [
+    'authoritativeDeckString?: string',
+    'const initDeckString = encodeDeckString(cardIds, initialDeckClass)',
+    'decodeDeckString(authoritativeDeckString)',
+    'libraryCardsFromDeckString(authoritativeDeckString).length !== 30',
+    'deckString: authoritativeDeckString ?? initDeckString',
+    'initDeckString,',
+    'if (hasPlayer1Deck !== hasPlayer2Deck) return null',
+    'FROM multiplayer_match_authoritative_decks deck',
+    'deck.player_index = 0',
+    'deck.player_index = 1'
+  ]) {
+    if (!compactCompetitive.includes(token)) {
+      errors.push(`Worker final match deck projection is missing: ${token}`)
+    }
+  }
+  if (
+    (competitive.match(/SELECT \$\{MATCH_ROW_COLUMNS\}/g) ?? []).length !== 4
+  ) {
+    errors.push(
+      'history, staff, detail, and replay queries do not share final deck authority'
+    )
+  }
+  if (
+    !authoritativeDeckMigration.includes(
+      'CREATE TABLE multiplayer_match_authoritative_decks'
+    ) ||
+    !authoritativeDeckMigration.includes(
+      'PRIMARY KEY (proposal_id, player_index)'
+    )
+  ) {
+    errors.push('immutable authoritative match deck schema is missing')
+  }
+
   const compactWire = matchWire.replace(/\s+/g, ' ')
   for (const token of [
     'player1: match.player1 ? sourceMatchPlayerWire(match.player1) : null',
@@ -196,29 +244,49 @@ export const matchWireErrors = (
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [source, sourceHandler, matchWire, competitive, replays, api] =
-    await Promise.all([
-      readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
-      readFile(path.join(root, 'api', 'rpc', 'admin_ban_tools.go'), 'utf8'),
-      readFile(path.join(root, 'cloudflare', 'src', 'match-wire.ts'), 'utf8'),
-      readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
-      readFile(path.join(root, 'cloudflare', 'src', 'replays.ts'), 'utf8'),
-      readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8')
-    ])
-  const errors = matchWireErrors(
+  const [
     source,
     sourceHandler,
+    sourceFeeds,
     matchWire,
     competitive,
     replays,
-    api
+    api,
+    authoritativeDeckMigration
+  ] = await Promise.all([
+    readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'rpc', 'admin_ban_tools.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'rpc', 'feeds.go'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'match-wire.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'replays.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'api.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0115_authoritative_match_decks.sql'
+      ),
+      'utf8'
+    )
+  ])
+  const errors = matchWireErrors(
+    source,
+    sourceHandler,
+    sourceFeeds,
+    matchWire,
+    competitive,
+    replays,
+    api,
+    authoritativeDeckMigration
   )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Match history, staff lists, detail, and replay metadata preserve the generated Go JSON wire'
+      'Match history, staff lists, detail, and replay metadata preserve the generated Go wire and final-deck authority'
     )
   }
 }

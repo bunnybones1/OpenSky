@@ -1,16 +1,21 @@
 import { env } from 'cloudflare:workers'
-import { ActionType, QuestPeriodicity } from '@opensky/proto'
+import { ActionType, DeckClass, QuestPeriodicity } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import { AccountActionsRepository } from '../src/account-actions'
 import { allLibraryCards } from '../src/card-library'
+import { encodeDeckString } from '../src/deck-codec'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
-import { PlayerRepository, STARTER_CARDS } from '../src/player'
+import {
+  PlayerRepository,
+  STARTER_CARD_IDS,
+  STARTER_CARDS
+} from '../src/player'
 import { seasonFromDate } from '../src/legacy-seasons'
 import { questPeriodAt } from '../src/quest-library'
 import {
@@ -21,6 +26,14 @@ import {
 const testEnv = env as unknown as Env
 const ADMIN = 'staff-admin'
 const PLAYER = 'staff-player'
+const STAFF_FINAL_PLAYER1_DECK = encodeDeckString(
+  STARTER_CARD_IDS,
+  DeckClass.STR
+)
+const STAFF_FINAL_PLAYER2_DECK = encodeDeckString(
+  [...STARTER_CARD_IDS].reverse(),
+  DeckClass.STR
+)
 
 const rpcAs = async (
   userId: string,
@@ -196,6 +209,14 @@ const seedReport = async () => {
              ?, ?, ?)`
   )
     .bind(ADMIN, PLAYER, now, endedAt, endedAt)
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_match_authoritative_decks
+       (proposal_id, player_index, deck_string, captured_at)
+     VALUES ('staff-report-match', 0, ?, ?),
+            ('staff-report-match', 1, ?, ?)`
+  )
+    .bind(STAFF_FINAL_PLAYER1_DECK, endedAt, STAFF_FINAL_PLAYER2_DECK, endedAt)
     .run()
   await env.AUTH_DB.prepare(
     `INSERT INTO player_account_reports
@@ -2148,8 +2169,16 @@ describe('fail-closed Google identity staff authorization', () => {
             id: 901,
             status: 'COMPLETED',
             replayID: 'staff-report-replay',
-            player1: { address: `identity:${ADMIN}` },
-            player2: { address: `identity:${PLAYER}` },
+            player1: {
+              address: `identity:${ADMIN}`,
+              deckString: STAFF_FINAL_PLAYER1_DECK,
+              initDeckString: encodeDeckString([], DeckClass.STR)
+            },
+            player2: {
+              address: `identity:${PLAYER}`,
+              deckString: STAFF_FINAL_PLAYER2_DECK,
+              initDeckString: encodeDeckString([], DeckClass.STR)
+            },
             turnNonce: 8
           }
         }

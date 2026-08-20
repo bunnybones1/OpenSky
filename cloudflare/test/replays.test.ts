@@ -1,12 +1,15 @@
 import { env } from 'cloudflare:workers'
+import { DeckClass } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
+import { encodeDeckString } from '../src/deck-codec'
 import type { Env } from '../src/env'
 import {
   createIdentitySession,
   IDENTITY_SESSION_COOKIE
 } from '../src/identity-session'
+import { STARTER_CARD_IDS } from '../src/player'
 import { handleReplayRequest } from '../src/replays'
 
 const USER_ID = '77777777-7777-4777-8777-777777777777'
@@ -19,6 +22,11 @@ const SYSTEM_MATCH_ID = 900002
 const SYSTEM_REPLAY_ID = '99999999-8888-4888-8888-888888888888'
 const SYSTEM_PROPOSAL_ID = 'readiness-drill-match-replay-contract-test'
 const ADMIN_USER_ID = '99999999-9999-4999-8999-999999999999'
+const FINAL_PLAYER1_DECK = encodeDeckString(STARTER_CARD_IDS, DeckClass.STR)
+const FINAL_PLAYER2_DECK = encodeDeckString(
+  [...STARTER_CARD_IDS].reverse(),
+  DeckClass.STR
+)
 
 const service = (handler: (request: Request) => Response | Promise<Response>) =>
   ({ fetch: handler }) as unknown as Fetcher
@@ -110,7 +118,7 @@ beforeEach(async () => {
             }
           },
           player2: {
-            privateSeed: { cards: [2], prisms: ['agy'] },
+            privateSeed: { cards: [2], prisms: ['str'] },
             account: {
               address: '0x2222222222222222222222222222222222222222',
               name: 'Opponent'
@@ -120,6 +128,20 @@ beforeEach(async () => {
       }),
       now,
       now,
+      now
+    )
+    .run()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_match_authoritative_decks
+       (proposal_id, player_index, deck_string, captured_at)
+     VALUES (?, 0, ?, ?), (?, 1, ?, ?)`
+  )
+    .bind(
+      PROPOSAL_ID,
+      FINAL_PLAYER1_DECK,
+      now,
+      PROPOSAL_ID,
+      FINAL_PLAYER2_DECK,
       now
     )
     .run()
@@ -157,12 +179,16 @@ describe('source replay archive contract', () => {
     ])
     expect(body.match).toMatchObject({ tutorialLevel: null })
     expect(body.match.player1).toMatchObject({
+      deckString: FINAL_PLAYER1_DECK,
+      initDeckString: encodeDeckString([1], DeckClass.STR),
       region: null,
       tagArtID: null,
       crystalID: null,
       playerSessionId: null
     })
     expect(body.match.player2).toMatchObject({
+      deckString: FINAL_PLAYER2_DECK,
+      initDeckString: encodeDeckString([2], DeckClass.STR),
       region: null,
       tagArtID: null,
       crystalID: null,

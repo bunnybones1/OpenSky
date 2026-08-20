@@ -1675,6 +1675,19 @@ describe('legacy player RPC compatibility', () => {
            player2_mode = 'RANKED_CONSTRUCTED'
        WHERE proposal_id = 'ranked-history'`
     ).run()
+    const finalPlayer1Deck = encodeDeckString(STARTER_CARD_IDS, DeckClass.STR)
+    const finalPlayer2Deck = encodeDeckString(
+      [...STARTER_CARD_IDS].reverse(),
+      DeckClass.STR
+    )
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_authoritative_decks
+         (proposal_id, player_index, deck_string, captured_at)
+       VALUES ('ranked-history', 0, ?, ?),
+              ('ranked-history', 1, ?, ?)`
+    )
+      .bind(finalPlayer1Deck, now, finalPlayer2Deck, now)
+      .run()
 
     const response = await rpc('ListMatches', {
       page: { pageSize: 5 },
@@ -1695,12 +1708,16 @@ describe('legacy player RPC compatibility', () => {
           player1: {
             address: identityReference,
             name: 'Cloud Weasel Player',
+            deckString: finalPlayer1Deck,
+            initDeckString: encodeDeckString([6, 7], DeckClass.STR),
             deckClass: 'STR',
             isBot: false
           },
           player2: {
             address: `identity:${otherUserId}`,
-            name: 'History Opponent'
+            name: 'History Opponent',
+            deckString: finalPlayer2Deck,
+            initDeckString: encodeDeckString([8, 9, 10], DeckClass.STR)
           },
           winningPlayer: 1,
           player1GameMode: 'PRACTICE_PVP',
@@ -1864,7 +1881,11 @@ describe('legacy player RPC compatibility', () => {
     ).toMatchObject({
       match: {
         id: rankedRow!.id,
-        player1: { address: identityReference },
+        player1: {
+          address: identityReference,
+          deckString: finalPlayer1Deck,
+          initDeckString: encodeDeckString([6, 7], DeckClass.STR)
+        },
         replayID: 'ranked-history-replay'
       }
     })
@@ -1929,6 +1950,34 @@ describe('legacy player RPC compatibility', () => {
         }
       ]
     })
+
+    const olderRow = await env.AUTH_DB.prepare(
+      `SELECT id FROM multiplayer_matches
+       WHERE proposal_id = 'ranked-history-older'`
+    ).first<{ id: number }>()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_authoritative_decks
+         (proposal_id, player_index, deck_string, captured_at)
+       VALUES ('ranked-history-older', 0, ?, ?)`
+    )
+      .bind(finalPlayer1Deck, now)
+      .run()
+    expect((await rpc('GetMatch', { matchID: olderRow!.id })).status).toBe(404)
+
+    const newerRow = await env.AUTH_DB.prepare(
+      `SELECT id FROM multiplayer_matches
+       WHERE proposal_id = 'ranked-history-newer'`
+    ).first<{ id: number }>()
+    const wrongClassDeck = encodeDeckString(STARTER_CARD_IDS, DeckClass.AGY)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_authoritative_decks
+         (proposal_id, player_index, deck_string, captured_at)
+       VALUES ('ranked-history-newer', 0, ?, ?),
+              ('ranked-history-newer', 1, ?, ?)`
+    )
+      .bind(wrongClassDeck, now, wrongClassDeck, now)
+      .run()
+    expect((await rpc('GetMatch', { matchID: newerRow!.id })).status).toBe(404)
   })
 
   it('rebuilds the source profile feed from durable reward and rank receipts', async () => {

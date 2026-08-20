@@ -20,7 +20,8 @@ import {
 } from '@opensky/shared/match-modes'
 
 import { sourceAccountStatWire } from './account-stat-wire'
-import { encodeDeckString } from './deck-codec'
+import { libraryCardsFromDeckString } from './card-library'
+import { decodeDeckString, encodeDeckString } from './deck-codec'
 import { sourceCrystalIDSQL } from './account-wire'
 import { sourceLeaderboardEntryWire } from './competitive-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
@@ -132,8 +133,25 @@ interface MatchRow {
   created_at: string
   updated_at: string
   ended_at: string | null
+  player1_deck_string: string | null
+  player2_deck_string: string | null
   reviewed?: number
 }
+
+const MATCH_ROW_COLUMNS = `
+  matches.id, matches.proposal_id, matches.replay_id, matches.mode,
+  matches.player1_mode, matches.player2_mode, matches.status,
+  matches.player1_user_id, matches.player2_user_id,
+  matches.match_payload_json, matches.winner_player, matches.result_json,
+  matches.created_at, matches.updated_at, matches.ended_at,
+  (SELECT deck.deck_string
+   FROM multiplayer_match_authoritative_decks deck
+   WHERE deck.proposal_id = matches.proposal_id AND deck.player_index = 0)
+    AS player1_deck_string,
+  (SELECT deck.deck_string
+   FROM multiplayer_match_authoritative_decks deck
+   WHERE deck.proposal_id = matches.proposal_id AND deck.player_index = 1)
+    AS player2_deck_string`
 
 interface MatchPayloadParticipant {
   privateSeed?: { cards?: unknown; prisms?: unknown }
@@ -765,13 +783,23 @@ const participantCardIds = (
 
 const matchPlayer = (
   participant: MatchPayloadParticipant | undefined,
-  userId: string | null
+  userId: string | null,
+  authoritativeDeckString?: string
 ): MatchPlayer => {
   const account = participant?.account || {}
   const privateSeed = participant?.privateSeed || {}
-  const deckClass = deckClassForPrisms(privateSeed.prisms)
+  const initialDeckClass = deckClassForPrisms(privateSeed.prisms)
   const cardIds = participantCardIds(participant)
-  const deckString = encodeDeckString(cardIds, deckClass)
+  const initDeckString = encodeDeckString(cardIds, initialDeckClass)
+  const authoritativeDeck = authoritativeDeckString
+    ? decodeDeckString(authoritativeDeckString)
+    : undefined
+  if (
+    authoritativeDeckString &&
+    libraryCardsFromDeckString(authoritativeDeckString).length !== 30
+  ) {
+    throw new Error('authoritative match deck is incomplete')
+  }
   return {
     id: Number.isSafeInteger(account.id) ? account.id! : 0,
     address: userId
@@ -787,9 +815,9 @@ const matchPlayer = (
     ...(typeof account.crystalID === 'number'
       ? { crystalID: account.crystalID }
       : {}),
-    deckString,
-    initDeckString: deckString,
-    deckClass,
+    deckString: authoritativeDeckString ?? initDeckString,
+    initDeckString,
+    deckClass: authoritativeDeck?.deckClass ?? initialDeckClass,
     ...(typeof participant?.playerSessionID === 'string'
       ? { playerSessionId: participant.playerSessionID }
       : {}),
@@ -813,8 +841,25 @@ const matchFromRow = (row: MatchRow): Match | null => {
   } catch {
     return null
   }
-  const player1 = matchPlayer(payload.match?.player1, row.player1_user_id)
-  const player2 = matchPlayer(payload.match?.player2, row.player2_user_id)
+  const hasPlayer1Deck = row.player1_deck_string !== null
+  const hasPlayer2Deck = row.player2_deck_string !== null
+  if (hasPlayer1Deck !== hasPlayer2Deck) return null
+  let player1: MatchPlayer
+  let player2: MatchPlayer
+  try {
+    player1 = matchPlayer(
+      payload.match?.player1,
+      row.player1_user_id,
+      row.player1_deck_string ?? undefined
+    )
+    player2 = matchPlayer(
+      payload.match?.player2,
+      row.player2_user_id,
+      row.player2_deck_string ?? undefined
+    )
+  } catch {
+    return null
+  }
   const storedStatus =
     typeof resultBody.status === 'string' ? resultBody.status : undefined
   const status =
@@ -1200,13 +1245,10 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
-                status, player1_user_id,
-                player2_user_id, match_payload_json, winner_player,
-                result_json, created_at, updated_at, ended_at
-         FROM multiplayer_matches
-         WHERE status = 'ended'
-           AND (player1_user_id = ? OR player2_user_id = ?)`
+        `SELECT ${MATCH_ROW_COLUMNS}
+         FROM multiplayer_matches matches
+         WHERE matches.status = 'ended'
+           AND (matches.player1_user_id = ? OR matches.player2_user_id = ?)`
       )
       .bind(userId, userId)
       .all<MatchRow>()
@@ -1303,12 +1345,7 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT matches.id, matches.proposal_id, matches.replay_id,
-                matches.mode, matches.player1_mode, matches.player2_mode,
-                matches.status, matches.player1_user_id,
-                matches.player2_user_id, matches.match_payload_json,
-                matches.winner_player, matches.result_json,
-                matches.created_at, matches.updated_at, matches.ended_at,
+        `SELECT ${MATCH_ROW_COLUMNS},
                 COALESCE(review.reviewed, 0) AS reviewed
          FROM multiplayer_matches matches
          LEFT JOIN match_reviews review ON review.match_id = matches.id`
@@ -1457,12 +1494,9 @@ export class CompetitiveRepository {
     }
     const row = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
-                status, player1_user_id,
-                player2_user_id, match_payload_json, winner_player,
-                result_json, created_at, updated_at, ended_at
-         FROM multiplayer_matches
-         WHERE id = ?`
+        `SELECT ${MATCH_ROW_COLUMNS}
+         FROM multiplayer_matches matches
+         WHERE matches.id = ?`
       )
       .bind(matchId)
       .first<MatchRow>()
@@ -1489,12 +1523,9 @@ export class CompetitiveRepository {
   async matchByReplay(matchId: number, replayId: string) {
     const row = await this.database
       .prepare(
-        `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
-                status, player1_user_id,
-                player2_user_id, match_payload_json, winner_player,
-                result_json, created_at, updated_at, ended_at
-         FROM multiplayer_matches
-         WHERE id = ? AND replay_id = ?`
+        `SELECT ${MATCH_ROW_COLUMNS}
+         FROM multiplayer_matches matches
+         WHERE matches.id = ? AND matches.replay_id = ?`
       )
       .bind(matchId, replayId)
       .first<MatchRow>()
