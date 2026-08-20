@@ -5,16 +5,32 @@ import test from 'node:test'
 import { cloudflareBrandingGateErrors } from './check-cloudflare-branding-gate.mjs'
 
 const currentInput = async () => {
-  const [productBrand, gameHtml, gameLogic, tutorialTitle, hud, settings] =
-    await Promise.all([
-      readFile('game/src/productBrand.ts', 'utf8'),
-      readFile('game/index.html', 'utf8'),
-      readFile('game/src/gameLogic.ts', 'utf8'),
-      readFile('game/src/scenes/ui/containers/tutorialTitle.ts', 'utf8'),
-      readFile('game/src/scenes/ui/containers/hud.ts', 'utf8'),
-      readFile('game/src/scenes/ui/containers/settings.ts', 'utf8')
-    ])
-  return { productBrand, gameHtml, gameLogic, tutorialTitle, hud, settings }
+  const [
+    productBrand,
+    gameHtml,
+    gameEntry,
+    gameLogic,
+    tutorialTitle,
+    hud,
+    settings
+  ] = await Promise.all([
+    readFile('game/src/productBrand.ts', 'utf8'),
+    readFile('game/index.html', 'utf8'),
+    readFile('game/src/index.ts', 'utf8'),
+    readFile('game/src/gameLogic.ts', 'utf8'),
+    readFile('game/src/scenes/ui/containers/tutorialTitle.ts', 'utf8'),
+    readFile('game/src/scenes/ui/containers/hud.ts', 'utf8'),
+    readFile('game/src/scenes/ui/containers/settings.ts', 'utf8')
+  ])
+  return {
+    productBrand,
+    gameHtml,
+    gameEntry,
+    gameLogic,
+    tutorialTitle,
+    hud,
+    settings
+  }
 }
 
 test('accepts the reviewed Cloud Weasel game runtime branding', async () => {
@@ -34,6 +50,21 @@ test('rejects mutation of the shared product-name authority', async () => {
 test('rejects a missing helper on every original-game runtime surface', async () => {
   const mutations = [
     ['gameHtml', '<title>Cloud Weasel</title>', '<title>Other Name</title>'],
+    [
+      'gameEntry',
+      '<p>${PRODUCT_PROBLEM_HEADING}</p>',
+      '<p>Something went wrong</p>'
+    ],
+    [
+      'gameLogic',
+      '`No ${PRODUCT_ACCOUNT_NAME} found for this session.`',
+      "'No account found for this session.'"
+    ],
+    [
+      'gameLogic',
+      '`Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`',
+      "'Failed to load your account. Please reload.'"
+    ],
     [
       'gameLogic',
       "productDocumentTitle('Local Bot')",
@@ -64,6 +95,16 @@ test('rejects a missing helper on every original-game runtime surface', async ()
 test('rejects legacy OpenSky titles and build labels', async () => {
   const mutations = [
     ['gameHtml', '<title>Cloud Weasel</title>', '<title>OpenSky</title>'],
+    [
+      'gameEntry',
+      '<p>${PRODUCT_PROBLEM_HEADING}</p>',
+      '<p>Sorry, OpenSky ran into a problem:</p>'
+    ],
+    [
+      'gameLogic',
+      '`No ${PRODUCT_ACCOUNT_NAME} found for this session.`',
+      "'No OpenSky account found for this session.'"
+    ],
     ['gameLogic', "productDocumentTitle('Local Bot')", "'OpenSky | Local Bot'"],
     [
       'tutorialTitle',

@@ -5,7 +5,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const legacyRuntimeBrandPatterns = [
   /<title>OpenSky<\/title>/,
   /OpenSky \|/,
-  /OpenSky v/
+  /OpenSky v/,
+  /OpenSky account/,
+  /Sorry, OpenSky/
 ]
 
 export const cloudflareBrandingGateErrors = sources => {
@@ -13,6 +15,8 @@ export const cloudflareBrandingGateErrors = sources => {
 
   for (const token of [
     "export const PRODUCT_NAME = 'Cloud Weasel'",
+    'export const PRODUCT_ACCOUNT_NAME = `${PRODUCT_NAME} account`',
+    'export const PRODUCT_PROBLEM_HEADING = `Sorry, ${PRODUCT_NAME} ran into a problem:`',
     'export const productDocumentTitle =',
     'export const productVersionLabel ='
   ]) {
@@ -23,6 +27,22 @@ export const cloudflareBrandingGateErrors = sources => {
 
   const requiredSurfaceTokens = [
     ['game HTML title', sources.gameHtml, '<title>Cloud Weasel</title>'],
+    [
+      'fatal game error heading',
+      sources.gameEntry,
+      '<p>${PRODUCT_PROBLEM_HEADING}</p>'
+    ],
+    [
+      'missing game account error',
+      sources.gameLogic,
+      '`No ${PRODUCT_ACCOUNT_NAME} found for this session.`'
+    ],
+    [
+      'failed game account error',
+      sources.gameLogic,
+      '`Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`',
+      2
+    ],
     [
       'local game titles',
       sources.gameLogic,
@@ -46,14 +66,21 @@ export const cloudflareBrandingGateErrors = sources => {
     ]
   ]
 
-  for (const [surface, source, token] of requiredSurfaceTokens) {
-    if (!source.includes(token)) {
+  for (const [
+    surface,
+    source,
+    token,
+    expectedCount = 1
+  ] of requiredSurfaceTokens) {
+    const count = source.split(token).length - 1
+    if (count !== expectedCount) {
       errors.push(`${surface} is not wired to Cloud Weasel product chrome`)
     }
   }
 
   for (const [surface, source] of [
     ['game HTML', sources.gameHtml],
+    ['game entry', sources.gameEntry],
     ['game logic', sources.gameLogic],
     ['tutorial title', sources.tutorialTitle],
     ['HUD', sources.hud],
@@ -70,18 +97,27 @@ export const cloudflareBrandingGateErrors = sources => {
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const read = relativePath => readFile(path.join(root, relativePath), 'utf8')
-  const [productBrand, gameHtml, gameLogic, tutorialTitle, hud, settings] =
-    await Promise.all([
-      read('game/src/productBrand.ts'),
-      read('game/index.html'),
-      read('game/src/gameLogic.ts'),
-      read('game/src/scenes/ui/containers/tutorialTitle.ts'),
-      read('game/src/scenes/ui/containers/hud.ts'),
-      read('game/src/scenes/ui/containers/settings.ts')
-    ])
+  const [
+    productBrand,
+    gameHtml,
+    gameEntry,
+    gameLogic,
+    tutorialTitle,
+    hud,
+    settings
+  ] = await Promise.all([
+    read('game/src/productBrand.ts'),
+    read('game/index.html'),
+    read('game/src/index.ts'),
+    read('game/src/gameLogic.ts'),
+    read('game/src/scenes/ui/containers/tutorialTitle.ts'),
+    read('game/src/scenes/ui/containers/hud.ts'),
+    read('game/src/scenes/ui/containers/settings.ts')
+  ])
   const errors = cloudflareBrandingGateErrors({
     productBrand,
     gameHtml,
+    gameEntry,
     gameLogic,
     tutorialTitle,
     hud,

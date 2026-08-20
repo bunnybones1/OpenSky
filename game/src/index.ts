@@ -11,6 +11,7 @@ import env from './env'
 import { onAbortError } from './helpers/abortError'
 import { gameMode } from './helpers/envGameModeHelpers'
 import main from './main'
+import { PRODUCT_PROBLEM_HEADING } from './productBrand'
 import queryParams from './queryParams'
 import renderer from './renderer'
 import { removeLoadingSpinner } from './scenes/ui/removeLoadingSpinner'
@@ -73,7 +74,7 @@ for (const archetype of Object.values(archetypes)) {
       'beforeend',
       `
   <div id="error">
-  <p>Sorry, OpenSky ran into a problem:</p>
+  <p>${PRODUCT_PROBLEM_HEADING}</p>
   <p>${errText.slice(0, 512)}<p>
   <p>If you're using an old version, try updating ${
     device.isIOS ? 'your iOS version and/or' : ''

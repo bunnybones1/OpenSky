@@ -1,5 +1,7 @@
 import {
+  PRODUCT_ACCOUNT_NAME,
   PRODUCT_NAME,
+  PRODUCT_PROBLEM_HEADING,
   productDocumentTitle,
   productVersionLabel
 } from './productBrand'
@@ -7,6 +9,10 @@ import {
 describe('Cloud Weasel product chrome', () => {
   it('provides one product name for the original game runtime', () => {
     expect(PRODUCT_NAME).toBe('Cloud Weasel')
+    expect(PRODUCT_ACCOUNT_NAME).toBe('Cloud Weasel account')
+    expect(PRODUCT_PROBLEM_HEADING).toBe(
+      'Sorry, Cloud Weasel ran into a problem:'
+    )
     expect(productDocumentTitle()).toBe('Cloud Weasel')
   })
 

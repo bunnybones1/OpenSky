@@ -48,7 +48,7 @@ import {
 } from './helpers/envGameModeHelpers'
 import { getTimeMarker } from './helpers/timeMarker'
 import { fetchIdentityGamePrincipal } from './identitySession'
-import { productDocumentTitle } from './productBrand'
+import { PRODUCT_ACCOUNT_NAME, productDocumentTitle } from './productBrand'
 import queryParams from './queryParams'
 import { matchEnded, store } from './state'
 import { statePlayer } from './state/StatePlayer'
@@ -132,7 +132,7 @@ export async function initializeGame() {
         const session = await apiClient.getSession()
 
         if (!session.account) {
-          throw new Error('No OpenSky account found for this session.')
+          throw new Error(`No ${PRODUCT_ACCOUNT_NAME} found for this session.`)
         }
 
         account = session.account
@@ -149,7 +149,9 @@ export async function initializeGame() {
     } catch (err) {
       if (gameMode !== LocalGameMode.SPECTATE) {
         store.fireClientError(
-          new Error('Failed to load your OpenSky account. Please reload.')
+          new Error(
+            `Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`
+          )
         )
         console.error(err)
         return
@@ -165,7 +167,7 @@ export async function initializeGame() {
     // something wrong
     console.warn('Invalid wallet address')
     store.fireClientError(
-      new Error('Failed to load your OpenSky account. Please reload.')
+      new Error(`Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`)
     )
     return
   }
