@@ -32,6 +32,10 @@ const PRINCIPAL_8 = '0x8888888888888888888888888888888888888888'
 const runtimeEnv = env as unknown as MatchmakerEnv
 const pool = () =>
   runtimeEnv.MATCHMAKER_POOLS.getByName(CLOUDFLARE_MATCHMAKER_POOL_NAME)
+const isolatedPool = (suffix: string) =>
+  runtimeEnv.MATCHMAKER_POOLS.getByName(
+    `${CLOUDFLARE_MATCHMAKER_POOL_NAME}-${suffix}`
+  ) as DurableObjectStub<MatchmakerPool>
 
 const connect = async (principal: string, ip: string) => {
   const response = await SELF.fetch(
@@ -257,6 +261,44 @@ describe('Cloudflare matchmaker Worker', () => {
       }
     )
     expect(denied.status).toBe(403)
+  })
+
+  it.each([
+    ['malformed JSON', '{'],
+    ['a missing message type', '{}'],
+    ['an unknown message type', JSON.stringify({ type: 'cloud_weasel' })]
+  ])(
+    'returns the source server error and closes for %s',
+    async (_name, raw) => {
+      const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+      const rejected = nextMessage(player)
+      const closed = nextClose(player)
+      player.send(raw)
+      expect(await rejected).toEqual({
+        type: 'error',
+        reason: 'SERVER_ERROR',
+        message: 'SERVER_ERROR',
+        level: 'server'
+      })
+      expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    }
+  )
+
+  it('accepts the binary JSON payload that the source decoder accepts', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(
+      new TextEncoder().encode(JSON.stringify(findCommand()))
+        .buffer as ArrayBuffer
+    )
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
   })
 
   it('matches two authenticated identities and ignores forged playerID fields', async () => {
@@ -1115,9 +1157,7 @@ describe('Cloudflare matchmaker Worker', () => {
   it('closes a socket that does not establish a channel within the source authentication window', async () => {
     // A dedicated object keeps Miniflare's forced-alarm cancellation state
     // from earlier cases from masking the hibernation assertion in this case.
-    const timeoutPool = runtimeEnv.MATCHMAKER_POOLS.getByName(
-      `${CLOUDFLARE_MATCHMAKER_POOL_NAME}-authentication-timeout`
-    ) as DurableObjectStub<MatchmakerPool>
+    const timeoutPool = isolatedPool('authentication-timeout')
     const [pending] = track(
       await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
     )
@@ -1169,11 +1209,14 @@ describe('Cloudflare matchmaker Worker', () => {
   })
 
   it('does not expire a socket after it establishes a player channel', async () => {
-    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const timeoutPool = isolatedPool('established-authentication-timeout')
+    const [player] = track(
+      await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
+    )
     player.send(JSON.stringify(findCommand()))
     await expect
       .poll(async () => {
-        const status = await pool().fetch(
+        const status = await timeoutPool.fetch(
           'https://pool.example/internal/status',
           { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
         )
@@ -1181,29 +1224,29 @@ describe('Cloudflare matchmaker Worker', () => {
       })
       .toBe(1)
 
-    await runInDurableObject(
-      pool() as DurableObjectStub<MatchmakerPool>,
-      async (_instance, state) => {
-        const [socket] = state.getWebSockets(PRINCIPAL_1)
-        const attachment = socket?.deserializeAttachment() as {
-          connectedAtMs: number
-          subscribed: boolean
-        }
-        socket?.serializeAttachment({
-          ...attachment,
-          connectedAtMs: Date.now() - 10_001
-        })
-        await state.storage.setAlarm(Date.now() + 60_000)
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as {
+        connectedAtMs: number
+        subscribed: boolean
       }
-    )
+      socket?.serializeAttachment({
+        ...attachment,
+        connectedAtMs: Date.now() - 10_001
+      })
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
 
     const stayedSilent = expectNoMessage(player)
-    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
     await stayedSilent
     expect(player.readyState).toBe(WebSocket.OPEN)
-    const status = await pool().fetch('https://pool.example/internal/status', {
-      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
-    })
+    const status = await timeoutPool.fetch(
+      'https://pool.example/internal/status',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+      }
+    )
     expect(await status.json()).toMatchObject({
       queuedPlayers: 1,
       connectedSockets: 1
@@ -1211,47 +1254,56 @@ describe('Cloudflare matchmaker Worker', () => {
   })
 
   it('expires a stale pending duplicate without disturbing the active subscriber', async () => {
-    const first = await connect(PRINCIPAL_1, '192.0.2.1')
+    const timeoutPool = isolatedPool('duplicate-authentication-timeout')
+    const first = await connectDirectlyToPool(
+      timeoutPool,
+      PRINCIPAL_1,
+      '192.0.2.1'
+    )
     first.send(JSON.stringify(findCommand()))
     await expect
       .poll(async () => {
-        const status = await pool().fetch(
+        const status = await timeoutPool.fetch(
           'https://pool.example/internal/status',
           { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
         )
         return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
       })
       .toBe(1)
-    const pending = await connect(PRINCIPAL_1, '192.0.2.1')
+    const pending = await connectDirectlyToPool(
+      timeoutPool,
+      PRINCIPAL_1,
+      '192.0.2.1'
+    )
     track(first, pending)
 
-    await runInDurableObject(
-      pool() as DurableObjectStub<MatchmakerPool>,
-      async (_instance, state) => {
-        for (const socket of state.getWebSockets(PRINCIPAL_1)) {
-          const attachment = socket.deserializeAttachment() as {
-            connectedAtMs: number
-            subscribed: boolean
-          }
-          if (!attachment.subscribed) {
-            socket.serializeAttachment({
-              ...attachment,
-              connectedAtMs: Date.now() - 10_001
-            })
-          }
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      for (const socket of state.getWebSockets(PRINCIPAL_1)) {
+        const attachment = socket.deserializeAttachment() as {
+          connectedAtMs: number
+          subscribed: boolean
         }
-        await state.storage.setAlarm(Date.now() + 60_000)
+        if (!attachment.subscribed) {
+          socket.serializeAttachment({
+            ...attachment,
+            connectedAtMs: Date.now() - 10_001
+          })
+        }
       }
-    )
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
 
     const pendingClosed = nextClose(pending)
     const firstStayedSilent = expectNoMessage(first)
-    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
     expect(await pendingClosed).toMatchObject({ code: 1005, reason: '' })
     await firstStayedSilent
-    const status = await pool().fetch('https://pool.example/internal/status', {
-      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
-    })
+    const status = await timeoutPool.fetch(
+      'https://pool.example/internal/status',
+      {
+        headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+      }
+    )
     expect(await status.json()).toMatchObject({
       queuedPlayers: 1,
       connectedSockets: 1

@@ -45,6 +45,7 @@ import { orderParticipantsForGame } from './player-order'
 import {
   errorMessage,
   FindMatchCommand,
+  MatchmakerClientCommand,
   MatchmakerServerMessage,
   parseClientCommand,
   ProtocolError
@@ -348,8 +349,18 @@ export class MatchmakerPool implements DurableObject {
       return
     }
 
+    let command: MatchmakerClientCommand
     try {
-      const command = parseClientCommand(raw)
+      command = parseClientCommand(raw)
+    } catch (error) {
+      // Source message-receiver and command-decode failures are not exposed as
+      // validation details. The websocket handler writes the exact generic
+      // server error and then closes the client connection.
+      this.failMalformedClientMessage(webSocket, error)
+      return
+    }
+
+    try {
       switch (command.type) {
         case 'ping':
           // Source matcher heartbeats are one-way. Sending a new message type
@@ -383,9 +394,16 @@ export class MatchmakerPool implements DurableObject {
         this.safeSend(webSocket, errorMessage(error.reason, error.message))
       } else {
         console.error('matchmaker message failed', error)
-        this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))
+        this.safeSend(webSocket, errorMessage('SERVER_ERROR'))
+        webSocket.close()
       }
     }
+  }
+
+  private failMalformedClientMessage(webSocket: WebSocket, error: unknown) {
+    console.warn('matchmaker message rejected', error)
+    this.safeSend(webSocket, errorMessage('SERVER_ERROR'))
+    webSocket.close()
   }
 
   async webSocketClose(webSocket: WebSocket) {

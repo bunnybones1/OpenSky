@@ -55,6 +55,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the transactional match completion gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:matchmaker-ingress')) {
+    errors.push(
+      'Cloudflare build must include the matchmaker ingress source gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:matchmaker-session')) {
     errors.push(
       'Cloudflare build must include the matchmaker session source gate'

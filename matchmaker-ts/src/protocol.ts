@@ -2,7 +2,7 @@ import { GameMode } from '@opensky/proto'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 
 export const MATCHMAKER_PATH = '/v1/matchmaker'
-export const MAX_CLIENT_MESSAGE_BYTES = 64 * 1024
+export const MAX_CLIENT_MESSAGE_BYTES = 32 * 1024
 
 export interface FindMatchCommand {
   type: 'find_match'
@@ -87,24 +87,27 @@ export class ProtocolError extends Error {
 export const parseClientCommand = (
   raw: string | ArrayBuffer
 ): MatchmakerClientCommand => {
-  if (typeof raw !== 'string') {
-    throw new ProtocolError(
-      'INVALID_OPERATION',
-      'binary messages are not supported'
-    )
-  }
-  if (new TextEncoder().encode(raw).byteLength > MAX_CLIENT_MESSAGE_BYTES) {
+  const bytes =
+    typeof raw === 'string'
+      ? new TextEncoder().encode(raw)
+      : new Uint8Array(raw)
+  if (bytes.byteLength > MAX_CLIENT_MESSAGE_BYTES) {
     throw new ProtocolError('INVALID_OPERATION', 'message is too large')
   }
+  // Gorilla's ReadMessage returns the payload independently of frame type, and
+  // the source then JSON-decodes those bytes. Preserve valid binary JSON
+  // instead of adding a text-frame-only protocol rule.
+  const message =
+    typeof raw === 'string' ? raw : new TextDecoder().decode(bytes)
 
   // The original browser client has always sent this literal heartbeat. The Go
   // matcher rewrites it to {"type":"ping"} before decoding, so preserve that
   // wire compatibility instead of treating a healthy client as malformed.
-  if (raw === 'PING') return { type: 'ping' }
+  if (message === 'PING') return { type: 'ping' }
 
   let value: unknown
   try {
-    value = JSON.parse(raw)
+    value = JSON.parse(message)
   } catch {
     throw new ProtocolError('INVALID_OPERATION', 'message is not valid JSON')
   }
