@@ -9,8 +9,8 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `a3a48b61` (`Brand original game as Cloud Weasel`)
-- Latest tested runtime commit: `a3a48b61` (`Brand original game as Cloud Weasel`)
+- Last code/test checkpoint: `27842268` (`Brand original game failure paths`)
+- Latest tested runtime commit: `27842268` (`Brand original game failure paths`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -19,10 +19,10 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `a3a48b61` are committed and
+- The runtime changes from `38386294` through `27842268` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
-  `/game/cloudflare/assets/index-096c8599.js`.
+  `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -50,7 +50,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `a3a48b61`:
+Validation completed locally for exact code head `27842268`:
 
 - focused Conquest V2 Worker regression: 18/18 tests;
 - focused mutation-tested Conquest gate: 7/7 tests;
@@ -77,8 +77,10 @@ Exact-head GitHub Actions runs
 <https://github.com/bunnybones1/OpenSky/actions/runs/32396596729> and
 <https://github.com/bunnybones1/OpenSky/actions/runs/32397670778> passed the
 complete release contract for `7f1f2ce6` and the later storage-evidence
-checkpoint `470a79c5`. Commit `a3a48b61` must receive exact-head CI before any
-production mutation.
+checkpoint `470a79c5`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32399815459> passed the
+branding plus handoff head `e5b0c120` in 10m51s. Commit `27842268` must receive
+exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -95,6 +97,16 @@ deployed original game without replacing or redesigning that interface:
   surfaces and is itself required by the non-deploying CI contract;
 - the complete local Cloudflare release contract passed, and the assembled
   standalone and nested game artifacts contain the new title and bundle label.
+
+Follow-up commit `27842268` covers the player-facing failure paths that do not
+appear during the normal Practice smoke:
+
+- the fatal WebGL/WebAssembly/startup panel now identifies Cloud Weasel;
+- missing and failed Google game-session account loads now identify a Cloud
+  Weasel account;
+- the same shared product authority supplies both messages;
+- the branding gate requires the exact two account-load failure callsites and
+  mutation-tests both missing wiring and reintroduced OpenSky copy.
 
 This milestone is committed and locally tested but is not deployed. The
 production game continues to show the old title and watermark until deployment
@@ -234,7 +246,7 @@ production migration state.
 
 ### Production rollout
 
-- Deploy and verify the tested runtime changes through `a3a48b61`. Keep
+- Deploy and verify the tested runtime changes through `27842268`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.
