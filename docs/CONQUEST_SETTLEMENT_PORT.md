@@ -982,13 +982,13 @@ remain outstanding by design.
 
 ## Match-deck point-authority proof
 
-Milestone `f5869e53` removes the final mixed authority from Conquest V2 point
-settlement. The original Go updater passes each settled match deck string to
-both the card-point decoder and the hero-skin lookup. The TypeScript game
-Worker now reconstructs that same boundary from the canonical persisted match
-payload: card ownership queries use its card IDs and the skin query uses its
-prism-derived source hero-skin ID. The active Conquest row is consulted only
-to require an in-progress run; its hero cannot change the earned bonus.
+Milestone `f5869e53` removed mutable Conquest-run hero state from point
+settlement and pinned both card and hero-skin calculation to the persisted
+match seed. That was a safer single authority, but a deeper source audit found
+it was not yet the final source boundary: the original game server snapshots
+WASM's completed `secret.filledDeck`, not the potentially incomplete submitted
+seed. The active Conquest row is still consulted only to require an in-progress
+run; its hero cannot change the earned bonus.
 
 Malformed JSON, a missing private seed, numeric rather than canonical string
 card IDs, unknown cards, and card/class mismatches all produce the stable
@@ -1008,3 +1008,43 @@ source/off-chain gate and typecheck, and both production builds.
 
 No deployment, migration, storage provisioning, reward activation, live
 match, or production mutation was performed. Conquest remains disabled.
+
+## Authoritative WASM filled-deck proof
+
+Milestone `fe14a14f` closes that final deck-authority difference. The source
+`server/src/worker/match/Match.ts` captures each player's first materialized
+`secret.filledDeck`, and `server/src/ApiClient.ts` submits those strings as
+`player1DeckString` and `player2DeckString`. Both the Go Conquest point updater
+and deck-rank updater consume those stored fields.
+
+The Cloudflare game Durable Object now captures the identical filled decks
+from the authoritative WASM runtime, encodes them with the original deck-string
+codec, and refuses any later state that produces a different pair. Migration
+`0115_authoritative_match_decks.sql` stores both strings in an immutable
+two-row ledger. One guarded insert installs the pair; a partial prior snapshot,
+conflicting retry, direct update, or direct delete fails closed. Match deletion
+can still cascade through the parent relationship.
+
+Completion writes this ledger before progression, Conquest point settlement,
+or the deck-rank coordinator. Both consumers read the same validated final
+deck strings and no longer use submitted `privateSeed` cards as their economic
+authority. This matters for source-supported incomplete seeds: WASM fills the
+deck to 30 cards before play, and the filled deck—not only the submitted
+subset—determines Conquest ownership points and ranked deck identity.
+
+Workers regressions prove exact idempotent persistence, immutability, snapshot
+restore, final-deck hero selection, concurrent match isolation, and full-deck
+ranking. A real WASM match starting from empty card seeds captures two unique
+30-card decks; after one engine-added Silver is placed in the player's
+inventory, point settlement awards the source five points instead of the
+four-point match base. Mutation-tested gates derive the original capture and
+both Go consumer boundaries and reject any reintroduction of match-payload
+authority.
+
+The complete local release contract passed 510 main-Worker tests, 34
+game-server unit tests, 113 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, both production builds, and the 594-file
+artifact validation. No deployment, migration, storage provisioning, reward
+activation, live match, or production mutation was performed. Production
+Conquest remains disabled.

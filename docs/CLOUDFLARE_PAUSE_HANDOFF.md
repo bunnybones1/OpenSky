@@ -9,9 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `f5869e53` (`Pin Conquest match deck authority`)
-- Latest tested runtime commit: `f5869e53`
-  (`Pin Conquest match deck authority`)
+- Last code/test checkpoint: `fe14a14f`
+  (`Persist authoritative filled match decks`)
+- Latest tested runtime commit: `fe14a14f`
+  (`Persist authoritative filled match decks`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -20,10 +21,14 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `f5869e53` are committed and
+- The runtime changes from `38386294` through `fe14a14f` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-fd3d9163.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
+- Migration `0115_authoritative_match_decks.sql` is committed locally but has
+  **not** been applied to production. The new game-server runtime must not be
+  deployed until this migration exists, and migration/runtime rollout must be
+  performed with match allocation quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -51,13 +56,14 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `f5869e53`:
+Validation completed locally for exact code head `fe14a14f`:
 
-- focused Conquest V2 point/runtime regression: 27/27 tests;
-- focused mutation-tested Conquest gate: 8/8 tests;
+- focused authoritative-deck, Conquest V2 point, and deck-rank Workers
+  regressions: 44/44 tests;
+- focused mutation-tested Conquest gate: 9/9 tests;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
-- game server: 34 unit and 107 Workers tests;
+- game server: 34 unit and 113 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
 - analytics: four unit and five Workers tests;
@@ -85,7 +91,9 @@ branding plus handoff head `e5b0c120` in 10m51s. Run
 later game-error-branding head `80bf451d` in 10m14s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32404576690> passed the
 point-authority documentation head `edffd7b3` in 10m19s. Commit `f5869e53`
-must receive exact-head CI before any production mutation.
+and its pause handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32407579807>. Commit
+`fe14a14f` must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -204,6 +212,34 @@ source-contract, off-chain, production-target, and build gate remained green.
 The milestone is committed and locally tested; it is not deployed, and
 production Conquest remains disabled.
 
+## Authoritative filled-deck milestone
+
+Commit `fe14a14f` corrects the remaining difference between the submitted
+match seed and the source server's real deck authority:
+
+- the original TypeScript server captures each player's first materialized
+  WASM `secret.filledDeck`, which includes engine-selected cards when a player
+  submits an incomplete deck;
+- the game Durable Object now captures those two final 30-card decks once,
+  verifies that later state cannot change them, and encodes them with the
+  original deck-string codec;
+- migration `0115` stores the pair in an immutable D1 ledger: partial or
+  conflicting snapshots cannot be repaired or overwritten silently;
+- completion persists the pair before progression, Conquest points, or
+  deck-rank coordination, so all three services share the same final-match
+  authority;
+- Conquest points and deck ranks no longer consult mutable account state or
+  the submitted `privateSeed` for the settled deck;
+- a real WASM regression starts from an incomplete seed and proves that an
+  engine-added owned Silver card contributes its source point value.
+
+The complete local Cloudflare release contract passed at this code head: 510
+main-Worker tests, 34 game-server unit tests, 113 game-server Workers tests, 33
+match-service tests, 78 matchmaker tests, nine analytics tests, 30 browser-game
+tests, every source/off-chain gate and typecheck, and both production builds.
+No deployment, migration, storage provisioning, reward activation, or live
+match was performed. Production Conquest remains disabled.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -302,8 +338,16 @@ production migration state.
 
 ### Production rollout
 
-- Deploy and verify the tested runtime changes through `f5869e53`. Keep
+- Commit/push the refreshed handoff and wait for exact-head CI at or after
+  `fe14a14f`.
+- Deploy and verify the tested runtime changes through `fe14a14f`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
+- For the `0115` transition, use the existing game-mode controls to disable
+  new Practice and ranked allocations, allow already-active matches to end,
+  and verify zero `creating` or `active` match rows. Apply `0115`, deploy the
+  exact tested game-server runtime immediately, verify protocol health, and
+  only then restore the previously enabled modes. Do not leave old game-server
+  code accepting matches after the migration boundary.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.
 - Only after the consumer is healthy, enable and deploy the game-server
