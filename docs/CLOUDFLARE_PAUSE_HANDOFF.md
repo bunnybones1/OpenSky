@@ -2,17 +2,19 @@
 
 Status date: 2026-08-20
 
-Work is intentionally paused at the user's request. Do not resume deployment,
-provisioning, product activation, or live drills without a new user request.
+Production mutation is intentionally paused at the user's request. Local
+source-faithful code, test, documentation, PR, and CI work may continue, but do
+not resume deployment, provisioning, product activation, or live drills
+without a new user request.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `5c4ba408`
-  (`Preserve source session replacement lifecycle`)
-- Latest tested runtime commit: `5c4ba408`
-  (`Preserve source session replacement lifecycle`)
+- Last code/test checkpoint: `fb30fb0a`
+  (`Preserve source matchmaker subscriber lifecycle`)
+- Latest tested runtime commit: `fb30fb0a`
+  (`Preserve source matchmaker subscriber lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,7 +23,7 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `5c4ba408` are committed and
+- The runtime changes from `38386294` through `fb30fb0a` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -56,7 +58,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `5c4ba408`:
+Validation completed locally for exact code head `fb30fb0a`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
@@ -65,7 +67,7 @@ Validation completed locally for exact code head `5c4ba408`:
 - browser game suite: 30/30 tests;
 - game server: 34 unit and 117 Workers tests;
 - match service: 33/33 Workers tests;
-- matchmaker: 47 unit and 31 Workers tests;
+- matchmaker: 47 unit and 36 Workers tests;
 - analytics: four unit and five Workers tests;
 - all TypeScript, source-parity, off-chain, release, cache, deployment, and
   production-target gates;
@@ -112,7 +114,10 @@ passed exact-head run
 `8732a9fd` in 10m56s. The saved-session detachment checkpoint and its handoff
 passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32423540799> at commit
-`b9bb5439` in 10m18s. The newer `5c4ba408` checkpoint and this refreshed
+`b9bb5439` in 10m18s. The source session-replacement checkpoint and its
+handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32424685768> at commit
+`07deac2b` in 11m02s. The newer `fb30fb0a` checkpoint and this refreshed
 handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -447,6 +452,47 @@ source/off-chain gate and typecheck, both production builds, and 594-file
 artifact validation. No deployment, migration, provisioning, activation, live
 match, or production mutation was performed.
 
+## Source matchmaker subscriber lifecycle milestone
+
+Commit `fb30fb0a` removes a connection-time replacement policy that did not
+exist in the Go matchmaker:
+
+- opening another authenticated WebSocket no longer notifies or closes the
+  current search; a socket becomes a subscriber only after its `find_match`
+  command passes every validator;
+- only then does the Worker publish the exact `DUPLICATE_CONNECTION` error to
+  existing subscribers. It does not invent a server-side `4001` close or
+  detach the old channel; the preserved browser handles that error and closes
+  itself with the source forced-close code;
+- unvalidated sockets do not receive proposal events, do not keep queue or
+  proposal state alive after the last subscriber leaves, and cannot accept or
+  decline another channel's proposal;
+- a subscribed socket ignores repeated `find_match` commands just like source
+  `Client.HasChannel`, while decline and timeout tests now reconnect on the new
+  socket that the original browser actually creates; and
+- the subscription bit is serialized in the hibernating WebSocket attachment,
+  with a rolling-upgrade-compatible read for attachments created by the
+  previously deployed runtime.
+
+Workers regressions cover connect-only duplicates, invalid and valid
+replacement admission, client-controlled close, last-subscriber cleanup,
+pending-socket command denial, repeated search, proposal delivery isolation,
+and Durable Object eviction. The new mutation-tested
+`check:cloudflare:matchmaker-session` gate derives the find/accept/decline,
+pubsub, last-subscriber, and browser-close contracts directly from the Go and
+preserved TypeScript sources. Both the complete build and the guarded
+matchmaker deployment command require it.
+
+The exact complete local release contract passed at committed runtime head
+`fb30fb0a` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 47 matchmaker unit tests, 36
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and `/game/cloudflare/assets/index-ccb53c4b.js`.
+No deployment, migration, provisioning, activation, live match, or production
+mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -549,9 +595,9 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 ### Production rollout
 
-- Push the `5c4ba408` milestone and refreshed handoff, then wait for exact-head
+- Push the `fb30fb0a` milestone and refreshed handoff, then wait for exact-head
   CI.
-- Deploy and verify the tested runtime changes through `5c4ba408`. Keep
+- Deploy and verify the tested runtime changes through `fb30fb0a`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

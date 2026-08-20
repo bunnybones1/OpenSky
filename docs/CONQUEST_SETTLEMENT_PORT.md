@@ -1195,3 +1195,37 @@ and off-chain gate, all typechecks, both production builds, and 594-file
 artifact validation. No deployment, migration, provisioning, activation, live
 match, or production mutation was performed. Production Conquest remains
 disabled.
+
+## Source matchmaker subscriber lifecycle proof
+
+Follow-up milestone `fb30fb0a` replaces the Cloudflare matchmaker's
+connect-time duplicate eviction with the original Go channel lifecycle.
+Source `findmatch.Handler` first returns immediately for a client that already
+has a channel, creates and validates a player for a new client, publishes
+`DUPLICATE_CONNECTION` to existing pubsub subscribers only after all validators
+pass, and then creates the new channel. The Go server does not close the old
+subscriber; the preserved browser closes itself with code `4004` after
+receiving that error. Channel cleanup removes queue/proposal state only after
+the final subscriber leaves.
+
+The Durable Object now serializes an explicit subscription bit with each
+hibernating socket. Connect-only and rejected sockets remain unsubscribed: they
+receive no proposal events, cannot preserve another search, and cannot issue
+`accept_match` or `decline_match` against another subscriber's proposal. A
+valid replacement notifies the prior subscriber without closing it, then
+becomes a subscriber before its durable ticket can match. Repeated
+`find_match` on that established channel is ignored, matching source
+`Client.HasChannel`.
+
+The Workers suite covers valid and invalid replacement, the browser-controlled
+close, last-subscriber cleanup, command authority, repeated search, and
+Durable Object eviction. A mutation-tested source gate pins the Go find,
+accept, decline, pubsub, and cleanup paths together with the preserved browser
+close behavior and is required by both the complete release contract and the
+matchmaker deployment command. The exact complete local contract passed at
+`fb30fb0a`: 510 main-Worker tests, 34 game-server unit and 117 Workers tests,
+33 match-service tests, 47 matchmaker unit and 36 Workers tests, 30
+browser-game tests, nine analytics tests, all typechecks and source/off-chain
+gates, both builds, and 594-file artifact validation. No deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed. Production Conquest remains disabled.

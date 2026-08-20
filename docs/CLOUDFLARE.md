@@ -1074,6 +1074,14 @@ and progress are not migrated.
 - The matchmaker includes the source captcha retry/cache policy and durable
   shadow bans; it remains explicitly disabled until Cloud Weasel hCaptcha
   credentials are provisioned.
+- Matchmaker WebSockets preserve the source player-channel lifecycle rather
+  than evicting on transport connection. A new socket remains unsubscribed
+  until `find_match` passes every validator; only then are existing pubsub
+  subscribers sent `DUPLICATE_CONNECTION`. The server leaves them open for the
+  original browser to close with code `4004`. Pending sockets receive no
+  proposal events, cannot accept or decline another channel's proposal, and do
+  not prevent last-subscriber queue cleanup. The hibernating attachment stores
+  that subscription authority explicitly.
 - Ranked/Conquest abandon counts and cooldowns use the source fixed-window,
   release-scoped policy in D1 and are combined with matchmaker refusal and
   acceptance penalties. The production penalty map remains the source default
