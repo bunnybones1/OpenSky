@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `8adff767`
-  (`Project authoritative decks in match history`)
-- Latest tested runtime commit: `8adff767`
-  (`Project authoritative decks in match history`)
+- Last code/test checkpoint: `feaf5f1b`
+  (`Bind replay analytics to final match decks`)
+- Latest tested runtime commit: `feaf5f1b`
+  (`Bind replay analytics to final match decks`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,7 +21,7 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `8adff767` are committed and
+- The runtime changes from `38386294` through `feaf5f1b` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -56,7 +56,7 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `8adff767`:
+Validation completed locally for exact code head `feaf5f1b`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
@@ -95,8 +95,10 @@ and its pause handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32407579807>. Commit
 `fe14a14f` and its pause handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32411310241> at commit
-`076244ed`. The newer `8adff767` checkpoint must receive exact-head CI before
-any production mutation.
+`076244ed`. The match-history checkpoint and its handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32413329148> at commit
+`adbe7380` in 10m17s. The newer `feaf5f1b` checkpoint must receive exact-head
+CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -265,6 +267,30 @@ tests, the complete multi-service release contract, both production builds,
 and 594-file artifact validation. It is committed locally but not deployed;
 migration `0115` remains unapplied and production behavior is unchanged.
 
+## Replay analytics final-deck authority milestone
+
+Commit `feaf5f1b` extends the same immutable final-deck authority into the
+ported observational analytics service:
+
+- the Worker replays the original WASM diffs and derives both final
+  `filledDeck` strings as before, then requires an exact match with both
+  migration `0115` ledger rows before generating any CSV;
+- a missing/partial pair or either conflicting player string records a bounded
+  retry failure and writes none of the match, game-state, or move CSV objects;
+- the match-authority gate now pins the original Go end-match analytics fields,
+  both replay-derived WASM decks, both D1 player indices, pair completeness,
+  exact comparison, and comparison-before-CSV ordering;
+- Workers tests prove successful deterministic output, idempotent completion,
+  partial-pair failure, complete-but-conflicting failure, retained retry
+  evidence, and zero derived objects on either authority failure.
+
+The complete local release contract passed at this code head: four analytics
+unit tests, five analytics Workers tests, all 510 main-Worker tests, every
+multiplayer suite, every source/off-chain gate and typecheck, both production
+builds, and 594-file artifact validation. The analytics Worker remains
+undeployed, its production bucket remains absent, and migration `0115` remains
+unapplied.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -321,26 +347,30 @@ production gate after any later commit.
 3. Preserve the source analytics retention behavior unless an explicit product
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
-4. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
+4. Complete the quiescent migration `0115` transition and deploy/verify the
+   exact tested game server without analytics producer bindings, as described
+   under Production rollout. The analytics consumer now requires that schema
+   and must not be deployed against the older database.
+5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
-5. Create a separate private client-feedback bucket and add the reviewed
+6. Create a separate private client-feedback bucket and add the reviewed
    `CLIENT_FEEDBACK` binding to the main Worker config. The test name
    `cloud-weasel-client-feedback-test` is not a production resource.
-6. Reconfirm queues `cloud-weasel-game-analytics` and
+7. Reconfirm queues `cloud-weasel-game-analytics` and
    `cloud-weasel-game-analytics-dead-letter`; do not silently replace them.
-7. Deploy `cloud-weasel-game-analytics` as the consumer first, then verify
+8. Deploy `cloud-weasel-game-analytics` as the consumer first, then verify
    `/health`, its R2 binding, its D1 access, and exactly one queue consumer.
-8. Add the reviewed `GAME_ANALYTICS` R2 binding and analytics queue producer to
+9. Add the reviewed `GAME_ANALYTICS` R2 binding and analytics queue producer to
    `game-server-cloudflare/wrangler.jsonc`. Run the full contract and exact-head
    CI again, then deploy the game server last.
-9. Complete one bounded production Practice match and verify, without exposing
+10. Complete one bounded production Practice match and verify, without exposing
    private objects:
    - the replay manifest is written last beneath the release/proposal prefix;
    - one version-pinned queue message is consumed;
    - the D1 analytics receipt reaches `completed` exactly once;
    - all three source-compatible CSV objects exist;
    - replay access and off-chain match rewards remain unchanged.
-10. Only after the consumer path is healthy, deploy the main Worker with the
+11. Only after the consumer path is healthy, deploy the main Worker with the
     private feedback binding and test authenticated JSON/JPEG feedback plus
     account-deletion cleanup. Anonymous access must remain `401`, and a missing
     binding must remain explicit `503`.
@@ -354,18 +384,18 @@ pnpm deploy:cloudflare:game-server
 pnpm deploy:cloudflare
 ```
 
-Each command should be run only at its corresponding stage above. A new schema
-must be migrated before dependent code, though migration
+Each command should be run only at its corresponding stage above. Migration
 `0065_multiplayer_match_analytics.sql` was already present in the last observed
-production migration state.
+production migration state; migration `0115_authoritative_match_decks.sql` is
+not and must precede both the tested game-server runtime and analytics Worker.
 
 ## Other outstanding work
 
 ### Production rollout
 
 - Commit/push the refreshed handoff and wait for exact-head CI at or after
-  `8adff767`.
-- Deploy and verify the tested runtime changes through `8adff767`. Keep
+  `feaf5f1b`.
+- Deploy and verify the tested runtime changes through `feaf5f1b`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

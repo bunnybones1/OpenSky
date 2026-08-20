@@ -39,6 +39,9 @@ product description or Cloudflare runtime.
 
 - Create the private `cloud-weasel-game-analytics` bucket, deploy and verify the
   analytics consumer, and only then deploy the game-server replay producer.
+  First complete the quiescent `0115_authoritative_match_decks.sql` migration
+  and exact game-server rollout: the consumer now refuses to derive CSVs unless
+  both replayed final decks agree with that immutable D1 pair.
   The latest explicitly account-pinned read-only check on 2026-08-20 confirmed
   that R2 is enabled but the bucket list remains empty. Both queues still exist
   with zero producers and zero consumers, the deployment inventory returns
