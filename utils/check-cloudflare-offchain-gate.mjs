@@ -559,7 +559,7 @@ export const offchainGateErrors = ({
     for (const token of [
       'multiplayer_match_conquest_point_players',
       'settlement_token',
-      'POINTS_CAP'
+      'CONQUEST_V2_POINTS_CAP'
     ]) {
       if (!conquestPointSource.includes(token)) {
         errors.push(

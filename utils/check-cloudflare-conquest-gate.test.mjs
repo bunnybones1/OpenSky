@@ -7,6 +7,7 @@ import {
   conquestPoolCatalogErrors,
   conquestSettlementSourceParityErrors,
   conquestV2DeliveryBatchErrors,
+  conquestV2PointsSourceParityErrors,
   conquestV2TreasureSourceParityErrors,
   conquestV2ResumeSafetyErrors
 } from './check-cloudflare-conquest-gate.mjs'
@@ -524,16 +525,18 @@ test('keeps snapshotted Conquest V2 delivery ahead of later schedule changes', a
 })
 
 test('derives every Conquest V2 treasure consumer from Go and bounds large delivery batches', async () => {
-  const [source, treasure, policy, progress, economy, worker] =
+  const [source, treasure, sql, policy, progress, points, economy, worker] =
     await Promise.all([
       readFile('api/lib/conquest/conquestv2/treasure_map.go', 'utf8'),
+      readFile('lib/shared/src/conquest-v2-treasure.ts', 'utf8'),
       readFile('cloudflare/src/conquest-v2-treasure.ts', 'utf8'),
       readFile('cloudflare/src/conquest-v2-reward-policy.ts', 'utf8'),
       readFile('cloudflare/src/conquest.ts', 'utf8'),
+      readFile('game-server-cloudflare/src/conquest-points.ts', 'utf8'),
       readFile('cloudflare/src/conquest-v2-economy.ts', 'utf8'),
       readFile('cloudflare/src/conquest-v2-reward-worker.ts', 'utf8')
     ])
-  const consumers = { policy, progress, economy, worker }
+  const consumers = { sql, policy, progress, points, economy, worker }
   assert.deepEqual(
     conquestV2TreasureSourceParityErrors(source, treasure, consumers),
     []
@@ -558,10 +561,19 @@ test('derives every Conquest V2 treasure consumer from Go and bounds large deliv
     conquestV2TreasureSourceParityErrors(source, treasure, {
       ...consumers,
       progress: progress.replaceAll(
-        'CONQUEST_V2_TREASURE_TOTAL_POINTS',
-        'DRIFTED_TREASURE_POINTS'
+        'conquestV2TreasureProgress',
+        'driftedTreasureProgress'
       )
     }).some(error => error.includes('progress does not use shared'))
+  )
+  assert.ok(
+    conquestV2TreasureSourceParityErrors(source, treasure, {
+      ...consumers,
+      points: points.replace(
+        'CONQUEST_V2_POINTS_CAP,',
+        'const POINTS_CAP = 13_749\n  CONQUEST_V2_POINTS_CAP,'
+      )
+    }).some(error => error.includes('points duplicates the treasure map'))
   )
   assert.ok(
     conquestV2DeliveryBatchErrors(
@@ -579,6 +591,33 @@ test('derives every Conquest V2 treasure consumer from Go and bounds large deliv
       )
     ).some(error => error.includes('statements per distinct card'))
   )
+})
+
+test('derives Conquest V2 point earning and turn eligibility from Go', async () => {
+  const [sourceParts, worker] = await Promise.all([
+    Promise.all([
+      readFile('api/lib/conquest/conquestv2/points_updater.go', 'utf8'),
+      readFile('api/lib/conquest/conquestv2/points_calculator.go', 'utf8'),
+      readFile('api/lib/conquest/conquestv2/card_points_calculator.go', 'utf8')
+    ]),
+    readFile('game-server-cloudflare/src/conquest-points.ts', 'utf8')
+  ])
+  const source = sourceParts.join('\n')
+  assert.deepEqual(conquestV2PointsSourceParityErrors(source, worker), [])
+
+  for (const mutation of [
+    worker.replace('const EVENT_ID = 2', 'const EVENT_ID = 1'),
+    worker.replace('turnCount >= 8', 'turnCount >= 9'),
+    worker.replace('let earned =\n        4 +', 'let earned =\n        5 +'),
+    worker.replace(
+      'byCard.set(item.token_id, 3)',
+      'byCard.set(item.token_id, 2)'
+    ),
+    worker.replace('Math.ceil(earned * 0.25)', 'Math.ceil(earned * 0.2)'),
+    worker.replace('if (winner !== undefined)', 'if (winner === 0)')
+  ]) {
+    assert.ok(conquestV2PointsSourceParityErrors(source, mutation).length > 0)
+  }
 })
 
 test('derives Conquest settlement rewards and terminal behavior from source', async () => {

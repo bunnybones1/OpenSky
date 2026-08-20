@@ -136,7 +136,8 @@ const validInput = () => ({
     'match experience completion is invalid; ' +
     'match experience receipts are immutable',
   conquestPointSource:
-    'multiplayer_match_conquest_point_players; settlement_token; POINTS_CAP',
+    'multiplayer_match_conquest_point_players; settlement_token; ' +
+    'CONQUEST_V2_POINTS_CAP',
   conquestPointMigration:
     'match Conquest point player receipts are immutable; ' +
     'match Conquest point completion is invalid; ' +

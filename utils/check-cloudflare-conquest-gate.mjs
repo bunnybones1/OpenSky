@@ -306,11 +306,16 @@ export const conquestV2TreasureSourceParityErrors = (
   }
 
   for (const [consumer, tokens] of Object.entries({
+    sql: [
+      'CONQUEST_V2_TREASURE_TOTAL_POINTS',
+      'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
+    ],
     policy: [
       'CONQUEST_V2_TREASURE_TOTAL_POINTS',
       'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
     ],
-    progress: ['CONQUEST_V2_TREASURE_TOTAL_POINTS'],
+    progress: ['conquestV2TreasureProgress'],
+    points: ['CONQUEST_V2_POINTS_CAP', 'conquestV2TreasureProgress'],
     economy: [
       'CONQUEST_V2_TREASURE_LEVEL_SQL',
       'CONQUEST_V2_TREASURE_TOTAL_WEIGHTS'
@@ -332,7 +337,15 @@ export const conquestV2TreasureSourceParityErrors = (
     }
   }
   for (const [consumer, pattern] of [
-    ['progress', /const\s+TREASURE_TOTAL_POINTS\s*=\s*\[/],
+    [
+      'sql',
+      /export\s+const\s+CONQUEST_V2_TREASURE_TOTAL_(?:POINTS|WEIGHTS)\s*=\s*\[/
+    ],
+    [
+      'progress',
+      /export\s+const\s+conquestTreasureProgress\s*=\s*\(\s*currentPoints/
+    ],
+    ['points', /const\s+(?:POINTS_CAP|TREASURE_TOTAL_POINTS|progress)\s*=/],
     ['economy', /const\s+TREASURE_TOTAL_WEIGHTS\s*=\s*\[/],
     ['worker', /const\s+(?:levelSql|pointsSql|weightSql)\s*=/]
   ]) {
@@ -341,6 +354,125 @@ export const conquestV2TreasureSourceParityErrors = (
       pattern.test(consumers[consumer])
     ) {
       errors.push(`Conquest V2 ${consumer} duplicates the treasure map`)
+    }
+  }
+  return errors
+}
+
+const goIntegerConstant = (source, name) => {
+  const match = source.match(
+    new RegExp(`\\b${name}(?:\\s+\\w+)?\\s*=\\s*([\\d_]+)`)
+  )
+  return match ? numericLiteral(match[1]) : undefined
+}
+
+const goDecimalConstant = (source, name) => {
+  const match = source.match(
+    new RegExp(`\\b${name}(?:\\s+\\w+)?\\s*=\\s*([\\d_]+(?:\\.[\\d_]+)?)`)
+  )
+  return match ? numericLiteral(match[1]) : undefined
+}
+
+/**
+ * Derives the V2 points constants and the unusual winner/turn eligibility
+ * boundary from Go. The source's TurnNonce is the TypeScript engine's
+ * turnCount: before nonce eight, an abandonment/forfeit rewards only the
+ * winner; at nonce eight both players become eligible.
+ */
+export const conquestV2PointsSourceParityErrors = (source, worker) => {
+  const errors = []
+  const compactSource = source.replace(/\s+/g, ' ')
+  const compactWorker = worker.replace(/\s+/g, ' ')
+  const eventId = goIntegerConstant(source, 'EventID')
+  const matchPoints = goIntegerConstant(source, 'completedMatchPoints')
+  const heroBonus = goDecimalConstant(source, 'bonusPercentageForHeroSkin')
+  const threshold = Number(source.match(/match\.TurnNonce\s*>=\s*(\d+)/)?.[1])
+  const silverPoints = Number(
+    source.match(
+      /case\s+proto\.ItemType_SW_SILVER_CARDS:[\s\S]*?pointsByCardID\[item\.TokenID\]\s*=\s*(\d+)/
+    )?.[1]
+  )
+  const goldPoints = Number(
+    source.match(
+      /case\s+proto\.ItemType_SW_GOLD_CARDS:[\s\S]*?pointsByCardID\[item\.TokenID\]\s*=\s*(\d+)/
+    )?.[1]
+  )
+
+  for (const [label, value] of [
+    ['event ID', eventId],
+    ['completed-match points', matchPoints],
+    ['hero-skin bonus', heroBonus],
+    ['turn threshold', threshold],
+    ['Silver-card points', silverPoints],
+    ['Gold-card points', goldPoints]
+  ]) {
+    if (value === undefined || !Number.isFinite(value)) {
+      errors.push(`source Conquest V2 ${label} could not be derived`)
+    }
+  }
+
+  const sourceEligibility = [
+    'match.Status == proto.MatchStatus_COMPLETED ||',
+    'match.Status == proto.MatchStatus_FORFEITED ||',
+    'match.Status == proto.MatchStatus_ABANDONED',
+    '*match.WinningPlayer == playerNumber || match.TurnNonce >='
+  ]
+  for (const token of sourceEligibility) {
+    if (!compactSource.includes(token)) {
+      errors.push(`source Conquest V2 eligibility is missing: ${token}`)
+    }
+  }
+
+  if (
+    eventId !== undefined &&
+    !compactWorker.includes(`const EVENT_ID = ${eventId}`)
+  ) {
+    errors.push('Worker Conquest V2 event ID drifted from Go')
+  }
+  if (
+    matchPoints !== undefined &&
+    !compactWorker.includes(`let earned = ${matchPoints} +`)
+  ) {
+    errors.push('Worker Conquest V2 completed-match points drifted from Go')
+  }
+  if (
+    silverPoints !== undefined &&
+    !compactWorker.includes(`byCard.set(item.token_id, ${silverPoints})`)
+  ) {
+    errors.push('Worker Conquest V2 Silver-card points drifted from Go')
+  }
+  if (
+    goldPoints !== undefined &&
+    !compactWorker.includes(`byCard.set(item.token_id, ${goldPoints})`)
+  ) {
+    errors.push('Worker Conquest V2 Gold-card points drifted from Go')
+  }
+  if (
+    heroBonus !== undefined &&
+    !compactWorker.includes(`earned += Math.ceil(earned * ${heroBonus})`)
+  ) {
+    errors.push('Worker Conquest V2 hero-skin bonus drifted from Go')
+  }
+  if (
+    threshold !== undefined &&
+    !compactWorker.includes(
+      `status === MatchStatus.COMPLETED || ((status === MatchStatus.FORFEITED || status === MatchStatus.ABANDONED) && winner === player) || turnCount >= ${threshold}`
+    )
+  ) {
+    errors.push('Worker Conquest V2 eligibility drifted from Go')
+  }
+  for (const token of [
+    'if (winner !== undefined)',
+    "item_type IN ('SW_SILVER_CARDS', 'SW_GOLD_CARDS')",
+    'balance > 0',
+    "item_type = 'SW_HERO_SKINS'",
+    '!byCard.has(item.token_id)',
+    'CONQUEST_V2_POINTS_CAP',
+    'conquestV2TreasureProgress(player.before_points)',
+    'conquestV2TreasureProgress(player.after_points)'
+  ]) {
+    if (!compactWorker.includes(token)) {
+      errors.push(`Worker Conquest V2 points contract is missing: ${token}`)
     }
   }
   return errors
@@ -1158,6 +1290,9 @@ const main = async () => {
     v2RewardWorker,
     sourceV2Treasure,
     v2Treasure,
+    v2TreasureSql,
+    sourceV2Points,
+    gameConquestPoints,
     v2RewardPolicy,
     v2Economy,
     staff,
@@ -1325,7 +1460,50 @@ const main = async () => {
       'utf8'
     ),
     readFile(
+      path.join(root, 'lib', 'shared', 'src', 'conquest-v2-treasure.ts'),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'cloudflare', 'src', 'conquest-v2-treasure.ts'),
+      'utf8'
+    ),
+    Promise.all([
+      readFile(
+        path.join(
+          root,
+          'api',
+          'lib',
+          'conquest',
+          'conquestv2',
+          'points_updater.go'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'api',
+          'lib',
+          'conquest',
+          'conquestv2',
+          'points_calculator.go'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'api',
+          'lib',
+          'conquest',
+          'conquestv2',
+          'card_points_calculator.go'
+        ),
+        'utf8'
+      )
+    ]).then(sources => sources.join('\n')),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'conquest-points.ts'),
       'utf8'
     ),
     readFile(
@@ -1489,11 +1667,14 @@ const main = async () => {
       boundaryMigration
     }),
     ...conquestV2TreasureSourceParityErrors(sourceV2Treasure, v2Treasure, {
+      sql: v2TreasureSql,
       policy: v2RewardPolicy,
       progress: drainRepository,
+      points: gameConquestPoints,
       economy: v2Economy,
       worker: v2RewardWorker
     }),
+    ...conquestV2PointsSourceParityErrors(sourceV2Points, gameConquestPoints),
     ...conquestV2DeliveryBatchErrors(v2RewardWorker)
   ]
   if (errors.length) {

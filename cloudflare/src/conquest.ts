@@ -6,17 +6,16 @@ import {
   Hero,
   type Conquest,
   type ConquestStats,
-  type ConquestV2TreasureProgress,
   type WeeklyGolds
 } from '@opensky/proto'
 import { getGoldID } from '@opensky/shared/assetsIDs'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
+import { conquestV2TreasureProgress } from '@opensky/shared/conquest-v2-treasure'
 
 import {
   sourceConquestWire,
   sourceWeeklyGoldsListWire
 } from './conquest-wire'
-import { CONQUEST_V2_TREASURE_TOTAL_POINTS } from './conquest-v2-treasure'
 import { invalidArgument } from './errors'
 import { goFloat32Percentage } from './go-numbers'
 
@@ -122,31 +121,7 @@ const conquestStatsResults = (value: string): unknown[] => {
   return Object.values(parsed)
 }
 
-export const conquestTreasureProgress = (
-  currentPoints: number
-): ConquestV2TreasureProgress => {
-  const points = Math.max(0, Math.trunc(currentPoints))
-  let level = CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1
-  for (
-    let index = 0;
-    index < CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1;
-    index++
-  ) {
-    if (points < CONQUEST_V2_TREASURE_TOTAL_POINTS[index + 1]) {
-      level = index
-      break
-    }
-  }
-  const accounted = CONQUEST_V2_TREASURE_TOTAL_POINTS[level]
-  return {
-    treasureLevel: level,
-    treasurePoints: points - accounted,
-    treasurePointsRequired:
-      level < CONQUEST_V2_TREASURE_TOTAL_POINTS.length - 1
-        ? CONQUEST_V2_TREASURE_TOTAL_POINTS[level + 1] - points
-        : 0
-  }
-}
+export const conquestTreasureProgress = conquestV2TreasureProgress
 
 export class ConquestRepository {
   constructor(private readonly database: D1Database) {}

@@ -1,10 +1,8 @@
+import { GameMode, MatchStatus, Reward, RewardType } from '@opensky/proto'
 import {
-  GameMode,
-  MatchStatus,
-  Reward,
-  RewardType,
-  type ConquestV2TreasureProgress
-} from '@opensky/proto'
+  CONQUEST_V2_POINTS_CAP,
+  conquestV2TreasureProgress
+} from '@opensky/shared/conquest-v2-treasure'
 import {
   conquestMatchMode,
   storedMatchModes
@@ -13,10 +11,6 @@ import {
 import { sourceRewardListWire, sourceRewardWire } from './reward-wire'
 
 const EVENT_ID = 2
-const POINTS_CAP = 13_750
-const TREASURE_TOTAL_POINTS = [
-  0, 250, 750, 1_500, 2_500, 3_750, 5_250, 7_000, 9_000, 11_250, 13_750
-] as const
 const HERO_ID: Record<string, number> = {
   ADA: 1,
   SAMYA: 2,
@@ -78,25 +72,6 @@ export interface ConquestPointsReceipt {
   processedAt: string
 }
 
-const progress = (currentPoints: number): ConquestV2TreasureProgress => {
-  const points = Math.max(0, Math.trunc(currentPoints))
-  let level = TREASURE_TOTAL_POINTS.length - 1
-  for (let index = 0; index < TREASURE_TOTAL_POINTS.length - 1; index++) {
-    if (points < TREASURE_TOTAL_POINTS[index + 1]) {
-      level = index
-      break
-    }
-  }
-  return {
-    treasureLevel: level,
-    treasurePoints: points - TREASURE_TOTAL_POINTS[level],
-    treasurePointsRequired:
-      level < TREASURE_TOTAL_POINTS.length - 1
-        ? TREASURE_TOTAL_POINTS[level + 1] - points
-        : 0
-  }
-}
-
 const parseRewards = (value: string): Reward[] => {
   try {
     const parsed: unknown = JSON.parse(value)
@@ -142,8 +117,8 @@ const receipt = async (
         accountID: player.account_id,
         type: RewardType.CONQUEST_POINTS,
         conquestV2TreasureProgress: {
-          beforeMatch: progress(player.before_points),
-          afterMatch: progress(player.after_points)
+          beforeMatch: conquestV2TreasureProgress(player.before_points),
+          afterMatch: conquestV2TreasureProgress(player.after_points)
         }
       })
     ]
@@ -330,11 +305,11 @@ export const applyConquestPoints = async (
           players[player]!.account_id ?? 0,
           rawPoints[player],
           rawPoints[player],
-          POINTS_CAP,
+          CONQUEST_V2_POINTS_CAP,
           rawPoints[player],
-          POINTS_CAP,
+          CONQUEST_V2_POINTS_CAP,
           rawPoints[player],
-          POINTS_CAP,
+          CONQUEST_V2_POINTS_CAP,
           processedAt,
           userIds[player],
           EVENT_ID,

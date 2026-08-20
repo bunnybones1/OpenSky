@@ -215,6 +215,57 @@ describe('source Conquest authoritative match progression', () => {
     expect(receipt.rewards.map(rewards => rewards.length)).toEqual([1, 0])
   })
 
+  it.each([MatchStatus.FORFEITED, MatchStatus.ABANDONED])(
+    'awards both players at the source turn-eight boundary for %s matches',
+    async status => {
+      const proposalId = `conquest-points-turn-eight-${status.toLowerCase()}`
+      await setup(proposalId)
+      const receipt = await applyConquestPoints(
+        env.AUTH_DB,
+        proposalId,
+        0,
+        status,
+        8,
+        '2026-08-11T12:01:46.000Z'
+      )
+
+      expect(receipt.points).toEqual([4, 4])
+      expect(receipt.rewards.map(rewards => rewards.length)).toEqual([1, 1])
+      expect(
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, current_points, total_points
+           FROM player_conquest_points ORDER BY user_id`
+        ).all()
+      ).toMatchObject({
+        results: [
+          { user_id: USER_1, current_points: 4, total_points: 4 },
+          { user_id: USER_2, current_points: 4, total_points: 4 }
+        ]
+      })
+    }
+  )
+
+  it('awards no points without a winner even at the turn boundary', async () => {
+    const proposalId = 'conquest-points-draw'
+    await setup(proposalId)
+    const receipt = await applyConquestPoints(
+      env.AUTH_DB,
+      proposalId,
+      undefined,
+      MatchStatus.COMPLETED,
+      8,
+      '2026-08-11T12:01:47.000Z'
+    )
+
+    expect(receipt.points).toEqual([0, 0])
+    expect(receipt.rewards).toEqual([[], []])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_conquest_points`
+      ).first('count')
+    ).toBe(0)
+  })
+
   it('serializes simultaneous point awards at the source event cap', async () => {
     const firstProposal = 'conquest-points-cap-one'
     const secondProposal = 'conquest-points-cap-two'
@@ -416,8 +467,11 @@ describe('source Conquest authoritative match progression', () => {
   it('moves earned-reward runs to pending on a third win or later loss', async () => {
     const proposalId = 'conquest-progress-terminal-rewards'
     const match = await setup(proposalId, [
-      { 10: ConquestMatchResult.WIN, 11: ConquestMatchResult.WIN },
-      { 10: ConquestMatchResult.WIN }
+      {
+        1_000_010: ConquestMatchResult.WIN,
+        1_000_011: ConquestMatchResult.WIN
+      },
+      { 1_000_010: ConquestMatchResult.WIN }
     ])
     const processedAt = '2026-08-11T12:03:00.000Z'
 
