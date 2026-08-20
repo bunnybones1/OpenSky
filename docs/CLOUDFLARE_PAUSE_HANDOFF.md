@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `fb551525`
-  (`Detach saved recent match sessions`)
-- Latest tested runtime commit: `fb551525`
-  (`Detach saved recent match sessions`)
+- Last code/test checkpoint: `5c4ba408`
+  (`Preserve source session replacement lifecycle`)
+- Latest tested runtime commit: `5c4ba408`
+  (`Preserve source session replacement lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,9 +21,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `fb551525` are committed and
+- The runtime changes from `38386294` through `5c4ba408` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-874772de.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -56,14 +56,14 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `fb551525`:
+Validation completed locally for exact code head `5c4ba408`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
   source gate;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
-- game server: 34 unit and 116 Workers tests;
+- game server: 34 unit and 117 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
 - analytics: four unit and five Workers tests;
@@ -109,8 +109,11 @@ exact-head run
 `4519fd28` in 10m46s. The terminal-socket checkpoint and its refreshed handoff
 passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32421253747> at commit
-`8732a9fd` in 10m56s. The newer `fb551525` checkpoint and this refreshed handoff
-must receive exact-head CI before any production mutation.
+`8732a9fd` in 10m56s. The saved-session detachment checkpoint and its handoff
+passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32423540799> at commit
+`b9bb5439` in 10m18s. The newer `5c4ba408` checkpoint and this refreshed
+handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -413,6 +416,37 @@ typecheck, both production builds, and 594-file artifact validation. No
 deployment, migration, provisioning, activation, live match, or production
 mutation was performed.
 
+## Source session replacement lifecycle milestone
+
+Follow-up commit `5c4ba408` removes a shared duplicate-socket behavior that did
+not exist in the original TypeScript game server:
+
+- source `MatchProxy.updateContext` detaches the prior active player's match
+  worker, sends the exact server-level “You connected in another session,
+  please play there.” error, and leaves that authenticated socket open;
+- the detached player can still time-sync or submit `join_server` again. If it
+  sends gameplay without a live match, source `MatchManager` sends the exact
+  user-level “You have no game in progress!” error and closes with an empty
+  close frame;
+- source duplicate spectators instead receive the user-level “connected in
+  another location” error and are immediately closed with an empty close frame;
+  and
+- player and spectator replacements now use separate role-scoped paths, with no
+  invented `4001` code or `Duplicate connection` reason.
+
+The Workers regression checks the detached/joined attachment pair, proves the
+old player remains open for `timesync`, verifies the later no-active-game error
+and empty close frame, and checks the distinct spectator message and close.
+The same detached-gameplay behavior is exercised after a saved recent-match
+reconnect. The mutation-tested completion gate now parses both original source
+paths and rejects changed levels, text, detachment, role scoping, or close
+semantics. The exact complete local release contract passed at committed
+runtime head `5c4ba408` with 510 main-Worker tests, 34 game-server unit tests,
+117 game-server Workers tests, all other service and browser suites, every
+source/off-chain gate and typecheck, both production builds, and 594-file
+artifact validation. No deployment, migration, provisioning, activation, live
+match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -515,9 +549,9 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 ### Production rollout
 
-- Push the `fb551525` milestone and refreshed handoff, then wait for exact-head
+- Push the `5c4ba408` milestone and refreshed handoff, then wait for exact-head
   CI.
-- Deploy and verify the tested runtime changes through `fb551525`. Keep
+- Deploy and verify the tested runtime changes through `5c4ba408`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

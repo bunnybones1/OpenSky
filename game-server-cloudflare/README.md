@@ -50,7 +50,13 @@ wire messages. It is a separate service from `matchmaker-ts`.
   open. Saved recent-match sockets stay detached from live-session duplicate
   eviction, so parallel history/replay retrieval does not displace an earlier
   connection, while settlement retries expose only the authoritative final
-  game state.
+  game state; and
+- source-distinct session replacement: an old active player attachment is
+  detached, receives the original server-level replacement message, and stays
+  open for time-sync or rejoin, while only a duplicate spectator receives the
+  original user-level message and empty close frame. Detached gameplay retains
+  the source no-active-game response and empty close frame without triggering
+  player abandonment.
 
 The gateway, not the browser, is the identity authority. It validates a Google
 session and maps the user to the stable 20-byte game principal for player and

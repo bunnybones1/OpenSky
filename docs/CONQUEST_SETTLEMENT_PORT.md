@@ -1164,3 +1164,34 @@ browser-game tests, nine analytics tests, every source and off-chain gate, all
 typechecks, both production builds, and 594-file artifact validation. No
 deployment, migration, provisioning, activation, live match, or production
 mutation was performed. Production Conquest remains disabled.
+
+## Source session replacement lifecycle proof
+
+Follow-up milestone `5c4ba408` separates two replacement paths that the
+Cloudflare Durable Object had incorrectly combined. Source
+`MatchProxy.updateContext` removes the old active player's match-worker link,
+sends the exact server-level replacement message, and keeps the authenticated
+socket open. That detached context continues to answer `timesync` and may join
+again; gameplay without a live match receives the exact user-level “You have
+no game in progress!” response before an empty close frame.
+
+A duplicate spectator follows the distinct source `MatchManager` path: it gets
+the user-level “connected in another location” response and is immediately
+closed with an empty close frame. The Worker now has separate role-scoped
+replacement helpers and no longer invents a `4001` code or `Duplicate
+connection` reason for either path. Detaching the previous player attachment
+also ensures its eventual close cannot start an abandon timer while the
+replacement remains joined.
+
+Workers tests assert the attachment transition, exact messages, continued
+time-sync, no-active-game response, empty close events, saved recent-session
+behavior, and distinct spectator lifecycle. The mutation-tested completion gate
+derives both source branches and rejects any changed text, level, detachment,
+role filter, or close semantics. The exact complete local release contract
+passed at committed runtime head `5c4ba408` with 510 main-Worker tests, 34
+game-server unit tests, 117 game-server Workers tests, 33 match-service tests,
+78 matchmaker tests, 30 browser-game tests, nine analytics tests, every source
+and off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. No deployment, migration, provisioning, activation, live
+match, or production mutation was performed. Production Conquest remains
+disabled.
