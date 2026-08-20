@@ -10,10 +10,7 @@ import { GameMode, MatchStatus } from '@opensky/proto'
 import { gameStateParse } from '@opensky/shared/gameStateSerializer'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import * as StateBindings from '@skyweaver/state-browser-sys'
-import type {
-  PlayerSecret,
-  SkyWeaver
-} from '@skyweaver/state-metadata'
+import type { PlayerSecret, SkyWeaver } from '@skyweaver/state-metadata'
 
 import {
   archiveReplayRecords,
@@ -21,6 +18,7 @@ import {
   GameMatch,
   GameServerEnv
 } from '../src/game-match'
+import { readAuthoritativeMatchDecks } from '../src/authoritative-decks'
 import { hexToBytes } from '../src/encoding'
 import { recordAbandonPenalty } from '../src/abandon-penalties'
 import {
@@ -63,8 +61,7 @@ const PRIVATE_SPECTATOR_USER_ID = '44444444-4444-4444-8444-444444444444'
 const SPECTATOR_PRINCIPAL = '0x3333333333333333333333333333333333333333'
 const PRIVATE_SPECTATOR_PRINCIPAL = '0x4444444444444444444444444444444444444444'
 const PLAYER_1_SPECTATE_CODE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-const ANONYMOUS_SPECTATOR_ID =
-  'anonymous-55555555-5555-4555-8555-555555555555'
+const ANONYMOUS_SPECTATOR_ID = 'anonymous-55555555-5555-4555-8555-555555555555'
 
 const createMatch = (fixture = createMatchFixture({ proposalId })) =>
   SELF.fetch('https://game.example/internal/matches', {
@@ -319,11 +316,7 @@ const collectMessages = (socket: WebSocket, count: number) =>
 const nextMessage = async (socket: WebSocket) =>
   (await collectMessages(socket, 1))[0]
 
-const join = (
-  socket: WebSocket,
-  subkeyByte: number,
-  loadingProgress = 1
-) => {
+const join = (socket: WebSocket, subkeyByte: number, loadingProgress = 1) => {
   socket.send(
     JSON.stringify({
       type: 'join_server',
@@ -1555,7 +1548,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     malformed.match.player1.playerSessionID = 'player-session-1'
     const rejected = await createMatch(malformed)
     expect(rejected.status).toBe(400)
-    expect(await rejected.json()).toEqual({ error: 'invalid player session ID' })
+    expect(await rejected.json()).toEqual({
+      error: 'invalid player session ID'
+    })
   })
 
   it('repairs interrupted initialization on an identical create retry', async () => {
@@ -1617,9 +1612,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<Record<string, unknown>>(
-          'match:timers'
-        )
+        const timers =
+          await state.storage.get<Record<string, unknown>>('match:timers')
         await state.storage.put('match:timers', {
           ...timers,
           loadExpiryAtMs: Date.now() - 1
@@ -1711,9 +1705,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<Record<string, unknown>>(
-          'match:timers'
-        )
+        const timers =
+          await state.storage.get<Record<string, unknown>>('match:timers')
         await state.storage.put('match:timers', {
           ...timers,
           loadExpiryAtMs: Date.now() - 1
@@ -1936,10 +1929,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     pendingReplacement.close(1000, 'replacement abandoned before join')
     await new Promise(resolve => setTimeout(resolve, 50))
-    const beforeHandoff = await stub().fetch(
-      'https://match/internal/status',
-      { headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' } }
-    )
+    const beforeHandoff = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
     const beforeHandoffBody = await beforeHandoff.json<{
       players: Record<
         string,
@@ -1967,10 +1959,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       expect.objectContaining({ type: 'opponent_loading_progress' })
     ])
     await new Promise(resolve => setTimeout(resolve, 50))
-    const afterHandoff = await stub().fetch(
-      'https://match/internal/status',
-      { headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' } }
-    )
+    const afterHandoff = await stub().fetch('https://match/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
     const afterHandoffBody = await afterHandoff.json<{
       players: Record<
         string,
@@ -2293,9 +2284,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
 
-    first.send(
-      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
-    )
+    first.send(JSON.stringify({ type: 'player_loading_progress', progress: 1 }))
 
     for (const clientTime of [101, 102, 103, 104, 105]) {
       const response = nextMessage(first)
@@ -2318,17 +2307,16 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await insertActiveLedgerRow()
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
-    first.send(
-      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
-    )
+    first.send(JSON.stringify({ type: 'player_loading_progress', progress: 1 }))
     await expect
       .poll(async () =>
         runInDurableObject(
           stub() as DurableObjectStub,
           async (_instance, state) => {
-            const players = await state.storage.get<
-              Record<string, { finishedLoadingAssets: boolean }>
-            >('match:players')
+            const players =
+              await state.storage.get<
+                Record<string, { finishedLoadingAssets: boolean }>
+              >('match:players')
             return players?.[PRINCIPAL_1].finishedLoadingAssets
           }
         )
@@ -2337,9 +2325,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const timers = await state.storage.get<Record<string, unknown>>(
-          'match:timers'
-        )
+        const timers =
+          await state.storage.get<Record<string, unknown>>('match:timers')
         await state.storage.put('match:timers', {
           ...timers,
           loadExpiryAtMs: Date.now() - 1
@@ -2387,9 +2374,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
 
     const relayed = collectMessages(first, 2)
-    first.send(
-      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
-    )
+    first.send(JSON.stringify({ type: 'player_loading_progress', progress: 1 }))
     expect(await relayed).toEqual([
       expect.objectContaining({
         type: 'opponent_loading_progress',
@@ -2593,9 +2578,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
-        const players = await state.storage.get<
-          Record<string, { abandonAtMs?: number }>
-        >('match:players')
+        const players =
+          await state.storage.get<Record<string, { abandonAtMs?: number }>>(
+            'match:players'
+          )
         const timers = await state.storage.get<{ turnAtMs?: number }>(
           'match:timers'
         )
@@ -2642,6 +2628,21 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       winner_player: 1,
       ended_at: expect.any(String)
     })
+    const realDecks = await readAuthoritativeMatchDecks(env.AUTH_DB, proposalId)
+    expect(realDecks.map(deck => deck.cardIds.length)).toEqual([30, 30])
+    expect(fixture().match.player1.privateSeed.cards).toEqual([])
+    expect(fixture().match.player2.privateSeed.cards).toEqual([])
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const metadata = await state.storage.get<{
+          realDeckStrings?: [string, string]
+        }>('match:metadata')
+        expect(metadata?.realDeckStrings).toEqual(
+          realDecks.map(deck => deck.deckString)
+        )
+      }
+    )
     const storedResult = JSON.parse(ledger!.result_json)
     expect(storedResult).toMatchObject({
       winner: 1,
@@ -2715,7 +2716,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       gameMode: GameMode.RANKED_CONSTRUCTED,
       matchID: 42,
       replayID: 'replay-test-42',
-      accounts: [fixture().match.player1.account, fixture().match.player2.account],
+      accounts: [
+        fixture().match.player1.account,
+        fixture().match.player2.account
+      ],
       store: recentReconnect.store,
       rewards: storedResult.rewards[1]
     })
@@ -3023,7 +3027,11 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ])
 
     let current = await status()
-    for (let attempt = 0; attempt < 6 && !current.state.hasState; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 6 && !current.state.hasState;
+      attempt += 1
+    ) {
       await runInDurableObject(
         dualBotStub() as DurableObjectStub,
         async (_instance, state) => {

@@ -2,18 +2,41 @@ import { env } from 'cloudflare:test'
 import {
   ConquestMatchResult,
   ConquestStatus,
+  DeckClass,
   GameMode,
   MatchStatus,
   RewardType
 } from '@opensky/proto'
+import type { BaseCard } from '@skyweaver/state-metadata'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import cardLibrary from '../../cloudflare/src/generated/card-library.json'
+import { encodeDeckString } from '../../cloudflare/src/deck-codec'
+import {
+  persistAuthoritativeMatchDecks,
+  realDeckStringsFromFilledDecks,
+  type RealDeckStrings
+} from '../src/authoritative-decks'
+import type { GameServerEnv } from '../src/game-match'
 import { applyConquestProgress } from '../src/progression'
 import { applyConquestPoints } from '../src/conquest-points'
 import { settleConquestRewardsForMatch } from '../src/conquest-settlement'
+import { AuthoritativeMatchRuntime } from '../src/state-runtime'
+import { createMatchFixture } from './fixture'
 
 const USER_1 = 'conquest-progress-user-1'
 const USER_2 = 'conquest-progress-user-2'
+const cardsForClass = (deckClass: 'STR' | 'AGY') =>
+  cardLibrary.cards
+    .filter(card => card.class === deckClass)
+    .slice(0, 30)
+    .map(card => String(card.id) as BaseCard)
+const STR_DECK = cardsForClass('STR')
+const AGY_DECK = cardsForClass('AGY')
+const DEFAULT_REAL_DECKS = realDeckStringsFromFilledDecks(
+  [STR_DECK, STR_DECK],
+  [DeckClass.STR, DeckClass.STR]
+)
 
 const matchPayload = (
   player1: { cards: string[]; prisms: string[] } = {
@@ -38,7 +61,8 @@ const setup = async (
     Record<number, ConquestMatchResult>,
     Record<number, ConquestMatchResult>
   ] = [{}, {}],
-  mode = GameMode.CONQUEST_CONSTRUCTED
+  mode = GameMode.CONQUEST_CONSTRUCTED,
+  realDeckStrings: RealDeckStrings | false = DEFAULT_REAL_DECKS
 ) => {
   const now = '2026-08-11T12:00:00.000Z'
   await env.AUTH_DB.batch([
@@ -101,6 +125,14 @@ const setup = async (
       now
     )
   ])
+  if (realDeckStrings) {
+    await persistAuthoritativeMatchDecks(
+      env.AUTH_DB,
+      proposalId,
+      realDeckStrings,
+      now
+    )
+  }
   return env.AUTH_DB.prepare(
     'SELECT id FROM multiplayer_matches WHERE proposal_id = ?'
   )
@@ -142,14 +174,7 @@ describe('source Conquest authoritative match progression', () => {
         `UPDATE multiplayer_matches SET match_payload_json = ?
          WHERE proposal_id = ?`
       ).bind(
-        JSON.stringify({
-          match: {
-            player1: {
-              privateSeed: { cards: ['10', '11', '10'], prisms: ['str'] }
-            },
-            player2: { privateSeed: { cards: [], prisms: ['str'] } }
-          }
-        }),
+        '{"untrusted":"submitted seed is not settlement authority"}',
         proposalId
       ),
       env.AUTH_DB.prepare(
@@ -229,26 +254,24 @@ describe('source Conquest authoritative match progression', () => {
 
   it('derives the hero-skin bonus from the immutable match deck', async () => {
     const proposalId = 'conquest-points-match-deck-skin'
-    await setup(proposalId)
+    await setup(
+      proposalId,
+      [{}, {}],
+      GameMode.CONQUEST_CONSTRUCTED,
+      realDeckStringsFromFilledDecks(
+        [AGY_DECK, STR_DECK],
+        [DeckClass.AGY, DeckClass.STR]
+      )
+    )
     const now = '2026-08-11T12:01:31.000Z'
-    await env.AUTH_DB.batch([
-      env.AUTH_DB.prepare(
-        `UPDATE multiplayer_matches SET match_payload_json = ?
-         WHERE proposal_id = ?`
-      ).bind(
-        matchPayload(
-          { cards: [], prisms: ['agy'] },
-          { cards: [], prisms: ['str'] }
-        ),
-        proposalId
-      ),
-      env.AUTH_DB.prepare(
-        `INSERT INTO player_items
-           (user_id, item_type, token_id, balance, is_new, unlock_source,
-            created_at, updated_at)
-         VALUES (?, 'SW_HERO_SKINS', 2, 1, 0, 'test', ?, ?)`
-      ).bind(USER_1, now, now)
-    ])
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_items
+         (user_id, item_type, token_id, balance, is_new, unlock_source,
+          created_at, updated_at)
+       VALUES (?, 'SW_HERO_SKINS', 2, 1, 0, 'test', ?, ?)`
+    )
+      .bind(USER_1, now, now)
+      .run()
 
     const receipt = await applyConquestPoints(
       env.AUTH_DB,
@@ -262,46 +285,101 @@ describe('source Conquest authoritative match progression', () => {
     expect(receipt.points).toEqual([5, 4])
   })
 
+  it('awards an owned card selected by WASM to fill an incomplete seed', async () => {
+    const proposalId = 'conquest-points-engine-filled-card'
+    const runtimeEnv = env as unknown as GameServerEnv
+    const fixture = createMatchFixture({
+      proposalId,
+      gameMode: GameMode.CONQUEST_CONSTRUCTED
+    })
+    const runtime = AuthoritativeMatchRuntime.create({
+      matchId: fixture.match.matchID,
+      season: fixture.match.matchSettings.season,
+      player1Seed: fixture.match.player1.privateSeed,
+      player2Seed: fixture.match.player2.privateSeed,
+      heroRarities: ['base', 'base'],
+      ownerPrivateKey: runtimeEnv.MATCH_OWNER_PRIVATE_KEY
+    })
+    try {
+      for (let attempt = 0; !runtime.stateInfo().hasState; attempt += 1) {
+        if (attempt >= 6) throw new Error('runtime did not materialize state')
+        runtime.dispatchTimeout()
+      }
+      const filledDecks = runtime.authoritativeFilledDecks()!
+      expect(fixture.match.player1.privateSeed.cards).toEqual([])
+      expect(filledDecks[0]).toHaveLength(30)
+      await setup(
+        proposalId,
+        [{}, {}],
+        GameMode.CONQUEST_CONSTRUCTED,
+        realDeckStringsFromFilledDecks(filledDecks, [
+          DeckClass.STR,
+          DeckClass.STR
+        ])
+      )
+      const filledCardId = Number(filledDecks[0][0])
+      const now = '2026-08-11T12:01:31.500Z'
+      await env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_SILVER_CARDS', ?, 1, 0, 'test', ?, ?)`
+      )
+        .bind(USER_1, filledCardId, now, now)
+        .run()
+
+      const receipt = await applyConquestPoints(
+        env.AUTH_DB,
+        proposalId,
+        0,
+        MatchStatus.COMPLETED,
+        5,
+        now
+      )
+      expect(receipt.points).toEqual([5, 4])
+    } finally {
+      runtime.free()
+    }
+  })
+
   it.each([
-    ['invalid JSON', '{'],
-    ['missing deck', JSON.stringify({ match: {} })],
-    [
-      'noncanonical card IDs',
-      JSON.stringify({
-        match: {
-          player1: { privateSeed: { cards: [10], prisms: ['str'] } },
-          player2: { privateSeed: { cards: [], prisms: ['str'] } }
-        }
-      })
-    ],
+    ['missing decks', []],
+    ['one missing deck', [DEFAULT_REAL_DECKS[0]]],
+    ['invalid base58', ['SWxSTR02zzzz', DEFAULT_REAL_DECKS[1]]],
     [
       'an unknown card',
-      matchPayload(
-        { cards: ['999999'], prisms: ['str'] },
-        { cards: [], prisms: ['str'] }
-      )
+      [
+        encodeDeckString(
+          [...STR_DECK.slice(0, 29).map(Number), 9999],
+          DeckClass.STR
+        ),
+        DEFAULT_REAL_DECKS[1]
+      ]
     ],
     [
       'a card/class mismatch',
-      matchPayload(
-        { cards: ['10'], prisms: ['agy'] },
-        { cards: [], prisms: ['str'] }
-      )
+      [
+        encodeDeckString(STR_DECK.map(Number), DeckClass.AGY),
+        DEFAULT_REAL_DECKS[1]
+      ]
     ]
-  ])(
+  ] satisfies Array<[string, string[]]>)(
     'fails closed without point writes for %s',
-    async (description, payload) => {
+    async (description, deckStrings) => {
       const proposalId = `conquest-points-malformed-${description.replaceAll(
         ' ',
         '-'
       )}`
-      await setup(proposalId)
-      await env.AUTH_DB.prepare(
-        `UPDATE multiplayer_matches SET match_payload_json = ?
-       WHERE proposal_id = ?`
-      )
-        .bind(payload, proposalId)
-        .run()
+      await setup(proposalId, [{}, {}], GameMode.CONQUEST_CONSTRUCTED, false)
+      for (const [player, deckString] of deckStrings.entries()) {
+        await env.AUTH_DB.prepare(
+          `INSERT INTO multiplayer_match_authoritative_decks
+             (proposal_id, player_index, deck_string, captured_at)
+           VALUES (?, ?, ?, '2026-08-11T12:01:31.000Z')`
+        )
+          .bind(proposalId, player, deckString)
+          .run()
+      }
 
       await expect(
         applyConquestPoints(
@@ -411,6 +489,12 @@ describe('source Conquest authoritative match progression', () => {
     )
       .bind(secondProposal, `replay-${secondProposal}`, firstProposal)
       .run()
+    await persistAuthoritativeMatchDecks(
+      env.AUTH_DB,
+      secondProposal,
+      DEFAULT_REAL_DECKS,
+      '2026-08-11T12:00:00.000Z'
+    )
     await env.AUTH_DB.batch(
       [USER_1, USER_2].map(userId =>
         env.AUTH_DB.prepare(

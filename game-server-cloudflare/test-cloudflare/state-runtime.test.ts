@@ -36,7 +36,9 @@ describe('Cloudflare authoritative state runtime', () => {
     })
     runtimes.push(runtime)
 
-    expect(stage('inspect initial state', () => runtime.stateInfo())).toMatchObject({
+    expect(
+      stage('inspect initial state', () => runtime.stateInfo())
+    ).toMatchObject({
       hasState: false,
       pendingPlayer: 0
     })
@@ -44,7 +46,9 @@ describe('Cloudflare authoritative state runtime', () => {
       runtime.dispatchTimeout()
     )
     expect(emitted).toHaveLength(1)
-    expect(stage('inspect advanced state', () => runtime.stateInfo())).toMatchObject({
+    expect(
+      stage('inspect advanced state', () => runtime.stateInfo())
+    ).toMatchObject({
       hasState: false,
       pendingPlayer: 1
     })
@@ -60,6 +64,39 @@ describe('Cloudflare authoritative state runtime', () => {
       hasState: false,
       pendingPlayer: 1
     })
+  })
+
+  it('exposes the engine-filled decks only after state materialization', () => {
+    const runtimeEnv = env as unknown as GameServerEnv
+    const { match } = createMatchFixture()
+    const runtime = AuthoritativeMatchRuntime.create({
+      matchId: match.matchID,
+      season: match.matchSettings.season,
+      player1Seed: match.player1.privateSeed,
+      player2Seed: match.player2.privateSeed,
+      heroRarities: ['base', 'base'],
+      ownerPrivateKey: runtimeEnv.MATCH_OWNER_PRIVATE_KEY
+    })
+    runtimes.push(runtime)
+
+    expect(match.player1.privateSeed.cards).toEqual([])
+    expect(match.player2.privateSeed.cards).toEqual([])
+    expect(runtime.authoritativeFilledDecks()).toBeUndefined()
+    for (let attempt = 0; !runtime.stateInfo().hasState; attempt += 1) {
+      if (attempt >= 6) throw new Error('runtime did not materialize state')
+      runtime.dispatchTimeout()
+    }
+
+    const filled = runtime.authoritativeFilledDecks()!
+    expect(filled.map(cards => cards.length)).toEqual([30, 30])
+    expect(filled.map(cards => new Set(cards).size)).toEqual([30, 30])
+
+    const restored = AuthoritativeMatchRuntime.restore(
+      runtime.snapshot(),
+      runtimeEnv.MATCH_OWNER_PRIVATE_KEY
+    )
+    runtimes.push(restored)
+    expect(restored.authoritativeFilledDecks()).toEqual(filled)
   })
 })
 

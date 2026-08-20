@@ -26,10 +26,7 @@ import {
 } from '@skyweaver/state-metadata'
 
 import { bytesToHex, hexToBytes, numberToInt64Bytes } from './encoding'
-import {
-  createOwnerSigner,
-  ethereumAddressForPrivateKey
-} from './signing'
+import { createOwnerSigner, ethereumAddressForPrivateKey } from './signing'
 
 type WorkersStateBindings = typeof StateBindings & {
   __wbg_set_wasm(exports: WebAssembly.Exports): void
@@ -412,6 +409,19 @@ export class AuthoritativeMatchRuntime {
     ]
   }
 
+  /**
+   * The source records these exact WASM-filled card lists the first time a
+   * public state exists. They can include engine-selected cards that were not
+   * present in an incomplete submitted seed.
+   */
+  authoritativeFilledDecks(): [BaseCard[], BaseCard[]] | undefined {
+    if (!this.store.hasState()) return undefined
+    return [0, 1].map(player => [
+      ...(this.store.secret(player as Player) as PlayerSecret<SkyWeaver>).secret
+        .filledDeck
+    ]) as [BaseCard[], BaseCard[]]
+  }
+
   stateInfo(): RuntimeStateInfo {
     let state: GameState<SkyWeaver> | undefined
     const hasState = this.store.hasState()
@@ -457,7 +467,9 @@ export class AuthoritativeMatchRuntime {
       secureRandom
     )
     try {
-      if (ethereumAddressForPrivateKey(botPrivateKey) !== botSubkey.toLowerCase()) {
+      if (
+        ethereumAddressForPrivateKey(botPrivateKey) !== botSubkey.toLowerCase()
+      ) {
         throw new Error('bot private key does not match its approved subkey')
       }
       if (botStore.getAddressPlayer(botSubkey) !== player) {

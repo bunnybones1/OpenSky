@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
+  conquestFilledDeckAuthorityErrors,
   conquestGateErrors,
   conquestPoolCatalogErrors,
   conquestSettlementSourceParityErrors,
@@ -677,6 +678,128 @@ test('derives Conquest V2 point earning and turn eligibility from Go', async () 
       )
     ).some(error => error.includes('match service'))
   )
+})
+
+test('pins WASM filledDeck as the shared points and deck-rank authority', async () => {
+  const [
+    server,
+    apiClient,
+    pointsSource,
+    ranksSource,
+    runtime,
+    gameMatch,
+    authoritativeDecks,
+    migration,
+    points,
+    ranks
+  ] = await Promise.all([
+    readFile('server/src/worker/match/Match.ts', 'utf8'),
+    readFile('server/src/ApiClient.ts', 'utf8'),
+    readFile('api/lib/conquest/conquestv2/points_updater.go', 'utf8'),
+    readFile('api/lib/decks/rank_updater.go', 'utf8'),
+    readFile('game-server-cloudflare/src/state-runtime.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/authoritative-decks.ts', 'utf8'),
+    readFile(
+      'cloudflare/migrations/0115_authoritative_match_decks.sql',
+      'utf8'
+    ),
+    readFile('game-server-cloudflare/src/conquest-points.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/deck-ranks.ts', 'utf8')
+  ])
+  const source = { server, apiClient, points: pointsSource, ranks: ranksSource }
+  const worker = {
+    runtime,
+    gameMatch,
+    authoritativeDecks,
+    migration,
+    points,
+    ranks
+  }
+  const errors = (sourceMutation = {}, workerMutation = {}) =>
+    conquestFilledDeckAuthorityErrors(
+      { ...source, ...sourceMutation },
+      { ...worker, ...workerMutation }
+    )
+  assert.deepEqual(errors(), [])
+
+  for (const mutation of [
+    [
+      {
+        server: server.replace(
+          'secrets[p].secret.filledDeck',
+          'secrets[p].secret.originalDeck'
+        )
+      },
+      {}
+    ],
+    [
+      {
+        apiClient: apiClient.replace(
+          'player1DeckString: match.playerContexts[0].realDeckString',
+          'player1DeckString: match.playerContexts[0].deckString'
+        )
+      },
+      {}
+    ],
+    [
+      {
+        ranks: ranksSource.replace(
+          'match.Player1DeckString',
+          'match.InitPlayer1DeckString'
+        )
+      },
+      {}
+    ],
+    [
+      {},
+      {
+        runtime: runtime.replace(
+          'authoritativeFilledDecks()',
+          'submittedDecks()'
+        )
+      }
+    ],
+    [
+      {},
+      {
+        gameMatch: gameMatch.replace(
+          'await persistAuthoritativeMatchDecks(',
+          'void persistAuthoritativeMatchDecks('
+        )
+      }
+    ],
+    [
+      {},
+      {
+        authoritativeDecks: authoritativeDecks.replace(
+          'WHERE NOT EXISTS (',
+          'WHERE EXISTS ('
+        )
+      }
+    ],
+    [
+      {},
+      {
+        migration: migration.replace(
+          'multiplayer_match_authoritative_decks_no_update',
+          'mutable_authoritative_decks'
+        )
+      }
+    ],
+    [
+      {},
+      {
+        points: points.replaceAll(
+          'readAuthoritativeMatchDeckStrings',
+          'readSubmittedDeckStrings'
+        )
+      }
+    ],
+    [{}, { ranks: `${ranks}\nconst match_payload_json = true` }]
+  ]) {
+    assert.ok(errors(mutation[0], mutation[1]).length > 0)
+  }
 })
 
 test('derives Conquest settlement rewards and terminal behavior from source', async () => {

@@ -599,11 +599,7 @@ export const conquestV2PointsSourceParityErrors = (
   }
   for (const token of [
     'const sourceMatchDeck = (',
-    'const cards = privateSeed?.cards',
-    'const prisms = privateSeed?.prisms',
-    'CardLibrary.has(canonicalCards[index] as BaseCard)',
-    'const deckClass = prismsToDeckClass(prisms as Prism[])',
-    'CODE_PRISMS[deckClass]',
+    'const { cardIds, deckClass } = decodeAuthoritativeMatchDeck(deckString)',
     'const heroSkinId = sourceHeroSkinIdForDeckClass(deckClass)',
     "throw new Error('Conquest match deck is malformed')",
     'const ids = deck.cardIds',
@@ -613,10 +609,185 @@ export const conquestV2PointsSourceParityErrors = (
       errors.push(`Worker Conquest V2 deck contract is missing: ${token}`)
     }
   }
+  if (
+    !/readAuthoritativeMatchDeckStrings\(\s*database,\s*proposalId\s*\)/.test(
+      worker
+    )
+  ) {
+    errors.push(
+      'Worker Conquest V2 deck contract is missing: readAuthoritativeMatchDeckStrings(database, proposalId)'
+    )
+  }
+  if (
+    occurrences(
+      worker,
+      /throw new Error\('Conquest match deck is malformed'\)/g
+    ) !== 2
+  ) {
+    errors.push(
+      'Worker Conquest V2 must fail closed for both missing and malformed final decks'
+    )
+  }
   if (/\bHERO_ID\b|conquest\.hero|players\[player\]!\.hero/.test(worker)) {
     errors.push(
       'Worker Conquest V2 skin points cannot use mutable active-run hero state'
     )
+  }
+  return errors
+}
+
+/**
+ * Pins the cross-service boundary that the source calls realDeckString. The
+ * submitted private seed is not equivalent: WASM fills incomplete decks before
+ * MatchEndRequest stores Player1DeckString / Player2DeckString, and both the Go
+ * Conquest point calculator and deck-rank updater consume those final strings.
+ */
+export const conquestFilledDeckAuthorityErrors = (source, worker) => {
+  const errors = []
+  const compactSourceServer = (source.server ?? '').replace(/\s+/g, ' ')
+  const compactSourceClient = (source.apiClient ?? '').replace(/\s+/g, ' ')
+  const compactSourcePoints = (source.points ?? '').replace(/\s+/g, ' ')
+  const compactSourceRanks = (source.ranks ?? '').replace(/\s+/g, ' ')
+  for (const token of [
+    'if (!this.playerContexts[p].realDeckString)',
+    'secrets[p].secret.filledDeck',
+    'this.playerContexts[p].privateSeed?.prisms',
+    '?? DeckClass.UNKNOWN_CLASS'
+  ]) {
+    if (!compactSourceServer.includes(token)) {
+      errors.push(`source filled-deck capture is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "player1DeckString: match.playerContexts[0].realDeckString ?? ''",
+    "player2DeckString: match.playerContexts[1].realDeckString ?? ''"
+  ]) {
+    if (!compactSourceClient.includes(token)) {
+      errors.push(`source MatchEndRequest deck authority is missing: ${token}`)
+    }
+  }
+  for (const token of ['match.Player1DeckString', 'match.Player2DeckString']) {
+    if (!compactSourcePoints.includes(token)) {
+      errors.push(`source point deck authority is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'data.DeckFromDeckString(match.Player1DeckString)',
+    'data.DeckFromDeckString(match.Player2DeckString)'
+  ]) {
+    if (!compactSourceRanks.includes(token)) {
+      errors.push(`source deck-rank authority is missing: ${token}`)
+    }
+  }
+
+  const runtimeBlock =
+    bracedBlock(worker.runtime ?? '', 'authoritativeFilledDecks()') ?? ''
+  for (const token of [
+    'if (!this.store.hasState()) return undefined',
+    'this.store.secret(player as Player)',
+    '.filledDeck'
+  ]) {
+    if (!runtimeBlock.replace(/\s+/g, ' ').includes(token)) {
+      errors.push(`Worker filled-deck runtime capture is missing: ${token}`)
+    }
+  }
+
+  const compactGame = (worker.gameMatch ?? '').replace(/\s+/g, ' ')
+  for (const token of [
+    'realDeckStrings?: RealDeckStrings',
+    'if (info.hasState) this.captureRealDeckStrings(metadata, runtime)',
+    'realDeckStringsFromFilledDecks(filledDecks, [',
+    'prismsToDeckClass(metadata.match.player1.privateSeed.prisms)',
+    'prismsToDeckClass(metadata.match.player2.privateSeed.prisms)',
+    "throw new Error('authoritative match decks changed after capture')"
+  ]) {
+    if (!compactGame.includes(token)) {
+      errors.push(`Worker real-deck capture is missing: ${token}`)
+    }
+  }
+  const persistIndex = compactGame.indexOf(
+    'await persistAuthoritativeMatchDecks('
+  )
+  const pointIndex = compactGame.indexOf(
+    'const conquestPoints = await applyConquestPoints('
+  )
+  const rankIndex = compactGame.indexOf(
+    'const deckRanksResponse = await this.env.DECK_RANK_COORDINATOR'
+  )
+  if (
+    persistIndex < 0 ||
+    pointIndex < 0 ||
+    rankIndex < 0 ||
+    persistIndex > pointIndex ||
+    persistIndex > rankIndex
+  ) {
+    errors.push(
+      'Worker must persist the filled-deck snapshot before points and deck ranks'
+    )
+  }
+
+  const compactDecks = (worker.authoritativeDecks ?? '').replace(/\s+/g, ' ')
+  for (const token of [
+    'encode(VERSION, [...cards], deckClasses[player])',
+    'cardIds.length !== COMPLETE_DECK_SIZE',
+    'CardLibrary.has(String(cardId) as BaseCard)',
+    'const allowedPrisms = CODE_PRISMS[deckClass]',
+    'FROM multiplayer_match_authoritative_decks',
+    'WHERE NOT EXISTS ( SELECT 1 FROM multiplayer_match_authoritative_decks',
+    'stored[0] !== deckStrings[0] || stored[1] !== deckStrings[1]'
+  ]) {
+    if (!compactDecks.includes(token)) {
+      errors.push(`Worker authoritative-deck adapter is missing: ${token}`)
+    }
+  }
+
+  const migration = worker.migration ?? ''
+  for (const token of [
+    'CREATE TABLE multiplayer_match_authoritative_decks',
+    'PRIMARY KEY (proposal_id, player_index)',
+    'FOREIGN KEY (proposal_id) REFERENCES multiplayer_matches(proposal_id)',
+    'CREATE TRIGGER multiplayer_match_authoritative_decks_insert_guard',
+    'CREATE TRIGGER multiplayer_match_authoritative_decks_no_update',
+    'CREATE TRIGGER multiplayer_match_authoritative_decks_no_delete',
+    'authoritative match decks are immutable'
+  ]) {
+    if (!migration.includes(token)) {
+      errors.push(`authoritative-deck migration is missing: ${token}`)
+    }
+  }
+
+  const points = worker.points ?? ''
+  for (const token of ['decodeAuthoritativeMatchDeck(deckString)']) {
+    if (!points.replace(/\s+/g, ' ').includes(token)) {
+      errors.push(`Conquest points lost filled-deck authority: ${token}`)
+    }
+  }
+  if (
+    !/readAuthoritativeMatchDeckStrings\(\s*database,\s*proposalId\s*\)/.test(
+      points
+    )
+  ) {
+    errors.push(
+      'Conquest points lost filled-deck authority: readAuthoritativeMatchDeckStrings(database, proposalId)'
+    )
+  }
+  const ranks = worker.ranks ?? ''
+  if (
+    !ranks
+      .replace(/\s+/g, ' ')
+      .includes('readAuthoritativeMatchDecks( database, proposalId )')
+  ) {
+    errors.push('deck ranks lost filled-deck authority')
+  }
+  for (const [label, implementation] of [
+    ['Conquest points', points],
+    ['deck ranks', ranks]
+  ]) {
+    if (/match_payload_json|privateSeed/.test(implementation)) {
+      errors.push(
+        `${label} cannot use the submitted match payload as deck authority`
+      )
+    }
   }
   return errors
 }
@@ -1460,7 +1631,8 @@ const main = async () => {
     gateway,
     readiness,
     sourceRewardPool,
-    boundaryMigration
+    boundaryMigration,
+    filledDeckEvidence
   ] = await Promise.all([
     readFile(
       path.join(root, 'match-service-cloudflare', 'src', 'worker.ts'),
@@ -1792,6 +1964,61 @@ const main = async () => {
         '0103_conquest_inclusive_pool_end.sql'
       ),
       'utf8'
+    ),
+    Promise.all([
+      readFile(
+        path.join(root, 'server', 'src', 'worker', 'match', 'Match.ts'),
+        'utf8'
+      ),
+      readFile(path.join(root, 'server', 'src', 'ApiClient.ts'), 'utf8'),
+      readFile(
+        path.join(root, 'api', 'lib', 'decks', 'rank_updater.go'),
+        'utf8'
+      ),
+      readFile(
+        path.join(root, 'game-server-cloudflare', 'src', 'state-runtime.ts'),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'game-server-cloudflare',
+          'src',
+          'authoritative-decks.ts'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare',
+          'migrations',
+          '0115_authoritative_match_decks.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(root, 'game-server-cloudflare', 'src', 'deck-ranks.ts'),
+        'utf8'
+      )
+    ]).then(
+      ([
+        server,
+        apiClient,
+        sourceRanks,
+        runtime,
+        authoritativeDecks,
+        migration,
+        ranks
+      ]) => ({
+        server,
+        apiClient,
+        sourceRanks,
+        runtime,
+        authoritativeDecks,
+        migration,
+        ranks
+      })
     )
   ])
   const errors = [
@@ -1849,6 +2076,22 @@ const main = async () => {
       sharedHeroSkins,
       sharedConstants,
       matchRepository
+    ),
+    ...conquestFilledDeckAuthorityErrors(
+      {
+        server: filledDeckEvidence.server,
+        apiClient: filledDeckEvidence.apiClient,
+        points: sourceV2Points,
+        ranks: filledDeckEvidence.sourceRanks
+      },
+      {
+        runtime: filledDeckEvidence.runtime,
+        gameMatch,
+        authoritativeDecks: filledDeckEvidence.authoritativeDecks,
+        migration: filledDeckEvidence.migration,
+        points: gameConquestPoints,
+        ranks: filledDeckEvidence.ranks
+      }
     ),
     ...conquestV2DeliveryBatchErrors(v2RewardWorker)
   ]

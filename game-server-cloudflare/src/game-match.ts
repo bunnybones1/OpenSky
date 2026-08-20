@@ -19,6 +19,11 @@ import {
   readAbandonPenaltyConfig,
   recordAbandonPenalty
 } from './abandon-penalties'
+import {
+  persistAuthoritativeMatchDecks,
+  realDeckStringsFromFilledDecks,
+  type RealDeckStrings
+} from './authoritative-decks'
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
 import type { RankedSettlementReceipt } from './deck-ranks'
@@ -89,6 +94,9 @@ interface MatchMetadata {
   expiredBeforeLoad?: boolean
   completionRecorded?: boolean
   analyticsEnqueuedAt?: string
+  // Source ThreadPlayerContext.realDeckString values, captured once from the
+  // first materialized WASM state's secret.filledDeck values.
+  realDeckStrings?: RealDeckStrings
 }
 
 export interface ReplayArchiveResult {
@@ -108,7 +116,9 @@ export const archiveReplayRecords = async (
     records: Array<{ index: number; body: string }>
   }
 ): Promise<ReplayArchiveResult> => {
-  const archive = [...input.records].sort((left, right) => left.index - right.index)
+  const archive = [...input.records].sort(
+    (left, right) => left.index - right.index
+  )
   if (
     archive.length < 1 ||
     archive.length > 10_000 ||
@@ -123,8 +133,7 @@ export const archiveReplayRecords = async (
   if (replayBytes < 1 || replayBytes > 100 * 1024 * 1024) {
     throw new Error('match replay archive size is invalid')
   }
-  const archivePrefix =
-    `replays/${input.releaseVersion}/${input.proposalId}/`
+  const archivePrefix = `replays/${input.releaseVersion}/${input.proposalId}/`
   for (let start = 0; start < archive.length; start += 10) {
     await Promise.all(
       archive.slice(start, start + 10).map(record =>
@@ -201,10 +210,7 @@ interface PendingGameplay {
   data: string[]
 }
 
-const addPlayerMoveDeltas = (
-  timers: MatchTimers,
-  deltas: [number, number]
-) => {
+const addPlayerMoveDeltas = (timers: MatchTimers, deltas: [number, number]) => {
   const current = timers.playerMoves ?? [0, 0]
   timers.playerMoves = [current[0] + deltas[0], current[1] + deltas[1]]
 }
@@ -491,7 +497,10 @@ export class GameMatch implements DurableObject {
               await this.questProgress()
             )
           }
-        } else if (!metadata.expiredBeforeLoad && !metadata.analyticsEnqueuedAt) {
+        } else if (
+          !metadata.expiredBeforeLoad &&
+          !metadata.analyticsEnqueuedAt
+        ) {
           await this.archiveAndEnqueueAnalyticsWithRetry(metadata, Date.now())
         }
         return
@@ -519,10 +528,7 @@ export class GameMatch implements DurableObject {
           player.abandonAtMs !== undefined && player.abandonAtMs <= now
       )
       let emitted: string[] = []
-      if (
-        timers.loadExpiryAtMs !== undefined &&
-        timers.loadExpiryAtMs <= now
-      ) {
+      if (timers.loadExpiryAtMs !== undefined && timers.loadExpiryAtMs <= now) {
         timers.loadExpiryAtMs = undefined
         const loadedPlayers = Object.entries(players).filter(
           ([, player]) => player.finishedLoadingAssets
@@ -682,10 +688,7 @@ export class GameMatch implements DurableObject {
   }
 
   private async repairIdempotentCreation(metadata: MatchMetadata) {
-    const [players, timers] = await Promise.all([
-      this.players(),
-      this.timers()
-    ])
+    const [players, timers] = await Promise.all([this.players(), this.timers()])
     const now = Date.now()
 
     if (
@@ -1245,12 +1248,7 @@ export class GameMatch implements DurableObject {
     }
     const timers = await this.timers()
     addPlayerMoveDeltas(timers, result.playerMoveDeltas)
-    await this.afterStateChange(
-      metadata,
-      players,
-      timers,
-      Date.now()
-    )
+    await this.afterStateChange(metadata, players, timers, Date.now())
   }
 
   private async flushPendingGameplay(
@@ -1344,6 +1342,7 @@ export class GameMatch implements DurableObject {
   ) {
     const runtime = await this.ensureRuntime()
     const info = runtime.stateInfo()
+    if (info.hasState) this.captureRealDeckStrings(metadata, runtime)
     const allPlayersLoaded = Object.values(players).every(
       player => player.finishedLoadingAssets
     )
@@ -1454,6 +1453,20 @@ export class GameMatch implements DurableObject {
   ) {
     try {
       const endedAt = new Date(metadata.endedAtMs ?? now).toISOString()
+      const runtime = await this.ensureRuntime()
+      const capturedRealDecks = this.captureRealDeckStrings(metadata, runtime)
+      if (capturedRealDecks) {
+        await this.state.storage.put(METADATA_KEY, metadata)
+      }
+      if (!metadata.realDeckStrings) {
+        throw new Error('authoritative match decks are unavailable')
+      }
+      await persistAuthoritativeMatchDecks(
+        this.env.AUTH_DB,
+        metadata.proposalId,
+        metadata.realDeckStrings,
+        endedAt
+      )
       const progression = await applyMatchProgression(
         this.env.AUTH_DB,
         metadata.proposalId,
@@ -1510,8 +1523,7 @@ export class GameMatch implements DurableObject {
           `deck-rank coordinator returned ${deckRanksResponse.status}`
         )
       }
-      const { stats } =
-        await deckRanksResponse.json<RankedSettlementReceipt>()
+      const { stats } = await deckRanksResponse.json<RankedSettlementReceipt>()
       const experience = await applyMatchExperience(
         this.env.AUTH_DB,
         metadata.proposalId,
@@ -1827,9 +1839,7 @@ export class GameMatch implements DurableObject {
       ),
       {
         actionCount:
-          timers.botActionCounts?.[bot.index] ??
-          timers.botActionCount ??
-          0,
+          timers.botActionCounts?.[bot.index] ?? timers.botActionCount ?? 0,
         playedManaVial:
           timers.botPlayedManaVials?.[bot.index] ??
           timers.botPlayedManaVial ??
@@ -1849,9 +1859,8 @@ export class GameMatch implements DurableObject {
     if (result.diffs.length === 0) {
       const failureCounts = timers.botFailureCounts ?? [0, 0]
       failureCounts[bot.index] =
-        (timers.botFailureCounts?.[bot.index] ??
-          timers.botFailureCount ??
-          0) + 1
+        (timers.botFailureCounts?.[bot.index] ?? timers.botFailureCount ?? 0) +
+        1
       timers.botFailureCounts = failureCounts
       if (this.botParticipants(metadata.match).length === 1) {
         timers.botFailureCount = failureCounts[bot.index]
@@ -1944,17 +1953,15 @@ export class GameMatch implements DurableObject {
       return
     }
     if (
-      this.state
-        .getWebSockets(attachment.principal)
-        .some(other => {
-          if (other.readyState !== WebSocket.OPEN) return false
-          const otherAttachment =
-            other.deserializeAttachment() as SocketAttachment | null
-          return (
-            otherAttachment?.joined === true &&
-            (otherAttachment.role ?? 'player') === 'player'
-          )
-        })
+      this.state.getWebSockets(attachment.principal).some(other => {
+        if (other.readyState !== WebSocket.OPEN) return false
+        const otherAttachment =
+          other.deserializeAttachment() as SocketAttachment | null
+        return (
+          otherAttachment?.joined === true &&
+          (otherAttachment.role ?? 'player') === 'player'
+        )
+      })
     ) {
       return
     }
@@ -2059,6 +2066,29 @@ export class GameMatch implements DurableObject {
       questRuntimeState
     )
     return this.runtime
+  }
+
+  private captureRealDeckStrings(
+    metadata: MatchMetadata,
+    runtime: AuthoritativeMatchRuntime
+  ) {
+    const filledDecks = runtime.authoritativeFilledDecks()
+    if (!filledDecks) return false
+    const captured = realDeckStringsFromFilledDecks(filledDecks, [
+      prismsToDeckClass(metadata.match.player1.privateSeed.prisms),
+      prismsToDeckClass(metadata.match.player2.privateSeed.prisms)
+    ])
+    if (metadata.realDeckStrings) {
+      if (
+        metadata.realDeckStrings[0] !== captured[0] ||
+        metadata.realDeckStrings[1] !== captured[1]
+      ) {
+        throw new Error('authoritative match decks changed after capture')
+      }
+      return false
+    }
+    metadata.realDeckStrings = captured
+    return true
   }
 
   private releaseRuntime() {

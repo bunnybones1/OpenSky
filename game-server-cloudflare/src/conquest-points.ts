@@ -1,27 +1,23 @@
-import {
-  DeckClass,
-  GameMode,
-  MatchStatus,
-  Reward,
-  RewardType
-} from '@opensky/proto'
-import { CODE_PRISMS, PrismClass } from '@opensky/shared/constants'
+import { GameMode, MatchStatus, Reward, RewardType } from '@opensky/proto'
 import {
   CONQUEST_V2_POINTS_CAP,
   conquestV2TreasureProgress
 } from '@opensky/shared/conquest-v2-treasure'
-import { prismsToDeckClass } from '@opensky/shared/helpers'
 import {
   conquestMatchMode,
   storedMatchModes
 } from '@opensky/shared/match-modes'
 import { sourceHeroSkinIdForDeckClass } from '@opensky/shared/source-hero-skins'
-import { BaseCard, CardLibrary, Prism } from '@skyweaver/state-metadata'
 
+import {
+  AuthoritativeMatchDeckError,
+  decodeAuthoritativeMatchDeck,
+  readAuthoritativeMatchDeckStrings,
+  type RealDeckStrings
+} from './authoritative-decks'
 import { sourceRewardListWire, sourceRewardWire } from './reward-wire'
 
 const EVENT_ID = 2
-const VALID_PRISMS = new Set<Prism>(['str', 'hrt', 'agy', 'int', 'wis'])
 
 interface MatchRow {
   mode: GameMode
@@ -29,7 +25,6 @@ interface MatchRow {
   player2_mode: GameMode | null
   player1_user_id: string | null
   player2_user_id: string | null
-  match_payload_json: string
 }
 
 interface PlayerRow {
@@ -130,85 +125,23 @@ const receipt = async (
 
 interface SourceMatchDeck {
   cardIds: number[]
-  deckClass: DeckClass
   heroSkinId: number
 }
 
-const record = (value: unknown): Record<string, unknown> | undefined =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined
-
 /**
- * Reconstructs the source deck-string authority from the immutable match
- * payload. The match service persists canonical numeric card strings and
- * lower-case prisms; source settlement DecodeDeckString rejects an invalid
- * card, class, or class/card combination instead of awarding base points.
+ * Consumes the same final deck-string boundary as the Go point calculator.
+ * The game Durable Object captured this string from WASM's filledDeck, not
+ * from the incomplete seed submitted to matchmaking.
  */
-const sourceMatchDeck = (
-  payload: string,
-  player: 'player1' | 'player2'
-): SourceMatchDeck => {
+const sourceMatchDeck = (deckString: string): SourceMatchDeck => {
   try {
-    const root = record(JSON.parse(payload))
-    const match = record(root?.match)
-    const participant = record(match?.[player])
-    const privateSeed = record(participant?.privateSeed)
-    const cards = privateSeed?.cards
-    const prisms = privateSeed?.prisms
-    if (
-      !Array.isArray(cards) ||
-      cards.length > 30 ||
-      cards.some(
-        card => typeof card !== 'string' || !/^[1-9]\d*$/.test(card)
-      ) ||
-      !Array.isArray(prisms) ||
-      prisms.length < 1 ||
-      prisms.length > 2 ||
-      prisms.some(
-        prism => typeof prism !== 'string' || !VALID_PRISMS.has(prism as Prism)
-      )
-    ) {
-      throw new Error('invalid canonical seed')
-    }
-
-    const canonicalCards = cards as string[]
-    const cardIds = canonicalCards.map(card => Number(card))
-    if (
-      cardIds.some(
-        (cardId, index) =>
-          !Number.isSafeInteger(cardId) ||
-          String(cardId) !== canonicalCards[index] ||
-          !CardLibrary.has(canonicalCards[index] as BaseCard)
-      )
-    ) {
-      throw new Error('invalid source card')
-    }
-
-    const deckClass = prismsToDeckClass(prisms as Prism[])
+    const { cardIds, deckClass } = decodeAuthoritativeMatchDeck(deckString)
     const heroSkinId = sourceHeroSkinIdForDeckClass(deckClass)
-    if (deckClass === DeckClass.UNKNOWN_CLASS || heroSkinId === undefined) {
+    if (heroSkinId === undefined) {
       throw new Error('invalid source deck class')
     }
-
-    if (cardIds.length > 0) {
-      const cardPrisms = new Set<PrismClass>()
-      for (const card of canonicalCards) {
-        const prism = CardLibrary.get(card as BaseCard)!.prism.toUpperCase()
-        if (prism in PrismClass) cardPrisms.add(prism as PrismClass)
-      }
-      const allowedPrisms = CODE_PRISMS[deckClass]
-      if (
-        cardPrisms.size === 0 ||
-        [...cardPrisms].some(prism => !allowedPrisms.includes(prism))
-      ) {
-        throw new Error('invalid source card class')
-      }
-    }
-
     return {
       cardIds: Array.from(new Set(cardIds)),
-      deckClass,
       heroSkinId
     }
   } catch {
@@ -241,7 +174,7 @@ export const applyConquestPoints = async (
   const match = await database
     .prepare(
       `SELECT mode, player1_mode, player2_mode, player1_user_id,
-              player2_user_id, match_payload_json
+              player2_user_id
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
@@ -279,14 +212,23 @@ export const applyConquestPoints = async (
     undefined,
     undefined
   ]
+  let deckStrings: RealDeckStrings | undefined
   if (winner !== undefined) {
+    try {
+      deckStrings = await readAuthoritativeMatchDeckStrings(
+        database,
+        proposalId
+      )
+    } catch (error) {
+      if (error instanceof AuthoritativeMatchDeckError) {
+        throw new Error('Conquest match deck is malformed')
+      }
+      throw error
+    }
     for (const player of [0, 1] as const) {
       if (!eligible(player, winner, status, turnCount)) continue
+      decks[player] = sourceMatchDeck(deckStrings[player])
       eligiblePlayers[player] = true
-      decks[player] = sourceMatchDeck(
-        match.match_payload_json,
-        player === 0 ? 'player1' : 'player2'
-      )
       const deck = decks[player]!
       const ids = deck.cardIds
       const placeholders = ids.map(() => '?').join(',')

@@ -6,7 +6,10 @@ import {
   storedMatchModes
 } from '@opensky/shared/match-modes'
 
-import { encodeDeckString } from '../../cloudflare/src/deck-codec'
+import {
+  readAuthoritativeMatchDecks,
+  type AuthoritativeMatchDeck
+} from './authoritative-decks'
 import {
   initialRankState,
   parseRankState,
@@ -19,7 +22,6 @@ import { applyMatchStats, type MatchStatsReceipt } from './progression'
 import { applyConquestScores } from './conquest-score'
 
 const LIBRARY_REVISION = cardLibrary.sourceSha256
-const COMPLETE_DECK_SIZE = 30
 const activeCardIds = new Set(cardLibrary.cards.map(card => card.id))
 const RANK_ORDER: Record<PlayerRank, number> = {
   [PlayerRank.UNKNOWN]: 0,
@@ -38,7 +40,6 @@ interface MatchRow {
   player2_mode: GameMode | null
   player1_user_id: string | null
   player2_user_id: string | null
-  match_payload_json: string
 }
 
 interface RankRow {
@@ -58,10 +59,6 @@ interface RankRow {
 
 interface PlayerStatsRow {
   player_rank: PlayerRank
-}
-
-interface PayloadParticipant {
-  privateSeed?: { cards?: unknown; prisms?: unknown }
 }
 
 interface MutableRank {
@@ -94,62 +91,18 @@ export interface RankedSettlementReceipt {
   deckRanks: DeckRankReceipt
 }
 
-const deckClassForPrisms = (value: unknown): DeckClass => {
-  const prisms = Array.isArray(value)
-    ? value.map(prism => String(prism).toLowerCase()).sort()
-    : []
-  const classes: Record<string, DeckClass> = {
-    str: DeckClass.STR,
-    hrt: DeckClass.HRT,
-    agy: DeckClass.AGY,
-    int: DeckClass.INT,
-    wis: DeckClass.WIS,
-    'hrt,str': DeckClass.STH,
-    'agy,str': DeckClass.STA,
-    'int,str': DeckClass.STI,
-    'str,wis': DeckClass.STW,
-    'agy,hrt': DeckClass.HRA,
-    'hrt,int': DeckClass.HRI,
-    'hrt,wis': DeckClass.HRW,
-    'agy,int': DeckClass.AGI,
-    'agy,wis': DeckClass.AGW,
-    'int,wis': DeckClass.INW
-  }
-  const deckClass = classes[prisms.join(',')]
-  if (!deckClass) throw new Error('ranked deck has invalid prisms')
-  return deckClass
-}
-
 const parseDeck = (
-  participant: PayloadParticipant | undefined,
+  deck: AuthoritativeMatchDeck,
   userId: string,
   processedAt: string
-): MutableRank | null => {
-  const privateSeed = participant?.privateSeed
-  const cards = Array.isArray(privateSeed?.cards)
-    ? privateSeed.cards.map(Number)
-    : []
-  if (
-    cards.length !== COMPLETE_DECK_SIZE ||
-    new Set(cards).size !== COMPLETE_DECK_SIZE ||
-    cards.some(
-      card =>
-        !Number.isSafeInteger(card) || card <= 0 || !activeCardIds.has(card)
-    )
-  ) {
-    return null
-  }
-  const deckClass = deckClassForPrisms(privateSeed?.prisms)
-  let deckString: string
-  try {
-    deckString = encodeDeckString(cards, deckClass)
-  } catch {
-    return null
+): MutableRank => {
+  if (deck.cardIds.some(cardId => !activeCardIds.has(cardId))) {
+    throw new Error('ranked authoritative deck contains an inactive card')
   }
   return {
-    deckString,
-    deckClass,
-    cardIds: [...cards].sort((left, right) => left - right),
+    deckString: deck.deckString,
+    deckClass: deck.deckClass,
+    cardIds: [...deck.cardIds].sort((left, right) => left - right),
     rankState: initialRankState(),
     score: 0,
     highestPlayerUserId: userId,
@@ -293,7 +246,7 @@ export const applyDeckRanks = async (
   const match = await database
     .prepare(
       `SELECT mode, player1_mode, player2_mode, player1_user_id,
-              player2_user_id, match_payload_json
+              player2_user_id
        FROM multiplayer_matches WHERE proposal_id = ?`
     )
     .bind(proposalId)
@@ -309,35 +262,19 @@ export const applyDeckRanks = async (
     )
   }
 
-  let payload: {
-    match?: { player1?: PayloadParticipant; player2?: PayloadParticipant }
-  }
-  try {
-    payload = JSON.parse(match.match_payload_json) as typeof payload
-  } catch {
-    throw new Error('ranked match payload is invalid')
-  }
   const userIds = [match.player1_user_id, match.player2_user_id] as const
+  const authoritativeDecks = await readAuthoritativeMatchDecks(
+    database,
+    proposalId
+  )
   const parsed = [
-    parseDeck(payload.match?.player1, userIds[0], processedAt),
-    parseDeck(payload.match?.player2, userIds[1], processedAt)
+    parseDeck(authoritativeDecks[0], userIds[0], processedAt),
+    parseDeck(authoritativeDecks[1], userIds[1], processedAt)
   ] as const
   const deckStrings: [string | null, string | null] = [
-    parsed[0]?.deckString ?? null,
-    parsed[1]?.deckString ?? null
+    parsed[0].deckString,
+    parsed[1].deckString
   ]
-  if (!parsed[0] && !parsed[1]) {
-    await database
-      .prepare(
-        `INSERT INTO multiplayer_match_deck_ranks_applied
-           (proposal_id, library_revision, player1_deck_string,
-            player2_deck_string, processed_at)
-         VALUES (?, ?, NULL, NULL, ?)`
-      )
-      .bind(proposalId, LIBRARY_REVISION, processedAt)
-      .run()
-    return { applied: true, deckStrings, processedAt }
-  }
 
   const uniqueDeckStrings = [
     ...new Set(deckStrings.filter(Boolean))
@@ -362,10 +299,9 @@ export const applyDeckRanks = async (
   // working copies so draws save one tie (not two); winner matches explicitly
   // alias the copies below, exactly where the source does.
   const working = parsed.map(deck => {
-    if (!deck) return null
     const row = existingByDeckString.get(deck.deckString)
     return row ? mutableRank(row) : deck
-  }) as [MutableRank | null, MutableRank | null]
+  }) as [MutableRank, MutableRank]
   const playerRanks = await Promise.all(
     userIds.map((userId, player) =>
       isRankedGameMode(modes[player])

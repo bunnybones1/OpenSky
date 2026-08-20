@@ -1,9 +1,14 @@
 import { env } from 'cloudflare:test'
 import { DeckClass, GameMode, MatchStatus, PlayerRank } from '@opensky/proto'
+import type { BaseCard } from '@skyweaver/state-metadata'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import cardLibrary from '../../cloudflare/src/generated/card-library.json'
 import { encodeDeckString } from '../../cloudflare/src/deck-codec'
+import {
+  persistAuthoritativeMatchDecks,
+  realDeckStringsFromFilledDecks
+} from '../src/authoritative-decks'
 import { applyDeckRanks } from '../src/deck-ranks'
 
 const USER_1 = 'deck-rank-player-one'
@@ -18,6 +23,8 @@ const deck2 = cardLibrary.cards
   .filter(card => card.class === 'STR')
   .slice(30, 60)
   .map(card => card.id)
+const baseCards = (cards: number[]) =>
+  cards.map(card => String(card) as BaseCard)
 
 const payload = (left = deck1, right = deck2) =>
   JSON.stringify({
@@ -35,6 +42,7 @@ const setup = async (
     leftRank?: PlayerRank
     rightRank?: PlayerRank
     payload?: string
+    decks?: [number[], number[]]
   } = {}
 ) => {
   await env.AUTH_DB.batch([
@@ -94,6 +102,16 @@ const setup = async (
       NOW
     )
   ])
+  const decks = options.decks ?? [deck1, deck2]
+  await persistAuthoritativeMatchDecks(
+    env.AUTH_DB,
+    proposalId,
+    realDeckStringsFromFilledDecks(
+      [baseCards(decks[0]), baseCards(decks[1])],
+      [DeckClass.STR, DeckClass.STR]
+    ),
+    NOW
+  )
 }
 
 const ranks = () =>
@@ -254,7 +272,10 @@ describe('source ranked-constructed deck aggregates', () => {
   })
 
   it('preserves the source mirror-match alias and ordered double transition', async () => {
-    await setup('deck-rank-mirror', { payload: payload(deck1, deck1) })
+    await setup('deck-rank-mirror', {
+      payload: payload(deck1, deck1),
+      decks: [deck1, deck1]
+    })
     await applyDeckRanks(
       env.AUTH_DB,
       'deck-rank-mirror',
@@ -294,7 +315,7 @@ describe('source ranked-constructed deck aggregates', () => {
     ).toHaveLength(0)
   })
 
-  it('ignores other modes and treats partial constructed decks as no aggregate', async () => {
+  it('ignores other modes and ranks the engine-filled deck for a partial seed', async () => {
     await setup('deck-rank-other-mode', { mode: GameMode.RANKED_DISCOVERY })
     expect(
       await applyDeckRanks(
@@ -324,8 +345,14 @@ describe('source ranked-constructed deck aggregates', () => {
         MatchStatus.COMPLETED,
         NOW
       )
-    ).toMatchObject({ applied: true, deckStrings: [null, null] })
-    expect((await ranks()).results).toHaveLength(0)
+    ).toMatchObject({
+      applied: true,
+      deckStrings: [
+        encodeDeckString(deck1, DeckClass.STR),
+        encodeDeckString(deck2, DeckClass.STR)
+      ]
+    })
+    expect((await ranks()).results).toHaveLength(2)
   })
 
   it('serializes concurrent completions through the coordinator', async () => {
@@ -341,6 +368,15 @@ describe('source ranked-constructed deck aggregates', () => {
               status, created_at, updated_at
        FROM multiplayer_matches WHERE proposal_id = 'deck-rank-concurrent-one'`
     ).run()
+    await persistAuthoritativeMatchDecks(
+      env.AUTH_DB,
+      'deck-rank-concurrent-two',
+      realDeckStringsFromFilledDecks(
+        [baseCards(deck1), baseCards(deck2)],
+        [DeckClass.STR, DeckClass.STR]
+      ),
+      NOW
+    )
     await env.AUTH_DB.prepare(
       `UPDATE player_account_stats
        SET score = 600, player_rank_stage = 'STAGE_I',
