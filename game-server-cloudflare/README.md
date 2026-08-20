@@ -37,7 +37,11 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - retry-safe Conquest progress, points, exact source reward bundles, versioned
   card selection pinned at ticket admission, immediate Silver settlement after
   the admission window closes, and persisted 24-hour Gold delivery tasks
-  consumed by the API Worker's scheduler.
+  consumed by the API Worker's scheduler; and
+- a final player-visible publication barrier that requires the authoritative
+  deck pair and every applicable progression, rank, experience, warm-up,
+  Conquest, and abandon receipt before the match ledger can become `ended`.
+  A Conquest run still awaiting card settlement also blocks publication.
 
 The gateway, not the browser, is the identity authority. It validates a Google
 session and maps the user to the stable 20-byte game principal for player and

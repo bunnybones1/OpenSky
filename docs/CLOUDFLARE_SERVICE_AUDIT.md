@@ -7,16 +7,16 @@ without reviewing this inventory fails the Cloudflare build.
 
 ## Product workloads
 
-| Original workload   | Cloudflare disposition                                                                                                                                         |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `webapp`            | Original Vite client served by the main Worker Assets binding.                                                                                                 |
-| `game`              | Original Vite game client served beneath the main Worker asset tree.                                                                                           |
-| `api` API target    | TypeScript API and Google identity gateway backed by D1.                                                                                                       |
-| `api` worker target | Main Worker cron plus Durable Object alarms; each registered source runner also has a separate mechanical audit.                                               |
-| `matchmaker`        | `matchmaker-ts`, using Durable Objects and a separate match service.                                                                                           |
-| `server`            | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`. The source server was already TypeScript.                   |
-| `game-analytics`    | TypeScript Worker/Queue/R2 port is complete and tested. R2 is enabled; production activation is paused before private bucket creation and consumer deployment. |
-| `chain`             | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional.   |
+| Original workload   | Cloudflare disposition                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webapp`            | Original Vite client served by the main Worker Assets binding.                                                                                                                     |
+| `game`              | Original Vite game client served beneath the main Worker asset tree.                                                                                                               |
+| `api` API target    | TypeScript API and Google identity gateway backed by D1.                                                                                                                           |
+| `api` worker target | Main Worker cron plus Durable Object alarms; each registered source runner also has a separate mechanical audit.                                                                   |
+| `matchmaker`        | `matchmaker-ts`, using Durable Objects and a separate match service.                                                                                                               |
+| `server`            | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`, with receipt-gated final publication. The source server was already TypeScript. |
+| `game-analytics`    | TypeScript Worker/Queue/R2 port is complete and tested. R2 is enabled; production activation is paused before private bucket creation and consumer deployment.                     |
+| `chain`             | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional.                       |
 
 `sheets` is an internal Tauri/Vite content tool, not a hosted player service.
 `asset-pipeline`, `bot`, and the Go GM/stress/migration utilities are operator,

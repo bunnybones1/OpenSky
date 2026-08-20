@@ -9,10 +9,10 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `feaf5f1b`
-  (`Bind replay analytics to final match decks`)
-- Latest tested runtime commit: `feaf5f1b`
-  (`Bind replay analytics to final match decks`)
+- Last code/test checkpoint: `b4eb53c0`
+  (`Gate match completion on settlement receipts`)
+- Latest tested runtime commit: `b4eb53c0`
+  (`Gate match completion on settlement receipts`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -21,9 +21,9 @@ provisioning, product activation, or live drills without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `feaf5f1b` are committed and
+- The runtime changes from `38386294` through `b4eb53c0` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -56,14 +56,14 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `feaf5f1b`:
+Validation completed locally for exact code head `b4eb53c0`:
 
 - focused player match-history, replay, and staff projections: 90/90 tests;
 - mutation-tested match-wire source contract: 2/2 tests plus the executable
   source gate;
 - main Worker suite: 510/510 tests across 84 files;
 - browser game suite: 30/30 tests;
-- game server: 34 unit and 113 Workers tests;
+- game server: 34 unit and 116 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
 - analytics: four unit and five Workers tests;
@@ -97,7 +97,10 @@ and its pause handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32411310241> at commit
 `076244ed`. The match-history checkpoint and its handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32413329148> at commit
-`adbe7380` in 10m17s. The newer `feaf5f1b` checkpoint must receive exact-head
+`adbe7380` in 10m17s. The replay-analytics checkpoint and its handoff passed
+exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32415594311> at commit
+`e39a62f0` in 10m18s. The newer `b4eb53c0` checkpoint must receive exact-head
 CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -291,6 +294,34 @@ builds, and 594-file artifact validation. The analytics Worker remains
 undeployed, its production bucket remains absent, and migration `0115` remains
 unapplied.
 
+## Transactional completion publication milestone
+
+Commit `b4eb53c0` closes the concrete publication gap between the source Go
+transaction and the retryable Cloudflare match-finalization pipeline:
+
+- the original `endMatch` mutates warm-ups, ranks, XP, Conquest, the match row,
+  and deck ranks inside one `TxContext` transaction;
+- the Worker retains individually atomic, immutable stage receipts so a
+  Durable Object alarm can recover safely across D1 or service failures;
+- its final `ended` update now requires the exact-timestamp authoritative deck
+  pair plus universal quest-progression and experience receipts;
+- ranked stats, warm-up progress, Conquest points/progress, and abandon
+  penalties are required when their source eligibility predicates apply;
+- a Conquest run containing the match cannot publish while it remains
+  `REWARDS_PENDING`, so match history cannot claim completion before its
+  immediate off-chain cards settle; and
+- an exact retry may republish the same immutable result, while a conflicting
+  winner, result JSON, or end time fails closed.
+
+Three focused Workers tests exercise progressive universal-receipt failure,
+exact and conflicting retries, each conditional player mutation, and pending
+Conquest cards. A mutation-tested source gate pins the Go transaction, Worker
+stage order, shared warm-up predicate, every receipt table, Conquest pending
+guard, and build/CI inclusion. The complete local release contract passed with
+510 main-Worker tests, 34 game-server unit tests, 116 game-server Workers tests,
+all other service suites, both production builds, and 594-file artifact
+validation. No production resource or behavior changed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -364,12 +395,12 @@ production gate after any later commit.
    `game-server-cloudflare/wrangler.jsonc`. Run the full contract and exact-head
    CI again, then deploy the game server last.
 10. Complete one bounded production Practice match and verify, without exposing
-   private objects:
-   - the replay manifest is written last beneath the release/proposal prefix;
-   - one version-pinned queue message is consumed;
-   - the D1 analytics receipt reaches `completed` exactly once;
-   - all three source-compatible CSV objects exist;
-   - replay access and off-chain match rewards remain unchanged.
+    private objects, that the replay manifest is written last beneath the
+    release/proposal prefix, one version-pinned queue message is consumed, the
+    D1 analytics receipt reaches `completed` exactly once, all three
+    source-compatible CSV objects exist, and replay access plus off-chain match
+    rewards remain unchanged.
+
 11. Only after the consumer path is healthy, deploy the main Worker with the
     private feedback binding and test authenticated JSON/JPEG feedback plus
     account-deletion cleanup. Anonymous access must remain `401`, and a missing
@@ -394,8 +425,8 @@ not and must precede both the tested game-server runtime and analytics Worker.
 ### Production rollout
 
 - Commit/push the refreshed handoff and wait for exact-head CI at or after
-  `feaf5f1b`.
-- Deploy and verify the tested runtime changes through `feaf5f1b`. Keep
+  `b4eb53c0`.
+- Deploy and verify the tested runtime changes through `b4eb53c0`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
