@@ -197,6 +197,24 @@ const PRACTICE_MODES = new Set<GameMode>([
   GameMode.WARM_UP
 ])
 
+export const warmUpProgressPlayer = (
+  gameModes: [GameMode, GameMode],
+  winner: 0 | 1 | undefined,
+  status: MatchStatus
+): 0 | 1 | undefined => {
+  const practiceBot = gameModes.includes(GameMode.PRACTICE_BOT)
+  const creditedPlayer = winner ?? (!practiceBot ? 0 : undefined)
+  if (
+    status !== MatchStatus.COMPLETED ||
+    creditedPlayer === undefined ||
+    !gameModes.some(mode => PRACTICE_MODES.has(mode)) ||
+    (practiceBot && creditedPlayer !== 0)
+  ) {
+    return undefined
+  }
+  return creditedPlayer
+}
+
 const warmUpReceipt = async (
   database: D1Database,
   proposalId: string,
@@ -238,14 +256,8 @@ export const applyWarmUpProgress = async (
   const existing = await warmUpReceipt(database, proposalId, false)
   if (existing) return existing
 
-  const practiceBot = gameModes.includes(GameMode.PRACTICE_BOT)
-  const creditedPlayer = winner ?? (!practiceBot ? 0 : undefined)
-  if (
-    status !== MatchStatus.COMPLETED ||
-    creditedPlayer === undefined ||
-    !gameModes.some(mode => PRACTICE_MODES.has(mode)) ||
-    (practiceBot && creditedPlayer !== 0)
-  ) {
+  const creditedPlayer = warmUpProgressPlayer(gameModes, winner, status)
+  if (creditedPlayer === undefined) {
     return { applied: false, before: 0, after: 0, processedAt }
   }
 

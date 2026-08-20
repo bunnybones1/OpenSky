@@ -10,12 +10,17 @@ import {
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import { ReplayAnalyticsMessage } from '@opensky/shared/gameAnalytics'
 import { prismsToDeckClass } from '@opensky/shared/helpers'
+import {
+  conquestMatchMode,
+  isRankedMatchModes
+} from '@opensky/shared/match-modes'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
 import {
+  isLeavePenaltyMode,
   readAbandonPenaltyConfig,
   recordAbandonPenalty
 } from './abandon-penalties'
@@ -26,12 +31,14 @@ import {
 } from './authoritative-decks'
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
+import { publishMatchCompletion } from './completion-publication'
 import type { RankedSettlementReceipt } from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
-  applyWarmUpProgress
+  applyWarmUpProgress,
+  warmUpProgressPlayer
 } from './progression'
 import {
   AcceptedClientMessage,
@@ -1461,6 +1468,12 @@ export class GameMatch implements DurableObject {
       if (!metadata.realDeckStrings) {
         throw new Error('authoritative match decks are unavailable')
       }
+      const gameModes: [GameMode, GameMode] = [
+        metadata.match.player1.gameMode,
+        metadata.match.player2.gameMode
+      ]
+      const winner = metadata.result?.winner
+      const status = metadata.result?.status ?? MatchStatus.COMPLETED
       await persistAuthoritativeMatchDecks(
         this.env.AUTH_DB,
         metadata.proposalId,
@@ -1476,23 +1489,23 @@ export class GameMatch implements DurableObject {
       await applyWarmUpProgress(
         this.env.AUTH_DB,
         metadata.proposalId,
-        [metadata.match.player1.gameMode, metadata.match.player2.gameMode],
-        metadata.result?.winner,
-        metadata.result?.status ?? MatchStatus.COMPLETED,
+        gameModes,
+        winner,
+        status,
         endedAt
       )
       const conquestPoints = await applyConquestPoints(
         this.env.AUTH_DB,
         metadata.proposalId,
-        metadata.result?.winner,
-        metadata.result?.status ?? MatchStatus.COMPLETED,
+        winner,
+        status,
         metadata.result?.turnCount ?? 0,
         endedAt
       )
       await applyConquestProgress(
         this.env.AUTH_DB,
         metadata.proposalId,
-        metadata.result?.winner,
+        winner,
         endedAt
       )
       const conquestCards = await settleConquestRewardsForMatch(
@@ -1512,8 +1525,8 @@ export class GameMatch implements DurableObject {
           body: JSON.stringify({
             proposalId: metadata.proposalId,
             season: metadata.match.matchSettings.season,
-            winner: metadata.result?.winner,
-            status: metadata.result?.status ?? MatchStatus.COMPLETED,
+            winner,
+            status,
             processedAt: endedAt
           })
         })
@@ -1528,9 +1541,9 @@ export class GameMatch implements DurableObject {
         this.env.AUTH_DB,
         metadata.proposalId,
         metadata.match.matchSettings.season,
-        [metadata.match.player1.gameMode, metadata.match.player2.gameMode],
-        metadata.result?.winner,
-        metadata.result?.status ?? MatchStatus.COMPLETED,
+        gameModes,
+        winner,
+        status,
         metadata.result?.turnCount ?? 0,
         endedAt,
         stats.rewards
@@ -1551,11 +1564,8 @@ export class GameMatch implements DurableObject {
           ...experience.rewards[1]
         ] as Reward[])
       ]
-      if (
-        metadata.result?.status === MatchStatus.ABANDONED &&
-        (metadata.result.winner === 0 || metadata.result.winner === 1)
-      ) {
-        const loser = metadata.result.winner === 0 ? 1 : 0
+      if (status === MatchStatus.ABANDONED && winner !== undefined) {
+        const loser = winner === 0 ? 1 : 0
         const principals = this.playerAddresses(metadata.match)
         await recordAbandonPenalty(
           this.env.AUTH_DB,
@@ -1572,27 +1582,28 @@ export class GameMatch implements DurableObject {
           now
         )
       }
-      const result = await this.env.AUTH_DB.prepare(
-        `UPDATE multiplayer_matches
-         SET status = 'ended', winner_player = ?, result_json = ?,
-             ended_at = ?, updated_at = ?
-         WHERE proposal_id = ? AND status IN ('active', 'ended')`
-      )
-        .bind(
-          metadata.result?.winner ?? null,
-          JSON.stringify({
-            ...(metadata.result ?? {}),
-            questProgress: progression.questProgress,
-            rewards
-          }),
-          endedAt,
-          endedAt,
-          metadata.proposalId
-        )
-        .run()
-      if ((result.meta.changes ?? 0) < 1) {
-        throw new Error('active match ledger row was not found')
-      }
+      const conquestMode = conquestMatchMode(gameModes)
+      const loser = winner === undefined ? undefined : winner === 0 ? 1 : 0
+      await publishMatchCompletion(this.env.AUTH_DB, {
+        proposalId: metadata.proposalId,
+        winner,
+        result: {
+          ...(metadata.result ?? {}),
+          questProgress: progression.questProgress,
+          rewards
+        },
+        endedAt,
+        requirements: {
+          rankedStats: isRankedMatchModes(gameModes),
+          warmUpProgress:
+            warmUpProgressPlayer(gameModes, winner, status) !== undefined,
+          conquestMode,
+          abandonPenalty:
+            status === MatchStatus.ABANDONED &&
+            loser !== undefined &&
+            isLeavePenaltyMode(gameModes[loser])
+        }
+      })
       const principals = this.playerAddresses(metadata.match)
       for (const player of [0, 1] as const) {
         this.sendToPrincipal(principals[player], {

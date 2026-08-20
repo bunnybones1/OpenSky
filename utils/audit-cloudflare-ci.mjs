@@ -50,6 +50,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go match wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:match-completion')) {
+    errors.push(
+      'Cloudflare build must include the transactional match completion gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:match-reward-wire')) {
     errors.push(
       'Cloudflare build must include the generated Go match reward wire gate'
@@ -115,9 +120,7 @@ export const cloudflareBuildScriptErrors = rootPackage => {
     )
   }
   if (!build.includes('pnpm check:cloudflare:branding')) {
-    errors.push(
-      'Cloudflare build must include the original-game branding gate'
-    )
+    errors.push('Cloudflare build must include the original-game branding gate')
   }
   return errors
 }

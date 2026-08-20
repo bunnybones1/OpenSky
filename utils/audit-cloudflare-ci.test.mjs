@@ -70,6 +70,19 @@ test('requires generated wire and browser lifecycle gates in the complete build'
       scripts: {
         ...rootPackage.scripts,
         'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:match-completion && ',
+          ''
+        )
+      }
+    })[0],
+    /transactional match completion/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
           'pnpm check:cloudflare:match-reward-wire && ',
           ''
         )
