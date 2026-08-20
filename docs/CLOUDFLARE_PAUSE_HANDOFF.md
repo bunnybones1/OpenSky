@@ -9,19 +9,20 @@ provisioning, product activation, or live drills without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `7f1f2ce634d04c849a05b2b38934abd04a69202f`
-  (`Bound Conquest V2 reward delivery`)
-- Latest tested runtime commit: `7f1f2ce6` (`Bound Conquest V2 reward delivery`)
+- Last code/test checkpoint: `a3a48b61` (`Brand original game as Cloud Weasel`)
+- Latest tested runtime commit: `a3a48b61` (`Brand original game as Cloud Weasel`)
+- Latest storage-readiness evidence checkpoint: `470a79c5`
+  (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
 - Last known deployed main Worker version:
   `89037f40-5cda-4503-9e70-35b710cd7c2b`
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `7f1f2ce6` are committed and
+- The runtime changes from `38386294` through `a3a48b61` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-874772de.js`; the game entry remained
-  `/game/cloudflare/assets/index-7e9c419b.js`.
+  `/assets/index-1eddfd33.js` and game entry
+  `/game/cloudflare/assets/index-096c8599.js`.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -49,12 +50,12 @@ approved D1 schedule used by the leaderboard distribution worker:
 - A mutation-tested `check:cloudflare:reward-timing` gate is part of the full
   release contract and is itself required by the CI audit.
 
-Validation completed locally for exact code head `7f1f2ce6`:
+Validation completed locally for exact code head `a3a48b61`:
 
 - focused Conquest V2 Worker regression: 18/18 tests;
 - focused mutation-tested Conquest gate: 7/7 tests;
 - main Worker suite: 510/510 tests across 84 files;
-- browser game suite: 27/27 tests;
+- browser game suite: 30/30 tests;
 - game server: 34 unit and 98 Workers tests;
 - match service: 33/33 Workers tests;
 - matchmaker: 47 unit and 31 Workers tests;
@@ -72,10 +73,32 @@ pnpm build:cloudflare
 It passed. Existing Vite chunk-size and legacy lint warnings remained warnings;
 there were no build errors.
 
-Exact-head GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32396596729> passed the
-complete release contract for `7f1f2ce6` in 10m29s. Any later commit must also
-receive exact-head CI before a production mutation.
+Exact-head GitHub Actions runs
+<https://github.com/bunnybones1/OpenSky/actions/runs/32396596729> and
+<https://github.com/bunnybones1/OpenSky/actions/runs/32397670778> passed the
+complete release contract for `7f1f2ce6` and the later storage-evidence
+checkpoint `470a79c5`. Commit `a3a48b61` must receive exact-head CI before any
+production mutation.
+
+## Cloud Weasel original-game chrome milestone
+
+Commit `a3a48b61` removes the remaining OpenSky product name observed in the
+deployed original game without replacing or redesigning that interface:
+
+- one shared `Cloud Weasel` authority now drives the base HTML title, Local Bot
+  and Sandbox browser titles, tutorial browser titles, and the existing HUD and
+  settings build labels;
+- the original game layout, behavior, and artwork are unchanged;
+- focused formatter tests preserve contextual titles and the ten-character
+  build identifier;
+- a mutation-tested `check:cloudflare:branding` gate covers all six runtime
+  surfaces and is itself required by the non-deploying CI contract;
+- the complete local Cloudflare release contract passed, and the assembled
+  standalone and nested game artifacts contain the new title and bundle label.
+
+This milestone is committed and locally tested but is not deployed. The
+production game continues to show the old title and watermark until deployment
+work is explicitly resumed.
 
 ## Conquest V2 resume-safety milestone
 
@@ -211,9 +234,8 @@ production migration state.
 
 ### Production rollout
 
-- Deploy and verify runtime commit `38386294`; it affects only the main API and
-  original webapp. Keep leaderboard rewards hidden until a real approved
-  schedule exists.
+- Deploy and verify the tested runtime changes through `a3a48b61`. Keep
+  leaderboard rewards hidden until a real approved schedule exists.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.
 - Only after the consumer is healthy, enable and deploy the game-server
