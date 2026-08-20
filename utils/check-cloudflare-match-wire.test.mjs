@@ -9,30 +9,42 @@ const fixtures = async () => {
     source,
     sourceHandler,
     sourceFeeds,
+    sourceAnalytics,
     matchWire,
     competitive,
     replays,
     api,
-    authoritativeDeckMigration
+    authoritativeDeckMigration,
+    analyticsMatch,
+    analyticsWorker
   ] = await Promise.all([
     readFile('api/proto/api.gen.go', 'utf8'),
     readFile('api/rpc/admin_ban_tools.go', 'utf8'),
     readFile('api/rpc/feeds.go', 'utf8'),
+    readFile('api/lib/analytics/tracker.go', 'utf8'),
     readFile('cloudflare/src/match-wire.ts', 'utf8'),
     readFile('cloudflare/src/competitive.ts', 'utf8'),
     readFile('cloudflare/src/replays.ts', 'utf8'),
     readFile('cloudflare/src/api.ts', 'utf8'),
-    readFile('cloudflare/migrations/0115_authoritative_match_decks.sql', 'utf8')
+    readFile(
+      'cloudflare/migrations/0115_authoritative_match_decks.sql',
+      'utf8'
+    ),
+    readFile('game-analytics/src/Match.ts', 'utf8'),
+    readFile('game-analytics/src/cloudflareWorker.ts', 'utf8')
   ])
   return {
     source,
     sourceHandler,
     sourceFeeds,
+    sourceAnalytics,
     matchWire,
     competitive,
     replays,
     api,
-    authoritativeDeckMigration
+    authoritativeDeckMigration,
+    analyticsMatch,
+    analyticsWorker
   }
 }
 
@@ -43,11 +55,14 @@ test('derives and enforces the complete Go match JSON wire', async () => {
       value.source,
       value.sourceHandler,
       value.sourceFeeds,
+      value.sourceAnalytics,
       value.matchWire,
       value.competitive,
       value.replays,
       value.api,
-      value.authoritativeDeckMigration
+      value.authoritativeDeckMigration,
+      value.analyticsMatch,
+      value.analyticsWorker
     ),
     []
   )
@@ -82,6 +97,13 @@ test('rejects source omission, sparse pointers, and bypassed boundaries', async 
       sourceFeeds: value.sourceFeeds.replace(
         'm.Player1.DeckString = m.Player1DeckString',
         'm.Player1.DeckString = m.InitPlayer1DeckString'
+      )
+    },
+    {
+      ...value,
+      sourceAnalytics: value.sourceAnalytics.replace(
+        'playerDeckString = match.Player1DeckString',
+        'playerDeckString = match.InitPlayer1DeckString'
       )
     },
     {
@@ -170,6 +192,54 @@ test('rejects source omission, sparse pointers, and bypassed boundaries', async 
     },
     {
       ...value,
+      analyticsMatch: value.analyticsMatch.replace(
+        'secrets[1].secret.filledDeck',
+        'secrets[0].secret.filledDeck'
+      )
+    },
+    {
+      ...value,
+      analyticsWorker: value.analyticsWorker.replace(
+        'rows.results.length !== 2',
+        'rows.results.length < 1'
+      )
+    },
+    {
+      ...value,
+      analyticsWorker: value.analyticsWorker.replace(
+        'match.p1DeckString !== finalDecks[1]',
+        'match.p1DeckString !== finalDecks[0]'
+      )
+    },
+    {
+      ...value,
+      analyticsWorker: value.analyticsWorker.replace(
+        `  if (
+    match.p0DeckString !== finalDecks[0] ||
+    match.p1DeckString !== finalDecks[1]
+  ) {
+    throw new Error('Replay final decks do not match authoritative match decks')
+  }
+
+  const csv = processToCSV(match)`,
+        `  const csv = processToCSV(match)
+  if (
+    match.p0DeckString !== finalDecks[0] ||
+    match.p1DeckString !== finalDecks[1]
+  ) {
+    throw new Error('Replay final decks do not match authoritative match decks')
+  }`
+      )
+    },
+    {
+      ...value,
+      analyticsWorker: value.analyticsWorker.replace(
+        'FROM multiplayer_match_authoritative_decks',
+        'FROM multiplayer_matches'
+      )
+    },
+    {
+      ...value,
       replays: value.replays.replace('match: found.match,', '')
     }
   ]
@@ -179,11 +249,14 @@ test('rejects source omission, sparse pointers, and bypassed boundaries', async 
         mutation.source,
         mutation.sourceHandler,
         mutation.sourceFeeds,
+        mutation.sourceAnalytics,
         mutation.matchWire,
         mutation.competitive,
         mutation.replays,
         mutation.api,
-        mutation.authoritativeDeckMigration
+        mutation.authoritativeDeckMigration,
+        mutation.analyticsMatch,
+        mutation.analyticsWorker
       ),
       []
     )

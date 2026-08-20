@@ -5,6 +5,7 @@ import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthoritativeMatchRuntime } from '../../game-server-cloudflare/src/state-runtime'
+import { realDeckStringsFromFilledDecks } from '../../game-server-cloudflare/src/authoritative-decks'
 import { createMatchFixture } from '../../game-server-cloudflare/test-cloudflare/fixture'
 import { Game, parseReplayLogs } from '../src/Match'
 import {
@@ -67,9 +68,32 @@ const runQueue = (
     analyticsEnv
   )
 
+const insertAuthoritativeDecks = async (
+  analyticsEnv: GameAnalyticsEnv,
+  proposalId: string,
+  deckStrings: [string, string],
+  capturedAt: string
+) => {
+  await analyticsEnv.AUTH_DB.prepare(
+    `INSERT INTO multiplayer_match_authoritative_decks
+       (proposal_id, player_index, deck_string, captured_at)
+     VALUES (?, 0, ?, ?), (?, 1, ?, ?)`
+  )
+    .bind(
+      proposalId,
+      deckStrings[0],
+      capturedAt,
+      proposalId,
+      deckStrings[1],
+      capturedAt
+    )
+    .run()
+}
+
 const insertEndedMatch = async (
   analyticsEnv: GameAnalyticsEnv,
-  message: ReturnType<typeof replayMessage>
+  message: ReturnType<typeof replayMessage>,
+  deckStrings: [string, string] | false = ['SWxSTR02', 'SWxSTR02']
 ) => {
   const now = new Date().toISOString()
   await analyticsEnv.AUTH_DB.prepare(
@@ -90,6 +114,14 @@ const insertEndedMatch = async (
       now
     )
     .run()
+  if (deckStrings) {
+    await insertAuthoritativeDecks(
+      analyticsEnv,
+      message.proposalId,
+      deckStrings,
+      now
+    )
+  }
   return now
 }
 
@@ -217,7 +249,7 @@ describe('Cloudflare replay analytics runtime', () => {
     expect(result.moveCount).toBeGreaterThan(0)
   })
 
-  it('writes deterministic analytics objects and an idempotent D1 receipt', async () => {
+  it('writes analytics only when replay and ledger final decks agree', async () => {
     const analyticsEnv = env as unknown as GameAnalyticsEnv
     const { match } = createMatchFixture({ botPlayer2: true, matchID: 5252 })
     const proposalId = 'analytics-proposal-5252'
@@ -272,6 +304,12 @@ describe('Cloudflare replay analytics runtime', () => {
         ])
       )
     }
+    const filledDecks = runtime.authoritativeFilledDecks()
+    if (!filledDecks) throw new Error('authoritative filled decks are missing')
+    const finalDeckStrings = realDeckStringsFromFilledDecks(filledDecks, [
+      prismsToDeckClass(match.player1.privateSeed.prisms),
+      prismsToDeckClass(match.player2.privateSeed.prisms)
+    ])
     runtime.free()
     runtimes.pop()
 
@@ -304,6 +342,12 @@ describe('Cloudflare replay analytics runtime', () => {
         now
       )
       .run()
+    await insertAuthoritativeDecks(
+      analyticsEnv,
+      proposalId,
+      finalDeckStrings,
+      now
+    )
     const message = {
       type: 'process-match-replay' as const,
       proposalId,
@@ -358,6 +402,91 @@ describe('Cloudflare replay analytics runtime', () => {
         `analytics/${releaseVersion}/${proposalId}/move-data.csv`
       )
     ).not.toBeNull()
+
+    for (const authorityCase of [
+      {
+        proposalId: 'analytics-deck-mismatch',
+        matchId: 5253,
+        replayId: 'analytics-deck-mismatch-replay',
+        error: 'Replay final decks do not match authoritative match decks',
+        partial: false
+      },
+      {
+        proposalId: 'analytics-partial-deck-authority',
+        matchId: 5254,
+        replayId: 'analytics-partial-deck-authority-replay',
+        error: 'Authoritative match deck pair is incomplete',
+        partial: true
+      }
+    ]) {
+      const rejectedMessage = {
+        ...replayMessage(
+          authorityCase.proposalId,
+          authorityCase.matchId,
+          authorityCase.replayId
+        ),
+        replayRecordCount: records.length,
+        replayBytes
+      }
+      for (const [index, record] of records.entries()) {
+        await analyticsEnv.GAME_ANALYTICS.put(
+          `${rejectedMessage.archivePrefix}${String(index).padStart(6, '0')}.json`,
+          record
+        )
+      }
+      const capturedAt = await insertEndedMatch(
+        analyticsEnv,
+        rejectedMessage,
+        false
+      )
+      await analyticsEnv.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_authoritative_decks
+           (proposal_id, player_index, deck_string, captured_at)
+         VALUES (?, 0, ?, ?)`
+      )
+        .bind(
+          authorityCase.proposalId,
+          authorityCase.partial ? finalDeckStrings[0] : 'SWxSTR02',
+          capturedAt
+        )
+        .run()
+      if (!authorityCase.partial) {
+        await analyticsEnv.AUTH_DB.prepare(
+          `INSERT INTO multiplayer_match_authoritative_decks
+             (proposal_id, player_index, deck_string, captured_at)
+           VALUES (?, 1, 'SWxSTR02', ?)`
+        )
+          .bind(authorityCase.proposalId, capturedAt)
+          .run()
+      }
+
+      await expect(
+        processAnalyticsMessage(analyticsEnv, rejectedMessage, WasmMatch)
+      ).rejects.toThrow(authorityCase.error)
+      expect(
+        await analyticsEnv.AUTH_DB.prepare(
+          `SELECT status, attempts, last_error
+           FROM multiplayer_match_analytics WHERE proposal_id = ?`
+        )
+          .bind(authorityCase.proposalId)
+          .first()
+      ).toEqual({
+        status: 'retrying',
+        attempts: 1,
+        last_error: `Error: ${authorityCase.error}`
+      })
+      for (const name of [
+        'match-data.csv',
+        'game-state-data.csv',
+        'move-data.csv'
+      ]) {
+        expect(
+          await analyticsEnv.GAME_ANALYTICS.get(
+            `analytics/${releaseVersion}/${authorityCase.proposalId}/${name}`
+          )
+        ).toBeNull()
+      }
+    }
   })
 
   it('retries malformed messages so the platform can dead-letter them', async () => {

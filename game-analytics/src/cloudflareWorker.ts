@@ -128,6 +128,33 @@ const recordFailure = async (
     .run()
 }
 
+interface AuthoritativeDeckRow {
+  player_index: number
+  deck_string: string
+}
+
+const authoritativeDeckStrings = async (
+  database: D1Database,
+  proposalId: string
+): Promise<[string, string]> => {
+  const rows = await database
+    .prepare(
+      `SELECT player_index, deck_string
+       FROM multiplayer_match_authoritative_decks
+       WHERE proposal_id = ? ORDER BY player_index`
+    )
+    .bind(proposalId)
+    .all<AuthoritativeDeckRow>()
+  if (
+    rows.results.length !== 2 ||
+    rows.results[0]?.player_index !== 0 ||
+    rows.results[1]?.player_index !== 1
+  ) {
+    throw new Error('Authoritative match deck pair is incomplete')
+  }
+  return [rows.results[0].deck_string, rows.results[1].deck_string]
+}
+
 const complete = async (
   env: GameAnalyticsEnv,
   message: ReplayAnalyticsMessage,
@@ -138,6 +165,17 @@ const complete = async (
 ) => {
   const match = await Game.loadMatch(message.matchId, records, Runtime)
   if (match.type !== 'matchData') throw match.err
+
+  const finalDecks = await authoritativeDeckStrings(
+    env.AUTH_DB,
+    message.proposalId
+  )
+  if (
+    match.p0DeckString !== finalDecks[0] ||
+    match.p1DeckString !== finalDecks[1]
+  ) {
+    throw new Error('Replay final decks do not match authoritative match decks')
+  }
 
   const csv = processToCSV(match)
   const prefix = outputPrefix(message)

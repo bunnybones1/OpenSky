@@ -36,11 +36,14 @@ export const matchWireErrors = (
   source,
   sourceHandler,
   sourceFeeds,
+  sourceAnalytics,
   matchWire,
   competitive,
   replays,
   api,
-  authoritativeDeckMigration
+  authoritativeDeckMigration,
+  analyticsMatch,
+  analyticsWorker
 ) => {
   const errors = []
   const matchFields = [
@@ -187,6 +190,53 @@ export const matchWireErrors = (
     errors.push('immutable authoritative match deck schema is missing')
   }
 
+  for (const token of [
+    'playerDeckString = match.Player1DeckString',
+    'opponentDeckString = match.Player2DeckString',
+    'playerDeckString = match.Player2DeckString',
+    'opponentDeckString = match.Player1DeckString'
+  ]) {
+    if (!sourceAnalytics.includes(token)) {
+      errors.push(`source analytics final deck authority changed: ${token}`)
+    }
+  }
+  for (const token of [
+    'secrets[0].secret.filledDeck',
+    'secrets[1].secret.filledDeck',
+    'p0DeckString: this.deckData.deckStrings[0].data',
+    'p1DeckString: this.deckData.deckStrings[1].data'
+  ]) {
+    if (!analyticsMatch.includes(token)) {
+      errors.push(`replay analytics final deck derivation changed: ${token}`)
+    }
+  }
+  const compactAnalyticsWorker = analyticsWorker.replace(/\s+/g, ' ')
+  for (const token of [
+    'FROM multiplayer_match_authoritative_decks',
+    'rows.results.length !== 2',
+    'rows.results[0]?.player_index !== 0',
+    'rows.results[1]?.player_index !== 1',
+    'match.p0DeckString !== finalDecks[0]',
+    'match.p1DeckString !== finalDecks[1]'
+  ]) {
+    if (!compactAnalyticsWorker.includes(token)) {
+      errors.push(`analytics final deck authority is missing: ${token}`)
+    }
+  }
+  const analyticsAuthorityIndex = analyticsWorker.indexOf(
+    'match.p0DeckString !== finalDecks[0]'
+  )
+  const analyticsCsvIndex = analyticsWorker.indexOf(
+    'const csv = processToCSV(match)'
+  )
+  if (
+    analyticsAuthorityIndex < 0 ||
+    analyticsCsvIndex < 0 ||
+    analyticsAuthorityIndex > analyticsCsvIndex
+  ) {
+    errors.push('analytics CSV generation is not gated by final deck authority')
+  }
+
   const compactWire = matchWire.replace(/\s+/g, ' ')
   for (const token of [
     'player1: match.player1 ? sourceMatchPlayerWire(match.player1) : null',
@@ -248,15 +298,19 @@ const main = async () => {
     source,
     sourceHandler,
     sourceFeeds,
+    sourceAnalytics,
     matchWire,
     competitive,
     replays,
     api,
-    authoritativeDeckMigration
+    authoritativeDeckMigration,
+    analyticsMatch,
+    analyticsWorker
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'proto', 'api.gen.go'), 'utf8'),
     readFile(path.join(root, 'api', 'rpc', 'admin_ban_tools.go'), 'utf8'),
     readFile(path.join(root, 'api', 'rpc', 'feeds.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'lib', 'analytics', 'tracker.go'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'match-wire.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
     readFile(path.join(root, 'cloudflare', 'src', 'replays.ts'), 'utf8'),
@@ -269,24 +323,32 @@ const main = async () => {
         '0115_authoritative_match_decks.sql'
       ),
       'utf8'
+    ),
+    readFile(path.join(root, 'game-analytics', 'src', 'Match.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'game-analytics', 'src', 'cloudflareWorker.ts'),
+      'utf8'
     )
   ])
   const errors = matchWireErrors(
     source,
     sourceHandler,
     sourceFeeds,
+    sourceAnalytics,
     matchWire,
     competitive,
     replays,
     api,
-    authoritativeDeckMigration
+    authoritativeDeckMigration,
+    analyticsMatch,
+    analyticsWorker
   )
   if (errors.length) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Match history, staff lists, detail, and replay metadata preserve the generated Go wire and final-deck authority'
+      'Match history, replay metadata, staff lists, and replay analytics preserve the generated Go wire and final-deck authority'
     )
   }
 }
