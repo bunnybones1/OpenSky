@@ -349,7 +349,6 @@ const matchInfo = async (
           status: 'online',
           name: 'cloud-weasel-game-server',
           hostname: websocket.hostname,
-          internalHostname: '',
           port:
             Number(websocket.port) ||
             (websocket.protocol === 'wss:' ? 443 : 80),
@@ -357,7 +356,6 @@ const matchInfo = async (
           http: serverAddress
             .replace(/^wss:/, 'https:')
             .replace(/^ws:/, 'http:'),
-          internalHttp: '',
           load: {
             inProgressMatches: 1,
             maxCapacity: 1,

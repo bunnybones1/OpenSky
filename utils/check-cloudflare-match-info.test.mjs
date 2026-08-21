@@ -9,6 +9,7 @@ const fixtures = async () => {
     sourceRegistry,
     sourceMatchTracker,
     sourceMessages,
+    sourceGameServerInfo,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -23,6 +24,7 @@ const fixtures = async () => {
       'utf8'
     ),
     readFile('matchmaker/lib/messages/messages.go', 'utf8'),
+    readFile('matchmaker/lib/gameservers/game_server_info.go', 'utf8'),
     readFile('game/src/state/worker/multiplayerWorkerState.ts', 'utf8'),
     readFile(
       'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx',
@@ -41,6 +43,7 @@ const fixtures = async () => {
     sourceRegistry,
     sourceMatchTracker,
     sourceMessages,
+    sourceGameServerInfo,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -60,7 +63,7 @@ const replaceAfter = (source, marker, search, replacement) => {
   )}`
 }
 
-test('pins source wire, initialization retry, and disconnect-timeout lifecycles', async () => {
+test('pins source match/server wires, initialization retry, and timeout lifecycles', async () => {
   assert.deepEqual(matchInfoErrors(await fixtures()), [])
 })
 
@@ -72,6 +75,13 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       sourceMessages: value.sourceMessages.replace(
         'ServerLocationKey string         `json:"serverLocationKey"`',
         'ServerLocationKey string         `json:"replayID"`'
+      )
+    },
+    {
+      ...value,
+      sourceGameServerInfo: value.sourceGameServerInfo.replace(
+        'InternalHostname string         `json:"internalHostname,omitempty"`',
+        'InternalHostname string         `json:"internalHostname"`'
       )
     },
     {
@@ -183,8 +193,24 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
     {
       ...value,
       workerGateway: value.workerGateway.replace(
+        'hostname: websocket.hostname,',
+        "hostname: websocket.hostname, internalHostname: '',"
+      )
+    },
+    {
+      ...value,
+      workerGateway: value.workerGateway.replace(
         "pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'",
         "pendingAddress.protocol === 'https:' ? 'https:' : 'http:'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('restores the source match-info contract for the requested player'",
+        'expect(await response.json()).toEqual({',
+        'expect(await response.json()).toMatchObject({'
       )
     },
     {

@@ -204,11 +204,9 @@ describe('same-origin multiplayer gateway', () => {
         status: 'online',
         name: 'cloud-weasel-game-server',
         hostname: 'opensky.example',
-        internalHostname: '',
         port: 443,
         ws: 'wss://opensky.example/api/game/matches/gateway-proposal',
         http: 'https://opensky.example/api/game/matches/gateway-proposal',
-        internalHttp: '',
         load: {
           inProgressMatches: 1,
           maxCapacity: 1,
@@ -268,11 +266,9 @@ describe('same-origin multiplayer gateway', () => {
         status: 'online',
         name: 'cloud-weasel-game-server',
         hostname: 'opensky.example',
-        internalHostname: '',
         port: 443,
         ws: 'wss://opensky.example/api/game/matches/initializing-proposal',
         http: 'https://opensky.example/api/game/matches/initializing-proposal',
-        internalHttp: '',
         load: {
           inProgressMatches: 1,
           maxCapacity: 1,

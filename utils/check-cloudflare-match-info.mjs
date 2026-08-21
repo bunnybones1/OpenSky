@@ -30,6 +30,7 @@ export const matchInfoErrors = ({
   sourceRegistry,
   sourceMatchTracker,
   sourceMessages,
+  sourceGameServerInfo,
   sourceBrowserWorker,
   sourceInProgressHook,
   gameWorker,
@@ -70,6 +71,36 @@ export const matchInfoErrors = ({
     '  registerMatch(\n    matchID:',
     '\n  async getMatchInProgress'
   )
+
+  const sourceServerInfoWire = bodyBetween(
+    sourceGameServerInfo,
+    'type GameServerInfo struct {',
+    '\n}'
+  )
+  const sourceServerInfoFields = [
+    ...sourceServerInfoWire.matchAll(/`json:"([^",]+)(,omitempty)?"`/g)
+  ].map(match => [match[1], Boolean(match[2])])
+  const expectedServerInfoFields = [
+    ['name', false],
+    ['status', false],
+    ['load', false],
+    ['hostname', true],
+    ['internalHostname', true],
+    ['port', true],
+    ['ws', true],
+    ['http', true],
+    ['internalHttp', true],
+    ['releaseVersion', true],
+    ['error', true]
+  ]
+  if (
+    JSON.stringify(sourceServerInfoFields) !==
+    JSON.stringify(expectedServerInfoFields)
+  ) {
+    errors.push(
+      'Source public GameServerInfo JSON or omitempty contract changed'
+    )
+  }
   requireOrdered(
     errors,
     'Source pending-match registration',
@@ -229,6 +260,11 @@ export const matchInfoErrors = ({
   if (workerProjection.includes('replayID:')) {
     errors.push('Worker in-progress MatchInfo leaks registry-only replayID')
   }
+  for (const field of ['internalHostname:', 'internalHttp:']) {
+    if (workerProjection.includes(field)) {
+      errors.push(`Worker serializes empty optional server field: ${field}`)
+    }
+  }
 
   const workerDisconnectTimeout = bodyBetween(
     workerGateway,
@@ -254,6 +290,30 @@ export const matchInfoErrors = ({
       'return 0'
     ]
   )
+  const readyRuntimeTest = bodyBetween(
+    workerRuntimeTest,
+    "it('restores the source match-info contract for the requested player'",
+    "it('preserves source initializing match info for the client retry loop'"
+  )
+  const pendingRuntimeTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves source initializing match info for the client retry loop'",
+    "it('uses the source minimum remaining loading and disconnect TTL'"
+  )
+  for (const [label, runtimeTest] of [
+    ['ready', readyRuntimeTest],
+    ['initializing', pendingRuntimeTest]
+  ]) {
+    if (!runtimeTest.includes('expect(await response.json()).toEqual({')) {
+      errors.push(`Worker ${label} match-info regression is not exact`)
+    }
+    if (
+      runtimeTest.includes('internalHostname:') ||
+      runtimeTest.includes('internalHttp:')
+    ) {
+      errors.push(`Worker ${label} regression expects empty optional internals`)
+    }
+  }
 
   requireOrdered(
     errors,
@@ -313,6 +373,7 @@ const main = async () => {
     sourceRegistry,
     sourceMatchTracker,
     sourceMessages,
+    sourceGameServerInfo,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -330,6 +391,10 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'matchmaker/lib/messages/messages.go'), 'utf8'),
+    readFile(
+      path.join(root, 'matchmaker/lib/gameservers/game_server_info.go'),
+      'utf8'
+    ),
     readFile(
       path.join(root, 'game/src/state/worker/multiplayerWorkerState.ts'),
       'utf8'
@@ -363,6 +428,7 @@ const main = async () => {
     sourceRegistry,
     sourceMatchTracker,
     sourceMessages,
+    sourceGameServerInfo,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -376,7 +442,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match info preserves the public wire, initialization retry, and per-player timeout lifecycles'
+      'Cloudflare match info preserves public match/server wires, initialization retry, and per-player timeout lifecycles'
     )
   }
 }
