@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9f3de2fc`
-  (`Preserve source loaded-player mute gate`)
-- Latest tested runtime commit: `9f3de2fc`
-  (`Preserve source loaded-player mute gate`)
+- Last code/test checkpoint: `b8a210aa`
+  (`Preserve source player lifecycle recipients`)
+- Latest tested runtime commit: `b8a210aa`
+  (`Preserve source player lifecycle recipients`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,11 +23,11 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `9f3de2fc` are committed and
+- The runtime changes from `38386294` through `b8a210aa` are committed and
   tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
-  `9f3de2fc` retained both entries.
+  `b8a210aa` retained both entries.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -191,9 +191,12 @@ its handoff passed exact-head run
 `2d6dd16b` in 13m43s. The configurable-chat checkpoint and its refreshed
 handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32487556774> at
-`2d3c0103`. The newer `9f3de2fc` loaded-player mute checkpoint and this
-refreshed handoff require a later green exact-head CI run before any production
-mutation.
+`2d3c0103`. The loaded-player mute checkpoint and its refreshed handoff passed
+exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32489013684> at
+`f89200e9` in 11m17s. The newer `b8a210aa` player-lifecycle recipient
+checkpoint and this refreshed handoff require a later green exact-head CI run
+before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1835,6 +1838,43 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source player-lifecycle recipient milestone
+
+Commit `b8a210aa` restores the original separation between direct player
+lifecycle messages and worker-relayed spectator messages. `MatchManager` sends
+`opponent_connected`, `opponent_disconnected`, and intermediate
+`opponent_loading_progress` messages only through the two player contexts. Once
+both players have loaded, `MatchHandler` emits the final progress-one,
+`matchAbandonTime: -1` message through `MatchProxy`, which also publishes that
+worker relay to joined spectators. The Durable Object previously broadcast all
+four lifecycle paths to spectators.
+
+The Cloudflare game server now keeps connection, disconnection, and fractional
+loading progress player-only while retaining the source all-loaded completion
+for the finishing player and every joined spectator. The real Workers
+regression proves both players still receive their exact direct lifecycle
+messages, uses a same-socket time-sync reply to establish join ordering, proves
+the spectator remains silent across connection and intermediate progress,
+receives exactly the final completion relay, and remains silent when a player
+disconnects.
+
+The expanded mutation-tested game-ingress gate derives the four recipient
+boundaries from `MatchManager`, `MatchHandler`, and `MatchProxy`; requires the
+Worker to have exactly one spectator send in the loading handler; forbids
+spectator sends in the join and disconnect handlers; and pins the real Durable
+Object regression. Mutations reject source recipient drift, reintroduced
+Worker broadcasts, or weakened no-leak assertions.
+
+The exact complete local release contract passed with exit code zero at
+`b8a210aa`: 514 main-Worker tests, 40 game-server unit and 133 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1946,7 +1986,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `9f3de2fc`. Keep
+- Deploy and verify the tested runtime changes through `b8a210aa`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
