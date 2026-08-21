@@ -2972,14 +2972,50 @@ source/off-chain/mutation gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source asynchronous Grandweaver task — 2026-08-21
+
+Milestone `1e7f878c` completes the Go `PromoteGrandmastersRunner` contract.
+Ranked settlement still stages the task inside the unpublished match mutation,
+but no global rank recalculation runs before terminal publication, rewards,
+`match_ended`, metadata persistence, or player-socket closure. A later match
+alarm dispatches one proposal to the separately named `grandweaver` coordinator
+Durable Object, preserving the source runner's global batch size of one while
+remaining independent from the deck-rank work group.
+
+Migration `0120` rebuilds the pre-production Grandweaver job table with durable
+`PENDING`, `APPLIED`, and `FAILED` states, attempt timestamps, the source
+15-second linear backoff, and an exact five-attempt bound. D1 guards require a
+terminal match ledger, exact retry timing, immutable scope, an atomic rank/job
+application batch, and terminal job immutability. Early alarms do not consume
+an attempt; a fifth failed batch becomes durably `FAILED` and cannot mutate
+ranks on a later retry.
+
+The source completion gate now mutation-tests enqueue order, worker cadence,
+batch size, retry constants, global coordination, terminal-client ordering,
+schema transitions, and direct runtime proof. The production preflight requires
+`0120`, all three attempt-state columns, and the guarded linear retry/terminal
+transition before any deploy command can spawn Wrangler.
+
+The complete local release contract passed at exact code commit `1e7f878c`:
+528 main-Worker tests across 85 files, 40 game-server unit and 135 Workers
+tests, 48 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain/mutation gate
+and typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
+deployment, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Suggested next slice
 
-No known dormant matchmaker or non-RPC service-route parity slice remains. The
-next local completion audit should verify exact retry and terminal-failure
-semantics for the separately queued PromoteGrandmasters task.
+No known dormant matchmaker, non-RPC service-route, or active source-worker
+parity slice remains. The PromoteGrandmasters retry/terminal-failure audit is
+complete. The next local work should begin with a fresh source-contract audit,
+prioritizing Conquest settlement/task boundaries or remaining player-facing
+behavior rather than inventing a replacement interface.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, and `0119` at the documented quiescent boundary,
+then `0116`, `0117`, `0118`, `0119`, and `0120` at the documented quiescent boundary,
 deploy the exact tested Workers with both bot flags still false, and only
 consider a bounded ranked/PvP-bot soak after ordinary multiplayer and
 analytics paths are healthy.
