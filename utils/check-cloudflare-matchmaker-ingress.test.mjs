@@ -145,6 +145,20 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
     },
     {
       ...value,
+      workerProtocol: value.workerProtocol.replace(
+        'message: reason,',
+        "message: 'detail',"
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
+        'errorMessage(reason)',
+        'errorMessage(reason, serviceError)'
+      )
+    },
+    {
+      ...value,
       workerRuntime: value.workerRuntime.replace(
         "this.safeSend(webSocket, errorMessage('SERVER_ERROR'))\n    webSocket.close()",
         "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))\n    webSocket.close()"
@@ -167,8 +181,22 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
     {
       ...value,
       workerProtocolTest: value.workerProtocolTest.replace(
+        "it('aliases the source error message to its reason'",
+        "it('allows a detailed error message'"
+      )
+    },
+    {
+      ...value,
+      workerProtocolTest: value.workerProtocolTest.replace(
         "it('pins the source 32 KiB message boundary'",
         "it('allows a broad message boundary'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        "message: 'RANK_TOO_LOW'",
+        "message: 'ranked play is not unlocked'"
       )
     },
     {

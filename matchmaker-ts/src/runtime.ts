@@ -460,10 +460,7 @@ export class MatchmakerPool implements DurableObject {
     const attachment =
       webSocket.deserializeAttachment() as SocketAttachment | null
     if (!attachment) {
-      this.safeSend(
-        webSocket,
-        errorMessage('INVALID_OPERATION', 'missing identity')
-      )
+      this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))
       webSocket.close(1008, 'Missing identity')
       return
     }
@@ -1608,7 +1605,14 @@ export class MatchmakerPool implements DurableObject {
               : response.status === 400
                 ? 'INVALID_OPERATION'
                 : 'MATCH_CREATION_FAILED')
-        this.broadcastProposal(proposal, errorMessage(reason, serviceError))
+        console.warn(
+          'match service rejected proposal',
+          proposal.id,
+          response.status,
+          reason,
+          serviceError
+        )
+        this.broadcastProposal(proposal, errorMessage(reason))
         await this.deleteProposal(proposal)
         return
       }

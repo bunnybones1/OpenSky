@@ -180,12 +180,9 @@ export const parseClientCommand = (
   }
 }
 
-export const errorMessage = (
-  reason: string,
-  message = reason
-): MatchmakerErrorMessage => ({
+export const errorMessage = (reason: string): MatchmakerErrorMessage => ({
   type: 'error',
   reason,
-  message,
+  message: reason,
   level: 'server'
 })

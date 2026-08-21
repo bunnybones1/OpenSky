@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { deriveGamePrincipal, isGamePrincipal } from '../src/identity'
 import {
+  errorMessage,
   MAX_CLIENT_MESSAGE_BYTES,
   parseClientCommand,
   ProtocolError
@@ -18,6 +19,15 @@ const findMatch = {
 }
 
 describe('matchmaker protocol boundary', () => {
+  it('aliases the source error message to its reason', () => {
+    expect(errorMessage('RANK_TOO_LOW')).toEqual({
+      type: 'error',
+      reason: 'RANK_TOO_LOW',
+      message: 'RANK_TOO_LOW',
+      level: 'server'
+    })
+  })
+
   it('normalizes the source wire command', () => {
     expect(parseClientCommand(JSON.stringify(findMatch))).toMatchObject({
       sessionID: 'ABC',

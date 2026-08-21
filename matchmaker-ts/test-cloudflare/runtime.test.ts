@@ -1159,7 +1159,7 @@ describe('Cloudflare matchmaker Worker', () => {
         {
           type: 'error',
           reason: 'RANK_TOO_LOW',
-          message: 'ranked play is not unlocked',
+          message: 'RANK_TOO_LOW',
           level: 'server'
         }
       ])

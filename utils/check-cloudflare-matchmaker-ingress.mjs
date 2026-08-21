@@ -168,6 +168,26 @@ export const matchmakerIngressErrors = ({
   if (workerParse.includes('binary messages are not supported')) {
     errors.push('Worker still rejects source-compatible binary JSON')
   }
+  const workerErrorMessage = bodyBetween(
+    workerProtocol,
+    'export const errorMessage = (',
+    '\n})'
+  )
+  requireOrdered(
+    errors,
+    'Worker source error message wire',
+    workerErrorMessage,
+    [
+      'reason: string',
+      "type: 'error'",
+      'reason,',
+      'message: reason',
+      "level: 'server'"
+    ]
+  )
+  if (workerErrorMessage.includes('message = reason')) {
+    errors.push('Worker error helper still accepts a non-source message')
+  }
 
   const workerMessage = bodyBetween(
     workerRuntime,
@@ -182,6 +202,12 @@ export const matchmakerIngressErrors = ({
     'return',
     'switch (command.type) {'
   ])
+  for (const call of workerRuntime.matchAll(/errorMessage\(([^)]*)\)/g)) {
+    if (call[1].includes(',')) {
+      errors.push('Worker matchmaker error call supplies a non-source message')
+      break
+    }
+  }
   const workerFailure = bodyBetween(
     workerRuntime,
     'private failMalformedClientMessage(',
@@ -210,6 +236,9 @@ export const matchmakerIngressErrors = ({
       'unit',
       workerProtocolTest,
       [
+        "it('aliases the source error message to its reason'",
+        "errorMessage('RANK_TOO_LOW')",
+        "message: 'RANK_TOO_LOW'",
         "it('accepts source-compatible binary JSON payloads'",
         "it('pins the source 32 KiB message boundary'",
         'expect(MAX_CLIENT_MESSAGE_BYTES).toBe(32 * 1024)'
@@ -232,6 +261,17 @@ export const matchmakerIngressErrors = ({
       }
     }
   }
+  const serviceRejectionTest = bodyBetween(
+    workerRuntimeTest,
+    "it('terminates proposals rejected by final match preconditions'",
+    "it('releases accepted players after bounded transient dispatch failures'"
+  )
+  requireOrdered(
+    errors,
+    'Worker match-service rejection error regression',
+    serviceRejectionTest,
+    ["reason: 'RANK_TOO_LOW'", "message: 'RANK_TOO_LOW'", "level: 'server'"]
+  )
 
   const scripts = rootPackage?.scripts ?? {}
   if (
@@ -318,7 +358,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker ingress preserves the source payload, error, and close contract'
+      'Cloudflare matchmaker ingress preserves the source payload, exact error alias, and close contract'
     )
   }
 }
