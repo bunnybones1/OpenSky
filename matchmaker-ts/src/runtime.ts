@@ -767,12 +767,21 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async acceptMatch(principal: string) {
-    const proposal = await this.proposalForPrincipal(principal)
-    if (!proposal) {
+    const pendingProposalId = await this.state.storage.get<string>(
+      pendingKey(principal)
+    )
+    if (!pendingProposalId) {
       throw new ProtocolError('INVALID_OPERATION', 'match proposal is not set')
     }
-    if (proposal.expiresAtMs <= Date.now()) {
-      await this.expireProposal(proposal)
+    const proposal = await this.state.storage.get<StoredProposal>(
+      proposalKey(pendingProposalId)
+    )
+    if (!proposal || proposal.expiresAtMs < Date.now()) {
+      // Source FrontendService.AcceptMatch notifies only the accepting
+      // player's channel, then returns ErrInvalidOperation. The normal timeout
+      // runner remains authoritative for deleting and notifying the proposal
+      // as a whole.
+      this.sendToPrincipal(principal, { type: 'timed_out' })
       throw new ProtocolError('INVALID_OPERATION', 'match proposal timed out')
     }
     if (proposal.accepted.includes(principal)) return
@@ -1581,7 +1590,7 @@ export class MatchmakerPool implements DurableObject {
     if (this.hasSubscribedSocket(attachment.principal)) return
     await this.state.storage.delete(ticketKey(attachment.principal))
     const proposal = await this.proposalForPrincipal(attachment.principal)
-    if (proposal?.status === 'FOUND') {
+    if (proposal?.status === 'FOUND' && proposal.expiresAtMs >= Date.now()) {
       const participant = proposal.participants.find(
         current => current.player.address === attachment.principal
       )

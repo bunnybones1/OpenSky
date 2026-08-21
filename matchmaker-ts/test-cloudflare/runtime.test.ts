@@ -987,6 +987,92 @@ describe('Cloudflare matchmaker Worker', () => {
       .toEqual([0, 0])
   })
 
+  it('notifies only the accepter before the timeout alarm expires the proposal', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<Record<string, unknown>>({
+          prefix: 'proposal:'
+        })
+        expect(proposals.size).toBe(1)
+        for (const [key, proposal] of proposals) {
+          await state.storage.put(key, {
+            ...proposal,
+            expiresAtMs: Date.now() - 1
+          })
+        }
+        await state.storage.setAlarm(Date.now() + 60_000)
+      }
+    )
+
+    const accepterMessages = collectMessages(first, 2)
+    const accepterClosed = nextClose(first)
+    const opponentStayedSilent = expectNoMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    expect(await accepterMessages).toEqual([
+      { type: 'timed_out' },
+      GENERIC_SERVER_ERROR
+    ])
+    expect(await accepterClosed).toMatchObject({ code: 1005, reason: '' })
+    await opponentStayedSilent
+
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect((await state.storage.list({ prefix: 'proposal:' })).size).toBe(1)
+        expect(
+          (await state.storage.list({ prefix: 'penalty:accept-timeout:' })).size
+        ).toBe(0)
+      }
+    )
+
+    const opponentTimedOut = nextMessage(second)
+    expect(await runDurableObjectAlarm(pool())).toBe(true)
+    expect(await opponentTimedOut).toEqual({ type: 'timed_out' })
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect((await state.storage.list({ prefix: 'proposal:' })).size).toBe(0)
+        expect(
+          (await state.storage.list({ prefix: 'penalty:accept-timeout:' })).size
+        ).toBe(2)
+      }
+    )
+  })
+
+  it('reports a referenced missing proposal as timed out before closing', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list({ prefix: 'proposal:' })
+        expect(proposals.size).toBe(1)
+        await state.storage.delete([...proposals.keys()])
+      }
+    )
+
+    const accepterMessages = collectMessages(first, 2)
+    const accepterClosed = nextClose(first)
+    const opponentStayedSilent = expectNoMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    expect(await accepterMessages).toEqual([
+      { type: 'timed_out' },
+      GENERIC_SERVER_ERROR
+    ])
+    expect(await accepterClosed).toMatchObject({ code: 1005, reason: '' })
+    await opponentStayedSilent
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect((await state.storage.list({ prefix: 'proposal:' })).size).toBe(0)
+        expect((await state.storage.list({ prefix: 'pending:' })).size).toBe(2)
+      }
+    )
+  })
+
   it('keeps the channel open only for decline invalid-operation errors', async () => {
     const { first, second } = await pairPlayers(
       GameMode.CONQUEST_CONSTRUCTED,

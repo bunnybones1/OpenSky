@@ -9,6 +9,10 @@ const fixtures = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourceFrontendService,
+    sourceAcceptTimeouter,
+    sourceDecliner,
+    sourceMatchProposalRepository,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -27,6 +31,19 @@ const fixtures = async () => {
     readFile('matchmaker/lib/frontend/findmatch/handler.go', 'utf8'),
     readFile('matchmaker/lib/frontend/acceptmatch/handler.go', 'utf8'),
     readFile('matchmaker/lib/frontend/declinematch/handler.go', 'utf8'),
+    readFile(
+      'matchmaker/lib/matchmaker/custommatchmaker/frontend_service.go',
+      'utf8'
+    ),
+    readFile(
+      'matchmaker/lib/matchmaker/custommatchmaker/accept_timeouter.go',
+      'utf8'
+    ),
+    readFile('matchmaker/lib/matchmaker/custommatchmaker/decliner.go', 'utf8'),
+    readFile(
+      'matchmaker/lib/matchmaker/custommatchmaker/match_proposal_repository.go',
+      'utf8'
+    ),
     readFile('matchmaker/lib/playerchannel/notifier.go', 'utf8'),
     readFile('matchmaker/lib/playerchannel/factory.go', 'utf8'),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
@@ -46,6 +63,10 @@ const fixtures = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourceFrontendService,
+    sourceAcceptTimeouter,
+    sourceDecliner,
+    sourceMatchProposalRepository,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -68,6 +89,10 @@ const errorsFor = value =>
     value.sourceHandler,
     value.sourceAcceptHandler,
     value.sourceDeclineHandler,
+    value.sourceFrontendService,
+    value.sourceAcceptTimeouter,
+    value.sourceDecliner,
+    value.sourceMatchProposalRepository,
     value.sourceNotifier,
     value.sourceFactory,
     value.sourceBrowserClient,
@@ -111,6 +136,49 @@ test('rejects weakened source, Worker, browser, and release requirements', async
         'return mmerrors.ErrMissingChannel',
         'return nil'
       )
+    },
+    {
+      ...value,
+      sourceFrontendService: value.sourceFrontendService.replace(
+        's.notifier.Message(ctx, events.EventTimeOutMessage{}, p)',
+        's.notifier.Message(ctx, events.EventTimeOutMessage{})'
+      )
+    },
+    {
+      ...value,
+      sourceFrontendService: value.sourceFrontendService.replace(
+        'return fmt.Errorf("match timed out: %w", errors.ErrInvalidOperation)',
+        'return nil'
+      )
+    },
+    {
+      ...value,
+      sourceFrontendService: value.sourceFrontendService.replace(
+        'matchProposal.Timeout() < 0',
+        'matchProposal.Timeout() <= 0'
+      )
+    },
+    {
+      ...value,
+      sourceAcceptTimeouter: value.sourceAcceptTimeouter.replace(
+        'if err := t.matchProposalRepository.Delete(matchProposal); err != nil {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'if !hasMatchProposal {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
+      sourceMatchProposalRepository:
+        value.sourceMatchProposalRepository.replace(
+          'if ttl < 0 || errors.Is(err, store.ErrNoSuchItem) {',
+          'if ttl > 0 || errors.Is(err, store.ErrNoSuchItem) {'
+        )
     },
     {
       ...value,
@@ -461,6 +529,38 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
+      worker: value.worker.replace('if (!pendingProposalId) {', 'if (false) {')
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'proposal.expiresAtMs < Date.now()',
+        'proposal.expiresAtMs <= Date.now()'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "this.sendToPrincipal(principal, { type: 'timed_out' })",
+        "this.broadcastProposal(proposal, { type: 'timed_out' })"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "this.sendToPrincipal(principal, { type: 'timed_out' })",
+        "await this.expireProposal(proposal)\n      this.sendToPrincipal(principal, { type: 'timed_out' })"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'proposal.expiresAtMs >= Date.now()',
+        'proposal.expiresAtMs <= Date.now()'
+      )
+    },
+    {
+      ...value,
       worker: value.worker.replace(
         "'conquest cannot be declined'",
         "'conquest decline was ignored'"
@@ -492,6 +592,20 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'sends the source generic error and closes when accept-match handling fails',
         'keeps accept-match failures open'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'notifies only the accepter before the timeout alarm expires the proposal',
+        'expires the proposal inside the accept command'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'reports a referenced missing proposal as timed out before closing',
+        'reports a referenced missing proposal as absent'
       )
     },
     {

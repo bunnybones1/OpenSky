@@ -30,6 +30,10 @@ export const matchmakerSessionErrors = (
   sourceHandler,
   sourceAcceptHandler,
   sourceDeclineHandler,
+  sourceFrontendService,
+  sourceAcceptTimeouter,
+  sourceDecliner,
+  sourceMatchProposalRepository,
   sourceNotifier,
   sourceFactory,
   sourceBrowserClient,
@@ -84,6 +88,85 @@ export const matchmakerSessionErrors = (
       'if !client.HasPlayer() {'
     ])
   }
+
+  const sourceAcceptMatch = bodyBetween(
+    sourceFrontendService,
+    'func (s *FrontendService) AcceptMatch(',
+    'func (s *FrontendService) DeclineMatch('
+  )
+  requireOrdered(
+    errors,
+    'Source expired-accept player notification',
+    sourceAcceptMatch,
+    [
+      'if !p.HasMatchProposalID() {',
+      's.matchProposalRepository.Load(p.GetMatchProposalID())',
+      'if matchProposal == nil || *matchProposal.Timeout() < 0 {',
+      's.notifier.Message(ctx, events.EventTimeOutMessage{}, p)',
+      'return fmt.Errorf("match timed out: %w", errors.ErrInvalidOperation)',
+      'if matchProposal.HasAccepted(p.Address()) {'
+    ]
+  )
+  if (
+    sourceAcceptMatch.includes('matchProposalRepository.Delete(') ||
+    sourceAcceptMatch.includes('SetAcceptTimeoutPenalty(')
+  ) {
+    errors.push('Source accept command now owns shared proposal expiration')
+  }
+
+  const sourceAcceptanceTimeout = bodyBetween(
+    sourceAcceptTimeouter,
+    'func (t *acceptTimeouter) checkAcceptanceTimeout(',
+    '//go:generate'
+  )
+  requireOrdered(
+    errors,
+    'Source shared proposal timeout authority',
+    sourceAcceptanceTimeout,
+    [
+      'if err := t.matchProposalRepository.Delete(matchProposal); err != nil {',
+      'for _, address := range matchProposal.Addresses() {',
+      'playerStatus := player.PlayerStatus_MATCH_TIMED_OUT',
+      'if matchProposal.HasAccepted(address) {',
+      'playerStatus = player.PlayerStatus_MATCH_ABORTED',
+      't.notifier.Message(context.Background(), events.EventTimeOutMessage{}, p)',
+      'if p.IsChallengeMatch() {',
+      'if matchProposal.HasAccepted(address) {',
+      't.acceptTimeoutPenaltySetter.SetAcceptTimeoutPenalty(p)'
+    ]
+  )
+
+  const sourceDeclineMatch = bodyBetween(
+    sourceDecliner,
+    'func (d *decliner) DeclineMatch(',
+    '//go:generate'
+  )
+  requireOrdered(
+    errors,
+    'Source expired pending-match close behavior',
+    sourceDeclineMatch,
+    [
+      'd.matchProposalRepository.HasMatchProposal(p.Address())',
+      'if !hasMatchProposal {',
+      'return nil',
+      'd.matchProposalRepository.Load(p.GetMatchProposalID())'
+    ]
+  )
+  const sourceHasMatchProposal = bodyBetween(
+    sourceMatchProposalRepository,
+    'func (r *matchProposalRepository) HasMatchProposal(',
+    'func (r *matchProposalRepository) pendingMatchStoreID('
+  )
+  requireOrdered(
+    errors,
+    'Source expired pending-match authority',
+    sourceHasMatchProposal,
+    [
+      'r.keyValStore.TTL(r.pendingMatchStoreID(address))',
+      'if ttl < 0 || errors.Is(err, store.ErrNoSuchItem) {',
+      'return false, nil'
+    ]
+  )
 
   const sourcePublish = bodyBetween(
     sourceNotifier,
@@ -468,16 +551,25 @@ export const matchmakerSessionErrors = (
     'private async recordAcceptance('
   )
   requireOrdered(errors, 'Worker accept-match error identity', workerAccept, [
-    'if (!proposal) {',
+    'const pendingProposalId = await this.state.storage.get<string>(',
+    'if (!pendingProposalId) {',
     "'INVALID_OPERATION'",
-    'await this.expireProposal(proposal)',
+    'this.state.storage.get<StoredProposal>(',
+    'proposalKey(pendingProposalId)',
+    'if (!proposal || proposal.expiresAtMs < Date.now()) {',
+    "this.sendToPrincipal(principal, { type: 'timed_out' })",
     "'match proposal timed out'",
     'if (proposal.accepted.includes(principal)) return',
     "proposal.status !== 'FOUND'",
     "'INVALID_OPERATION'"
   ])
-  if (workerAccept.includes('this.sendToPrincipal(')) {
-    errors.push('Worker accept-match failure bypasses the fatal outer handler')
+  if (
+    workerAccept.includes('this.expireProposal(') ||
+    workerAccept.includes('errorMessage(')
+  ) {
+    errors.push(
+      'Worker accept command owns shared expiration or bypasses the fatal outer handler'
+    )
   }
 
   const workerDecline = bodyBetween(
@@ -573,6 +665,17 @@ export const matchmakerSessionErrors = (
   ) {
     errors.push('Worker cleanup can be preserved by an unsubscribed socket')
   }
+  requireOrdered(
+    errors,
+    'Worker expired proposal close behavior',
+    workerCleanup,
+    [
+      "proposal?.status === 'FOUND'",
+      'proposal.expiresAtMs >= Date.now()',
+      "type: 'decline_match'",
+      'await this.deleteProposal(proposal)'
+    ]
+  )
 
   const workerReschedule = bodyBetween(
     worker,
@@ -757,6 +860,56 @@ export const matchmakerSessionErrors = (
       '.toEqual([0, 0])'
     ]
   )
+  const expiredAcceptTest = bodyBetween(
+    workerRuntimeTest,
+    "it('notifies only the accepter before the timeout alarm expires the proposal'",
+    "it('reports a referenced missing proposal as timed out before closing'"
+  )
+  requireOrdered(
+    errors,
+    'Worker expired-accept regression',
+    expiredAcceptTest,
+    [
+      'expiresAtMs: Date.now() - 1',
+      "first.send(JSON.stringify({ type: 'accept_match' }))",
+      "{ type: 'timed_out' }",
+      'GENERIC_SERVER_ERROR',
+      "expect(await accepterClosed).toMatchObject({ code: 1005, reason: '' })",
+      'await opponentStayedSilent',
+      "state.storage.list({ prefix: 'proposal:' })",
+      ').toBe(1)',
+      "state.storage.list({ prefix: 'penalty:accept-timeout:' })",
+      ').toBe(0)',
+      'runDurableObjectAlarm(pool())',
+      "expect(await opponentTimedOut).toEqual({ type: 'timed_out' })",
+      ').toBe(0)',
+      "state.storage.list({ prefix: 'penalty:accept-timeout:' })",
+      ').toBe(2)'
+    ]
+  )
+  const missingProposalAcceptTest = bodyBetween(
+    workerRuntimeTest,
+    "it('reports a referenced missing proposal as timed out before closing'",
+    "it('keeps the channel open only for decline invalid-operation errors'"
+  )
+  requireOrdered(
+    errors,
+    'Worker missing-proposal accept regression',
+    missingProposalAcceptTest,
+    [
+      "state.storage.list({ prefix: 'proposal:' })",
+      'await state.storage.delete([...proposals.keys()])',
+      "first.send(JSON.stringify({ type: 'accept_match' }))",
+      "{ type: 'timed_out' }",
+      'GENERIC_SERVER_ERROR',
+      "expect(await accepterClosed).toMatchObject({ code: 1005, reason: '' })",
+      'await opponentStayedSilent',
+      "state.storage.list({ prefix: 'proposal:' })",
+      ').toBe(0)',
+      "state.storage.list({ prefix: 'pending:' })",
+      ').toBe(2)'
+    ]
+  )
   const declineInvalidOperationTest = bodyBetween(
     workerRuntimeTest,
     "it('keeps the channel open only for decline invalid-operation errors'",
@@ -799,6 +952,10 @@ const main = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourceFrontendService,
+    sourceAcceptTimeouter,
+    sourceDecliner,
+    sourceMatchProposalRepository,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -824,6 +981,31 @@ const main = async () => {
     ),
     readFile(
       path.join(root, 'matchmaker/lib/frontend/declinematch/handler.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchmaker/custommatchmaker/frontend_service.go'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchmaker/custommatchmaker/accept_timeouter.go'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'matchmaker/lib/matchmaker/custommatchmaker/decliner.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchmaker/custommatchmaker/match_proposal_repository.go'
+      ),
       'utf8'
     ),
     readFile(
@@ -869,6 +1051,10 @@ const main = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourceFrontendService,
+    sourceAcceptTimeouter,
+    sourceDecliner,
+    sourceMatchProposalRepository,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -889,7 +1075,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, expired-accept, authentication-timeout, and read-timeout contracts'
     )
   }
 }
