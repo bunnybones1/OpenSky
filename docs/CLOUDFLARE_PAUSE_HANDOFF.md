@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `aaa6f4e7`
-  (`Gate Conquest projections on match publication`)
-- Latest tested runtime commit: `aaa6f4e7`
-  (`Gate Conquest projections on match publication`)
+- Last code/test checkpoint: `22045837`
+  (`Pin Conquest wire gate to projected points`)
+- Latest tested runtime commit: `7dcff712`
+  (`Preserve source Conquest V2 point publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,11 +23,11 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `aaa6f4e7` are committed and
+- The runtime changes from `38386294` through `7dcff712` are committed and
   tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
-  `aaa6f4e7` retained both entries.
+  exact release-gate head `22045837` retained both entries.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -200,9 +200,12 @@ refreshed handoff passed exact-head run
 `f95d7bec` in 10m21s. The Conquest settlement-admission checkpoint and its
 refreshed handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32492219003> at
-`edea0920` in 11m22s. The newer `aaa6f4e7` Conquest publication-projection
-checkpoint and this refreshed handoff require a later green exact-head CI run
-before any production mutation.
+`edea0920` in 11m22s. The Conquest publication-projection checkpoint and its
+refreshed handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32493951570> at
+`294ebd34` in 10m58s. The newer `7dcff712` Conquest V2 point-publication
+checkpoint, its `22045837` wire-gate checkpoint, and this refreshed handoff
+require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1958,6 +1961,43 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source Conquest V2 point-publication milestone
+
+Commit `7dcff712` closes the remaining player-visible point window around the
+same decomposed completion path. The source Conquest V2 updater writes through
+the `db.Session` passed into `endMatch`, and Go saves the terminal match inside
+that transaction. The Worker persists its capped, immutable per-player point
+receipt before `publishMatchCompletion` changes the shared multiplayer ledger
+to `ended`; without a read projection, `ConquestV2Progress` could therefore
+show points from a match the product still treated as unfinished.
+
+Event-2 point reads now join the immutable point receipt to its multiplayer
+ledger. While any owning ledger is non-`ended`, the repository projects the
+earliest receipt's `before_points` and `before_total_points`. This reconstructs
+the source pre-transaction view and handles more than one staged receipt in a
+deterministic order. The unrelated legacy event-1 RPC remains unchanged. Once
+the final ledger publication commits, current and total points plus the next
+treasure band become visible together.
+
+A real Workers regression stages a 300-point receipt over a 200/1200 baseline,
+proves both repository and RPC reads retain that baseline while the ledger is
+active, publishes the ledger, and then proves the 500/1500 state appears. The
+mutation-tested Conquest gate derives the source transaction/session/RPC,
+Worker receipt and final publication barrier, ordered pre-state projection,
+and both runtime states. Follow-up `22045837` updates the independent generated
+Conquest wire gate to require the new projected repository query instead of
+the obsolete direct-select token.
+
+The exact complete local release contract passed with exit code zero at
+`22045837`: 517 main-Worker tests, 40 game-server unit and 133 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -2069,7 +2109,8 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `aaa6f4e7`. Keep
+- Deploy and verify the tested runtime changes through `7dcff712` from exact
+  release-gate head `22045837`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
