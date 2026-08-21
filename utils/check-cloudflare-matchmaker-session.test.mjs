@@ -12,12 +12,16 @@ const fixtures = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceBrowserSocket,
     sourceWebsocketHandler,
+    sourceClientConnection,
+    sourceMessageReceiver,
     sourceConfig,
     sourceComposeConfig,
     worker,
     workerWrangler,
     workerTestWrangler,
+    workerRuntimeTest,
     rootPackage
   ] = await Promise.all([
     readFile('matchmaker/lib/frontend/findmatch/handler.go', 'utf8'),
@@ -26,12 +30,16 @@ const fixtures = async () => {
     readFile('matchmaker/lib/playerchannel/notifier.go', 'utf8'),
     readFile('matchmaker/lib/playerchannel/factory.go', 'utf8'),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
+    readFile('webapp/src/clients/WebsocketClient.ts', 'utf8'),
     readFile('matchmaker/lib/frontend/websocket_handler.go', 'utf8'),
+    readFile('matchmaker/lib/frontend/client_connection.go', 'utf8'),
+    readFile('matchmaker/lib/frontend/message_receiver.go', 'utf8'),
     readFile('matchmaker/config/config.go', 'utf8'),
     readFile('matchmaker/etc/matchmaker.compose.conf', 'utf8'),
     readFile('matchmaker-ts/src/runtime.ts', 'utf8'),
     readFile('matchmaker-ts/wrangler.jsonc', 'utf8'),
     readFile('matchmaker-ts/wrangler.test.jsonc', 'utf8'),
+    readFile('matchmaker-ts/test-cloudflare/runtime.test.ts', 'utf8'),
     readFile('package.json', 'utf8').then(JSON.parse)
   ])
   return {
@@ -41,12 +49,16 @@ const fixtures = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceBrowserSocket,
     sourceWebsocketHandler,
+    sourceClientConnection,
+    sourceMessageReceiver,
     sourceConfig,
     sourceComposeConfig,
     worker,
     workerWrangler,
     workerTestWrangler,
+    workerRuntimeTest,
     rootPackage
   }
 }
@@ -59,12 +71,16 @@ const errorsFor = value =>
     value.sourceNotifier,
     value.sourceFactory,
     value.sourceBrowserClient,
+    value.sourceBrowserSocket,
     value.sourceWebsocketHandler,
+    value.sourceClientConnection,
+    value.sourceMessageReceiver,
     value.sourceConfig,
     value.sourceComposeConfig,
     value.worker,
     value.workerWrangler,
     value.workerTestWrangler,
+    value.workerRuntimeTest,
     value.rootPackage
   )
 
@@ -168,6 +184,34 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
+      sourceClientConnection: value.sourceClientConnection.replace(
+        'readTimeout = time.Second * 120',
+        'readTimeout = time.Second * 60'
+      )
+    },
+    {
+      ...value,
+      sourceClientConnection: value.sourceClientConnection.replace(
+        'c.ws.SetReadDeadline(time.Now().Add(readTimeout))',
+        'c.ws.SetReadDeadline(time.Now().Add(time.Hour))'
+      )
+    },
+    {
+      ...value,
+      sourceMessageReceiver: value.sourceMessageReceiver.replace(
+        'return nil, messages.EmptyMessageType, client.Close()',
+        'return nil, messages.EmptyMessageType, nil'
+      )
+    },
+    {
+      ...value,
+      sourceBrowserSocket: value.sourceBrowserSocket.replace(
+        'const KEEPALIVE_INTERVAL = 3000',
+        'const KEEPALIVE_INTERVAL = 30000'
+      )
+    },
+    {
+      ...value,
       worker: value.worker.replace(
         'env.AUTHENTICATION_TIMEOUT_MS,',
         'undefined,'
@@ -192,6 +236,55 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerTestWrangler: value.workerTestWrangler.replace(
         '"AUTHENTICATION_TIMEOUT_MS": "10000"',
         '"AUTHENTICATION_TIMEOUT_MS": "5000"'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'MATCHMAKER_READ_TIMEOUT_MS = 120_000',
+        'MATCHMAKER_READ_TIMEOUT_MS = 60_000'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'lastMessageAtMs?: number',
+        'lastMessageAtMs: number'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'lastMessageAtMs: Date.now(),',
+        'lastMessageAtMs: undefined,'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'attachment.lastMessageAtMs = Date.now()',
+        'attachment.lastMessageAtMs = attachment.connectedAtMs'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'this.expireIdleSockets(now)',
+        'this.ignoreIdleSockets(now)'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        '!attachment ||\n        attachment.subscribed === false',
+        '!attachment ||\n        attachment.subscribed === true'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'lastMessageAtMs + MATCHMAKER_READ_TIMEOUT_MS > now',
+        'lastMessageAtMs + MATCHMAKER_READ_TIMEOUT_MS <= now'
       )
     },
     {
@@ -243,8 +336,50 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
-        'attachment?.subscribed === false',
-        'attachment?.subscribed === true'
+        'if (attachment.subscribed === false) {\n        candidates.push(',
+        'if (attachment.subscribed === true) {\n        candidates.push('
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'this.socketLastMessageAtMs(socket, attachment, now) +\n            MATCHMAKER_READ_TIMEOUT_MS',
+        'attachment.connectedAtMs + MATCHMAKER_READ_TIMEOUT_MS'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'socket.close()\n      } catch {\n        // A close/error event may race the Durable Object alarm.\n      }\n    }\n  }\n\n  private socketLastMessageAtMs',
+        "socket.close(1008, 'Read timeout')\n      } catch {\n        // A close/error event may race the Durable Object alarm.\n      }\n    }\n  }\n\n  private socketLastMessageAtMs"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'attachment.lastMessageAtMs = now\n    socket.serializeAttachment(attachment)\n    return now',
+        'attachment.lastMessageAtMs = now\n    return now'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'lastMessageAtMs <= now',
+        'lastMessageAtMs <= Number.MAX_SAFE_INTEGER'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'resets the source read timeout when the browser sends PING',
+        'does not reset the source read timeout'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        '.toEqual([0, 0])',
+        '.toEqual([1, 1])'
       )
     },
     {

@@ -33,12 +33,16 @@ export const matchmakerSessionErrors = (
   sourceNotifier,
   sourceFactory,
   sourceBrowserClient,
+  sourceBrowserSocket,
   sourceWebsocketHandler,
+  sourceClientConnection,
+  sourceMessageReceiver,
   sourceConfig,
   sourceComposeConfig,
   worker,
   workerWrangler,
   workerTestWrangler,
+  workerRuntimeTest,
   rootPackage
 ) => {
   const errors = []
@@ -182,6 +186,46 @@ export const matchmakerSessionErrors = (
     )
   }
 
+  const sourceReadJSON = bodyBetween(
+    sourceClientConnection,
+    'func (c *clientConn) ReadJSON(',
+    'func (c *clientConn) WriteJSON('
+  )
+  if (!sourceClientConnection.includes('readTimeout = time.Second * 120')) {
+    errors.push('Source websocket read timeout is no longer 120 seconds')
+  }
+  requireOrdered(errors, 'Source websocket read deadline', sourceReadJSON, [
+    'c.ws.SetReadDeadline(time.Now().Add(readTimeout))',
+    'c.ws.ReadMessage()'
+  ])
+  const sourceReceive = bodyBetween(
+    sourceMessageReceiver,
+    'func (r *messageReceiver) Receive(',
+    'type timeouter interface'
+  )
+  const sourceIdleTimeout = bodyBetween(
+    sourceReceive,
+    'if t, ok := err.(timeouter); ok && t.Timeout() {',
+    'if websocket.IsUnexpectedCloseError('
+  )
+  requireOrdered(errors, 'Source idle read-timeout close', sourceIdleTimeout, [
+    'if t, ok := err.(timeouter); ok && t.Timeout() {',
+    'return nil, messages.EmptyMessageType, client.Close()'
+  ])
+  if (!/^const KEEPALIVE_INTERVAL = 3000$/m.test(sourceBrowserSocket)) {
+    errors.push('Source browser matchmaker heartbeat is no longer 3 seconds')
+  }
+  requireOrdered(
+    errors,
+    'Source browser matchmaker heartbeat',
+    sourceBrowserSocket,
+    [
+      'this.keepaliveInterval = setInterval(',
+      "this.conn.send('PING')",
+      'KEEPALIVE_INTERVAL'
+    ]
+  )
+
   if (!worker.includes('AUTHENTICATION_TIMEOUT_MS?: string')) {
     errors.push(
       'Worker authentication timeout environment authority is missing'
@@ -242,6 +286,7 @@ export const matchmakerSessionErrors = (
   requireOrdered(errors, 'Worker alarm authentication cleanup', workerAlarm, [
     'const now = Date.now()',
     'this.expireUnauthenticatedSockets(now)',
+    'this.expireIdleSockets(now)',
     'await this.processProposalTimers(now)',
     'await this.attemptMatches(now)',
     'await this.rescheduleAlarm(now)'
@@ -255,11 +300,35 @@ export const matchmakerSessionErrors = (
   if (!workerAttachment.includes('subscribed: false')) {
     errors.push('Worker new socket is not explicitly unsubscribed')
   }
+  if (!worker.includes('MATCHMAKER_READ_TIMEOUT_MS = 120_000')) {
+    errors.push('Worker websocket read timeout does not match the source')
+  }
+  const workerSocketAttachment = bodyBetween(
+    worker,
+    'interface SocketAttachment {',
+    'interface StoredPlayer'
+  )
+  if (!workerSocketAttachment.includes('lastMessageAtMs?: number')) {
+    errors.push('Worker hibernating socket has no rolling-safe read timestamp')
+  }
+  if (!workerAttachment.includes('lastMessageAtMs: Date.now()')) {
+    errors.push('Worker new socket has no initial read timestamp')
+  }
 
   const workerMessages = bodyBetween(
     worker,
     'async webSocketMessage(',
     'async webSocketClose('
+  )
+  requireOrdered(
+    errors,
+    'Worker received-message deadline reset',
+    workerMessages,
+    [
+      'attachment.lastMessageAtMs = Date.now()',
+      'webSocket.serializeAttachment(attachment)',
+      'command = parseClientCommand(raw)'
+    ]
   )
   for (const [command, handler] of [
     ['accept_match', 'this.acceptMatch(attachment.principal)'],
@@ -392,9 +461,20 @@ export const matchmakerSessionErrors = (
     workerReschedule,
     [
       'for (const socket of this.state.getWebSockets()) {',
-      'socket.readyState === WebSocket.OPEN',
-      'attachment?.subscribed === false',
+      'socket.readyState !== WebSocket.OPEN || !attachment',
+      'if (attachment.subscribed === false) {',
       'attachment.connectedAtMs + this.config.authenticationTimeoutMs'
+    ]
+  )
+  requireOrdered(
+    errors,
+    'Worker established-socket read deadline rescheduling',
+    workerReschedule,
+    [
+      'if (attachment.subscribed === false) {',
+      'continue',
+      'this.socketLastMessageAtMs(socket, attachment, now)',
+      'MATCHMAKER_READ_TIMEOUT_MS'
     ]
   )
   const workerAlarmSchedule = bodyBetween(
@@ -416,7 +496,7 @@ export const matchmakerSessionErrors = (
   const workerAuthenticationExpiry = bodyBetween(
     worker,
     'private expireUnauthenticatedSockets(',
-    'private async proposalForPrincipal('
+    'private expireIdleSockets('
   )
   requireOrdered(
     errors,
@@ -437,6 +517,63 @@ export const matchmakerSessionErrors = (
     errors.push(
       'Worker authentication timeout invents an application error or close payload'
     )
+  }
+
+  const workerIdleExpiry = bodyBetween(
+    worker,
+    'private expireIdleSockets(',
+    'private socketLastMessageAtMs('
+  )
+  requireOrdered(
+    errors,
+    'Worker source read-timeout eligibility',
+    workerIdleExpiry,
+    [
+      'socket.readyState !== WebSocket.OPEN',
+      'attachment.subscribed === false',
+      'this.socketLastMessageAtMs(',
+      'lastMessageAtMs + MATCHMAKER_READ_TIMEOUT_MS > now',
+      'socket.close()'
+    ]
+  )
+  if (
+    workerIdleExpiry.includes('safeSend(') ||
+    workerIdleExpiry.includes('errorMessage(') ||
+    !/socket\.close\(\s*\)/.test(workerIdleExpiry)
+  ) {
+    errors.push(
+      'Worker read timeout invents an application error or close payload'
+    )
+  }
+  const workerReadUpgrade = bodyBetween(
+    worker,
+    'private socketLastMessageAtMs(',
+    'private async proposalForPrincipal('
+  )
+  requireOrdered(
+    errors,
+    'Worker legacy read-timeout upgrade',
+    workerReadUpgrade,
+    [
+      'const lastMessageAtMs = attachment.lastMessageAtMs',
+      'Number.isSafeInteger(lastMessageAtMs)',
+      'lastMessageAtMs <= now',
+      'attachment.lastMessageAtMs = now',
+      'socket.serializeAttachment(attachment)',
+      'return now'
+    ]
+  )
+  for (const title of [
+    'silently closes an established channel after the source read timeout',
+    'resets the source read timeout when the browser sends PING',
+    'gives a legacy established attachment one bounded read window'
+  ]) {
+    if (!workerRuntimeTest.includes(title)) {
+      errors.push(`Worker read-timeout regression is missing: ${title}`)
+    }
+  }
+  if (!workerRuntimeTest.includes('.toEqual([0, 0])')) {
+    errors.push('Worker read-timeout cleanup regression is missing')
   }
 
   const scripts = rootPackage?.scripts ?? {}
@@ -467,12 +604,16 @@ const main = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceBrowserSocket,
     sourceWebsocketHandler,
+    sourceClientConnection,
+    sourceMessageReceiver,
     sourceConfig,
     sourceComposeConfig,
     worker,
     workerWrangler,
     workerTestWrangler,
+    workerRuntimeTest,
     rootPackage
   ] = await Promise.all([
     readFile(
@@ -502,8 +643,17 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(path.join(root, 'webapp/src/clients/WebsocketClient.ts'), 'utf8'),
     readFile(
       path.join(root, 'matchmaker/lib/frontend/websocket_handler.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'matchmaker/lib/frontend/client_connection.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'matchmaker/lib/frontend/message_receiver.go'),
       'utf8'
     ),
     readFile(path.join(root, 'matchmaker/config/config.go'), 'utf8'),
@@ -511,6 +661,10 @@ const main = async () => {
     readFile(path.join(root, 'matchmaker-ts/src/runtime.ts'), 'utf8'),
     readFile(path.join(root, 'matchmaker-ts/wrangler.jsonc'), 'utf8'),
     readFile(path.join(root, 'matchmaker-ts/wrangler.test.jsonc'), 'utf8'),
+    readFile(
+      path.join(root, 'matchmaker-ts/test-cloudflare/runtime.test.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse)
   ])
   const errors = matchmakerSessionErrors(
@@ -520,12 +674,16 @@ const main = async () => {
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
+    sourceBrowserSocket,
     sourceWebsocketHandler,
+    sourceClientConnection,
+    sourceMessageReceiver,
     sourceConfig,
     sourceComposeConfig,
     worker,
     workerWrangler,
     workerTestWrangler,
+    workerRuntimeTest,
     rootPackage
   )
   if (errors.length > 0) {
@@ -533,7 +691,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber and authentication-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, authentication-timeout, and read-timeout contracts'
     )
   }
 }

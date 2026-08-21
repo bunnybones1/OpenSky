@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   INTERNAL_AUTH_HEADER,
+  MATCHMAKER_READ_TIMEOUT_MS,
   MatchmakerEnv,
   MatchmakerPool,
   TRUSTED_CLIENT_IP_HEADER,
@@ -1251,6 +1252,145 @@ describe('Cloudflare matchmaker Worker', () => {
       queuedPlayers: 1,
       connectedSockets: 1
     })
+  })
+
+  it('silently closes an established channel after the source read timeout', async () => {
+    const timeoutPool = isolatedPool('read-timeout')
+    const [player] = track(
+      await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
+    )
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await timeoutPool.fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as {
+        lastMessageAtMs: number
+      }
+      socket?.serializeAttachment({
+        ...attachment,
+        lastMessageAtMs: Date.now() - MATCHMAKER_READ_TIMEOUT_MS - 1
+      })
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+
+    await evictDurableObject(timeoutPool)
+    const closed = nextClose(player)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    await expect
+      .poll(async () => {
+        const status = await timeoutPool.fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        const body = await status.json<{
+          queuedPlayers: number
+          connectedSockets: number
+        }>()
+        return [body.queuedPlayers, body.connectedSockets]
+      })
+      .toEqual([0, 0])
+  })
+
+  it('resets the source read timeout when the browser sends PING', async () => {
+    const timeoutPool = isolatedPool('read-timeout-ping')
+    const [player] = track(
+      await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
+    )
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await timeoutPool.fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as {
+        lastMessageAtMs: number
+      }
+      socket?.serializeAttachment({
+        ...attachment,
+        lastMessageAtMs: Date.now() - MATCHMAKER_READ_TIMEOUT_MS - 1
+      })
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+    const pingSentAtMs = Date.now()
+    player.send('PING')
+    await expect
+      .poll(() =>
+        runInDurableObject(timeoutPool, async (_instance, state) => {
+          const [socket] = state.getWebSockets(PRINCIPAL_1)
+          return (
+            socket?.deserializeAttachment() as { lastMessageAtMs?: number }
+          )?.lastMessageAtMs
+        })
+      )
+      .toBeGreaterThanOrEqual(pingSentAtMs)
+
+    await evictDurableObject(timeoutPool)
+    const stayedSilent = expectNoMessage(player)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
+    await stayedSilent
+    expect(player.readyState).toBe(WebSocket.OPEN)
+  })
+
+  it('gives a legacy established attachment one bounded read window', async () => {
+    const timeoutPool = isolatedPool('legacy-read-timeout')
+    const [player] = track(
+      await connectDirectlyToPool(timeoutPool, PRINCIPAL_1, '192.0.2.1')
+    )
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await timeoutPool.fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    await runInDurableObject(timeoutPool, async (_instance, state) => {
+      const [socket] = state.getWebSockets(PRINCIPAL_1)
+      const attachment = socket?.deserializeAttachment() as Record<
+        string,
+        unknown
+      >
+      const { lastMessageAtMs: _legacyField, ...legacyAttachment } = attachment
+      socket?.serializeAttachment(legacyAttachment)
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+
+    await evictDurableObject(timeoutPool)
+    const upgradedAtMs = Date.now()
+    const stayedSilent = expectNoMessage(player)
+    expect(await runDurableObjectAlarm(timeoutPool)).toBe(true)
+    await stayedSilent
+    expect(player.readyState).toBe(WebSocket.OPEN)
+    const lastMessageAtMs = await runInDurableObject(
+      timeoutPool,
+      async (_instance, state) => {
+        const [socket] = state.getWebSockets(PRINCIPAL_1)
+        return (socket?.deserializeAttachment() as { lastMessageAtMs?: number })
+          ?.lastMessageAtMs
+      }
+    )
+    expect(lastMessageAtMs).toBeGreaterThanOrEqual(upgradedAtMs)
+    expect(lastMessageAtMs).toBeLessThanOrEqual(Date.now())
   })
 
   it('expires a stale pending duplicate without disturbing the active subscriber', async () => {

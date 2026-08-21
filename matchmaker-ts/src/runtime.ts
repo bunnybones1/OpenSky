@@ -92,6 +92,7 @@ interface SocketAttachment {
   displayName: string
   clientIp: string
   connectedAtMs: number
+  lastMessageAtMs?: number
   subscribed: boolean
 }
 
@@ -165,6 +166,12 @@ const deckClasses = new Set(Object.values(DeckClass))
 const heroes = new Set(Object.values(Hero))
 const conquestResults = new Set(Object.values(ConquestMatchResult))
 const rarities = new Set<Rarity>(['base', 'silver', 'gold'])
+
+// frontend/client_connection.go resets this hard-coded read deadline before
+// every blocking websocket read. The preserved browser sends PING every three
+// seconds; a suspended tab is silently disconnected after this exact window
+// and reconnects when it becomes active again.
+export const MATCHMAKER_READ_TIMEOUT_MS = 120_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -349,6 +356,12 @@ export class MatchmakerPool implements DurableObject {
       return
     }
 
+    // A successful Gorilla ReadMessage resets the source read deadline before
+    // command decoding. Persist that moment in the hibernating attachment so
+    // PING and every other received payload preserve the same idle lifetime.
+    attachment.lastMessageAtMs = Date.now()
+    webSocket.serializeAttachment(attachment)
+
     let command: MatchmakerClientCommand
     try {
       command = parseClientCommand(raw)
@@ -417,6 +430,7 @@ export class MatchmakerPool implements DurableObject {
   async alarm() {
     const now = Date.now()
     this.expireUnauthenticatedSockets(now)
+    this.expireIdleSockets(now)
     await this.processProposalTimers(now)
     await this.attemptMatches(now)
     await this.rescheduleAlarm(now)
@@ -438,6 +452,7 @@ export class MatchmakerPool implements DurableObject {
         128
       ),
       connectedAtMs: Date.now(),
+      lastMessageAtMs: Date.now(),
       subscribed: false
     }
   }
@@ -1337,17 +1352,23 @@ export class MatchmakerPool implements DurableObject {
     for (const socket of this.state.getWebSockets()) {
       const attachment =
         socket.deserializeAttachment() as SocketAttachment | null
-      if (
-        socket.readyState === WebSocket.OPEN &&
-        attachment?.subscribed === false
-      ) {
+      if (socket.readyState !== WebSocket.OPEN || !attachment) continue
+      if (attachment.subscribed === false) {
         candidates.push(
           Math.max(
             now + 1,
             attachment.connectedAtMs + this.config.authenticationTimeoutMs
           )
         )
+        continue
       }
+      candidates.push(
+        Math.max(
+          now + 1,
+          this.socketLastMessageAtMs(socket, attachment, now) +
+            MATCHMAKER_READ_TIMEOUT_MS
+        )
+      )
     }
     const proposalValues = [...proposals.values()]
     for (const proposal of proposalValues) {
@@ -1412,6 +1433,55 @@ export class MatchmakerPool implements DurableObject {
         // A close/error event may race the Durable Object alarm.
       }
     }
+  }
+
+  private expireIdleSockets(now: number) {
+    for (const socket of this.state.getWebSockets()) {
+      const attachment =
+        socket.deserializeAttachment() as SocketAttachment | null
+      if (
+        socket.readyState !== WebSocket.OPEN ||
+        !attachment ||
+        attachment.subscribed === false
+      ) {
+        continue
+      }
+      const lastMessageAtMs = this.socketLastMessageAtMs(
+        socket,
+        attachment,
+        now
+      )
+      if (lastMessageAtMs + MATCHMAKER_READ_TIMEOUT_MS > now) continue
+      try {
+        // Source messageReceiver treats its 120-second read deadline as a
+        // normal, error-free disconnect and supplies no close code or reason.
+        socket.close()
+      } catch {
+        // A close/error event may race the Durable Object alarm.
+      }
+    }
+  }
+
+  private socketLastMessageAtMs(
+    socket: WebSocket,
+    attachment: SocketAttachment,
+    now: number
+  ) {
+    const lastMessageAtMs = attachment.lastMessageAtMs
+    if (
+      typeof lastMessageAtMs === 'number' &&
+      Number.isSafeInteger(lastMessageAtMs) &&
+      lastMessageAtMs > 0 &&
+      lastMessageAtMs <= now
+    ) {
+      return lastMessageAtMs
+    }
+    // The previously deployed attachment has no read timestamp. Give that
+    // established channel exactly one source read window during a rolling
+    // upgrade, persist it, and include it in every later alarm reschedule.
+    attachment.lastMessageAtMs = now
+    socket.serializeAttachment(attachment)
+    return now
   }
 
   private async proposalForPrincipal(principal: string) {
