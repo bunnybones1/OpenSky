@@ -10,6 +10,7 @@ import {
   conquestSettlementAdmissionErrors,
   conquestSettlementSourceParityErrors,
   conquestV2DeliveryBatchErrors,
+  conquestV2PointsPublicationErrors,
   conquestV2PointsSourceParityErrors,
   conquestV2TreasureSourceParityErrors,
   conquestV2ResumeSafetyErrors
@@ -1076,6 +1077,103 @@ test('withholds Conquest projections until source-atomic match publication', asy
         'constructedMatchesPlayed: 1',
         'constructedMatchesPlayed: 2'
       )
+    ).some(error => error.includes('runtime proof'))
+  )
+})
+
+test('withholds Conquest V2 points until source-atomic match publication', async () => {
+  const [
+    sourceMatches,
+    sourceConquests,
+    sourcePoints,
+    publication,
+    repository,
+    rpcTest
+  ] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('api/rpc/conquests.go', 'utf8'),
+    readFile('api/lib/conquest/conquestv2/points_updater.go', 'utf8'),
+    readFile('game-server-cloudflare/src/completion-publication.ts', 'utf8'),
+    readFile('cloudflare/src/conquest.ts', 'utf8'),
+    readFile('cloudflare/test/conquest-rpc.test.ts', 'utf8')
+  ])
+  const errors = (
+    sourceMatchMutation = sourceMatches,
+    sourceConquestMutation = sourceConquests,
+    sourcePointMutation = sourcePoints,
+    publicationMutation = publication,
+    repositoryMutation = repository,
+    testMutation = rpcTest
+  ) =>
+    conquestV2PointsPublicationErrors(
+      sourceMatchMutation,
+      sourceConquestMutation,
+      sourcePointMutation,
+      publicationMutation,
+      repositoryMutation,
+      testMutation
+    )
+
+  assert.deepEqual(errors(), [])
+  assert.ok(
+    errors(sourceMatches.replaceAll('tx.Save(match)', 'tx.Skip(match)')).some(
+      error => error.includes('point transaction')
+    )
+  )
+  assert.ok(
+    errors(
+      sourceMatches.replace(
+        's.ConquestV2PointsUpdater.Update(ctx, sess, match)',
+        's.ConquestV2PointsUpdater.Skip(ctx, sess, match)'
+      )
+    ).some(error => error.includes('no longer updates'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests.replace(
+        'repo.ConquestPoints(nil).FindOrCreateByAddressAndEventID',
+        'repo.ConquestPoints(nil).FindByAddressAndEventID'
+      )
+    ).some(error => error.includes('ConquestV2Progress read'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      sourcePoints,
+      publication.replace("SET status = 'ended'", "SET status = 'active'")
+    ).some(error => error.includes('point publication'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      sourcePoints,
+      publication,
+      repository.replaceAll("match.status <> 'ended'", "match.status = 'ended'")
+    ).some(error => error.includes('publication projection'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      sourcePoints,
+      publication,
+      repository.replace(
+        '(SELECT before_points FROM unpublished)',
+        'points.current_points'
+      )
+    ).some(error => error.includes('publication projection'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      sourcePoints,
+      publication,
+      repository,
+      rpcTest.replace('current: 200,\n      total: 1200', 'current: 500,\n      total: 1500')
     ).some(error => error.includes('runtime proof'))
   )
 })

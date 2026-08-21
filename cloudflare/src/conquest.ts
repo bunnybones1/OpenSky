@@ -459,12 +459,31 @@ export class ConquestRepository {
       )
       .bind(userId, eventId, at.toISOString())
       .run()
+    // Go commits the event-2 increment and terminal match together. Worker
+    // stages retain the immutable pre-match values until the ledger publishes.
     const row = await this.database
       .prepare(
-        `SELECT current_points, total_points FROM player_conquest_points
-         WHERE user_id = ? AND event_id = ?`
+        `WITH unpublished AS (
+           SELECT receipt.before_points, receipt.before_total_points
+           FROM multiplayer_match_conquest_point_players receipt
+           JOIN multiplayer_matches match
+             ON match.proposal_id = receipt.proposal_id
+           WHERE receipt.user_id = ? AND ? = 2
+             AND match.status <> 'ended'
+           ORDER BY receipt.processed_at ASC, receipt.proposal_id ASC
+           LIMIT 1
+         )
+         SELECT
+           COALESCE(
+             (SELECT before_points FROM unpublished), points.current_points
+           ) AS current_points,
+           COALESCE(
+             (SELECT before_total_points FROM unpublished), points.total_points
+           ) AS total_points
+         FROM player_conquest_points points
+         WHERE points.user_id = ? AND points.event_id = ?`
       )
-      .bind(userId, eventId)
+      .bind(userId, eventId, userId, eventId)
       .first<{ current_points: number; total_points: number }>()
     if (!row) throw new Error('Conquest points could not be created')
     return {

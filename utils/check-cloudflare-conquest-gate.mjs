@@ -1184,6 +1184,120 @@ export const conquestProjectionPublicationErrors = (
   return errors
 }
 
+/**
+ * The source mutates event-2 Conquest points and saves the terminal match in
+ * one transaction. The Worker persists a point receipt before its final match
+ * publication statement, so player reads must project the immutable pre-match
+ * point values while the owning multiplayer ledger is not ended.
+ */
+export const conquestV2PointsPublicationErrors = (
+  sourceMatches,
+  sourceConquests,
+  sourcePoints,
+  publication,
+  repository,
+  rpcTest
+) => {
+  const errors = []
+  const sourceEndMatch = bracedBlock(
+    sourceMatches,
+    'func (s *Server) endMatch'
+  )
+  const sourceTransaction = sourceEndMatch
+    ? bracedBlock(
+        sourceEndMatch,
+        'repo.TxContext(ctx, func(tx db.Session) error'
+      )
+    : undefined
+  for (const token of [
+    's.updateConquestProgress(ctx, tx, match, winner, loser, isDraw)',
+    'tx.Save(match)'
+  ]) {
+    if (!sourceTransaction?.includes(token)) {
+      errors.push(`source Conquest V2 point transaction is missing: ${token}`)
+    }
+  }
+  const sourceProgress = bracedBlock(
+    sourceMatches,
+    'func (s *Server) updateConquestProgress'
+  )
+  if (
+    !sourceProgress?.includes(
+      's.ConquestV2PointsUpdater.Update(ctx, sess, match)'
+    )
+  ) {
+    errors.push('source Conquest progress no longer updates V2 points')
+  }
+  const sourceReward = bracedBlock(
+    sourcePoints,
+    'func (p *PointsUpdater) rewardPlayer'
+  )
+  for (const token of ['sess.SQL()', 'Update("conquest_points")']) {
+    if (!sourceReward?.includes(token)) {
+      errors.push(`source Conquest V2 point session write is missing: ${token}`)
+    }
+  }
+  const sourceRpc = bracedBlock(
+    sourceConquests,
+    'func (s *Server) ConquestV2Progress'
+  )
+  for (const token of [
+    'repo.ConquestPoints(nil).FindOrCreateByAddressAndEventID',
+    's.ConquestV2TreasureCalculator.FromConquestPoints(conquestPoints)'
+  ]) {
+    if (!sourceRpc?.includes(token)) {
+      errors.push(`source ConquestV2Progress read is missing: ${token}`)
+    }
+  }
+
+  const publish = bracedBlock(publication, 'export const publishMatchCompletion')
+  for (const token of [
+    "SET status = 'ended'",
+    'FROM multiplayer_match_conquest_points points',
+    'match completion publication requirements are incomplete'
+  ]) {
+    if (!publish?.includes(token)) {
+      errors.push(`Worker Conquest V2 point publication is missing: ${token}`)
+    }
+  }
+
+  const points = bracedBlock(repository, 'async points(') ?? ''
+  const compactPoints = points.replace(/\s+/g, ' ')
+  for (const token of [
+    'WITH unpublished AS ( SELECT receipt.before_points, receipt.before_total_points',
+    'FROM multiplayer_match_conquest_point_players receipt JOIN multiplayer_matches match ON match.proposal_id = receipt.proposal_id',
+    "WHERE receipt.user_id = ? AND ? = 2 AND match.status <> 'ended'",
+    'ORDER BY receipt.processed_at ASC, receipt.proposal_id ASC',
+    '(SELECT before_points FROM unpublished)',
+    '(SELECT before_total_points FROM unpublished)'
+  ]) {
+    if (!compactPoints.includes(token)) {
+      errors.push(`ConquestV2Progress publication projection is missing: ${token}`)
+    }
+  }
+
+  const runtimeTest = bracedBlock(
+    rpcTest,
+    "it('withholds Conquest V2 points until the source-atomic match publishes'"
+  )
+  const compactRuntimeTest = runtimeTest?.replace(/\s+/g, ' ') ?? ''
+  for (const token of [
+    "'active'",
+    'current: 200, total: 1200',
+    'treasurePoints: 200',
+    'treasurePointsRequired: 50',
+    "SET status = 'ended'",
+    'current: 500, total: 1500',
+    'treasureLevel: 1',
+    'treasurePointsRequired: 250'
+  ]) {
+    if (!compactRuntimeTest.includes(token)) {
+      errors.push(`Conquest V2 point runtime proof is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const reviewedPoolCardIds = poolActivation => {
   const match = poolActivation.match(
     /INSERT INTO conquest_reward_pool_valid_card_ranges[\s\S]*?VALUES([\s\S]*?);/
@@ -2399,6 +2513,14 @@ const main = async () => {
     ...conquestProjectionPublicationErrors(
       sourceMatchCompletion,
       sourceConquestRpc,
+      completionPublication,
+      drainRepository,
+      conquestRpcTest
+    ),
+    ...conquestV2PointsPublicationErrors(
+      sourceMatchCompletion,
+      sourceConquestRpc,
+      sourceV2Points,
       completionPublication,
       drainRepository,
       conquestRpcTest

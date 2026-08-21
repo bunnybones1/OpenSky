@@ -1049,6 +1049,34 @@ artifact validation. No deployment, migration, storage provisioning, reward
 activation, live match, or production mutation was performed. Production
 Conquest remains disabled.
 
+## Source Conquest V2 point publication proof
+
+The Go `endMatch` transaction calls the Conquest V2 point updater through the
+same `db.Session` that saves the terminal match. A committed
+`ConquestV2Progress` read can therefore never observe the point increment
+without the corresponding terminal match mutation. The Cloudflare game
+Durable Object uses independently atomic, idempotent stages and persists its
+point receipt before `publishMatchCompletion` changes the shared multiplayer
+ledger to `ended`.
+
+Event-2 point reads now close that staging window with the existing immutable
+per-player match receipt. If a receipt belongs to a non-ended multiplayer
+ledger, `ConquestRepository.points` projects its earliest `before_points` and
+`before_total_points` values. The legacy event-1 read remains independent.
+Once final match publication succeeds, the stored current and total event-2
+values become visible together through the unchanged source
+`ConquestV2Progress` wire.
+
+A Workers-runtime regression stages a complete 300-point receipt over a
+200/1200 baseline, proves both the repository and RPC retain the pre-match
+projection while the ledger is active, publishes the ledger, and then proves
+the 500/1500 state and its next treasure band appear. The mutation-tested
+Conquest gate derives the shared Go transaction and session write, source RPC
+read, Worker completion barrier, ordered immutable receipt projection, and
+both runtime states. Production Conquest remains disabled, and this milestone
+performs no deployment, migration, provisioning, activation, live match, or
+production mutation.
+
 ## Player-facing final-deck projection proof
 
 Milestone `8adff767` carries the same immutable filled-deck pair into the

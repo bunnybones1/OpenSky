@@ -158,6 +158,92 @@ describe('source conquest RPC foundation', () => {
     })
   })
 
+  it('withholds Conquest V2 points until the source-atomic match publishes', async () => {
+    const repository = new ConquestRepository(env.AUTH_DB)
+    const now = new Date().toISOString()
+    const proposalId = `pending-points-${crypto.randomUUID()}`
+    const settlementToken = crypto.randomUUID()
+    expect(await repository.points(userId, 2)).toEqual({ current: 0, total: 0 })
+    const account = await env.AUTH_DB.prepare(
+      'SELECT id FROM game_accounts WHERE user_id = ?'
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(account).not.toBeNull()
+
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_points
+         SET current_points = 200, total_points = 1200, updated_at = ?
+         WHERE user_id = ? AND event_id = 2`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, status, created_at, updated_at)
+         VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'points-projection-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, NULL,
+                 '{}', 'active', ?, ?)`
+      ).bind(proposalId, `${proposalId}-replay`, userId, now, now)
+    ])
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_points
+         SET current_points = 500, total_points = 1500, updated_at = ?
+         WHERE user_id = ? AND event_id = 2`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_conquest_point_players
+           (proposal_id, player_index, user_id, settlement_token, account_id,
+            raw_points, before_points, before_total_points, awarded_points,
+            after_points, after_total_points, processed_at)
+         VALUES (?, 0, ?, ?, ?, 300, 200, 1200, 300, 500, 1500, ?)`
+      ).bind(proposalId, userId, settlementToken, account!.id, now)
+    ])
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_conquest_points
+         (proposal_id, player1_points, player2_points, player1_rewards_json,
+          player2_rewards_json, processed_at, player_count, settlement_token)
+       VALUES (?, 300, 0, '[]', '[]', ?, 1, ?)`
+    )
+      .bind(proposalId, now, settlementToken)
+      .run()
+
+    expect(await repository.points(userId, 2)).toEqual({
+      current: 200,
+      total: 1200
+    })
+    expect(await (await rpc('ConquestV2Progress', {})).json()).toEqual({
+      progress: {
+        treasureLevel: 0,
+        treasurePoints: 200,
+        treasurePointsRequired: 50
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', winner_player = 0,
+           result_json = '{"status":"COMPLETED"}', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(now, now, proposalId)
+      .run()
+    expect(await repository.points(userId, 2)).toEqual({
+      current: 500,
+      total: 1500
+    })
+    expect(await (await rpc('ConquestV2Progress', {})).json()).toEqual({
+      progress: {
+        treasureLevel: 1,
+        treasurePoints: 250,
+        treasurePointsRequired: 250
+      }
+    })
+  })
+
   it('returns only the active versioned weekly Gold pool and current supply', async () => {
     const now = new Date()
     const startsAt = new Date(now.getTime() - 60_000).toISOString()
