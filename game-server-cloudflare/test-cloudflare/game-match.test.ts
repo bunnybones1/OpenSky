@@ -2459,10 +2459,18 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
     const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
     const beforeJoinError = nextMessage(viewer)
+    const beforeJoinClosed = new Promise<CloseEvent>(resolve =>
+      viewer.addEventListener('close', resolve, { once: true })
+    )
     viewer.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
-    expect(await beforeJoinError).toMatchObject({
+    expect(await beforeJoinError).toEqual({
       type: 'error',
-      message: 'Error: spectate_server is required first'
+      level: 'user',
+      message: 'You have no game in progress!'
+    })
+    await expect(beforeJoinClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
     })
 
     const connected = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
@@ -2685,16 +2693,40 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
   })
 
-  it('still rejects gameplay before join_server', async () => {
+  it('silently ignores source non-gameplay messages before join_server', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const continued = collectMessages(first, 1)
+
+    first.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 0.5 })
+    )
+    first.send(JSON.stringify({ type: 'emote', emote: 'hello' }))
+    first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))
+    first.send(JSON.stringify({ type: 'error', message: 'client diagnostic' }))
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 8765 }))
+
+    expect(await continued).toEqual([
+      expect.objectContaining({ type: 'timesync', clientTime: 8765 })
+    ])
+    expect(first.readyState).toBe(WebSocket.OPEN)
+  })
+
+  it('preserves source no-game gameplay before join_server', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
     const response = nextMessage(first)
+    const closed = new Promise<CloseEvent>(resolve =>
+      first.addEventListener('close', resolve, { once: true })
+    )
     first.send(JSON.stringify({ type: 'gameplay', data: ['0x00'] }))
 
-    expect(await response).toMatchObject({
+    expect(await response).toEqual({
       type: 'error',
-      message: 'Error: join_server is required first'
+      level: 'user',
+      message: 'You have no game in progress!'
     })
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
   })
 
   it('restores the authoritative WASM snapshot and socket attachment after eviction', async () => {

@@ -464,11 +464,10 @@ export class GameMatch implements DurableObject {
         const message = parseClientMessage(frame)
         const role = attachment.role ?? 'player'
         if (!attachment.joined) {
-          if (
-            role === 'player' &&
-            attachment.detachedPlayerSession &&
-            message.type === 'gameplay'
-          ) {
+          // Source MatchManager has no linked MatchProxy before a successful
+          // join/spectate (including a detached replacement). Gameplay gets
+          // the exact user error and empty close regardless of gateway role.
+          if (message.type === 'gameplay') {
             this.safeSend(socket, {
               type: 'error',
               level: 'user',
@@ -477,10 +476,14 @@ export class GameMatch implements DurableObject {
             socket.close()
             return
           }
-          // Source MatchManager.handleLoadingProgress returns while the socket
-          // has no linked match context. Ignore this bootstrap race without
-          // mutating durable loading state or closing the connection.
-          if (role === 'player' && message.type === 'player_loading_progress') {
+          // The remaining source handlers either return or only log while no
+          // match context is linked. They do not invent a bootstrap error.
+          if (
+            message.type === 'player_loading_progress' ||
+            message.type === 'emote' ||
+            message.type === 'mute_opponent' ||
+            message.type === 'error'
+          ) {
             return
           }
           const bootstrapAllowed =

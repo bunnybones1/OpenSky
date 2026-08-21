@@ -199,6 +199,13 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     {
       ...value,
       gameMatch: value.gameMatch.replace(
+        "if (message.type === 'gameplay') {",
+        "if (attachment.detachedPlayerSession && message.type === 'gameplay') {"
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
         "message: 'You have no game in progress!'\n            })\n            socket.close()",
         "message: 'You have no game in progress!'\n            })\n            socket.close(4001, 'Duplicate connection')"
       )

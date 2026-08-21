@@ -76,6 +76,57 @@ export const gameIngressErrors = ({
     ]
   )
 
+  const sourceLoading = bodyBetween(
+    sourceMatchManager,
+    'private handleLoadingProgress = (',
+    'private handleClientError = ('
+  )
+  requireOrdered(errors, 'Source unlinked loading progress', sourceLoading, [
+    'if (!context.matchProxy) {',
+    'return'
+  ])
+  if (sourceLoading.includes('connection.close(')) {
+    errors.push('Source unlinked loading-progress handler became terminal')
+  }
+  const sourceClientError = bodyBetween(
+    sourceMatchManager,
+    'private handleClientError = (',
+    'private handleGameplayAction = ('
+  )
+  if (!sourceClientError.includes("logger.error('ERROR FROM CLIENT'")) {
+    errors.push('Source unlinked client-error logging changed')
+  }
+  if (sourceClientError.includes('connection.close(')) {
+    errors.push('Source client-error handler became terminal')
+  }
+  const sourceEmote = bodyBetween(
+    sourceMatchManager,
+    'private handlePlayerEmoted(',
+    'private handlePlayerMuted('
+  )
+  requireOrdered(errors, 'Source unlinked emote handling', sourceEmote, [
+    "if (!sendingContext.id || !('sticker' in message)) {",
+    'return'
+  ])
+  const sourceUnlinkedEmote = bodyBetween(
+    sourceEmote,
+    "if (!sendingContext.id || !('sticker' in message)) {",
+    'message.fromSpectator = sendingContext.id'
+  )
+  if (sourceUnlinkedEmote.includes('connection.close(')) {
+    errors.push('Source unlinked emote handler became terminal')
+  }
+  const sourceMute = bodyBetween(
+    sourceMatchManager,
+    'private handlePlayerMuted(',
+    '\n  }\n}'
+  )
+  requireOrdered(errors, 'Source unlinked mute handling', sourceMute, [
+    'sendingContext.matchProxy?.playerOrder.findIndex(',
+    'if (sendingGamePlayer !== undefined && sendingGamePlayer !== -1) {',
+    'sendingContext.processMessage(message)'
+  ])
+
   if (!sourcePlayerContext.includes('const KEEPALIVE_INTERVAL = 5000')) {
     errors.push('Source game keepalive interval is no longer five seconds')
   }
@@ -198,6 +249,31 @@ export const gameIngressErrors = ({
     'return',
     'this.safeSend(socket, stateError(error))'
   ])
+  const workerUnjoined = bodyBetween(
+    workerMessage,
+    'if (!attachment.joined) {',
+    'await this.handleMessage(socket, attachment, message)'
+  )
+  requireOrdered(
+    errors,
+    'Worker source-compatible pre-join routing',
+    workerUnjoined,
+    [
+      "if (message.type === 'gameplay') {",
+      "level: 'user'",
+      "message: 'You have no game in progress!'",
+      'socket.close()',
+      "message.type === 'player_loading_progress' ||",
+      "message.type === 'emote' ||",
+      "message.type === 'mute_opponent' ||",
+      "message.type === 'error'",
+      'return',
+      'const bootstrapAllowed ='
+    ]
+  )
+  if (workerUnjoined.includes('attachment.detachedPlayerSession &&')) {
+    errors.push('Worker no-game gameplay remains limited to detached players')
+  }
   for (const token of [
     'Cloudflare owns protocol ping/pong and disconnect detection',
     'the preserved browser still closes',
@@ -236,7 +312,15 @@ export const gameIngressErrors = ({
         "malformed.send('null')",
         "unknown.send(JSON.stringify({ type: 'unknown_source_message' }))",
         "code: 1005, reason: ''",
-        'expect(unexpectedMessages).toEqual([])'
+        'expect(unexpectedMessages).toEqual([])',
+        "it('silently ignores source non-gameplay messages before join_server'",
+        "type: 'player_loading_progress', progress: 0.5",
+        "type: 'emote', emote: 'hello'",
+        "type: 'mute_opponent', muted: true",
+        "type: 'error', message: 'client diagnostic'",
+        "it('preserves source no-game gameplay before join_server'",
+        "message: 'You have no game in progress!'",
+        "code: 1005, reason: ''"
       ]
     ]
   ]) {
@@ -248,6 +332,41 @@ export const gameIngressErrors = ({
       }
     }
   }
+
+  const workerSilentPreJoinTest = bodyBetween(
+    workerRuntimeTest,
+    "it('silently ignores source non-gameplay messages before join_server'",
+    "it('preserves source no-game gameplay before join_server'"
+  )
+  requireOrdered(
+    errors,
+    'Worker silent pre-join runtime regression',
+    workerSilentPreJoinTest,
+    [
+      "type: 'player_loading_progress', progress: 0.5",
+      "type: 'emote', emote: 'hello'",
+      "type: 'mute_opponent', muted: true",
+      "type: 'error', message: 'client diagnostic'",
+      "type: 'timesync', clientTime: 8765",
+      'expect(first.readyState).toBe(WebSocket.OPEN)'
+    ]
+  )
+  const workerNoGamePreJoinTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves source no-game gameplay before join_server'",
+    "it('restores the authoritative WASM snapshot"
+  )
+  requireOrdered(
+    errors,
+    'Worker no-game pre-join runtime regression',
+    workerNoGamePreJoinTest,
+    [
+      "type: 'gameplay', data: ['0x00']",
+      "level: 'user'",
+      "message: 'You have no game in progress!'",
+      "code: 1005, reason: ''"
+    ]
+  )
 
   const scripts = rootPackage?.scripts ?? {}
   if (

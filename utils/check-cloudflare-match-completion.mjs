@@ -128,7 +128,7 @@ export const matchCompletionErrors = (
   )
   requireOrdered(
     errors,
-    'Source detached-player gameplay response',
+    'Source unlinked-player gameplay response',
     sourceDetachedGameplay,
     [
       'if (!context.matchProxy) {',
@@ -282,17 +282,16 @@ export const matchCompletionErrors = (
   if (workerPlayerReplacement.includes('previous.close(')) {
     errors.push('Worker active-player replacement closes the detached socket')
   }
-  const workerDetachedGameplay = bodyBetween(
+  const workerUnjoinedGameplay = bodyBetween(
     gameMatch,
     'if (!attachment.joined) {',
     'await this.handleMessage(socket, attachment, message)'
   )
   requireOrdered(
     errors,
-    'Worker detached-player gameplay response',
-    workerDetachedGameplay,
+    'Worker unjoined gameplay response',
+    workerUnjoinedGameplay,
     [
-      'attachment.detachedPlayerSession',
       "message.type === 'gameplay'",
       "type: 'error'",
       "level: 'user'",
@@ -300,6 +299,9 @@ export const matchCompletionErrors = (
       'socket.close()'
     ]
   )
+  if (workerUnjoinedGameplay.includes('attachment.detachedPlayerSession &&')) {
+    errors.push('Worker no-game response remains limited to detached players')
+  }
   const workerSpectatorReplacement = bodyBetween(
     gameMatch,
     'private replaceSpectatorSession(',

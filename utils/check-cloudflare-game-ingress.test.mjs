@@ -42,6 +42,15 @@ const fixtures = async () => {
   }
 }
 
+const replaceAfter = (source, marker, search, replacement) => {
+  const markerIndex = source.indexOf(marker)
+  const searchIndex = source.indexOf(search, markerIndex)
+  assert.ok(markerIndex >= 0 && searchIndex >= markerIndex)
+  return `${source.slice(0, searchIndex)}${replacement}${source.slice(
+    searchIndex + search.length
+  )}`
+}
+
 test('pins the source and Worker game ingress lifecycle', async () => {
   assert.deepEqual(gameIngressErrors(await fixtures()), [])
 })
@@ -75,6 +84,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       sourceMatchManager: value.sourceMatchManager.replace(
         "logger.error('GAMESERVER: UNKNOWN MESSAGE', { msg })\n          context.connection.close()",
         "logger.error('GAMESERVER: UNKNOWN MESSAGE', { msg })"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      return',
+        'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      context.connection.close()\n      return'
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        "if (!sendingContext.id || !('sticker' in message)) {\n        return",
+        "if (!sendingContext.id || !('sticker' in message)) {\n        sendingContext.connection.close()\n        return"
       )
     },
     {
@@ -163,6 +186,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: value.workerMatch.replace(
+        "if (message.type === 'gameplay') {",
+        "if (attachment.detachedPlayerSession && message.type === 'gameplay') {"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "message.type === 'error'",
+        "message.type === 'unknown'"
+      )
+    },
+    {
+      ...value,
       workerProtocolTest: value.workerProtocolTest.replace(
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
         "it('rejects binary game messages'"
@@ -180,6 +217,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'expect(unexpectedMessages).toEqual([])',
         "expect(unexpectedMessages).toEqual(['error'])"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves source no-game gameplay before join_server'",
+        "message: 'You have no game in progress!'",
+        "message: 'Error: join_server is required first'"
       )
     },
     {
