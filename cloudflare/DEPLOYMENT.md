@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `e555f930` is tested but not
+- Paused branch checkpoint: runtime commit `e4ec21f5` is tested but not
   deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
@@ -16,26 +16,25 @@
   `0119_match_deck_rank_jobs.sql`, and
   `0120_grandweaver_task_attempts.sql`,
   `0121_conquest_v2_workflow_handoffs.sql`, and
-  `0122_leaderboard_reward_workflow_handoffs.sql`, are intentionally not
-  applied.
+  `0122_leaderboard_reward_workflow_handoffs.sql`, and
+  `0123_conquest_gold_queue_delivery.sql`, are intentionally not applied.
   Apply them in that order at the documented quiescent boundary before
   deploying the current Workers. The Conquest V2 and leaderboard Workflows,
-  delivery Queues, and dead-letter Queues are also not provisioned. No Worker
-  from `e555f930` or later may be deployed until all eight migrations and both
-  exact reviewed topologies exist. Every checked-in deploy command now
+  their delivery Queues/DLQs, and the delayed-Gold Queue/DLQ are also not
+  provisioned. No Worker from `e4ec21f5` or later may be deployed until all
+  nine migrations and all three exact reviewed topologies exist. Every
+  checked-in deploy command now
   performs a fail-closed, account-pinned, read-only D1 schema preflight first;
   the migration command is intentionally exempt so it can advance the schema.
-  The current leaderboard
-  milestone passed 22 focused Workers tests, all 534 main-Worker tests,
-  TypeScript validation, mutation-tested leaderboard and production topology
-  gates, and a fresh local application of every D1 migration through `0122`
-  plus the exact production schema query. The previous exact-head release and
-  draft-PR CI passed at `8e1468e2`: 531 main-Worker tests, 43 game-server unit
-  and 135 Workers tests, 48 match-service tests, 63 matchmaker unit and 69
-  Workers tests, 30 browser-game tests, nine analytics tests, all source and
-  mutation gates/typechecks, both production builds, and 594-file artifact
-  validation. Its assembled entries are `/assets/index-fd3d9163.js` and
-  `/game/cloudflare/assets/index-ccb53c4b.js`.
+  The delayed-Gold milestone passed 22 focused main-Worker tests, 25 focused
+  game-server Workers tests, all 536 main-Worker tests, all 43 game-server unit
+  and 136 Workers tests, TypeScript validation, mutation-tested Gold and
+  production-topology gates, and a fresh local application of every D1
+  migration through `0123` plus the exact production schema query. The latest
+  complete exact-head release and draft-PR CI passed at `43ae47d8` in GitHub
+  Actions run <https://github.com/bunnybones1/OpenSky/actions/runs/32533363968>.
+  Complete release validation and exact-head CI for the current documentation
+  head remain required.
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed
   4/4/5-route inventory is required by the complete release contract and the
@@ -228,8 +227,9 @@
 - Versioned Conquest card pools, exact zero-through-three-win source bundles,
   independent Silver draws, and immutable retry-safe settlement receipts
 - Immediate identity-inventory Silver grants plus source-compatible 24-hour
-  delayed Gold delivery, pending-card reads/counters, feed receipts, and
-  five-attempt dead-letter safety
+  delayed Gold delivery through one narrow Queue message per D1 entitlement;
+  pending-card reads/counters, moderation, atomic inventory/feed receipts, and
+  due-only cron re-drive remain authoritative without terminal abandonment
 - Write-once identity referrals, top-five friend points, inviter gifts, and the
   original Invite Friends screens
 - Source referral-sticker threshold accounting, top-five friend attribution,

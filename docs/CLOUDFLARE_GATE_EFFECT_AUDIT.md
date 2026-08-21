@@ -8,9 +8,9 @@ authorize runtime changes, migration, deployment, or feature activation.
 
 ## Scope and method
 
-The current `build:cloudflare` command requires 83 named
+The current `build:cloudflare` command requires 84 named
 `check:cloudflare:*` gates before assembling the webapp and browser game. This
-audit classifies every one of those 83 gates by the effect it should protect.
+audit classifies every one of those 84 gates by the effect it should protect.
 
 The classification asks four questions:
 
@@ -23,9 +23,9 @@ The classification asks four questions:
    fidelity or safety?
 
 The four groups below are disjoint and complete: 15 release/operational gates,
-42 client/player-contract gates, 22 runtime-effect gates, and four mixed gates
-that require refactoring. The total is 83; no build gate is omitted or counted
-twice.
+42 client/player-contract gates, 23 runtime-effect gates, and four mixed gates
+tracked through effect-level conversion. The total is 84; no build gate is
+omitted or counted twice.
 
 ## 1. Release and operational safety: keep
 
@@ -110,7 +110,7 @@ repository calls, or statement order are not.
 
 ## 3. Runtime effects and safety: keep, narrow where noted
 
-These 22 gates protect game/reward outcomes, authorization, mutation
+These 23 gates protect game/reward outcomes, authorization, mutation
 boundaries, or operational safety:
 
 - `float32`
@@ -126,6 +126,7 @@ boundaries, or operational safety:
 - `bot-deck`
 - `system-player-gate`
 - `conquest-operator`
+- `conquest-gold-gate`
 - `leaderboard-gate`
 - `referral-sticker-gate`
 - `offchain`
@@ -167,7 +168,10 @@ completed at `36ca654d` with Workflow/Queue/D1 handoff evidence. The
 deadline, eviction, duplicate-alarm, and rolling-upgrade evidence. The
 implementation-coupled portion of `leaderboard-gate` converted at `e555f930`
 with Workflow/Queue creation-gap recovery, per-player isolation, re-drive
-beyond the source ceiling, and guarded completion evidence.
+beyond the source ceiling, and guarded completion evidence. The new
+`conquest-gold-gate` added at `e4ec21f5` protects the exact delayed D1 effect,
+narrow Queue authority, atomic publication, moderation, and indefinite
+re-drive while rejecting direct cron grants and copied attempt ceilings.
 
 ### `worker-runners`
 
@@ -339,10 +343,12 @@ Continue with one unconverted main-Worker responsibility at a time from
 Each next slice requires its own effect/recovery audit before a target topology
 or gate conversion is selected.
 
-Delayed Conquest Gold is now the selected next boundary. Its replacement gate
-must preserve the exact 24-hour D1 entitlement, pending-card visibility,
-moderation, atomic off-chain inventory/feed application, duplicate safety, and
-recoverability while rejecting direct cron grants and terminal abandonment
-after a copied attempt ceiling. The decision is recorded in
+Delayed Conquest Gold and its replacement gate completed locally at
+`e4ec21f5`. The gate preserves the exact 24-hour D1 entitlement, pending-card
+visibility, moderation, atomic off-chain inventory/feed application, duplicate
+safety, and recoverability while rejecting direct cron grants and terminal
+abandonment after a copied attempt ceiling. The decision and evidence are
+recorded in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md);
-runtime and gate conversion remain a later milestone.
+the next main-Worker responsibility remains unselected until its own
+effect/recovery audit.

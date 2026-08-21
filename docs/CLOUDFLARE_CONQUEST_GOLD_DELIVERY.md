@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: architecture selected; not implemented, provisioned, migrated,
-activated, deployed, or exercised against production. This decision does not
-authorize any Cloudflare mutation.
+Status: implemented and tested locally at `e4ec21f5`; not provisioned,
+migrated, activated, deployed, or exercised against production. This milestone
+does not authorize any Cloudflare mutation.
 
 ## Decision
 
@@ -128,8 +128,9 @@ then retries that message independently. No failure changes the entitlement to
 
 ## D1 migration disposition
 
-The next migration should add only immutable Queue-consumer failure evidence
-and replace implementation-shaped guards/views:
+Migration `0123_conquest_gold_queue_delivery.sql` adds only immutable
+Queue-consumer failure evidence and replaces implementation-shaped
+guards/views:
 
 - add `player_conquest_gold_delivery_failures` with immutable observations;
 - replace the delivery update guard so failure is not a business-state
@@ -163,7 +164,7 @@ current failure log; immutable failure rows carry that evidence.
 | Consumer receives a stale duplicate after APPLIED           | It acknowledges without a second balance or feed transition.                                                                                                 |
 | Deployment contains an unexpected legacy FAILED entitlement | Migration/preflight fails closed; no silent resurrection, discard, or card reselection occurs.                                                               |
 
-## Executable evidence required before deployment
+## Executable evidence
 
 - settlement and delayed Queue publication preserve the exact selected card,
   match-end wire response, immediate feed event, and `settled_at + 24 hours`;
@@ -185,6 +186,14 @@ current failure log; immutable failure rows carry that evidence.
   producer and main-Worker producer/consumer with a DLQ; and
 - focused tests, fresh local D1 migration, complete exact-head release, and
   exact-head draft-PR CI pass before deployment is even considered.
+
+The local milestone passes 22 focused main-Worker tests, 25 focused
+game-server Workers tests, both affected typechecks, the mutation-tested Gold
+effect gate, the broader Conquest and off-chain gates, 12 production-runner
+tests, all 536 main-Worker tests, all 43 game-server unit and 136 game-server
+Workers tests, and a fresh D1 migration chain through `0123` plus the exact
+production schema query. A complete release and exact-head draft-PR CI remain
+mandatory for the later documentation head.
 
 ## Rollout safety
 

@@ -3,9 +3,9 @@
 Status date: 2026-08-21
 
 Status: leaderboard implemented locally at `e555f930`; delayed Conquest Gold
-selected as the next independently audited slice. This audit and milestone do not
-authorize provisioning, migration, activation, deployment, a live drill, or
-any production mutation.
+implemented locally at `e4ec21f5`. This audit and milestone do not authorize
+provisioning, migration, activation, deployment, a live drill, or any
+production mutation.
 
 ## Decision
 
@@ -22,8 +22,8 @@ snapshotted player entitlement, and D1 business receipts for the immutable
 snapshot, off-chain inventory, feed/notification publication, rank reset,
 failures, and completion.
 
-The next selected slice is delayed Conquest Gold delivery. Its separate effect
-and recovery decision is recorded in
+The third converted slice is delayed Conquest Gold delivery. Its separate
+effect and recovery decision is recorded in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md).
 It uses a delayed Queue message per D1 entitlement plus due-only cron re-drive;
 it does not need a Workflow or a copied task runner.
@@ -37,7 +37,7 @@ and recovery needs.
 
 | Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                      |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `deliverDueConquestGold`                | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Selected next slice; remove copied 100-item/five-attempt terminal behavior       |
+| `dispatchDueConquestGoldDeliveries`     | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Completed at `e4ec21f5`                                                          |
 | `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress               |
 | `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                          |
 | `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                          |
@@ -211,12 +211,12 @@ The local implementation tests and release gates prove:
   migration, production schema/topology preflight, full release, and exact-head
   PR CI all pass before any deployment can be considered.
 
-At `e555f930`, the focused suite passes 22/22 tests, the full main-Worker suite
-passes 534/534, the leaderboard mutation gate passes 5/5 plus its live check,
-the production runner passes 12/12, and a fresh local D1 accepts every migration
-through `0122` and the exact production schema query. Full release and
-exact-head PR CI remain mandatory for the later documentation head before any
-deployment can be considered.
+At `e555f930`, the focused leaderboard suite passes 22/22 tests, the full
+main-Worker suite passes 534/534, the leaderboard mutation gate passes 5/5 plus
+its live check, the production runner passes 12/12, and a fresh local D1 accepts
+every migration through `0122` and the exact production schema query. Full
+release and exact-head PR CI remain mandatory for the later documentation head
+before any deployment can be considered.
 
 ## Rollout safety
 
@@ -226,7 +226,11 @@ undeployed until separately authorized after exact-head CI. Schedule activation
 is a later two-actor operation and is not implied by deploying dormant
 infrastructure.
 
-The selected delayed Gold Queue and its migration are likewise only an
-architecture decision at this checkpoint. They remain unimplemented and cannot
-be provisioned or deployed without a later tested runtime milestone and the
-same explicit authorization.
+The delayed Gold Queue runtime and migration `0123` are implemented locally at
+`e4ec21f5`. Focused validation passes 22 main-Worker and 25 game-server Workers
+tests, all 536 main-Worker tests, all 43 game-server unit and 136 Workers tests,
+both affected typechecks, the new mutation-tested effect gate, production
+preflight tests, and a fresh migration/schema check through `0123`. The Queue,
+DLQ, binding, migration, and code remain unprovisioned and undeployed; a full
+exact-head release, exact-head PR CI, and explicit user authorization are still
+required.

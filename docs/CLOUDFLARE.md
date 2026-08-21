@@ -199,13 +199,13 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migrations through `0122`, including authoritative decks, registered
+requires migrations through `0123`, including authoritative decks, registered
 bots, atomic XP/account-stat publication, recoverable post-match
-responsibilities, and both Conquest and leaderboard Workflow/Queue handoff
-receipts and guards. It refuses to spawn the deploy process on a missing,
-malformed, unsuccessful, duplicate, or unexpected result. The migration
-command is intentionally exempt so it can bring the schema forward before a
-deploy.
+responsibilities, Conquest and leaderboard Workflow/Queue handoff receipts,
+and delayed-Gold Queue effect guards. It refuses to spawn the deploy process on
+a missing, malformed, unsuccessful, duplicate, or unexpected result. The
+migration command is intentionally exempt so it can bring the schema forward
+before a deploy.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
@@ -3073,22 +3073,42 @@ topology remain local and undeployed; the leaderboard schedule remains
 absent/disabled. No remote preflight, provisioning, migration, activation,
 deployment, or live drill was performed.
 
+## Effect-faithful delayed Conquest Gold delivery — 2026-08-21
+
+Commit `e4ec21f5` replaces direct cron inventory mutation with one narrow
+delayed Queue message per authoritative D1 Gold entitlement. The game Durable
+Object publishes only the Conquest ID after atomic settlement and terminal
+match publication; Queue failure cannot withhold the match result. The
+consumer re-reads exact timing, identity, card/token selection, moderation,
+balances, and publication state from D1 and applies inventory, grant receipt,
+feed event, and terminal receipt in one transaction.
+
+Cron now only cursor-pages due D1 responsibilities into Cloudflare's
+100-message transport batches. It neither claims rewards nor imposes a global
+business ceiling. Queue retries and DLQ state never turn an earned card into a
+terminal failure; immutable D1 failure observations and due re-drive preserve
+operator recovery. Migration `0123`, the Queue/DLQ, and both producer/consumer
+bindings remain local and undeployed. No remote preflight, provisioning,
+migration, activation, deployment, or live drill was performed.
+
 ## Suggested next slice
 
-The Conquest, post-match, matchmaker-cadence, and leaderboard orchestration
-corrections are complete locally. Continue with one remaining main-Worker cron
-responsibility at a time, beginning each with an effect/recovery audit rather
-than a topology rewrite. No next responsibility has been selected yet.
+The Conquest, post-match, matchmaker-cadence, leaderboard, and delayed-Gold
+orchestration corrections are complete locally. Continue with one remaining
+main-Worker cron responsibility at a time, beginning each with an
+effect/recovery audit rather than a topology rewrite. No next responsibility
+has been selected yet.
 Player-facing parity remains separate and must continue using the original
 interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, and `0122` at the
+then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, and `0123` at the
 documented quiescent boundary, provision both exact reviewed reward
-Workflow/Queue/DLQ topologies, deploy the exact tested Workers with both bot
-flags still false and both reward schedules disabled, and only consider a
-bounded ranked/PvP-bot soak after ordinary multiplayer and analytics paths are
-healthy. This remains unauthorized while the production pause is in force.
+Workflow/Queue/DLQ topologies plus the delayed-Gold Queue/DLQ, deploy the exact
+tested Workers with both bot flags still false and both reward schedules
+disabled, and only consider a bounded ranked/PvP-bot soak after ordinary
+multiplayer and analytics paths are healthy. This remains unauthorized while
+the production pause is in force.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,
