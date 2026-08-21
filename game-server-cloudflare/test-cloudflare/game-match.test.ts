@@ -2452,6 +2452,69 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
   })
 
+  it('preserves the source loaded-player mute gate and reconnect state', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+
+    const earlySync = nextMessage(first)
+    first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 9101 }))
+    await expect(earlySync).resolves.toMatchObject({
+      type: 'timesync',
+      clientTime: 9101
+    })
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players =
+          await state.storage.get<Record<string, { opponentMuted: boolean }>>(
+            'match:players'
+          )
+        expect(players?.[PRINCIPAL_1].opponentMuted).toBe(false)
+      }
+    )
+
+    const second = await connect(PRINCIPAL_2)
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+    const acceptedSync = nextMessage(first)
+    first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 9102 }))
+    await expect(acceptedSync).resolves.toMatchObject({
+      type: 'timesync',
+      clientTime: 9102
+    })
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players =
+          await state.storage.get<Record<string, { opponentMuted: boolean }>>(
+            'match:players'
+          )
+        expect(players?.[PRINCIPAL_1].opponentMuted).toBe(true)
+      }
+    )
+
+    const rejoined = collectMessages(first, 3)
+    join(first, 0x31)
+    await expect(rejoined).resolves.toEqual([
+      {
+        type: 'error',
+        level: 'server',
+        message: 'You connected in another session, please play there.'
+      },
+      expect.objectContaining({
+        type: 'reconnect',
+        opponentMuted: true
+      }),
+      expect.objectContaining({ type: 'opponent_loading_progress' })
+    ])
+  })
+
   it('restores public and private spectator state without exposing it to public viewers', async () => {
     await insertSpectateIdentities()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])

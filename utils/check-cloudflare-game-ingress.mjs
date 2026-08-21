@@ -193,6 +193,36 @@ export const gameIngressErrors = ({
     'if (sendingGamePlayer !== undefined && sendingGamePlayer !== -1) {',
     'sendingContext.processMessage(message)'
   ])
+  const sourceMuteRelay = bodyBetween(
+    sourceMatchHandler,
+    'handleEnemyMutedMessage = (',
+    'handleGameplayMessage = ('
+  )
+  requireOrdered(errors, 'Source loaded-player mute gate', sourceMuteRelay, [
+    'const player = this.playerContexts.find(p => p.id === playerID)',
+    'const opponent = this.playerContexts[this.getOpponentID(playerID)]',
+    '!player ||',
+    '!opponent ||',
+    'player.finishedLoadingAssets && opponent.finishedLoadingAssets',
+    'return',
+    'player.opponentMuted = message.muted'
+  ])
+  const sourcePlayerReconnect = bodyBetween(
+    sourceMatchHandler,
+    'handleJoin = (message: JoinServerMessage) => {',
+    'handleSpectatorJoin = (message: SpectateServerMessage) => {'
+  )
+  requireOrdered(
+    errors,
+    'Source reconnect mute projection',
+    sourcePlayerReconnect,
+    [
+      'const player = this.getPlayerContextByID(playerID)',
+      'const rejoinMessage: ReconnectMessage = {',
+      'opponentMuted: player.opponentMuted',
+      'player.send(rejoinMessage)'
+    ]
+  )
   const sourceSpectate = bodyBetween(
     sourceMatchManager,
     'private handleSpectate = async (',
@@ -553,6 +583,21 @@ export const gameIngressErrors = ({
       errors.push(`Worker chat-setting regression is missing: ${token}`)
     }
   }
+  const workerMute = bodyBetween(
+    workerHandleMessage,
+    "case 'mute_opponent': {",
+    "case 'error':"
+  )
+  requireOrdered(errors, 'Worker loaded-player mute gate', workerMute, [
+    "if (role !== 'player') return",
+    'const players = await this.players()',
+    'if (',
+    '!Object.values(players).every(player =>',
+    'player.finishedLoadingAssets',
+    'return',
+    'players[attachment.principal].opponentMuted = message.muted',
+    'await this.state.storage.put(PLAYERS_KEY, players)'
+  ])
   const workerSpectate = bodyBetween(
     workerMatch,
     'private async spectate(',
@@ -666,6 +711,13 @@ export const gameIngressErrors = ({
         "first.send(JSON.stringify({ type: 'emote', emote: 'hello' }))",
         'expect(throttledOpponent).toEqual([])',
         'expect(throttledSpectator).toEqual([])',
+        "it('preserves the source loaded-player mute gate and reconnect state'",
+        "first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))",
+        'clientTime: 9101',
+        '.toBe(false)',
+        'clientTime: 9102',
+        '.toBe(true)',
+        'opponentMuted: true',
         "it('preserves source spectate validation errors and empty closes'",
         "message: 'invalid spectate player'",
         "message: 'you can\\t spectate yourself'",
@@ -766,7 +818,32 @@ export const gameIngressErrors = ({
   const workerChatTest = bodyBetween(
     workerRuntimeTest,
     "it('preserves source configurable chat outside the emote throttle'",
+    "it('preserves the source loaded-player mute gate and reconnect state'"
+  )
+  const workerMuteTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves the source loaded-player mute gate and reconnect state'",
     "it('restores public and private spectator state"
+  )
+  requireOrdered(
+    errors,
+    'Worker loaded-player mute runtime regression',
+    workerMuteTest,
+    [
+      "first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))",
+      'clientTime: 9101',
+      'await expect(earlySync).resolves.toMatchObject({',
+      '.toBe(false)',
+      'const second = await connect(PRINCIPAL_2)',
+      "first.send(JSON.stringify({ type: 'mute_opponent', muted: true }))",
+      'clientTime: 9102',
+      'await expect(acceptedSync).resolves.toMatchObject({',
+      '.toBe(true)',
+      'const rejoined = collectMessages(first, 3)',
+      "message: 'You connected in another session, please play there.'",
+      "type: 'reconnect'",
+      'opponentMuted: true'
+    ]
   )
   requireOrdered(
     errors,
@@ -1006,7 +1083,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare game ingress preserves source text/binary frames, PING, decode errors, and configurable chat/emote behavior'
+      'Cloudflare game ingress preserves source text/binary frames, PING, decode errors, configurable chat/emote behavior, and loaded-player mute state'
     )
   }
 }

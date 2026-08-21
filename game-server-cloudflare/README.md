@@ -52,6 +52,8 @@ wire messages. It is a separate service from `matchmaker-ts`.
   codes, emotes, connection limits, and hibernation-safe attachments; and
 - source-configurable player chat, including its independent unthrottled relay
   path, spectator visibility, and fail-closed disabled production default; and
+- source player-mute timing: mute state is ignored until both players finish
+  loading, then persists in that player's reconnect projection; and
 - source-shaped initialization/gameplay replay records exposed through
   capability-protected same-origin archive URLs; and
 - a narrow authenticated pre-runtime `match-info` status projection used by

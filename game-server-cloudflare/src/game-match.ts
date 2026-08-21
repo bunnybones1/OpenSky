@@ -1040,6 +1040,13 @@ export class GameMatch implements DurableObject {
         // their authenticated address is not in the match player order.
         if (role !== 'player') return
         const players = await this.players()
+        // MatchHandler also ignores the update until both player contexts
+        // have finished loading assets. In particular, an early UI action
+        // must not become durable reconnect state that the source never kept.
+        if (
+          !Object.values(players).every(player => player.finishedLoadingAssets)
+        )
+          return
         players[attachment.principal].opponentMuted = message.muted
         await this.state.storage.put(PLAYERS_KEY, players)
         return

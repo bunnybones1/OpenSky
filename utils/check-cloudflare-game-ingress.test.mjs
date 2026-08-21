@@ -154,6 +154,24 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      sourceMatchHandler: replaceAfter(
+        value.sourceMatchHandler,
+        'handleEnemyMutedMessage = (',
+        'player.finishedLoadingAssets && opponent.finishedLoadingAssets',
+        'player.finishedLoadingAssets'
+      )
+    },
+    {
+      ...value,
+      sourceMatchHandler: replaceAfter(
+        value.sourceMatchHandler,
+        'handleJoin = (message: JoinServerMessage) => {',
+        'opponentMuted: player.opponentMuted',
+        'opponentMuted: false'
+      )
+    },
+    {
+      ...value,
       sourceMatchProxy: replaceAfter(
         value.sourceMatchProxy,
         'for (const s of this.spectators.values()) {',
@@ -394,6 +412,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        "case 'mute_opponent': {",
+        '!Object.values(players).every(player =>',
+        'Object.values(players).some(player =>'
+      )
+    },
+    {
+      ...value,
       workerMatch: value.workerMatch.replace(
         'this.sendToSpectators(message)',
         'void message'
@@ -550,6 +577,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('preserves source configurable chat outside the emote throttle'",
         'expect(throttledOpponent).toEqual([])',
         "expect(throttledOpponent).toEqual([{ type: 'emote' }])"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves the source loaded-player mute gate and reconnect state'",
+        '.toBe(false)',
+        '.toBe(true)'
       )
     },
     {
