@@ -207,6 +207,17 @@ deployment paths.
   accepted proposals deliberately remain durable instead of falsely reporting
   that a game exists.
 
+## Source service routes
+
+The Worker preserves Chi's case-insensitive `GET`/`HEAD /ping` heartbeat with
+the exact plain-text `.` body before the authenticated WebSocket boundary. The
+source root WebSocket is ported behind the same-origin gateway, source
+`/matchinfo/{playerID}` is served by that gateway, and source `/status` is an
+internal authenticated Durable Object surface. The fail-closed
+`check:cloudflare:service-routes` inventory derives and reviews all four source
+routes and is required by both the complete release contract and the
+matchmaker component deploy path.
+
 ## Remaining source behavior
 
 The same-origin gateway provides source match-info responses for reconnects,

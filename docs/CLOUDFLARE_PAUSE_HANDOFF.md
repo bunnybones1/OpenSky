@@ -1,6 +1,6 @@
 # Cloud Weasel Cloudflare pause handoff
 
-Status date: 2026-08-20
+Status date: 2026-08-21
 
 Production mutation is intentionally paused at the user's request. Local
 source-faithful code, test, documentation, PR, and CI work may continue, but do
@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `152138fe`
-  (`Require production schema before deployment`)
-- Latest tested runtime commit: `152138fe`
-  (`Require production schema before deployment`)
+- Last code/test checkpoint: `7802aab4`
+  (`Preserve source service health routes`)
+- Latest tested runtime commit: `7802aab4`
+  (`Preserve source service health routes`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `152138fe` are committed and
+- The runtime changes from `38386294` through `7802aab4` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-874772de.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -1163,6 +1163,37 @@ off-chain gate, all typechecks, both production builds, and 594-file artifact
 validation. No remote preflight, deployment, migration, provisioning,
 activation, live match, or production mutation was performed.
 
+## Source service-route parity milestone
+
+Commit `7802aab4` closes the non-RPC service-route proof gap without exposing
+internal process state or inventing Cloudflare equivalents:
+
+- the API/web Worker preserves Chi's case-insensitive `GET`/`HEAD /ping`
+  heartbeat with the exact plain-text `.` body;
+- the matchmaker Worker preserves the same source heartbeat ahead of its
+  authenticated WebSocket boundary;
+- the game-server Worker preserves Express `GET`/`HEAD /` and `/ping`,
+  including case-insensitive and trailing-slash routing, `.`/`pong` bodies,
+  HTML content type, wildcard CORS, and the source no-cache headers;
+- the game-server status and create-match surfaces remain internal, while the
+  process-global Prometheus scrape is explicitly superseded by platform
+  Worker and Durable Object telemetry instead of publishing a misleading
+  partial view of hibernating objects; and
+- a mutation-tested inventory now derives all 4 API, 4 matchmaker, and 5 game
+  server routes from the original Go/TypeScript services, requires a reviewed
+  non-retirement disposition and concrete evidence for every route, and is
+  mandatory in the complete build plus both affected component deploy paths.
+
+The exact complete local release contract passed with exit code zero for the
+content committed as `7802aab4`: 512 main-Worker tests, 34 game-server unit
+and 118 Workers tests, 45 match-service tests, 62 matchmaker unit and 67
+Workers tests, 30 browser-game tests, nine analytics tests, every source and
+off-chain gate, all typechecks, both production builds, and 594-file artifact
+validation. The assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1337,6 +1368,9 @@ At the pause audit:
 - all 108 browser RPC calls had a Worker implementation or reviewed identity
   disposition, with direct tests for all 103 Worker-backed calls;
 - every original deployable service had a reviewed Cloudflare disposition;
+- all 13 active non-RPC routes across the API, matchmaker, and game server had
+  reviewed ported, internalized, superseded, or local-tooling dispositions,
+  with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
   but migration `0116`, deployment, and activation remain paused;
 - every production deploy command now fails closed until the remote D1 proves

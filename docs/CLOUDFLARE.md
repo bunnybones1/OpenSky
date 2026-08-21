@@ -2426,16 +2426,43 @@ browser-game tests, nine analytics tests, all source/off-chain gates and
 typechecks, both production builds, and 594-file artifact validation. No
 remote preflight or production mutation was performed.
 
+## Source service-route parity — 2026-08-21
+
+Milestone `7802aab4` extends the completion audit beyond RPCs, runners, and
+deployable services to every active non-RPC route in the original API,
+matchmaker, and TypeScript game server. The fail-closed inventory derives 4,
+4, and 5 routes respectively and rejects a new route, a disappeared reviewed
+route, blanket retirement, missing implementation evidence, or removal of the
+gate from the complete and affected component deployment contracts.
+
+The public source health contracts are now preserved directly. API and
+matchmaker `/ping` accept case-insensitive `GET` and `HEAD` with Chi's
+plain-text `.` response. The game server preserves Express `/` and `/ping`,
+including its case-insensitive/trailing-slash handling, `.` and `pong` bodies,
+HTML content type, wildcard CORS, and no-cache headers. Match info remains on
+the same-origin gateway; status and match creation remain authenticated
+internal surfaces. The source process-global Prometheus endpoint is
+superseded by platform Worker and Durable Object telemetry because one Worker
+request cannot truthfully aggregate hibernating match objects.
+
+The complete local release contract passed for the exact runtime content in
+`7802aab4`: 512 main-Worker tests, 34 game-server unit and 118 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
-No known dormant matchmaker parity slice remains after the registered-bot
-and deployment-preflight milestones. The next safe local step is a completion
-audit for any source-backed cross-service behavior not already covered by the
-RPC, runner, reward, matchmaker, and service inventories. Production
-activation remains a separate
-authorized exercise: apply `0115` and then `0116` at the documented quiescent
-boundary, deploy the exact tested Workers with both bot flags still false, and
-only consider a bounded ranked/PvP-bot soak after the ordinary multiplayer and
+No known dormant matchmaker or non-RPC service-route parity slice remains
+after the registered-bot, deployment-preflight, and route-inventory
+milestones. Further local implementation should be driven by a concrete
+source-backed gap found by the completion audit rather than a fabricated
+Cloudflare surface. Production activation remains a separate authorized
+exercise: apply `0115` and then `0116` at the documented quiescent boundary,
+deploy the exact tested Workers with both bot flags still false, and only
+consider a bounded ranked/PvP-bot soak after the ordinary multiplayer and
 analytics paths are healthy.
 
 The dormant, separately authorized readiness orchestrator is deployed and
