@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `2bbf8b6a`
-  (`Preserve source accepted decline lifecycle`)
-- Latest tested runtime commit: `2bbf8b6a`
-  (`Preserve source accepted decline lifecycle`)
+- Last code/test checkpoint: `30f8aa44`
+  (`Preserve independent pending match lifetime`)
+- Latest tested runtime commit: `30f8aa44`
+  (`Preserve independent pending match lifetime`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `2bbf8b6a` are committed and
+- The runtime changes from `38386294` through `30f8aa44` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -126,9 +126,11 @@ source read-timeout checkpoint and its handoff at exact pushed head `17590914`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32434673238> passed the
 command-error checkpoint and its handoff at exact pushed head `d331c5dd`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32436099294> passed the
-expired-accept checkpoint and its handoff at exact pushed head `85e1e453`. The
-newer `2bbf8b6a` accepted-decline checkpoint and this refreshed handoff must
-receive exact-head CI before any production mutation.
+expired-accept checkpoint and its handoff at exact pushed head `85e1e453`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32437463277> passed the
+accepted-decline checkpoint and its handoff at exact pushed head `c29d7e19`.
+The newer `30f8aa44` independent-pending-lifetime checkpoint and this refreshed
+handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -735,6 +737,42 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker independent pending-lifetime milestone
+
+Commit `30f8aa44` restores the separate pending-match lifetime owned by the
+original proposal repository:
+
+- the Go repository stores each proposal for its acceptance timeout plus one
+  hour, but writes a separate per-player `match_pending` key for only the
+  acceptance timeout;
+- the source find validator checks only that independently expiring key and
+  never loads proposal state, so a live pending key still rejects another
+  search if the proposal row is independently missing;
+- the strict source boundary remains intact: TTL zero is live and only a
+  negative lifetime permits a new search;
+- new Durable Object references store both proposal ID and expiry because its
+  storage has no per-key TTL, then remove expired references lazily; and
+- legacy string references remain readable during rolling deployment. A
+  surviving proposal supplies their lifetime, while an orphaned legacy string
+  with no expiry authority is drained rather than locking the player forever.
+
+Malformed new-format references fail closed. Workers regressions cover live
+and expired references with a missing proposal, a legacy orphan, and acceptance
+through a legacy live proposal. The mutation-tested
+`check:cloudflare:matchmaker-session` gate derives the Go validator and TTL
+write, the Worker storage and lookup order, strict boundary, rolling decoder,
+all four regressions, and release wiring.
+
+The exact complete local release contract passed at committed runtime head
+`30f8aa44` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 57
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -839,7 +877,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `2bbf8b6a`. Keep
+- Deploy and verify the tested runtime changes through `30f8aa44`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

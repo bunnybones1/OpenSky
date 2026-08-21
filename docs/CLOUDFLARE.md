@@ -2034,6 +2034,42 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker independent pending lifetime parity — 2026-08-20
+
+Milestone `30f8aa44` restores the source repository's independently expiring
+pending-match reference. The Go proposal repository persists the proposal row
+for the acceptance timeout plus one hour, but writes a separate
+`match_pending` key for exactly the acceptance timeout. Its find-match
+validator calls only `HasMatchProposal`; it neither loads nor infers liveness
+from the proposal row. A live pending reference therefore continues to reject
+a second search even if proposal storage is independently unavailable, while a
+negative TTL permits a new search even if the longer-lived proposal remains.
+
+Durable Object storage has no per-key TTL, so new Worker references persist the
+proposal ID and the exact expiry together. Find-match treats that timestamp as
+authoritative, preserves the source boundary where expiry equality is still
+live, and lazily removes an expired reference before queueing. The proposal is
+loaded only for existing timeout cleanup and compatibility with legacy string
+references. During a rolling upgrade, a legacy reference with a live proposal
+derives its lifetime from that proposal; a legacy orphan without any expiry
+authority is drained instead of becoming a permanent account lock. Malformed
+reference shapes fail closed.
+
+Workers regressions cover a live reference whose proposal is missing, its
+expired counterpart, legacy-orphan draining, and acceptance through a legacy
+live reference. The mutation-tested session gate derives the independent Go
+validator and `StoreTTL` write, Worker storage shape, strict timestamp
+comparison, rolling decoder, direct regressions, and release wiring.
+
+The exact complete local contract passed at `30f8aa44`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 57 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

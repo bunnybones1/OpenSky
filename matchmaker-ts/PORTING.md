@@ -96,6 +96,15 @@ rejects the operation and Challenge still avoids the refusal penalty. If a
 director-style allocation is already in flight, its local proposal copy still
 completes after repository deletion, preserving the source's possible
 decline-then-`match_made` ordering instead of orphaning an allocated game.
+The source proposal repository gives `match_pending` its own acceptance-timeout
+TTL rather than deriving pending state from the longer-lived proposal row, and
+the find validator checks only that key. New Durable Object references therefore
+store `{ proposalId, expiresAtMs }`: a live reference blocks another search even
+if the proposal is missing, expiry equality remains live, and an expired
+reference is removed lazily. Legacy string references remain readable during a
+rolling deployment; a surviving proposal supplies their lifetime, while a
+legacy orphan is drained because the old value contains no safe expiry
+authority. Malformed new-format references fail closed.
 
 ## Deployment gates
 
