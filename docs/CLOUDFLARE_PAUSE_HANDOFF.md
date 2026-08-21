@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `5b3d3306`
-  (`Preserve source multiplayer quest publication`)
-- Latest tested runtime commit: `5b3d3306`
-  (`Preserve source multiplayer quest publication`)
+- Last code/test checkpoint: `04deaac2`
+  (`Preserve source Warm Up publication`)
+- Latest tested runtime commit: `04deaac2`
+  (`Preserve source Warm Up publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `5b3d3306` are committed and
+- The runtime changes from `38386294` through `04deaac2` are committed and
   tested but are **not deployed**. The complete exact-commit build at
-  `5b3d3306` produced web entry `/assets/index-1eddfd33.js` and game entry
+  `04deaac2` produced web entry `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -207,8 +207,11 @@ checkpoint, its `22045837` wire-gate checkpoint, and refreshed handoff passed
 exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32495668086> at
 `0c81bee4` in 9m00s. The newer `5b3d3306` multiplayer quest-publication
-checkpoint and its refreshed handoff require a later green exact-head CI run
-before any production mutation.
+checkpoint and its refreshed handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32498355451> at
+`1863eb45` in 11m02s. The newer `04deaac2` Warm Up publication checkpoint and
+its refreshed handoff require a later green exact-head CI run before any
+production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -2045,6 +2048,45 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source Warm Up publication milestone
+
+Commit `04deaac2` closes the player-visible Warm Up counter window around the
+same decomposed completion transaction. The Go API increments the counter and
+saves both the terminal match and winning account inside one `TxContext`
+transaction. The Worker persists the exact `warm_ups_before` and
+`warm_ups_after` receipt before `publishMatchCompletion` changes the shared
+multiplayer ledger to `ended`; without a projection, the account could expose
+progress from a match that remained unpublished or was waiting for another
+settlement stage to retry.
+
+Account reads now select the earliest receipt whose multiplayer ledger is not
+`ended` and expose its immutable pre-match value. The projection verifies that
+the after-value is the source-capped increment and that the credited player
+matches the receipt user's exact ledger slot. A malformed or mismatched receipt
+produces a sentinel outside the source 0-3 range, and every repository boundary
+rejects it instead of exposing staged progression.
+
+The shared projection covers identity account, session, and username reads;
+gifted-inviter account hydration; player and centered leaderboard entries; and
+the authoritative account embedded into a newly allocated match. The Workers
+regression stages two pending completions over one account and proves the
+visible value advances from 1 to 2 to 3 only as each ledger publishes. It also
+proves a mismatched player-slot receipt fails account, session, and leaderboard
+reads closed until publication. The match-service regression independently
+proves authoritative match construction sees the projected pre-match value.
+
+The expanded mutation-tested match-completion gate derives the Go transaction,
+Worker stage order, receipt validation, every read surface, and both runtime
+proofs. The exact complete local release contract passed with exit code zero at
+`04deaac2`: 521 main-Worker tests across 85 files, 40 game-server unit and 133
+Workers tests, 46 match-service tests, 63 matchmaker unit and 67 Workers tests,
+30 browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled web entry is `/assets/index-874772de.js`; the game entry remains
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -2156,7 +2198,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `5b3d3306` from its
+- Deploy and verify the tested runtime changes through `04deaac2` from its
   exact green release-gate head. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
