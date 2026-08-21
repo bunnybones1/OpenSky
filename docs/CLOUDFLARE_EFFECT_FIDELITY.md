@@ -276,6 +276,10 @@ similarity to the Go task runner.
 
 ### 4. Reframe post-match maintenance
 
+The selected Cloudflare-native boundary and the `0119`/`0120` migration
+disposition are recorded in
+[`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md).
+
 - Preserve the terminal publication boundary and global ordering effects.
 - Replace gates that pin five-second/fifteen-second linear retry and five
   attempts with exactly-once, independent-progress, observability, and re-drive

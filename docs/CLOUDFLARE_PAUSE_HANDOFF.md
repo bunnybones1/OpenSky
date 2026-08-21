@@ -12,8 +12,10 @@ test, and architecture work may resume under
 [`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). The Go
 services are behavioral oracles, not architecture templates. The uncommitted
 Conquest `0121` attempt lifecycle was discarded; migrations `0119` and `0120`
-must be reassessed before production. The production mutation pause remains in
-force.
+were reassessed in
+[`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
+and must be corrected and reverified before production. The production
+mutation pause remains in force.
 
 ## Exact checkpoint
 
