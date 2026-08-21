@@ -2240,6 +2240,36 @@ artifact validation. The assembled entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source Warm Up bot difficulty — 2026-08-20
+
+Milestone `df44bad0` restores the original guided Warm Up opponent. Go's
+`bot.Difficulty` bypasses the normal account-level curve for `WARM_UP` and
+returns `1.0`. Cloudflare previously constructed both the bot account/name and
+the game setting from the level curve, so a level-one player received
+`Majordomo` at `0.34` rather than the source `Mecha Gygax` at full strength.
+
+The match service now uses one mode-aware calculation for both the generated
+bot participant and `matchSettings.botDifficulty`. Practice Bot and optional
+ranked bots still use the source level curve. A D1/Workers regression creates a
+real Warm Up allocation and verifies the stored payload's mode, name, and
+difficulty; the existing Practice allocation continues to verify `0.34`.
+
+The mutation-tested `check:cloudflare:bot-difficulty` gate covers the Go branch,
+curve, and direct tests; both TypeScript consumers; the end-to-end regression;
+the match-service deployment path; and the non-deploying complete-build audit.
+The targeted source `TestBotSuite/TestCalculateDifficulty` passed. The broader
+legacy Go package still has an unrelated nondeterministic-signature fixture in
+`TestContextFromKeys`, so it is not used as evidence for this milestone.
+
+The exact complete local contract passed at `df44bad0`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 34 match-service tests, 57
+matchmaker unit and 61 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

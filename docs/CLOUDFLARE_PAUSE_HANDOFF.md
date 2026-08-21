@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `4674f714`
-  (`Preserve source Conquest rank admission`)
-- Latest tested runtime commit: `4674f714`
-  (`Preserve source Conquest rank admission`)
+- Last code/test checkpoint: `df44bad0`
+  (`Preserve source Warm Up bot difficulty`)
+- Latest tested runtime commit: `df44bad0`
+  (`Preserve source Warm Up bot difficulty`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `4674f714` are committed and
+- The runtime changes from `38386294` through `df44bad0` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -141,8 +141,11 @@ deck-admission checkpoint and its handoff at exact pushed head `703e4de8` in
 10m48s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32443783609> passed the
 per-mode relaxation checkpoint and its handoff at exact pushed head `740d2ea7`
-in 10m46s. The newer `4674f714` Conquest-rank checkpoint and this refreshed
-handoff must receive exact-head CI before any production mutation.
+in 10m46s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32445218465> passed the
+Conquest-rank checkpoint and its handoff at exact pushed head `4478e24e` in
+10m45s. The newer `df44bad0` Warm Up bot checkpoint and this refreshed handoff
+must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -964,6 +967,39 @@ artifact validation. The assembled web and game entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source Warm Up bot-difficulty milestone
+
+Commit `df44bad0` restores the original player-facing Warm Up opponent:
+
+- Go forces the guided `WARM_UP` bot to difficulty `1.0` instead of applying
+  the normal account-level curve;
+- the match service now makes that mode-aware decision once for both the bot
+  participant's source name and the authoritative game `botDifficulty`
+  setting; and
+- Practice Bot and optional ranked bots retain the existing source curve,
+  including difficulty `0.34` for a level-one account.
+
+The Workers regression dispatches a real Warm Up allocation through D1 and
+proves both `Mecha Gygax` and difficulty `1.0` reach the stored game payload.
+The existing Practice regression continues to prove `Majordomo` and `0.34`.
+The mutation-tested `check:cloudflare:bot-difficulty` gate derives the Go
+branch, numeric curve and source tests; both TypeScript consumers; the
+end-to-end Workers regression; the match-service deployment command; and
+complete-build CI wiring.
+
+The targeted source `TestBotSuite/TestCalculateDifficulty` regression passed.
+The broader legacy Go bot package is not claimed green: its unrelated
+`TestContextFromKeys` compares a nondeterministic generated signature to a
+hard-coded value. The exact complete Cloudflare release contract passed at
+committed runtime head `df44bad0` with 510 main-Worker tests, 34 game-server
+unit tests, 117 game-server Workers tests, 34 match-service tests, 57
+matchmaker unit tests, 61 matchmaker Workers tests, 30 browser-game tests, nine
+analytics tests, every source/off-chain gate, all typechecks, both production
+builds, and 594-file artifact validation. The assembled web and game entries
+are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1068,7 +1104,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `4674f714`. Keep
+- Deploy and verify the tested runtime changes through `df44bad0`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

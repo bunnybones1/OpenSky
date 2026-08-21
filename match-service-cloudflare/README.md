@@ -5,6 +5,10 @@ the authoritative game-server Durable Object. It preserves the source
 `MatchmakerStartMatchMessage` contract, allocates stable match/replay IDs in D1,
 loads the authenticated player's account and unlocked cards, creates source-
 compatible bot participants, and dispatches an idempotent match creation call.
+Bot construction also preserves the source mode-specific difficulty boundary:
+Warm Up always receives the full-strength `1.0` opponent, while Practice Bot
+and optional ranked bots use the account-level curve. One mode-aware value
+drives both the bot account/name and the game-server match setting.
 Human match snapshots come from game-owned D1 state rather than Google identity
 metadata or browser claims: account alias/settings, current ranked stats,
 crystal/title/tag art, equipped cosmetics, inventory card rarity, hero ability,
@@ -56,5 +60,6 @@ Run checks from the repository root:
 ```sh
 corepack pnpm --filter @opensky/cloudflare-match-service typecheck
 corepack pnpm --filter @opensky/cloudflare-match-service test
+corepack pnpm check:cloudflare:bot-difficulty
 corepack pnpm --filter @opensky/cloudflare-match-service exec wrangler deploy --dry-run
 ```
