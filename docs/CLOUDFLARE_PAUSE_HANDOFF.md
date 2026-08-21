@@ -7,6 +7,14 @@ source-faithful code, test, documentation, PR, and CI work may continue, but do
 not resume deployment, provisioning, product activation, or live drills
 without a new user request.
 
+Runtime implementation is additionally frozen while the effect-fidelity audit
+is reviewed. The Go services are behavioral oracles, not architecture
+templates; the proposed contract and revised milestone plan are in
+[`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). Until that
+direction is ratified, do not commit the uncommitted Conquest `0121` attempt
+lifecycle, simplify committed migrations `0119` or `0120`, or begin a
+Workflow/Queue spike. Read-only audit and documentation work remain safe.
+
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
