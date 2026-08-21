@@ -52,20 +52,37 @@ describe('Go match criteria compatibility', () => {
   })
 
   it('selects wait-time relaxation stages by game mode', () => {
-    const calculator = new WaitTimeScoreCalculator(intervals, [10, 20, 30], () => now)
+    const calculator = new WaitTimeScoreCalculator(
+      intervals,
+      [10, 20, 30],
+      () => now
+    )
     const fixture = (mode: GameMode, waitMs: number) =>
-      createPlayer({ address: `0x${mode}${waitMs}`, mode, initTimestampMs: now - waitMs })
+      createPlayer({
+        address: `0x${mode}${waitMs}`,
+        mode,
+        initTimestampMs: now - waitMs
+      })
 
-    expect(calculator.calculate(fixture(GameMode.RANKED_CONSTRUCTED, 10_000))).toBe(10)
-    expect(calculator.calculate(fixture(GameMode.RANKED_CONSTRUCTED, 11_000))).toBe(20)
-    expect(calculator.calculate(fixture(GameMode.RANKED_DISCOVERY, 24_000))).toBe(30)
-    expect(calculator.calculate(fixture(GameMode.CONQUEST_CONSTRUCTED, 21_000))).toBe(20)
-    expect(calculator.calculate(fixture(GameMode.CONQUEST_DISCOVERY, 44_000))).toBe(30)
-    expect(calculator.calculate(fixture(GameMode.PRACTICE_PVP, 1_000))).toBe(20)
+    for (const [mode, intervalMs] of [
+      [GameMode.RANKED_CONSTRUCTED, 11_000],
+      [GameMode.RANKED_DISCOVERY, 12_000],
+      [GameMode.CONQUEST_CONSTRUCTED, 21_000],
+      [GameMode.CONQUEST_DISCOVERY, 22_000],
+      [GameMode.PRACTICE_PVP, 1_000]
+    ] as const) {
+      expect(calculator.calculate(fixture(mode, intervalMs - 1))).toBe(10)
+      expect(calculator.calculate(fixture(mode, intervalMs))).toBe(20)
+      expect(calculator.calculate(fixture(mode, intervalMs * 2))).toBe(30)
+    }
   })
 
   it('preserves ranked and practice-PVP distance rules', () => {
-    const calculator = new WaitTimeScoreCalculator(intervals, [8, 20], () => now)
+    const calculator = new WaitTimeScoreCalculator(
+      intervals,
+      [8, 20],
+      () => now
+    )
     const ranked = rankedCriteria(calculator)
     const practice = practicePvpCriteria(calculator)
     const player1 = createPlayer({

@@ -16,6 +16,7 @@ import {
   gameModeCriteriaValidator,
   practicePvpCriteria,
   rankedCriteria,
+  type RelaxMatchingRuleIntervals,
   sameIpAddressValidator,
   sessionValidator,
   versionValidator,
@@ -72,6 +73,10 @@ export interface MatchmakerEnv {
   MATCH_REFUSAL_PENALTY_SECONDS?: string
   MATCH_TICK_MS?: string
   RELAX_MATCHING_INTERVAL_MS?: string
+  RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS?: string
+  RELAX_MATCHING_RANKED_DISCOVERY_INTERVAL_MS?: string
+  RELAX_MATCHING_CONQUEST_CONSTRUCTED_INTERVAL_MS?: string
+  RELAX_MATCHING_CONQUEST_DISCOVERY_INTERVAL_MS?: string
   MATCH_DISPATCH_MAX_ATTEMPTS?: string
   GAME_MODE_STATUS_CACHE_TTL_MS?: string
   EXPECTED_RELEASE_VERSION?: string
@@ -151,7 +156,7 @@ interface RuntimeConfig {
   authenticationTimeoutMs: number
   acceptanceTimeoutMs: number
   tickMs: number
-  relaxIntervalMs: number
+  relaxIntervals: RelaxMatchingRuleIntervals
   dispatchMaxAttempts: number
   gameModeStatusCacheTtlMs: number
   expectedReleaseVersion: string
@@ -205,6 +210,46 @@ const parsePositiveInteger = (
 const bool = (value: string | undefined, fallback: boolean) =>
   value === undefined ? fallback : value.toLowerCase() === 'true'
 
+export const readRelaxMatchingRuleIntervals = (
+  env: Pick<
+    MatchmakerEnv,
+    | 'RELAX_MATCHING_INTERVAL_MS'
+    | 'RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS'
+    | 'RELAX_MATCHING_RANKED_DISCOVERY_INTERVAL_MS'
+    | 'RELAX_MATCHING_CONQUEST_CONSTRUCTED_INTERVAL_MS'
+    | 'RELAX_MATCHING_CONQUEST_DISCOVERY_INTERVAL_MS'
+  >
+): RelaxMatchingRuleIntervals => {
+  const relaxDefaultMs = parsePositiveInteger(
+    env.RELAX_MATCHING_INTERVAL_MS,
+    30_000,
+    10 * 60_000
+  )
+  return {
+    defaultMs: relaxDefaultMs,
+    rankedConstructedMs: parsePositiveInteger(
+      env.RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS,
+      relaxDefaultMs,
+      10 * 60_000
+    ),
+    rankedDiscoveryMs: parsePositiveInteger(
+      env.RELAX_MATCHING_RANKED_DISCOVERY_INTERVAL_MS,
+      relaxDefaultMs,
+      10 * 60_000
+    ),
+    conquestConstructedMs: parsePositiveInteger(
+      env.RELAX_MATCHING_CONQUEST_CONSTRUCTED_INTERVAL_MS,
+      relaxDefaultMs,
+      10 * 60_000
+    ),
+    conquestDiscoveryMs: parsePositiveInteger(
+      env.RELAX_MATCHING_CONQUEST_DISCOVERY_INTERVAL_MS,
+      relaxDefaultMs,
+      10 * 60_000
+    )
+  }
+}
+
 const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
   const expectedReleaseVersion =
     env.EXPECTED_RELEASE_VERSION?.trim().toLowerCase()
@@ -229,11 +274,7 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
       120_000
     ),
     tickMs: parsePositiveInteger(env.MATCH_TICK_MS, 2_000, 30_000),
-    relaxIntervalMs: parsePositiveInteger(
-      env.RELAX_MATCHING_INTERVAL_MS,
-      30_000,
-      10 * 60_000
-    ),
+    relaxIntervals: readRelaxMatchingRuleIntervals(env),
     dispatchMaxAttempts: parsePositiveInteger(
       env.MATCH_DISPATCH_MAX_ATTEMPTS,
       3,
@@ -972,13 +1013,7 @@ export class MatchmakerPool implements DurableObject {
     }
     if (candidates.length < 2) return
 
-    const interval = {
-      defaultMs: this.config.relaxIntervalMs,
-      rankedConstructedMs: this.config.relaxIntervalMs,
-      rankedDiscoveryMs: this.config.relaxIntervalMs,
-      conquestConstructedMs: this.config.relaxIntervalMs,
-      conquestDiscoveryMs: this.config.relaxIntervalMs
-    }
+    const interval = this.config.relaxIntervals
     const pvpScore = new WaitTimeScoreCalculator(
       interval,
       [100, 200, 300, 400],
