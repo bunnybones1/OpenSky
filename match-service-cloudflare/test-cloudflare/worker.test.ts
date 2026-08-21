@@ -948,6 +948,31 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(body.profile.abandonPenaltyMs).toBeLessThanOrEqual(10_000)
   })
 
+  it('forces the source full-strength bot for Warm Up matches', async () => {
+    const accepted = dispatch()
+    accepted.proposalId = 'proposal-warm-up-difficulty'
+    accepted.participants[0].player.mode = GameMode.WARM_UP
+    accepted.participants[0].request!.mode = GameMode.WARM_UP
+    accepted.participants[1].player.mode = GameMode.WARM_UP
+
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{ match_payload_json: string }>()
+    const payload = JSON.parse(row!.match_payload_json)
+    expect(payload.match).toMatchObject({
+      player2: {
+        gameMode: GameMode.WARM_UP,
+        account: { name: 'Mecha Gygax' }
+      },
+      matchSettings: { botDifficulty: 1 }
+    })
+  })
+
   it('uses the identity inventory as the authoritative playable-card source', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const now = new Date().toISOString()

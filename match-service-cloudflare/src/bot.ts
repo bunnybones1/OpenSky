@@ -1,5 +1,6 @@
 import { keccak_256 } from '@noble/hashes/sha3'
 import { getPublicKey, utils } from '@noble/secp256k1'
+import { GameMode } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
 import { MatchStartPlayerInfo } from '@opensky/shared/matchmaker-message-types'
 import { PrivateSeed } from '@skyweaver/state-metadata'
@@ -7,8 +8,8 @@ import { PrivateSeed } from '@skyweaver/state-metadata'
 import { bytesToHex } from './encoding'
 
 const STARTER_CARD_IDS = [
-  6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149,
-  150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
+  6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
+  151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
 ]
 const BOT_NAMES = [
   'Short Circuit',
@@ -40,6 +41,11 @@ export const addressForBotPrivateKey = (key: Uint8Array) => {
 export const botDifficultyForLevel = (level: number) =>
   Math.floor((0.3 + Math.min(15, Math.max(0, level)) * (0.7 / 15)) * 100) / 100
 
+// Source oracle: matchmaker/lib/player/bot.Difficulty forces the guided Warm
+// Up opponent to full strength. Other bot modes retain the level curve.
+export const botDifficultyForPlayer = (mode: GameMode, level: number) =>
+  mode === GameMode.WARM_UP ? 1 : botDifficultyForLevel(level)
+
 export const createBotParticipant = (
   mode: MatchStartPlayerInfo['gameMode'],
   opponentLevel: number
@@ -48,7 +54,7 @@ export const createBotParticipant = (
   const subkey = createBotPrivateKey()
   const address = addressForBotPrivateKey(walletKey)
   const subkeyAddress = addressForBotPrivateKey(subkey)
-  const difficulty = botDifficultyForLevel(opponentLevel)
+  const difficulty = botDifficultyForPlayer(mode, opponentLevel)
   const createdAt = '2020-01-01T00:00:00.000Z'
   const privateSeed: PrivateSeed = {
     player: [...hexAddressBytes(address)],
@@ -87,7 +93,10 @@ export const createBotParticipant = (
 const hexAddressBytes = (address: string) => {
   const bytes = new Uint8Array(20)
   for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(address.slice(2 + index * 2, 4 + index * 2), 16)
+    bytes[index] = Number.parseInt(
+      address.slice(2 + index * 2, 4 + index * 2),
+      16
+    )
   }
   return bytes
 }

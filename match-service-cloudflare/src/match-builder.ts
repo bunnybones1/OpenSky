@@ -7,7 +7,7 @@ import {
 import { prismsToDeckClass } from '@opensky/shared/helpers'
 import { BaseCard, CardLibrary, PrivateSeed } from '@skyweaver/state-metadata'
 
-import { botDifficultyForLevel, createBotParticipant } from './bot'
+import { botDifficultyForPlayer, createBotParticipant } from './bot'
 import { hexToBytes, validByteArray } from './encoding'
 import {
   AcceptedMatchDispatch,
@@ -165,7 +165,7 @@ export const buildMatch = async (
       ? createBotParticipant(participant.player.mode, humanLevel)
       : humans[index]!.info
   ) as [MatchStartPlayerInfo, MatchStartPlayerInfo]
-  const hasBot = dispatch.participants.some(
+  const botParticipant = dispatch.participants.find(
     participant => participant.player.address === BOT_PLACEHOLDER
   )
   return {
@@ -182,7 +182,14 @@ export const buildMatch = async (
         // Source customgameservers/client.go uses player one's normalized
         // session verbatim, including the empty non-challenge value.
         matchmakingCode: dispatch.participants[0].player.sessionId,
-        ...(hasBot ? { botDifficulty: botDifficultyForLevel(humanLevel) } : {})
+        ...(botParticipant
+          ? {
+              botDifficulty: botDifficultyForPlayer(
+                botParticipant.player.mode,
+                humanLevel
+              )
+            }
+          : {})
       }
     }
   }
