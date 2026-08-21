@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `96e25086`
-  (`Preserve source level-gated bot decks`)
-- Latest tested runtime commit: `96e25086`
-  (`Preserve source level-gated bot decks`)
+- Last code/test checkpoint: `60292a03`
+  (`Preserve source matchmaker cadence`)
+- Latest tested runtime commit: `60292a03`
+  (`Preserve source matchmaker cadence`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `96e25086` are committed and
+- The runtime changes from `38386294` through `60292a03` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-c8882239.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -147,8 +147,11 @@ Conquest-rank checkpoint and its handoff at exact pushed head `4478e24e` in
 10m45s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32446135691> passed the
 Warm Up bot checkpoint and its handoff at exact pushed head `5df2edb0` in
-10m49s. The newer `96e25086` level-gated bot-deck checkpoint and this refreshed
-handoff must receive exact-head CI before any production mutation.
+10m49s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32447434380> passed the
+level-gated bot-deck checkpoint and its handoff at exact pushed head
+`c69a6121` in 10m30s. The newer `60292a03` cadence checkpoint and this
+refreshed handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1043,6 +1046,54 @@ artifact validation. The assembled web and game entries are
 warnings remained non-fatal. No deployment, migration, provisioning,
 activation, live match, or production mutation was performed.
 
+## Source matchmaker independent-cadence milestone
+
+Commit `60292a03` restores the nine independent `director.NewRunner` cycles
+started by the Go matchmaker instead of treating every Durable Object alarm as
+one global matching tick:
+
+- Practice Bot/Warm Up and Practice PvP/ranked find cycles retain their source
+  five-second defaults; Conquest Constructed and both Challenge find cycles
+  retain two seconds; and the four accepted-proposal `MakeMatch` cycles retain
+  their separate two-second cadence;
+- each active source runner has a durable deadline, preserves phase across a
+  delayed alarm, and advances or disappears independently, so a socket,
+  proposal-timeout, or unrelated mode alarm cannot match another queue early;
+- new and rolling-upgrade tickets/proposals reconstruct any missing runner
+  state without performing work immediately;
+- the source app does not start a Conquest Discovery find or make runner, so
+  Cloudflare no longer invents one despite the unused Go config field; and
+- accepted PvP/Conquest/Challenge proposals wait for their matching source
+  `MakeMatch` runner instead of allocating inside the final accept command.
+
+The source `BotMatchProcessor` is intentionally different: Practice Bot and
+Warm Up allocate directly on their find tick and never enter a human acceptance
+or `MakeMatch` queue. Cloudflare now follows that path, writes the proposal and
+removes the ticket transactionally before its idempotent allocation call, and
+keeps the bounded retry/release safety for transient service failures. A
+rolling deployment also finishes a legacy already-accepted bot proposal
+directly rather than stranding it without a source make runner.
+
+Workers regressions prove no immediate match after admission, an unrelated
+alarm cannot match, mode-group deadlines stay independent, Conquest Discovery
+has no runner, accepted PvP waits for `MakeMatch`, and Practice Bot goes
+directly from its find tick to `match_made`. The mutation-tested
+`check:cloudflare:matchmaker-cadence` gate derives the nine-runner topology,
+Go ticker lifecycle and defaults, direct bot processor, TypeScript mapping,
+durable state, tests, both Wrangler policies, deployment command, and CI
+wiring from source.
+
+The source director packages passed their Go tests. The exact complete local
+contract passed with exit code zero at `60292a03`: 510 main-Worker tests, 34
+game-server unit and 117 Workers tests, 36 match-service tests, 60 matchmaker
+unit and 65 Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. Existing chunk-size, PWA, and
+legacy lint messages remained warnings. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1147,7 +1198,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `96e25086`. Keep
+- Deploy and verify the tested runtime changes through `60292a03`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - Keep optional ranked/PvP bots disabled until the source registered bot
   account and unlocked-deck selection path is ported and separately verified.

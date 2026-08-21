@@ -2305,7 +2305,52 @@ are `/assets/index-c8882239.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker independent cadence — 2026-08-20
+
+Milestone `60292a03` replaces the Cloudflare matchmaker's eager shared tick
+with the nine independent runners constructed by the Go app. Practice Bot/Warm
+Up and Practice PvP/ranked find cycles retain their source five-second
+defaults; Conquest Constructed, both Challenge find cycles, and the four
+accepted-proposal `MakeMatch` cycles retain two seconds. Each active runner has
+a durable deadline that advances by its prior phase, survives hibernation, and
+cannot be triggered early by an unrelated socket or proposal alarm.
+
+The runner map preserves two less-obvious source facts. Although Go has a
+Conquest Discovery interval field, the app starts no find or make runner for
+that mode, so Cloudflare no longer invents one. Conversely, the source
+`BotMatchProcessor` allocates Practice Bot and Warm Up directly on their find
+tick; it never creates a human acceptance or `MakeMatch` queue entry. The
+Worker now performs that direct idempotent allocation after a transactional
+proposal-write/ticket-delete boundary, while retaining bounded transient retry
+and release safety. Legacy accepted bot proposals finish directly during a
+rolling deployment.
+
+Unit and Workers regressions prove exact interval defaults and runner groups,
+phase-preserving delayed ticks, no immediate match, unrelated-alarm isolation,
+independent mode deadlines, the absent Conquest Discovery runner, delayed PvP
+make, and direct Practice Bot allocation. The mutation-tested
+`check:cloudflare:matchmaker-cadence` gate derives the topology, ticker,
+defaults, direct bot processor, Worker state machine, tests, Wrangler values,
+deployment path, and non-deploying CI wiring from the checked-in source.
+
+The source director Go packages passed. The exact complete local contract
+passed with exit code zero at `60292a03`: 510 main-Worker tests, 34 game-server
+unit and 117 Workers tests, 36 match-service tests, 60 matchmaker unit and 65
+Workers tests, 30 browser-game tests, nine analytics tests, every source and
+off-chain gate, all typechecks, both production builds, and 594-file artifact
+validation. The assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
+
+The remaining dormant matchmaker parity slice is the source registered-bot
+path used only when ranked/PvP bots are enabled. It selects a provisioned bot
+account compatible with the opponent's season/mode/rank/score, excludes bots
+already in a match, chooses among the human player's unlocked starter decks,
+and replaces the unregistered bot snapshot with that account/deck. Both
+production Workers retain `ENABLE_RANKED_BOTS=false` until that separate D1
+account authority and selection path are ported and verified.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,

@@ -3,18 +3,19 @@
 This package ports behavior from the Go `matchmaker` component without changing
 the client wire contract or combining it with the game server.
 
-| TypeScript module  | Go source oracle                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| `src/model.ts`     | `matchmaker/lib/player`, `matchmaker/lib/mappings`                                          |
-| `src/quality.ts`   | `matchmaker/lib/matchmaker/matching/matchers/matchquality`                                  |
-| `src/criteria.ts`  | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators`                               |
-| `src/matcher.ts`   | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go`                         |
-| `src/protocol.ts`  | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts`                     |
-| `src/admission.ts` | `frontend/findmatch/validators/game_mode_data_consistency.go`                               |
-| `src/runtime.ts`   | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
-| `src/penalties.ts` | `matchmaker/lib/penaltytracker/tracker.go`                                                  |
-| `src/captcha.ts`   | `frontend/findmatch/validators/captcha.go`, `matching/matchers/player_validator.go`         |
-| `src/worker.ts`    | `matchmaker/lib/frontend/websocket_handler.go`                                              |
+| TypeScript module      | Go source oracle                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `src/model.ts`         | `matchmaker/lib/player`, `matchmaker/lib/mappings`                                          |
+| `src/quality.ts`       | `matchmaker/lib/matchmaker/matching/matchers/matchquality`                                  |
+| `src/criteria.ts`      | `matchmaker/lib/matchmaker/matching/matchers/matchvalidators`                               |
+| `src/matcher.ts`       | `player_combinator.go`, `pvp_match_matcher.go`, `match_proposal.go`                         |
+| `src/match-cadence.ts` | `matchmaker/app.go`, `matchmaker/lib/director/runner.go`, `matchmaker/config/config.go`     |
+| `src/protocol.ts`      | `matchmaker/lib/messages`, `lib/shared/src/matchmaker-message-types.ts`                     |
+| `src/admission.ts`     | `frontend/findmatch/validators/game_mode_data_consistency.go`                               |
+| `src/runtime.ts`       | `custommatchmaker/{frontend_service,backend_service,accepter,decliner,accept_timeouter}.go` |
+| `src/penalties.ts`     | `matchmaker/lib/penaltytracker/tracker.go`                                                  |
+| `src/captcha.ts`       | `frontend/findmatch/validators/captcha.go`, `matching/matchers/player_validator.go`         |
+| `src/worker.ts`        | `matchmaker/lib/frontend/websocket_handler.go`                                              |
 
 Tests intentionally reproduce boundary values from the corresponding Go tests.
 The Cloudflare integration suite additionally covers authenticated WebSocket
@@ -38,10 +39,14 @@ be copied to a second `workers.dev` hostname. It derives a stable game principal
 from the Google identity and calls this Worker over a service binding with
 trusted identity headers. This Worker owns only queue and proposal state.
 
-After all players accept, the matchmaker calls the separate `MATCH_SERVICE`
-binding with the proposal ID as an idempotency key. A successful game-server
-allocation returns a WebSocket address; only then does the matchmaker send the
-existing `match_made` and `match_ready_to_start` messages.
+After all PvP, Conquest, or Challenge players accept, the proposal waits for
+its independent source `MakeMatch` runner before the matchmaker calls the
+separate `MATCH_SERVICE` binding with the proposal ID as an idempotency key. A
+successful game-server allocation returns a WebSocket address; only then does
+the matchmaker send the existing `match_made` and `match_ready_to_start`
+messages. Practice Bot and Warm Up preserve the source's different
+`BotMatchProcessor` path: their find runner allocates directly without a human
+acceptance proposal or `MakeMatch` cycle.
 
 Before a queue ticket is written, the same internal binding resolves the
 source-authoritative player inputs from D1: current mode score/rank, highest
@@ -144,6 +149,18 @@ mode-specific overrides inherit that default for rolling compatibility. The
 mutation-tested `check:cloudflare:matchmaker-relaxation` gate protects the Go
 oracle, TypeScript selection, explicit policy, tests, and release wiring.
 
+The source app separately starts nine director tickers: five find runners and
+four accepted-proposal `MakeMatch` runners. Practice Bot/Warm Up and Practice
+PvP/ranked find runners default to five seconds; Conquest Constructed, both
+Challenge find runners, and all make runners default to two seconds. Durable
+Object runner deadlines preserve those groups and phases while work exists,
+survive hibernation, and cannot be triggered early by an unrelated socket or
+proposal alarm. The source app has no Conquest Discovery runner despite an
+unused config field, so the Worker deliberately leaves that mode out of both
+maps. `check:cloudflare:matchmaker-cadence` mutation-tests the source topology,
+direct bot processor, durable scheduler, explicit Wrangler policies, runtime
+regressions, and release wiring.
+
 The source Conquest validator next checks both ranked ladders before active-run,
 status, locked-deck, game-mode, reconnect, pending-match, penalty, or queue
 behavior. A player qualifies when either Ranked Constructed or Ranked Discovery
@@ -161,6 +178,7 @@ deployment paths.
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
+- `pnpm check:cloudflare:matchmaker-cadence`
 - `pnpm check:cloudflare:matchmaker-deck`
 - `pnpm check:cloudflare:matchmaker-relaxation`
 - `pnpm check:cloudflare:matchmaker-conquest`
