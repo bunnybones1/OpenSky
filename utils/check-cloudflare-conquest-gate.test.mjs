@@ -6,6 +6,7 @@ import {
   conquestFilledDeckAuthorityErrors,
   conquestGateErrors,
   conquestPoolCatalogErrors,
+  conquestSettlementAdmissionErrors,
   conquestSettlementSourceParityErrors,
   conquestV2DeliveryBatchErrors,
   conquestV2PointsSourceParityErrors,
@@ -887,5 +888,83 @@ test('derives Conquest settlement rewards and terminal behavior from source', as
       settlement,
       progression
     ).some(error => error.includes('source Conquest reward wire'))
+  )
+})
+
+test('pins pending Conquest settlement to the source transaction boundary', async () => {
+  const [sourceMatches, gameMatch, repository, rpcTest] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('cloudflare/src/conquest.ts', 'utf8'),
+    readFile('cloudflare/test/conquest-rpc.test.ts', 'utf8')
+  ])
+  const errors = (
+    sourceMutation = sourceMatches,
+    gameMutation = gameMatch,
+    repositoryMutation = repository,
+    testMutation = rpcTest
+  ) =>
+    conquestSettlementAdmissionErrors(
+      sourceMutation,
+      gameMutation,
+      repositoryMutation,
+      testMutation
+    )
+
+  assert.deepEqual(errors(), [])
+  assert.ok(
+    errors(
+      sourceMatches.replace(
+        'err := repo.TxContext(ctx, func(tx db.Session) error {',
+        'err := repo.NoTx(ctx, func(tx db.Session) error {'
+      )
+    ).some(error => error.includes('match-completion transaction'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      gameMatch.replace(
+        'const conquestCards = await settleConquestRewardsForMatch(',
+        'const conquestCards = await deferConquestRewardsForMatch('
+      )
+    ).some(error => error.includes('retry stages'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      gameMatch,
+      repository.replace(
+        "status IN ('IN_PROGRESS', 'REWARDS_PENDING')",
+        "status = 'IN_PROGRESS'"
+      )
+    ).some(error => error.includes('admission lookup'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      gameMatch,
+      repository.replace('AND NOT EXISTS (', 'AND EXISTS (')
+    ).some(error => error.includes('insert race guard'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      gameMatch,
+      repository.replaceAll(
+        'conquest rewards are still settling',
+        'enter conquest'
+      )
+    ).some(error => error.includes('admission boundary'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      gameMatch,
+      repository,
+      rpcTest.replace(
+        '.toEqual({ balance: 2, conquests: 1, in_progress: 0 })',
+        '.toEqual({ balance: 1, conquests: 1, in_progress: 0 })'
+      )
+    ).some(error => error.includes('runtime proof'))
   )
 })

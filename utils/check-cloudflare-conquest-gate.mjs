@@ -906,6 +906,138 @@ export const conquestSettlementSourceParityErrors = (
   return errors
 }
 
+/**
+ * Go advances a Conquest run and creates its terminal rewards inside the same
+ * match-completion transaction. The Worker decomposes that work into
+ * retryable receipts, so REWARDS_PENDING must retain the single-run admission
+ * boundary until settlement has reached COMPLETED.
+ */
+export const conquestSettlementAdmissionErrors = (
+  sourceMatches,
+  gameMatch,
+  repository,
+  rpcTest
+) => {
+  const errors = []
+  const sourceEndMatch = bracedBlock(
+    sourceMatches,
+    'func (s *Server) endMatch'
+  )
+  const sourceTransaction = sourceEndMatch
+    ? bracedBlock(
+        sourceEndMatch,
+        'repo.TxContext(ctx, func(tx db.Session) error'
+      )
+    : undefined
+  if (
+    !sourceTransaction ||
+    !sourceTransaction.includes(
+      's.updateConquestProgress(ctx, tx, match, winner, loser, isDraw)'
+    )
+  ) {
+    errors.push(
+      'source Conquest progress is not proven inside match-completion transaction'
+    )
+  }
+
+  const workerCompletion =
+    bracedBlock(gameMatch, 'private async recordCompletionWithRetry') ?? ''
+  const progressionIndex = workerCompletion.indexOf(
+    'await applyConquestProgress('
+  )
+  const settlementIndex = workerCompletion.indexOf(
+    'await settleConquestRewardsForMatch('
+  )
+  const publicationIndex = workerCompletion.indexOf(
+    'await publishMatchCompletion('
+  )
+  if (
+    progressionIndex < 0 ||
+    settlementIndex <= progressionIndex ||
+    publicationIndex <= settlementIndex
+  ) {
+    errors.push(
+      'Worker Conquest retry stages do not preserve progress, settlement, publication order'
+    )
+  }
+
+  const entryStatus = bracedBlock(
+    repository,
+    'private async entryStatus'
+  )
+  const compactEntryStatus = entryStatus?.replace(/\s+/g, ' ') ?? ''
+  for (const token of [
+    'SELECT status FROM player_conquests',
+    "status IN ('IN_PROGRESS', 'REWARDS_PENDING')",
+    'ORDER BY id DESC',
+    'LIMIT 1'
+  ]) {
+    if (!compactEntryStatus.includes(token)) {
+      errors.push(`Conquest settlement admission lookup is missing: ${token}`)
+    }
+  }
+
+  const enter = bracedBlock(repository, 'async enter(') ?? ''
+  const compactEnter = enter.replace(/\s+/g, ' ')
+  if (
+    occurrences(enter, /this\.entryStatus\(userId\)/g) !== 2 ||
+    enter.indexOf('this.entryStatus(userId)') > enter.indexOf('const [rank')
+  ) {
+    errors.push(
+      'Conquest entry must check settlement status before admission and after an insert race'
+    )
+  }
+  for (const [token, count] of [
+    ['ConquestStatus.IN_PROGRESS', 2],
+    ['ConquestStatus.REWARDS_PENDING', 2],
+    ["throw new Error('conquest rewards are still settling')", 2]
+  ]) {
+    if (enter.split(token).length - 1 !== count) {
+      errors.push(`Conquest settlement admission boundary is missing: ${token}`)
+    }
+  }
+
+  const insertStart = compactEnter.indexOf(
+    'INSERT OR IGNORE INTO player_conquests'
+  )
+  const insertEnd = compactEnter.indexOf(
+    'ORDER BY verified.starts_at DESC',
+    insertStart
+  )
+  const insert =
+    insertStart >= 0 && insertEnd > insertStart
+      ? compactEnter.slice(insertStart, insertEnd)
+      : ''
+  for (const token of [
+    'AND NOT EXISTS ( SELECT 1 FROM player_conquests existing',
+    'WHERE existing.user_id = ?',
+    "existing.status IN ('IN_PROGRESS', 'REWARDS_PENDING')"
+  ]) {
+    if (!insert.includes(token)) {
+      errors.push(`Conquest settlement insert race guard is missing: ${token}`)
+    }
+  }
+
+  const runtimeTest = bracedBlock(
+    rpcTest,
+    "it('blocks a new entry while off-chain settlement is incomplete'"
+  )
+  const compactRuntimeTest = runtimeTest?.replace(/\s+/g, ' ') ?? ''
+  for (const token of [
+    "'REWARDS_PENDING'",
+    ".rejects.toThrow('conquest rewards are still settling')",
+    "rpc('EnterConquest', { hero: Hero.SAMYA })",
+    ').status).toBe(500)',
+    'conquest: null',
+    '.toEqual({ balance: 2, conquests: 1, in_progress: 0 })'
+  ]) {
+    if (!compactRuntimeTest.includes(token)) {
+      errors.push(`Conquest settlement runtime proof is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const reviewedPoolCardIds = poolActivation => {
   const match = poolActivation.match(
     /INSERT INTO conquest_reward_pool_valid_card_ranges[\s\S]*?VALUES([\s\S]*?);/
@@ -1632,6 +1764,8 @@ const main = async () => {
     readiness,
     sourceRewardPool,
     boundaryMigration,
+    sourceMatchCompletion,
+    conquestRpcTest,
     filledDeckEvidence
   ] = await Promise.all([
     readFile(
@@ -1965,6 +2099,11 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'conquest-rpc.test.ts'),
+      'utf8'
+    ),
     Promise.all([
       readFile(
         path.join(root, 'server', 'src', 'worker', 'match', 'Match.ts'),
@@ -2092,6 +2231,12 @@ const main = async () => {
         points: gameConquestPoints,
         ranks: filledDeckEvidence.ranks
       }
+    ),
+    ...conquestSettlementAdmissionErrors(
+      sourceMatchCompletion,
+      gameMatch,
+      drainRepository,
+      conquestRpcTest
     ),
     ...conquestV2DeliveryBatchErrors(v2RewardWorker)
   ]

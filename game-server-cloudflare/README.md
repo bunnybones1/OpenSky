@@ -74,6 +74,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
   card selection pinned at ticket admission, immediate Silver settlement after
   the admission window closes, and persisted 24-hour Gold delivery tasks
   consumed by the API Worker's scheduler; and
+- source single-run Conquest admission across those retryable stages: an
+  existing `IN_PROGRESS` entry remains idempotent, while `REWARDS_PENDING`
+  blocks another ticket spend without inventing a player-visible pending run;
+  the admission insert repeats the same guard to close concurrent races; and
 - a final player-visible publication barrier that requires the authoritative
   deck pair and every applicable progression, rank, experience, warm-up,
   Conquest, and abandon receipt before the match ledger can become `ended`.

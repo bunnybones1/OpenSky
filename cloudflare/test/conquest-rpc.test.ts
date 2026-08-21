@@ -411,6 +411,63 @@ describe('source conquest RPC foundation', () => {
     ).toBe(1)
   })
 
+  it('blocks a new entry while off-chain settlement is incomplete', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET player_rank = 'TRAINEE', player_rank_stage = 'STAGE_I',
+             updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED' AND season = ?`
+      ).bind(now, userId, seasonFromDate()),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_CONQUEST_TICKET', 2, 2, 0, 'test', ?, ?)`
+      ).bind(userId, now, now)
+    ])
+    const readiness = await provisionVerifiedConquestReadiness(env.AUTH_DB)
+    await enableConstructedConquestForTest(env.AUTH_DB)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at, reward_pool_version)
+       VALUES (?, ?, 'REWARDS_PENDING', 1, 'CONQUEST_CONSTRUCTED', 'ADA',
+               'STR', '{"1":"LOSS"}', ?, ?, ?)`
+    )
+      .bind(
+        `pending-entry-${crypto.randomUUID()}`,
+        userId,
+        now,
+        now,
+        readiness.poolVersion
+      )
+      .run()
+
+    await expect(
+      new ConquestRepository(env.AUTH_DB).enter(userId, Hero.SAMYA)
+    ).rejects.toThrow('conquest rewards are still settling')
+    expect((await rpc('EnterConquest', { hero: Hero.SAMYA })).status).toBe(500)
+    expect(await (await rpc('ConquestStatus', {})).json()).toEqual({
+      conquest: null
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT balance FROM player_items
+            WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+              AND token_id = 2) AS balance,
+           (SELECT COUNT(*) FROM player_conquests
+            WHERE user_id = ?) AS conquests,
+           (SELECT COUNT(*) FROM player_conquests
+            WHERE user_id = ? AND status = 'IN_PROGRESS') AS in_progress`
+      )
+        .bind(userId, userId, userId)
+        .first()
+    ).toEqual({ balance: 2, conquests: 1, in_progress: 0 })
+  })
+
   it('recreates source conquest statistics in row insertion order', async () => {
     const now = new Date().toISOString()
     await env.AUTH_DB.batch([

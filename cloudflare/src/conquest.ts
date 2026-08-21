@@ -126,6 +126,20 @@ export const conquestTreasureProgress = conquestV2TreasureProgress
 export class ConquestRepository {
   constructor(private readonly database: D1Database) {}
 
+  private async entryStatus(userId: string): Promise<ConquestStatus | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT status FROM player_conquests
+         WHERE user_id = ?
+           AND status IN ('IN_PROGRESS', 'REWARDS_PENDING')
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      .bind(userId)
+      .first<{ status: ConquestStatus }>()
+    return row?.status ?? null
+  }
+
   async isDrainable(userId: string, mode: GameMode): Promise<boolean> {
     if (
       mode !== GameMode.CONQUEST_CONSTRUCTED &&
@@ -181,7 +195,14 @@ export class ConquestRepository {
     const deckClass = HERO_DECK_CLASS[hero]
     if (hero === Hero.UNKNOWN) throw new Error('hero is missing')
     if (!deckClass) throw invalidArgument('hero is invalid')
-    if (await this.status(userId)) return true
+    const entryStatus = await this.entryStatus(userId)
+    if (entryStatus === ConquestStatus.IN_PROGRESS) return true
+    if (entryStatus === ConquestStatus.REWARDS_PENDING) {
+      // The source updates progress and creates rewards in one transaction.
+      // Cloudflare persists those retryable stages separately, so pending
+      // settlement must retain the source's single-run admission boundary.
+      throw new Error('conquest rewards are still settling')
+    }
 
     const [rank, ticket, nonce] = await Promise.all([
       this.database
@@ -244,6 +265,10 @@ export class ConquestRepository {
            ) AND EXISTS (
              SELECT 1 FROM game_mode_status
              WHERE game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1
+           ) AND NOT EXISTS (
+             SELECT 1 FROM player_conquests existing
+             WHERE existing.user_id = ?
+               AND existing.status IN ('IN_PROGRESS', 'REWARDS_PENDING')
            )
            ORDER BY verified.starts_at DESC, verified.pool_version DESC
            LIMIT 1`
@@ -257,6 +282,7 @@ export class ConquestRepository {
           createdAt,
           createdAt,
           createdAt,
+          userId,
           userId,
           userId
         ),
@@ -275,7 +301,12 @@ export class ConquestRepository {
       .prepare('SELECT 1 FROM player_conquests WHERE entry_key = ?')
       .bind(entryKey)
       .first()
-    if (inserted || (await this.status(userId))) return true
+    if (inserted) return true
+    const concurrentStatus = await this.entryStatus(userId)
+    if (concurrentStatus === ConquestStatus.IN_PROGRESS) return true
+    if (concurrentStatus === ConquestStatus.REWARDS_PENDING) {
+      throw new Error('conquest rewards are still settling')
+    }
     throw new Error('enter conquest')
   }
 
