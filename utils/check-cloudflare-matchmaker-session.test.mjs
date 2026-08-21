@@ -14,6 +14,7 @@ const fixtures = async () => {
     sourceAcceptTimeouter,
     sourceDecliner,
     sourceMatchProposalRepository,
+    sourceQueryService,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -49,6 +50,10 @@ const fixtures = async () => {
       'matchmaker/lib/matchmaker/custommatchmaker/match_proposal_repository.go',
       'utf8'
     ),
+    readFile(
+      'matchmaker/lib/matchmaker/custommatchmaker/query_service.go',
+      'utf8'
+    ),
     readFile('matchmaker/lib/playerchannel/notifier.go', 'utf8'),
     readFile('matchmaker/lib/playerchannel/factory.go', 'utf8'),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
@@ -73,6 +78,7 @@ const fixtures = async () => {
     sourceAcceptTimeouter,
     sourceDecliner,
     sourceMatchProposalRepository,
+    sourceQueryService,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -100,6 +106,7 @@ const errorsFor = value =>
     value.sourceAcceptTimeouter,
     value.sourceDecliner,
     value.sourceMatchProposalRepository,
+    value.sourceQueryService,
     value.sourceNotifier,
     value.sourceFactory,
     value.sourceBrowserClient,
@@ -243,6 +250,20 @@ test('rejects weakened source, Worker, browser, and release requirements', async
           'r.keyValStore.StoreTTL(r.pendingMatchStoreID(address), proposal.ID(), *proposal.Timeout())',
           'r.keyValStore.Store(r.pendingMatchStoreID(address), proposal.ID())'
         )
+    },
+    {
+      ...value,
+      sourceQueryService: value.sourceQueryService.replace(
+        'if nsubs == 0 {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
+      sourceQueryService: value.sourceQueryService.replaceAll(
+        's.playerQueue.Remove(p)',
+        's.playerRepository.Save(p)'
+      )
     },
     {
       ...value,
@@ -675,6 +696,20 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
+        'orphanedTicketKeys.push(key)',
+        'tickets.push(ticket)'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'await this.state.storage.delete(orphanedTicketKeys)',
+        'await Promise.resolve(orphanedTicketKeys)'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
         "'conquest cannot be declined'",
         "'conquest decline was ignored'"
       )
@@ -782,6 +817,13 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'accepts through a legacy live reference during a rolling upgrade',
         'rejects a legacy live proposal reference'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'removes an orphaned queue ticket before source matching',
+        'keeps an orphaned queue ticket forever'
       )
     },
     {

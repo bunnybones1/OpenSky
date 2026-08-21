@@ -35,6 +35,7 @@ export const matchmakerSessionErrors = (
   sourceAcceptTimeouter,
   sourceDecliner,
   sourceMatchProposalRepository,
+  sourceQueryService,
   sourceNotifier,
   sourceFactory,
   sourceBrowserClient,
@@ -222,6 +223,25 @@ export const matchmakerSessionErrors = (
       'r.HasMatchProposal(address)',
       'if has {',
       'r.keyValStore.StoreTTL(r.pendingMatchStoreID(address), proposal.ID(), *proposal.Timeout())'
+    ]
+  )
+
+  const sourceSubscriberRepair = bodyBetween(
+    sourceQueryService,
+    'nsubs, err := s.notifier.NumberOfSubscribers(p)',
+    'players = append(players, p)'
+  )
+  requireOrdered(
+    errors,
+    'Source orphaned queue repair',
+    sourceSubscriberRepair,
+    [
+      'nsubs, err := s.notifier.NumberOfSubscribers(p)',
+      'if err != nil {',
+      'return nil, fmt.Errorf("get number of subscribers: %w", err)',
+      'if nsubs == 0 {',
+      's.playerQueue.Remove(p)',
+      'continue'
     ]
   )
 
@@ -717,6 +737,23 @@ export const matchmakerSessionErrors = (
   if (workerDecline.includes("errorMessage('INVALID_OPERATION')")) {
     errors.push('Worker decline-match bypasses its source outer exception')
   }
+
+  const workerAttemptMatches = bodyBetween(
+    worker,
+    'private async attemptMatches(',
+    'private async matchGroup('
+  )
+  requireOrdered(errors, 'Worker orphaned queue repair', workerAttemptMatches, [
+    'this.drainDisabledMatchmaking(enabledModes)',
+    'this.state.storage.list<StoredTicket>({',
+    'const orphanedTicketKeys: string[] = []',
+    'this.hasSubscribedSocket(ticket.player.address)',
+    'tickets.push(ticket)',
+    'orphanedTicketKeys.push(key)',
+    'if (orphanedTicketKeys.length > 0) {',
+    'await this.state.storage.delete(orphanedTicketKeys)',
+    'const byAddress = new Map('
+  ])
 
   const workerDuplicate = bodyBetween(
     worker,
@@ -1216,6 +1253,30 @@ export const matchmakerSessionErrors = (
     ]
   )
 
+  const orphanedQueueTicketTest = bodyBetween(
+    workerRuntimeTest,
+    "it('removes an orphaned queue ticket before source matching'",
+    "it('drains an accepted proposal when its mode is disabled'"
+  )
+  requireOrdered(
+    errors,
+    'Worker orphaned queue ticket regression',
+    orphanedQueueTicketTest,
+    [
+      "isolatedPool('orphaned-queue-ticket')",
+      'player.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))',
+      "player.close(1000, 'create a persisted orphan')",
+      'queuedPlayers: 0, connectedSockets: 0',
+      'state.storage.put(`ticket:${PRINCIPAL_1}`, ticket!)',
+      'state.storage.setAlarm(Date.now() + 60_000)',
+      'runDurableObjectAlarm(orphanPool)',
+      'state.storage.get(`ticket:${PRINCIPAL_1}`)',
+      'toBeUndefined()',
+      'state.storage.getAlarm()',
+      'toBeNull()'
+    ]
+  )
+
   const scripts = rootPackage?.scripts ?? {}
   if (
     !String(scripts['build:cloudflare'] ?? '').includes(
@@ -1246,6 +1307,7 @@ const main = async () => {
     sourceAcceptTimeouter,
     sourceDecliner,
     sourceMatchProposalRepository,
+    sourceQueryService,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -1306,6 +1368,13 @@ const main = async () => {
       'utf8'
     ),
     readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchmaker/custommatchmaker/query_service.go'
+      ),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'matchmaker/lib/playerchannel/notifier.go'),
       'utf8'
     ),
@@ -1353,6 +1422,7 @@ const main = async () => {
     sourceAcceptTimeouter,
     sourceDecliner,
     sourceMatchProposalRepository,
+    sourceQueryService,
     sourceNotifier,
     sourceFactory,
     sourceBrowserClient,
@@ -1373,7 +1443,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, independent pending-match, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, orphaned-queue, command-error, independent pending-match, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
     )
   }
 }

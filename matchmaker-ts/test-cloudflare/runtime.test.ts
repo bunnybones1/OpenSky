@@ -618,6 +618,52 @@ describe('Cloudflare matchmaker Worker', () => {
     })
   })
 
+  it('removes an orphaned queue ticket before source matching', async () => {
+    const orphanPool = isolatedPool('orphaned-queue-ticket')
+    const [player] = track(
+      await connectDirectlyToPool(orphanPool, PRINCIPAL_1, '192.0.2.1')
+    )
+    player.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))
+
+    await expect
+      .poll(() =>
+        runInDurableObject(orphanPool, async (_instance, state) =>
+          state.storage.get(`ticket:${PRINCIPAL_1}`)
+        )
+      )
+      .not.toBeUndefined()
+    const ticket = await runInDurableObject(
+      orphanPool,
+      async (_instance, state) => state.storage.get(`ticket:${PRINCIPAL_1}`)
+    )
+    expect(ticket).toBeDefined()
+
+    player.close(1000, 'create a persisted orphan')
+    await expect
+      .poll(async () => {
+        const status = await orphanPool.fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return await status.json<{
+          queuedPlayers: number
+          connectedSockets: number
+        }>()
+      })
+      .toMatchObject({ queuedPlayers: 0, connectedSockets: 0 })
+
+    await runInDurableObject(orphanPool, async (_instance, state) => {
+      await state.storage.put(`ticket:${PRINCIPAL_1}`, ticket!)
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+    expect(await runDurableObjectAlarm(orphanPool)).toBe(true)
+
+    await runInDurableObject(orphanPool, async (_instance, state) => {
+      expect(await state.storage.get(`ticket:${PRINCIPAL_1}`)).toBeUndefined()
+      expect(await state.storage.getAlarm()).toBeNull()
+    })
+  })
+
   it('drains an accepted proposal when its mode is disabled', async () => {
     const { first, second } = await pairPlayers(GameMode.CHALLENGE_CONSTRUCTED)
     track(first, second)

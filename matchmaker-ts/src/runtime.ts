@@ -885,9 +885,25 @@ export class MatchmakerPool implements DurableObject {
     const storedTickets = await this.state.storage.list<StoredTicket>({
       prefix: TICKET_PREFIX
     })
-    const tickets = [...storedTickets.values()].filter(ticket =>
-      this.hasSubscribedSocket(ticket.player.address)
-    )
+    const tickets: StoredTicket[] = []
+    const orphanedTicketKeys: string[] = []
+    for (const [key, ticket] of storedTickets) {
+      if (this.hasSubscribedSocket(ticket.player.address)) {
+        tickets.push(ticket)
+      } else {
+        // Source QueryService repairs queue/subscription inconsistencies before
+        // returning matching candidates. Filtering alone would leave a
+        // durable ticket and alarm behind forever.
+        orphanedTicketKeys.push(key)
+      }
+    }
+    if (orphanedTicketKeys.length > 0) {
+      await this.state.storage.delete(orphanedTicketKeys)
+      console.warn(
+        'matchmaker removed orphaned queue tickets',
+        orphanedTicketKeys.length
+      )
+    }
     const byAddress = new Map(
       tickets.map(ticket => [ticket.player.address, ticket])
     )
