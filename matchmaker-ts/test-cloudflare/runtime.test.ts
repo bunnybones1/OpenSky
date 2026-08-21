@@ -1083,6 +1083,137 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
+  it('rejects a new search while a missing proposal reference is still live', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    const pending = {
+      proposalId: 'missing-live-proposal',
+      expiresAtMs: Date.now() + 60_000
+    }
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        await state.storage.put(`pending:${PRINCIPAL_1}`, pending)
+      }
+    )
+
+    const error = nextMessage(player)
+    const closed = nextClose(player)
+    player.send(JSON.stringify(findCommand()))
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect(await state.storage.get(`pending:${PRINCIPAL_1}`)).toEqual(
+          pending
+        )
+        expect(await state.storage.get(`ticket:${PRINCIPAL_1}`)).toBeUndefined()
+      }
+    )
+  })
+
+  it('allows a new search after a missing proposal reference expires', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        await state.storage.put(`pending:${PRINCIPAL_1}`, {
+          proposalId: 'missing-expired-proposal',
+          expiresAtMs: Date.now() - 1
+        })
+      }
+    )
+
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect(
+          await state.storage.get(`pending:${PRINCIPAL_1}`)
+        ).toBeUndefined()
+        expect(await state.storage.get(`ticket:${PRINCIPAL_1}`)).toBeDefined()
+      }
+    )
+  })
+
+  it('drains a legacy missing-proposal reference during a rolling upgrade', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        await state.storage.put(
+          `pending:${PRINCIPAL_1}`,
+          'legacy-missing-proposal'
+        )
+      }
+    )
+
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        expect(
+          await state.storage.get(`pending:${PRINCIPAL_1}`)
+        ).toBeUndefined()
+        expect(await state.storage.get(`ticket:${PRINCIPAL_1}`)).toBeDefined()
+      }
+    )
+  })
+
+  it('accepts through a legacy live reference during a rolling upgrade', async () => {
+    const { first, second } = await pairPlayers()
+    track(first, second)
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list({ prefix: 'proposal:' })
+        const [proposalKey] = [...proposals.keys()]
+        expect(proposalKey).toBeDefined()
+        await state.storage.put(
+          `pending:${PRINCIPAL_1}`,
+          proposalKey.slice('proposal:'.length)
+        )
+      }
+    )
+
+    const firstAccepted = nextMessage(first)
+    const secondAccepted = nextMessage(second)
+    first.send(JSON.stringify({ type: 'accept_match' }))
+    for (const message of [await firstAccepted, await secondAccepted]) {
+      expect(message).toEqual({
+        type: 'accept_match',
+        playerID: PRINCIPAL_1
+      })
+    }
+    await runInDurableObject(
+      pool() as DurableObjectStub<MatchmakerPool>,
+      async (_instance, state) => {
+        const proposals = await state.storage.list<{ accepted: string[] }>({
+          prefix: 'proposal:'
+        })
+        expect([...proposals.values()][0].accepted).toEqual([PRINCIPAL_1])
+      }
+    )
+  })
+
   it('keeps the channel open only for decline invalid-operation errors', async () => {
     const { first, second } = await pairPlayers(
       GameMode.CONQUEST_CONSTRUCTED,
@@ -1844,8 +1975,11 @@ describe('Cloudflare matchmaker Worker', () => {
         }>({ prefix: 'proposal:' })
         expect(proposals.size).toBe(1)
         expect([...proposals.values()][0].accepted).toEqual([])
-        expect(await state.storage.get(`pending:${PRINCIPAL_1}`)).toEqual(
-          expect.any(String)
+        expect(await state.storage.get(`pending:${PRINCIPAL_1}`)).toMatchObject(
+          {
+            proposalId: expect.any(String),
+            expiresAtMs: expect.any(Number)
+          }
         )
       }
     )

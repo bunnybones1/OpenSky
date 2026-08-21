@@ -30,6 +30,7 @@ export const matchmakerSessionErrors = (
   sourceHandler,
   sourceAcceptHandler,
   sourceDeclineHandler,
+  sourcePendingMatchValidator,
   sourceFrontendService,
   sourceAcceptTimeouter,
   sourceDecliner,
@@ -87,6 +88,26 @@ export const matchmakerSessionErrors = (
       'return mmerrors.ErrMissingChannel',
       'if !client.HasPlayer() {'
     ])
+  }
+
+  const sourcePendingMatch = bodyBetween(
+    sourcePendingMatchValidator,
+    'func (v *PendingMatchValidator) IsValid(',
+    '//go:generate'
+  )
+  requireOrdered(
+    errors,
+    'Source independent pending-match validator',
+    sourcePendingMatch,
+    [
+      'v.pendingMatchChecker.HasMatchProposal(client.Player().Address())',
+      'if has {',
+      'return false, fmt.Errorf("there is pending match already")',
+      'return true, nil'
+    ]
+  )
+  if (sourcePendingMatch.includes('.Load(')) {
+    errors.push('Source pending-match validator now depends on proposal state')
   }
 
   const sourceAcceptMatch = bodyBetween(
@@ -184,6 +205,23 @@ export const matchmakerSessionErrors = (
       'r.keyValStore.TTL(r.pendingMatchStoreID(address))',
       'if ttl < 0 || errors.Is(err, store.ErrNoSuchItem) {',
       'return false, nil'
+    ]
+  )
+  const sourceProposalSave = bodyBetween(
+    sourceMatchProposalRepository,
+    'func (r *matchProposalRepository) Save(',
+    'func (r *matchProposalRepository) pushToQueue('
+  )
+  requireOrdered(
+    errors,
+    'Source independent pending-match storage',
+    sourceProposalSave,
+    [
+      'if proposal.IsFound() {',
+      'for _, address := range proposal.Addresses() {',
+      'r.HasMatchProposal(address)',
+      'if has {',
+      'r.keyValStore.StoreTTL(r.pendingMatchStoreID(address), proposal.ID(), *proposal.Timeout())'
     ]
   )
 
@@ -543,7 +581,7 @@ export const matchmakerSessionErrors = (
     'validateGameModeDataConsistency(command)',
     'this.captcha.validate(',
     'this.loadPlayerProfile(',
-    'pendingProposalId',
+    'this.pendingProposalReference(',
     'this.penalties.getPenaltyMs(',
     'profile.conquest.deckClass !== prismsToDeckClass(prisms)',
     'this.notifyDuplicateSubscribers(webSocket, attachment.principal)',
@@ -551,6 +589,21 @@ export const matchmakerSessionErrors = (
     'webSocket.serializeAttachment(attachment)',
     'this.state.storage.put(ticketKey(attachment.principal), ticket)'
   ])
+  requireOrdered(
+    errors,
+    'Worker independent pending-match validation',
+    workerFind,
+    [
+      'const pendingProposal = await this.pendingProposalReference(',
+      'proposalKey(pendingProposal.proposalId)',
+      'pendingProposal.expiresAtMs ?? proposal?.expiresAtMs',
+      'pendingExpiresAtMs >= now',
+      "throw new ProtocolError('SERVER_ERROR', 'pending match already exists')",
+      'await this.state.storage.delete(pendingKey(attachment.principal))',
+      "proposal?.status === 'FOUND' && proposal.expiresAtMs <= now",
+      'await this.expireProposal(proposal)'
+    ]
+  )
   for (const directType of [
     "type: 'match_made'",
     "type: 'match_refusal_cooldown'"
@@ -570,11 +623,11 @@ export const matchmakerSessionErrors = (
     'private async recordAcceptance('
   )
   requireOrdered(errors, 'Worker accept-match error identity', workerAccept, [
-    'const pendingProposalId = await this.state.storage.get<string>(',
-    'if (!pendingProposalId) {',
+    'const pendingProposal = await this.pendingProposalReference(principal)',
+    'if (!pendingProposal) {',
     "'INVALID_OPERATION'",
     'this.state.storage.get<StoredProposal>(',
-    'proposalKey(pendingProposalId)',
+    'proposalKey(pendingProposal.proposalId)',
     'if (!proposal || proposal.expiresAtMs < Date.now()) {',
     "this.sendToPrincipal(principal, { type: 'timed_out' })",
     "'match proposal timed out'",
@@ -590,6 +643,55 @@ export const matchmakerSessionErrors = (
       'Worker accept command owns shared expiration or bypasses the fatal outer handler'
     )
   }
+
+  const workerPendingStorage = bodyBetween(
+    worker,
+    'interface StoredPendingProposal {',
+    'interface RuntimeConfig {'
+  )
+  requireOrdered(
+    errors,
+    'Worker pending-match storage shape',
+    workerPendingStorage,
+    [
+      'proposalId: string',
+      'expiresAtMs: number',
+      'interface PendingProposalReference {',
+      'proposalId: string',
+      'expiresAtMs?: number'
+    ]
+  )
+  const workerCreateProposal = bodyBetween(
+    worker,
+    'private async createProposal(',
+    'private async processProposalTimers('
+  )
+  requireOrdered(errors, 'Worker pending-match write', workerCreateProposal, [
+    'writes[pendingKey(principal)] = {',
+    'proposalId: proposal.id',
+    'expiresAtMs: proposal.expiresAtMs',
+    '} satisfies StoredPendingProposal'
+  ])
+  const workerPendingReference = bodyBetween(
+    worker,
+    'private async pendingProposalReference(',
+    'private async deleteProposal('
+  )
+  requireOrdered(
+    errors,
+    'Worker pending-match rolling decoder',
+    workerPendingReference,
+    [
+      'this.state.storage.get<unknown>(pendingKey(principal))',
+      "typeof stored === 'string' && stored.length > 0",
+      'return { proposalId: stored }',
+      'isRecord(stored)',
+      "typeof stored.proposalId === 'string'",
+      'Number.isSafeInteger(stored.expiresAtMs)',
+      'return stored as unknown as StoredPendingProposal',
+      "throw new Error('invalid pending match reference')"
+    ]
+  )
 
   const workerDecline = bodyBetween(
     worker,
@@ -916,7 +1018,7 @@ export const matchmakerSessionErrors = (
   const missingProposalAcceptTest = bodyBetween(
     workerRuntimeTest,
     "it('reports a referenced missing proposal as timed out before closing'",
-    "it('keeps the channel open only for decline invalid-operation errors'"
+    "it('rejects a new search while a missing proposal reference is still live'"
   )
   requireOrdered(
     errors,
@@ -934,6 +1036,85 @@ export const matchmakerSessionErrors = (
       ').toBe(0)',
       "state.storage.list({ prefix: 'pending:' })",
       ').toBe(2)'
+    ]
+  )
+  const liveMissingProposalFindTest = bodyBetween(
+    workerRuntimeTest,
+    "it('rejects a new search while a missing proposal reference is still live'",
+    "it('allows a new search after a missing proposal reference expires'"
+  )
+  requireOrdered(
+    errors,
+    'Worker live missing-proposal find regression',
+    liveMissingProposalFindTest,
+    [
+      "proposalId: 'missing-live-proposal'",
+      'expiresAtMs: Date.now() + 60_000',
+      'player.send(JSON.stringify(findCommand()))',
+      'expect(await error).toEqual(GENERIC_SERVER_ERROR)',
+      "expect(await closed).toMatchObject({ code: 1005, reason: '' })",
+      'state.storage.get(`pending:${PRINCIPAL_1}`)',
+      ').toEqual(',
+      'pending',
+      'state.storage.get(`ticket:${PRINCIPAL_1}`)',
+      'toBeUndefined()'
+    ]
+  )
+  const expiredMissingProposalFindTest = bodyBetween(
+    workerRuntimeTest,
+    "it('allows a new search after a missing proposal reference expires'",
+    "it('drains a legacy missing-proposal reference during a rolling upgrade'"
+  )
+  requireOrdered(
+    errors,
+    'Worker expired missing-proposal find regression',
+    expiredMissingProposalFindTest,
+    [
+      "proposalId: 'missing-expired-proposal'",
+      'expiresAtMs: Date.now() - 1',
+      'player.send(JSON.stringify(findCommand()))',
+      '.toBe(1)',
+      'state.storage.get(`pending:${PRINCIPAL_1}`)',
+      'toBeUndefined()',
+      'state.storage.get(`ticket:${PRINCIPAL_1}`)',
+      'toBeDefined()'
+    ]
+  )
+  const legacyMissingProposalFindTest = bodyBetween(
+    workerRuntimeTest,
+    "it('drains a legacy missing-proposal reference during a rolling upgrade'",
+    "it('accepts through a legacy live reference during a rolling upgrade'"
+  )
+  requireOrdered(
+    errors,
+    'Worker legacy missing-proposal find regression',
+    legacyMissingProposalFindTest,
+    [
+      "'legacy-missing-proposal'",
+      'player.send(JSON.stringify(findCommand()))',
+      '.toBe(1)',
+      'state.storage.get(`pending:${PRINCIPAL_1}`)',
+      'toBeUndefined()',
+      'state.storage.get(`ticket:${PRINCIPAL_1}`)',
+      'toBeDefined()'
+    ]
+  )
+  const legacyLiveProposalAcceptTest = bodyBetween(
+    workerRuntimeTest,
+    "it('accepts through a legacy live reference during a rolling upgrade'",
+    "it('keeps the channel open only for decline invalid-operation errors'"
+  )
+  requireOrdered(
+    errors,
+    'Worker legacy live-proposal accept regression',
+    legacyLiveProposalAcceptTest,
+    [
+      "proposalKey.slice('proposal:'.length)",
+      "first.send(JSON.stringify({ type: 'accept_match' }))",
+      "type: 'accept_match'",
+      'playerID: PRINCIPAL_1',
+      'state.storage.list<{ accepted: string[] }>({',
+      'accepted).toEqual([PRINCIPAL_1])'
     ]
   )
   const declineInvalidOperationTest = bodyBetween(
@@ -1060,6 +1241,7 @@ const main = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourcePendingMatchValidator,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -1089,6 +1271,13 @@ const main = async () => {
     ),
     readFile(
       path.join(root, 'matchmaker/lib/frontend/declinematch/handler.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/frontend/findmatch/validators/pending_match.go'
+      ),
       'utf8'
     ),
     readFile(
@@ -1159,6 +1348,7 @@ const main = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourcePendingMatchValidator,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -1183,7 +1373,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, independent pending-match, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
     )
   }
 }

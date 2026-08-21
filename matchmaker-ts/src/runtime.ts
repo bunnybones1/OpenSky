@@ -133,6 +133,19 @@ interface StoredProposal {
   serverAddress?: string
 }
 
+interface StoredPendingProposal {
+  proposalId: string
+  expiresAtMs: number
+}
+
+interface PendingProposalReference {
+  proposalId: string
+  // References from the previously deployed runtime stored only the proposal
+  // ID. Keep those readable during the rolling upgrade and derive their
+  // lifetime from the proposal when it still exists.
+  expiresAtMs?: number
+}
+
 interface RuntimeConfig {
   authenticationTimeoutMs: number
   acceptanceTimeoutMs: number
@@ -519,19 +532,25 @@ export class MatchmakerPool implements DurableObject {
     // The source pending-match validator runs before the penalty validator and
     // before duplicate notification. A second, not-yet-subscribed socket must
     // therefore fail without disturbing or replaying another live channel.
-    const pendingProposalId = await this.state.storage.get<string>(
-      pendingKey(attachment.principal)
+    const pendingProposal = await this.pendingProposalReference(
+      attachment.principal
     )
-    if (pendingProposalId) {
+    if (pendingProposal) {
+      const now = Date.now()
       const proposal = await this.state.storage.get<StoredProposal>(
-        proposalKey(pendingProposalId)
+        proposalKey(pendingProposal.proposalId)
       )
-      if (proposal?.status === 'FOUND' && proposal.expiresAtMs <= Date.now()) {
-        await this.expireProposal(proposal)
-      } else if (proposal) {
+      const pendingExpiresAtMs =
+        pendingProposal.expiresAtMs ?? proposal?.expiresAtMs
+      if (pendingExpiresAtMs !== undefined && pendingExpiresAtMs >= now) {
         throw new ProtocolError('SERVER_ERROR', 'pending match already exists')
-      } else {
-        await this.state.storage.delete(pendingKey(attachment.principal))
+      }
+      // Redis removes the source TTL key independently of the longer-lived
+      // proposal row. Durable Object storage has no per-key TTL, so remove the
+      // expired reference lazily before allowing the new search.
+      await this.state.storage.delete(pendingKey(attachment.principal))
+      if (proposal?.status === 'FOUND' && proposal.expiresAtMs <= now) {
+        await this.expireProposal(proposal)
       }
     }
 
@@ -767,14 +786,12 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async acceptMatch(principal: string) {
-    const pendingProposalId = await this.state.storage.get<string>(
-      pendingKey(principal)
-    )
-    if (!pendingProposalId) {
+    const pendingProposal = await this.pendingProposalReference(principal)
+    if (!pendingProposal) {
       throw new ProtocolError('INVALID_OPERATION', 'match proposal is not set')
     }
     const proposal = await this.state.storage.get<StoredProposal>(
-      proposalKey(pendingProposalId)
+      proposalKey(pendingProposal.proposalId)
     )
     if (!proposal || proposal.expiresAtMs < Date.now()) {
       // Source FrontendService.AcceptMatch notifies only the accepting
@@ -1008,8 +1025,12 @@ export class MatchmakerPool implements DurableObject {
     const writes: Record<string, unknown> = {
       [proposalKey(proposal.id)]: proposal
     }
-    for (const principal of humanAddresses)
-      writes[pendingKey(principal)] = proposal.id
+    for (const principal of humanAddresses) {
+      writes[pendingKey(principal)] = {
+        proposalId: proposal.id,
+        expiresAtMs: proposal.expiresAtMs
+      } satisfies StoredPendingProposal
+    }
     await this.state.storage.put(writes)
     await this.state.storage.delete(humanAddresses.map(ticketKey))
     console.log(
@@ -1510,10 +1531,32 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async proposalForPrincipal(principal: string) {
-    const id = await this.state.storage.get<string>(pendingKey(principal))
-    return id
-      ? this.state.storage.get<StoredProposal>(proposalKey(id))
+    const pendingProposal = await this.pendingProposalReference(principal)
+    return pendingProposal
+      ? this.state.storage.get<StoredProposal>(
+          proposalKey(pendingProposal.proposalId)
+        )
       : undefined
+  }
+
+  private async pendingProposalReference(
+    principal: string
+  ): Promise<PendingProposalReference | undefined> {
+    const stored = await this.state.storage.get<unknown>(pendingKey(principal))
+    if (stored === undefined) return undefined
+    if (typeof stored === 'string' && stored.length > 0) {
+      return { proposalId: stored }
+    }
+    if (
+      isRecord(stored) &&
+      typeof stored.proposalId === 'string' &&
+      stored.proposalId.length > 0 &&
+      Number.isSafeInteger(stored.expiresAtMs) &&
+      (stored.expiresAtMs as number) > 0
+    ) {
+      return stored as unknown as StoredPendingProposal
+    }
+    throw new Error('invalid pending match reference')
   }
 
   private async deleteProposal(proposal: StoredProposal) {

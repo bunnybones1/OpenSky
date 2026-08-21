@@ -9,6 +9,7 @@ const fixtures = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourcePendingMatchValidator,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -31,6 +32,10 @@ const fixtures = async () => {
     readFile('matchmaker/lib/frontend/findmatch/handler.go', 'utf8'),
     readFile('matchmaker/lib/frontend/acceptmatch/handler.go', 'utf8'),
     readFile('matchmaker/lib/frontend/declinematch/handler.go', 'utf8'),
+    readFile(
+      'matchmaker/lib/frontend/findmatch/validators/pending_match.go',
+      'utf8'
+    ),
     readFile(
       'matchmaker/lib/matchmaker/custommatchmaker/frontend_service.go',
       'utf8'
@@ -63,6 +68,7 @@ const fixtures = async () => {
     sourceHandler,
     sourceAcceptHandler,
     sourceDeclineHandler,
+    sourcePendingMatchValidator,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -89,6 +95,7 @@ const errorsFor = value =>
     value.sourceHandler,
     value.sourceAcceptHandler,
     value.sourceDeclineHandler,
+    value.sourcePendingMatchValidator,
     value.sourceFrontendService,
     value.sourceAcceptTimeouter,
     value.sourceDecliner,
@@ -135,6 +142,20 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       sourceDeclineHandler: value.sourceDeclineHandler.replace(
         'return mmerrors.ErrMissingChannel',
         'return nil'
+      )
+    },
+    {
+      ...value,
+      sourcePendingMatchValidator: value.sourcePendingMatchValidator.replace(
+        'v.pendingMatchChecker.HasMatchProposal(client.Player().Address())',
+        'v.pendingMatchChecker.HasQueuedPlayer(client.Player().Address())'
+      )
+    },
+    {
+      ...value,
+      sourcePendingMatchValidator: value.sourcePendingMatchValidator.replace(
+        'if has {',
+        'if v.pendingMatchChecker.Load(client.Player().Address()) != nil {'
       )
     },
     {
@@ -213,6 +234,14 @@ test('rejects weakened source, Worker, browser, and release requirements', async
         value.sourceMatchProposalRepository.replace(
           'if ttl < 0 || errors.Is(err, store.ErrNoSuchItem) {',
           'if ttl > 0 || errors.Is(err, store.ErrNoSuchItem) {'
+        )
+    },
+    {
+      ...value,
+      sourceMatchProposalRepository:
+        value.sourceMatchProposalRepository.replace(
+          'r.keyValStore.StoreTTL(r.pendingMatchStoreID(address), proposal.ID(), *proposal.Timeout())',
+          'r.keyValStore.Store(r.pendingMatchStoreID(address), proposal.ID())'
         )
     },
     {
@@ -564,7 +593,7 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
-      worker: value.worker.replace('if (!pendingProposalId) {', 'if (false) {')
+      worker: value.worker.replace('if (!pendingProposal) {', 'if (false) {')
     },
     {
       ...value,
@@ -606,6 +635,41 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       worker: value.worker.replace(
         'await this.state.storage.delete(ticketKey(principal))',
         'await Promise.resolve(ticketKey(principal))'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'expiresAtMs?: number',
+        'expiresAtMs: number'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'writes[pendingKey(principal)] = {\n        proposalId: proposal.id,\n        expiresAtMs: proposal.expiresAtMs\n      } satisfies StoredPendingProposal',
+        'writes[pendingKey(principal)] = proposal.id'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'pendingProposal.expiresAtMs ?? proposal?.expiresAtMs',
+        'proposal?.expiresAtMs'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'pendingExpiresAtMs >= now',
+        'pendingExpiresAtMs > now'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "typeof stored === 'string' && stored.length > 0",
+        'false'
       )
     },
     {
@@ -690,6 +754,34 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'ignores an accepted decline after the source pending lifetime expires',
         'declines an expired accepted proposal'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'rejects a new search while a missing proposal reference is still live',
+        'clears a live missing proposal reference'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'allows a new search after a missing proposal reference expires',
+        'rejects an expired missing proposal reference'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'drains a legacy missing-proposal reference during a rolling upgrade',
+        'preserves a legacy missing proposal forever'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'accepts through a legacy live reference during a rolling upgrade',
+        'rejects a legacy live proposal reference'
       )
     },
     {
