@@ -23,6 +23,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
 - source-compatible decode failures: malformed JSON is silent on the same
   socket, while missing or unknown message types close without an invented
   error payload, close code, or reason;
+- source-compatible pre-join routing: gameplay from either gateway role gets
+  the original no-game user error and empty close, while loading progress,
+  emote, mute, and client-error frames remain silent until a match context is
+  linked;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible

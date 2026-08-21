@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `b9d81cb0` is tested but not
+- Paused branch checkpoint: runtime commit `d07c7511` is tested but not
   deployed. Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
   them in that order at the documented quiescent boundary before deploying
@@ -22,7 +22,11 @@
   behavior across Durable Object hibernation. Its mutation-tested source gate
   is required by the complete and game-server deployment contracts. Malformed
   JSON remains silent on the usable source socket, while missing or unknown
-  message types empty-close without an invented player-facing error.
+  message types empty-close without an invented player-facing error. Before a
+  match context is linked, gameplay from either gateway role receives the
+  source `You have no game in progress!` user error and an empty close, while
+  loading progress, emote, mute, and client-error frames remain silent and do
+  not prevent a later time-sync or valid bootstrap.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game

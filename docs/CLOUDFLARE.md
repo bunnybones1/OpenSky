@@ -2512,6 +2512,27 @@ artifact validation. The assembled entries remain
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source pre-join game lifecycle parity — 2026-08-21
+
+Milestone `d07c7511` restores the original `MatchManager` behavior before a
+socket has linked a match context. Gameplay from either a player or spectator
+now receives the exact user-level `You have no game in progress!` error and an
+empty close. Loading progress, emote, mute, and client-error frames remain
+silent, and the same socket can still complete a time-sync exchange. The
+authenticated `join_server` and authorized `spectate_server` paths are
+unchanged.
+
+The game-ingress and match-completion gates derive this behavior from the
+source handlers and mutation-test the Worker routing, exact wire response,
+empty close, role independence, and targeted runtime regressions. The complete
+local release contract passed for `d07c7511`: 512 main-Worker tests, 35
+game-server unit and 121 Workers tests, 45 match-service tests, 62 matchmaker
+unit and 67 Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, both production builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
