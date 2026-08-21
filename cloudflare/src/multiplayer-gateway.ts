@@ -25,7 +25,6 @@ const MATCH_INFO_PREFIX = '/api/matchmaker/matchinfo/'
 interface MatchInfoRow {
   id: number
   proposal_id: string
-  replay_id: string
   mode: string
   player1_mode: GameMode | null
   player2_mode: GameMode | null
@@ -177,7 +176,7 @@ const trustedRequest = (
 
 const currentMatchFor = (env: Env, principal: string) =>
   env.AUTH_DB.prepare(
-    `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
+    `SELECT id, proposal_id, mode, player1_mode, player2_mode,
             version, match_payload_json, server_address, status,
             player1_principal, player2_principal
      FROM multiplayer_matches
@@ -337,12 +336,12 @@ const matchInfo = async (
         type: 'in_progress_match_info',
         matchInfo: {
           id: row.id,
-          replayID: row.replay_id,
           mode:
             row.player1_principal.toLowerCase() === principal.toLowerCase()
               ? modes[0]
               : modes[1],
           playerIDs,
+          serverLocationKey: `match:${row.proposal_id}`,
           version: releaseVersion,
           initialized
         },

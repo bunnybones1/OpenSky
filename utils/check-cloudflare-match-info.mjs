@@ -29,6 +29,7 @@ const requireOrdered = (errors, label, source, tokens) => {
 export const matchInfoErrors = ({
   sourceRegistry,
   sourceMatchTracker,
+  sourceMessages,
   sourceBrowserWorker,
   sourceInProgressHook,
   gameWorker,
@@ -38,6 +39,31 @@ export const matchInfoErrors = ({
   rootPackage
 }) => {
   const errors = []
+
+  const sourceMatchInfoWire = bodyBetween(
+    sourceMessages,
+    'type MatchInfo struct {',
+    '\n}'
+  )
+  const sourceMatchInfoFields = [
+    ...sourceMatchInfoWire.matchAll(/`json:"([^",]+)(?:,[^"]*)?"`/g)
+  ].map(match => match[1])
+  const expectedMatchInfoFields = [
+    'id',
+    'mode',
+    'playerIDs',
+    'serverLocationKey',
+    'version',
+    'initialized'
+  ]
+  if (
+    JSON.stringify(sourceMatchInfoFields) !==
+    JSON.stringify(expectedMatchInfoFields)
+  ) {
+    errors.push(
+      'Source public MatchInfo JSON fields changed; registry-only fields must not leak'
+    )
+  }
 
   const sourcePendingRegistration = bodyBetween(
     sourceRegistry,
@@ -196,9 +222,13 @@ export const matchInfoErrors = ({
       "pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'",
       'serverAddress = pendingAddress.href',
       'const disconnectTimeout = await matchDisconnectTimeout(env, row, principal)',
+      'serverLocationKey: `match:${row.proposal_id}`',
       'initialized\n        },'
     ]
   )
+  if (workerProjection.includes('replayID:')) {
+    errors.push('Worker in-progress MatchInfo leaks registry-only replayID')
+  }
 
   const workerDisconnectTimeout = bodyBetween(
     workerGateway,
@@ -232,6 +262,7 @@ export const matchInfoErrors = ({
     [
       "it('preserves source initializing match info for the client retry loop'",
       "NULL, 'creating'",
+      "serverLocationKey: 'match:initializing-proposal'",
       'initialized: false',
       "ws: 'wss://opensky.example/api/game/matches/initializing-proposal'",
       "http: 'https://opensky.example/api/game/matches/initializing-proposal'"
@@ -281,6 +312,7 @@ const main = async () => {
   const [
     sourceRegistry,
     sourceMatchTracker,
+    sourceMessages,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -297,6 +329,7 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(path.join(root, 'matchmaker/lib/messages/messages.go'), 'utf8'),
     readFile(
       path.join(root, 'game/src/state/worker/multiplayerWorkerState.ts'),
       'utf8'
@@ -329,6 +362,7 @@ const main = async () => {
   const errors = matchInfoErrors({
     sourceRegistry,
     sourceMatchTracker,
+    sourceMessages,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -342,7 +376,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match info preserves source initialization retry and per-player timeout lifecycles'
+      'Cloudflare match info preserves the public wire, initialization retry, and per-player timeout lifecycles'
     )
   }
 }

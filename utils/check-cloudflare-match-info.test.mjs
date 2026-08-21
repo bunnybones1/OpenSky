@@ -8,6 +8,7 @@ const fixtures = async () => {
   const [
     sourceRegistry,
     sourceMatchTracker,
+    sourceMessages,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -21,6 +22,7 @@ const fixtures = async () => {
       'matchmaker/lib/matchtrackers/match_in_progress_tracker.go',
       'utf8'
     ),
+    readFile('matchmaker/lib/messages/messages.go', 'utf8'),
     readFile('game/src/state/worker/multiplayerWorkerState.ts', 'utf8'),
     readFile(
       'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx',
@@ -38,6 +40,7 @@ const fixtures = async () => {
   return {
     sourceRegistry,
     sourceMatchTracker,
+    sourceMessages,
     sourceBrowserWorker,
     sourceInProgressHook,
     gameWorker,
@@ -57,13 +60,20 @@ const replaceAfter = (source, marker, search, replacement) => {
   )}`
 }
 
-test('pins source initialization retry and disconnect-timeout lifecycles', async () => {
+test('pins source wire, initialization retry, and disconnect-timeout lifecycles', async () => {
   assert.deepEqual(matchInfoErrors(await fixtures()), [])
 })
 
 test('rejects weakened source, Worker, runtime-test, and build requirements', async () => {
   const value = await fixtures()
   const mutations = [
+    {
+      ...value,
+      sourceMessages: value.sourceMessages.replace(
+        'ServerLocationKey string         `json:"serverLocationKey"`',
+        'ServerLocationKey string         `json:"replayID"`'
+      )
+    },
     {
       ...value,
       sourceRegistry: replaceAfter(
@@ -166,6 +176,13 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
     {
       ...value,
       workerGateway: value.workerGateway.replace(
+        'serverLocationKey: `match:${row.proposal_id}`',
+        'replayID: row.proposal_id'
+      )
+    },
+    {
+      ...value,
+      workerGateway: value.workerGateway.replace(
         "pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'",
         "pendingAddress.protocol === 'https:' ? 'https:' : 'http:'"
       )
@@ -175,8 +192,8 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       workerRuntimeTest: replaceAfter(
         value.workerRuntimeTest,
         "it('preserves source initializing match info for the client retry loop'",
-        'initialized: false',
-        'initialized: true'
+        "serverLocationKey: 'match:initializing-proposal'",
+        "replayID: 'initializing-replay'"
       )
     },
     {

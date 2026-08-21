@@ -194,9 +194,9 @@ describe('same-origin multiplayer gateway', () => {
       type: 'in_progress_match_info',
       matchInfo: {
         id: expect.any(Number),
-        replayID: 'gateway-replay',
         mode: 'PRACTICE_BOT',
         playerIDs: [principal, opponent],
+        serverLocationKey: 'match:gateway-proposal',
         version: 'client-release',
         initialized: true
       },
@@ -258,9 +258,9 @@ describe('same-origin multiplayer gateway', () => {
       type: 'in_progress_match_info',
       matchInfo: {
         id: expect.any(Number),
-        replayID: 'initializing-replay',
         mode: 'PRACTICE_PVP',
         playerIDs: [principal, opponent],
+        serverLocationKey: 'match:initializing-proposal',
         version: 'initializing-release',
         initialized: false
       },
@@ -658,7 +658,7 @@ describe('same-origin multiplayer gateway', () => {
     )
     expect(await response.json()).toMatchObject({
       type: 'in_progress_match_info',
-      matchInfo: { replayID: 'spectated-replay' }
+      matchInfo: { serverLocationKey: 'match:spectated-proposal' }
     })
 
     const publicResponse = await gateway(
@@ -667,7 +667,7 @@ describe('same-origin multiplayer gateway', () => {
     )
     expect(await publicResponse.json()).toMatchObject({
       type: 'in_progress_match_info',
-      matchInfo: { replayID: 'spectated-replay' }
+      matchInfo: { serverLocationKey: 'match:spectated-proposal' }
     })
 
     const unknown = await gateway(
