@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `04deaac2`
-  (`Preserve source Warm Up publication`)
-- Latest tested runtime commit: `04deaac2`
-  (`Preserve source Warm Up publication`)
+- Last code/test checkpoint: `5636d901`
+  (`Preserve source multiplayer XP publication`)
+- Latest tested runtime commit: `5636d901`
+  (`Preserve source multiplayer XP publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,15 +23,17 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `04deaac2` are committed and
+- The runtime changes from `38386294` through `5636d901` are committed and
   tested but are **not deployed**. The complete exact-commit build at
-  `04deaac2` produced web entry `/assets/index-874772de.js` and game entry
+  `5636d901` produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
-- Migrations `0115_authoritative_match_decks.sql` and
-  `0116_registered_matchmaker_bots.sql` are committed but have **not** been
-  applied to production. No Worker from `90ebe652` or later may be deployed
-  until both exist, and the migration/runtime rollout must be performed with
-  match allocation quiescent as described below.
+- Migrations `0115_authoritative_match_decks.sql`,
+  `0116_registered_matchmaker_bots.sql`, and
+  `0117_match_experience_publication_state.sql` are committed but have **not**
+  been applied to production. No Worker from `90ebe652` or later may be
+  deployed until `0115` and `0116` exist, and no Worker from `5636d901` or
+  later may be deployed until all three exist. Apply them in order while match
+  allocation is quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -43,6 +45,35 @@ without a new user request.
 The reported Practice PvP replay enum failure was fixed earlier and is already
 deployed. Commits `24e9c8e4` and `b0271620` normalize legacy enum shapes and
 verify the exact reported replay from both player perspectives.
+
+## Multiplayer XP publication milestone
+
+Commit `5636d901` preserves the source match transaction's visibility boundary
+for account XP, account level, SkyPass XP/season progress, and referral level
+and sticker-point effects:
+
+- migration `0117` records the exact pre-match profile, SkyPass, season-stat,
+  referral, inventory, and timestamp state and rejects invalid new receipts;
+- reads expose the immutable before-state until the terminal match ledger is
+  published, then reveal all after-state together;
+- matchmaking eligibility, account/stat/leaderboard reads, quests, tutorial
+  rewards, SkyPass listing and claims, season auto-claim, referral scheduling,
+  friend points, and sticker inventory all use the same fail-closed projection;
+- scheduled SkyPass and referral workers cannot consume staged progression or
+  mark a cycle complete while a matching receipt is unpublished;
+- the production runner now requires migration `0117`, all eight new snapshot
+  columns, and both publication guards before any deploy command may start.
+
+The complete local release contract passed at exact code commit `5636d901`:
+524 main-Worker tests, 40 game-server unit and 134 Workers tests, 47
+match-service tests, 63 matchmaker unit and 67 Workers tests, 30 browser-game
+tests, nine analytics tests, every source/off-chain/mutation gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
+deployment, provisioning, activation, live match, or production mutation was
+performed. Exact-head PR CI is still required after the refreshed handoff is
+pushed.
 
 ## Leaderboard reward-visibility milestone
 
@@ -2143,12 +2174,12 @@ production gate after any later commit.
 3. Preserve the source analytics retention behavior unless an explicit product
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
-4. Complete the quiescent migration `0115` transition, apply `0116` while
-   allocations remain stopped, and then deploy/verify the exact tested game
-   server without analytics producer bindings, as described under Production
-   rollout. The analytics consumer now requires `0115`, and every Worker from
-   `90ebe652` assumes `0116` exists; neither may be deployed against an older
-   database.
+4. Complete the quiescent migration `0115` transition, apply `0116` and `0117`
+   in order while allocations remain stopped, and then deploy/verify the exact
+   tested game server without analytics producer bindings, as described under
+   Production rollout. The analytics consumer requires `0115`, every Worker
+   from `90ebe652` assumes `0116`, and every Worker from `5636d901` assumes
+   `0117`; no current deploy command may run against an older database.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 6. Create a separate private client-feedback bucket and add the reviewed
@@ -2184,13 +2215,16 @@ pnpm deploy:cloudflare
 
 Each command should be run only at its corresponding stage above. Migration
 `0065_multiplayer_match_analytics.sql` was already present in the last observed
-production migration state. Migrations `0115_authoritative_match_decks.sql`
-and `0116_registered_matchmaker_bots.sql` are not: apply `0115` first at its
-quiescent game-server boundary, then apply `0116` before deploying any Worker
-from `90ebe652`. Keep both ranked-bot flags false throughout that baseline
-rollout. After those migrations, every checked-in deploy command performs the
-read-only schema preflight from `152138fe` and refuses to spawn Wrangler if the
-five required invariants are not present.
+production migration state. Migrations
+`0115_authoritative_match_decks.sql`,
+`0116_registered_matchmaker_bots.sql`, and
+`0117_match_experience_publication_state.sql` are not: apply `0115` first at
+its quiescent game-server boundary, then `0116`, then `0117` before deploying
+the current Workers. Keep both ranked-bot flags false throughout that baseline
+rollout. Every checked-in deploy command now performs the read-only schema
+preflight advanced by `5636d901` and refuses to spawn Wrangler unless the five
+prior invariants plus all eight `0117` columns and both publication triggers
+are present.
 
 ## Other outstanding work
 
@@ -2198,7 +2232,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `04deaac2` from its
+- Deploy and verify the tested runtime changes through `5636d901` from its
   exact green release-gate head. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
@@ -2208,9 +2242,9 @@ five required invariants are not present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`,
-  deploy the exact tested game-server runtime immediately, verify protocol
-  health, and only then restore the previously enabled modes. Do not leave old
-  game-server code accepting matches after the migration boundary.
+  then `0117`; deploy the exact tested game-server runtime immediately, verify
+  protocol health, and only then restore the previously enabled modes. Do not
+  leave old game-server code accepting matches after the migration boundary.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.
 - Only after the consumer is healthy, enable and deploy the game-server
@@ -2266,10 +2300,10 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migration `0116`, deployment, and activation remain paused;
+  but migrations `0116` and `0117`, deployment, and activation remain paused;
 - every production deploy command now fails closed until the remote D1 proves
-  both `0115` and `0116` invariants; the migration command remains the only
-  preflight-exempt operation;
+  the `0115`, `0116`, and `0117` invariants; the migration command remains the
+  only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;

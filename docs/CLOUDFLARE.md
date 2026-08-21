@@ -2884,17 +2884,49 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source multiplayer XP publication — 2026-08-21
+
+Milestone `5636d901` extends the terminal match publication barrier to every
+source progression side effect currently implemented by match XP: lifetime
+level/XP, basic SkyPass level/XP, season initial/achieved level, inviter level
+credit, and inviter sticker-point inventory. Migration `0117` stores and
+validates exact before-state, while the shared projection exposes that state
+until the match ledger reaches `ended`. Account, player-state, matchmaking,
+rank eligibility, leaderboard, quest, tutorial, SkyPass, referral, friend
+point, and item reads therefore cannot observe a partially published match.
+
+Scheduled SkyPass and referral settlement also fail closed: staged progression
+cannot be claimed, carried into a new season, batched into a reward, or treated
+as a completed cycle. Runtime regressions cover the before/after boundary in
+the main Worker, match service, game server, SkyPass auto-claim, and referral
+worker. The source completion gate mutation-tests receipt formulas, snapshot
+order, schema guards, every projection consumer, and the runtime proof. The
+production preflight now requires `0117`, its eight new snapshot columns, and
+both guards.
+
+The complete local release contract passed at exact code commit `5636d901`:
+524 main-Worker tests, 40 game-server unit and 134 Workers tests, 47
+match-service tests, 63 matchmaker unit and 67 Workers tests, 30 browser-game
+tests, nine analytics tests, every source/off-chain gate and typecheck, both
+production builds, and 594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
+deployment, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Suggested next slice
 
-No known dormant matchmaker or non-RPC service-route parity slice remains
-after the registered-bot, deployment-preflight, and route-inventory
-milestones. Further local implementation should be driven by a concrete
-source-backed gap found by the completion audit rather than a fabricated
-Cloudflare surface. Production activation remains a separate authorized
-exercise: apply `0115` and then `0116` at the documented quiescent boundary,
-deploy the exact tested Workers with both bot flags still false, and only
-consider a bounded ranked/PvP-bot soak after the ordinary multiplayer and
-analytics paths are healthy.
+No known dormant matchmaker or non-RPC service-route parity slice remains.
+The next local completion audit should cover the remaining ranked-stat and
+rank-unlock side effects that the Go match transaction performs after XP,
+including every player/deck/stat read that could expose them before terminal
+publication. That work should extend the existing receipt barrier and mutation
+gate, not introduce a new product surface.
+
+Production activation remains a separate authorized exercise: apply `0115`,
+then `0116`, then `0117` at the documented quiescent boundary, deploy the exact
+tested Workers with both bot flags still false, and only consider a bounded
+ranked/PvP-bot soak after ordinary multiplayer and analytics paths are healthy.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,
