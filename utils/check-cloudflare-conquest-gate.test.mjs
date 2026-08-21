@@ -575,6 +575,24 @@ test('requires Workflow, Queue, D1, and recovery evidence for Conquest V2', asyn
       )
     }).some(error => error.includes('cron'))
   )
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      scheduler: scheduler.replace(
+        'if (batch.queue === CONQUEST_V2_REWARD_QUEUE_NAME)',
+        'if (batch.queue === LEADERBOARD_REWARD_QUEUE_NAME)'
+      )
+    }).some(error => error.includes('named Queue'))
+  )
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      scheduler: scheduler.replace(
+        'export { ConquestV2RewardWorkflow, LeaderboardRewardWorkflow }',
+        'export { LeaderboardRewardWorkflow }'
+      )
+    }).some(error => error.includes('entrypoint'))
+  )
   const unsafeConfig = structuredClone(evidence.config)
   delete unsafeConfig.queues.consumers[0].dead_letter_queue
   assert.ok(

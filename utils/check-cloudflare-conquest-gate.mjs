@@ -870,14 +870,29 @@ export const conquestV2CloudflareOrchestrationErrors = evidence => {
   if (evidence.worker.includes('MAX_PLAYERS_PER_RUN')) {
     errors.push('Conquest V2 still copies a cron player batch limit')
   }
-  for (const token of [
-    'dispatchDueConquestV2Rewards(env)',
-    'handleConquestV2RewardQueue(batch, env.AUTH_DB)',
-    'export { ConquestV2RewardWorkflow }'
-  ]) {
+  for (const token of ['dispatchDueConquestV2Rewards(env)']) {
     if (!evidence.scheduler.includes(token)) {
       errors.push(`Conquest V2 main Worker integration is missing: ${token}`)
     }
+  }
+  const conquestQueueRoute = bracedBlock(
+    evidence.scheduler,
+    'if (batch.queue === CONQUEST_V2_REWARD_QUEUE_NAME)'
+  )
+  if (
+    !conquestQueueRoute?.includes('await handleConquestV2RewardQueue(') ||
+    !conquestQueueRoute.includes('env.AUTH_DB')
+  ) {
+    errors.push(
+      'Conquest V2 main Worker does not route the named Queue to its guarded consumer'
+    )
+  }
+  if (
+    ![...evidence.scheduler.matchAll(/export\s*\{([^}]*)\}/gs)].some(match =>
+      /\bConquestV2RewardWorkflow\b/.test(match[1])
+    )
+  ) {
+    errors.push('Conquest V2 Workflow entrypoint is not exported')
   }
   if (evidence.scheduler.includes('runDueConquestV2Rewards(env.AUTH_DB)')) {
     errors.push('Conquest V2 cron still performs reward delivery directly')
