@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -10,6 +10,29 @@ export const REVIEWED_ANALYTICS_QUEUE = 'cloud-weasel-game-analytics'
 export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
+export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
+  '0116_registered_matchmaker_bots.sql'
+export const PRODUCTION_SCHEMA_QUERY = `SELECT
+  (SELECT COUNT(*) FROM d1_migrations
+    WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
+    AS required_migration_applied,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'multiplayer_match_authoritative_decks')
+    AS authoritative_decks_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name = 'registered_matchmaker_bots')
+    AS registered_bots_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'registered_matchmaker_bots_identity_no_update',
+      'registered_matchmaker_bots_no_delete'
+    )) AS registered_bot_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'multiplayer_matches_user_kind_insert_guard'
+      AND instr(sql, 'registered_matchmaker_bots') > 0)
+    AS registered_bot_allocation_guard_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -224,6 +247,70 @@ export const productionInvocation = (operation, targetPath, config) => {
   throw new Error(`unsupported Cloudflare production operation: ${operation}`)
 }
 
+export const productionSchemaInvocation = () => [
+  'd1',
+  'execute',
+  'opensky-auth',
+  '--remote',
+  '--config',
+  '../wrangler.jsonc',
+  '--json',
+  '--command',
+  PRODUCTION_SCHEMA_QUERY
+]
+
+export const productionOperationPlan = (operation, targetPath, config) => {
+  const operationStep = {
+    kind: 'operation',
+    args: productionInvocation(operation, targetPath, config)
+  }
+  return operation === 'deploy'
+    ? [
+        { kind: 'schema-preflight', args: productionSchemaInvocation() },
+        operationStep
+      ]
+    : [operationStep]
+}
+
+export const productionSchemaRow = output => {
+  let parsed
+  try {
+    parsed = typeof output === 'string' ? JSON.parse(output) : output
+  } catch {
+    throw new Error(
+      'Cloudflare production schema preflight returned invalid JSON'
+    )
+  }
+  const executions = Array.isArray(parsed) ? parsed : []
+  const rows = executions.flatMap(execution => execution?.results ?? [])
+  if (
+    executions.length !== 1 ||
+    executions[0]?.success !== true ||
+    (executions[0]?.meta?.changed_db !== undefined &&
+      executions[0].meta.changed_db !== false) ||
+    (executions[0]?.meta?.changes !== undefined &&
+      executions[0].meta.changes !== 0) ||
+    rows.length !== 1
+  ) {
+    throw new Error(
+      'Cloudflare production schema preflight did not return one read-only row'
+    )
+  }
+  const row = rows[0]
+  if (
+    row?.required_migration_applied !== 1 ||
+    row?.authoritative_decks_present !== 1 ||
+    row?.registered_bots_present !== 1 ||
+    row?.registered_bot_guards_present !== 2 ||
+    row?.registered_bot_allocation_guard_present !== 1
+  ) {
+    throw new Error(
+      `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`
+    )
+  }
+  return row
+}
+
 export const productionScriptErrors = (rootPackage, analyticsPackage) => {
   const scripts = rootPackage?.scripts ?? {}
   const expected = {
@@ -295,16 +382,54 @@ const main = async () => {
     )
   }
   const config = JSON.parse(await readFile(absoluteTarget, 'utf8'))
-  const errors = productionTargetErrors(targetPath, config, process.env)
+  const schemaConfig =
+    targetPath === 'wrangler.jsonc'
+      ? config
+      : JSON.parse(await readFile(path.join(root, 'wrangler.jsonc'), 'utf8'))
+  const errors = [
+    ...productionTargetErrors(targetPath, config, process.env),
+    ...(targetPath === 'wrangler.jsonc'
+      ? []
+      : productionTargetErrors('wrangler.jsonc', schemaConfig, process.env))
+  ]
   if (errors.length) throw new Error(errors.join('\n'))
 
-  const args = productionInvocation(operation, targetPath, config)
+  const plan = productionOperationPlan(operation, targetPath, config)
   process.stdout.write(
     `Cloudflare production target: ${config.name} in reviewed account ${config.account_id}\n`
   )
+  const preflight = plan.find(step => step.kind === 'schema-preflight')
+  if (preflight) {
+    const check = spawnSync(
+      'pnpm',
+      ['--dir', 'cloudflare', 'exec', 'wrangler', ...preflight.args],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          CLOUDFLARE_ACCOUNT_ID: schemaConfig.account_id
+        }
+      }
+    )
+    if (check.error) throw check.error
+    if (check.status !== 0) {
+      process.stderr.write(check.stderr || check.stdout)
+      process.exitCode = check.status || 1
+      return
+    }
+    productionSchemaRow(check.stdout)
+    process.stdout.write(
+      `Cloudflare production schema includes ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}\n`
+    )
+  }
+  const operationStep = plan.find(step => step.kind === 'operation')
+  if (!operationStep) {
+    throw new Error('Cloudflare production operation is missing')
+  }
   const child = spawn(
     'pnpm',
-    ['--dir', 'cloudflare', 'exec', 'wrangler', ...args],
+    ['--dir', 'cloudflare', 'exec', 'wrangler', ...operationStep.args],
     {
       cwd: root,
       env: {

@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
+  PRODUCTION_SCHEMA_QUERY,
   productionInvocation,
+  productionOperationPlan,
+  productionSchemaInvocation,
+  productionSchemaRow,
   productionScriptErrors,
   productionTargetErrors,
   REVIEWED_ANALYTICS_BUCKET,
@@ -11,7 +16,8 @@ import {
   REVIEWED_AUTH_DB_ID,
   REVIEWED_CLIENT_FEEDBACK_BUCKET,
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
-  REVIEWED_PRODUCTION_TARGETS
+  REVIEWED_PRODUCTION_TARGETS,
+  REQUIRED_PRODUCTION_SCHEMA_MIGRATION
 } from './run-cloudflare-production.mjs'
 
 const configFor = target => ({
@@ -235,6 +241,118 @@ test('builds explicit deploy and remote migration invocations', () => {
     () => productionInvocation('delete', 'wrangler.jsonc', config),
     /unsupported/
   )
+})
+
+test('requires the exact reviewed remote schema before every deploy', () => {
+  assert.match(PRODUCTION_SCHEMA_QUERY, /^SELECT\b/)
+  assert.doesNotMatch(
+    PRODUCTION_SCHEMA_QUERY,
+    /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE)\b/i
+  )
+  for (const required of [
+    REQUIRED_PRODUCTION_SCHEMA_MIGRATION,
+    'multiplayer_match_authoritative_decks',
+    'registered_matchmaker_bots',
+    'registered_matchmaker_bots_identity_no_update',
+    'registered_matchmaker_bots_no_delete',
+    'multiplayer_matches_user_kind_insert_guard'
+  ]) {
+    assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
+  }
+  assert.deepEqual(productionSchemaInvocation().slice(0, 6), [
+    'd1',
+    'execute',
+    'opensky-auth',
+    '--remote',
+    '--config',
+    '../wrangler.jsonc'
+  ])
+  assert.ok(productionSchemaInvocation().includes('--json'))
+})
+
+test('places the read-only schema preflight before every deploy only', () => {
+  for (const [targetPath, target] of REVIEWED_PRODUCTION_TARGETS) {
+    const config = configFor(target)
+    const plan = productionOperationPlan('deploy', targetPath, config)
+    assert.deepEqual(
+      plan.map(step => step.kind),
+      ['schema-preflight', 'operation']
+    )
+    assert.deepEqual(plan[0].args, productionSchemaInvocation())
+  }
+  const config = configFor(REVIEWED_PRODUCTION_TARGETS.get('wrangler.jsonc'))
+  assert.deepEqual(
+    productionOperationPlan('migrate', 'wrangler.jsonc', config).map(
+      step => step.kind
+    ),
+    ['operation']
+  )
+})
+
+test('the production runner cannot bypass its reviewed preflight plan', async () => {
+  const source = await readFile(
+    new URL('./run-cloudflare-production.mjs', import.meta.url),
+    'utf8'
+  )
+  const ordered = [
+    'const plan = productionOperationPlan(operation, targetPath, config)',
+    "const preflight = plan.find(step => step.kind === 'schema-preflight')",
+    'const check = spawnSync(',
+    'productionSchemaRow(check.stdout)',
+    "const operationStep = plan.find(step => step.kind === 'operation')",
+    'const child = spawn('
+  ]
+  let cursor = -1
+  for (const token of ordered) {
+    const index = source.indexOf(token, cursor + 1)
+    assert.ok(index > cursor, `production runner is missing ordered ${token}`)
+    cursor = index
+  }
+})
+
+test('accepts only one successful complete read-only schema row', () => {
+  const complete = {
+    required_migration_applied: 1,
+    authoritative_decks_present: 1,
+    registered_bots_present: 1,
+    registered_bot_guards_present: 2,
+    registered_bot_allocation_guard_present: 1
+  }
+  assert.deepEqual(
+    productionSchemaRow(
+      JSON.stringify([
+        {
+          results: [complete],
+          success: true,
+          meta: { changed_db: false, changes: 0 }
+        }
+      ])
+    ),
+    complete
+  )
+  for (const output of [
+    'not JSON',
+    JSON.stringify([]),
+    JSON.stringify([{ results: [complete], success: false }]),
+    JSON.stringify([
+      {
+        results: [complete],
+        success: true,
+        meta: { changed_db: true, changes: 1 }
+      }
+    ]),
+    JSON.stringify([
+      { results: [{ ...complete, registered_bots_present: 0 }], success: true }
+    ]),
+    JSON.stringify([
+      { results: [complete, complete], success: true }
+    ])
+  ]) {
+    assert.throws(
+      () => productionSchemaRow(output),
+      /schema preflight|not ready/
+    )
+  }
 })
 
 test('requires every package deployment path to use the target runner', () => {

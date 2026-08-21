@@ -23,7 +23,10 @@ const validInput = () => ({
   analyticsPackageSource:
     'node ../utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc',
   productionRunnerSource: [
-    "['--dir', 'cloudflare', 'exec', 'wrangler', ...args]",
+    'const plan = productionOperationPlan(operation, targetPath, config)',
+    'const check = spawnSync(',
+    'productionSchemaRow(check.stdout)',
+    "['--dir', 'cloudflare', 'exec', 'wrangler', ...operationStep.args]",
     'CLOUDFLARE_ACCOUNT_ID: config.account_id'
   ].join('\n')
 })
@@ -94,10 +97,21 @@ test('rejects the obsolete account-level R2 blocker as analytics evidence', () =
   }
 })
 
-test('rejects a target runner without its explicit account and pinned Wrangler child', () => {
+test('rejects a target runner without its schema preflight and pinned Wrangler child', () => {
   const input = validInput()
   input.productionRunnerSource = ''
-  assert.equal(auditServices(input).errors.length, 2)
+  assert.equal(auditServices(input).errors.length, 5)
+})
+
+test('rejects a target runner that bypasses the reviewed schema result', () => {
+  const input = validInput()
+  input.productionRunnerSource = input.productionRunnerSource.replace(
+    'productionSchemaRow(check.stdout)',
+    'ignoredSchemaRow(check.stdout)'
+  )
+  assert.deepEqual(auditServices(input).errors, [
+    'production target runner is missing: productionSchemaRow(check.stdout)'
+  ])
 })
 
 test('rejects blanket retirement of a reviewed source workload', () => {
