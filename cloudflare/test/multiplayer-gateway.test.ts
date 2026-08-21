@@ -201,7 +201,7 @@ describe('same-origin multiplayer gateway', () => {
         initialized: true
       },
       serverInfo: {
-        status: 'online',
+        status: 'running',
         name: 'cloud-weasel-game-server',
         hostname: 'opensky.example',
         port: 443,
@@ -263,7 +263,7 @@ describe('same-origin multiplayer gateway', () => {
         initialized: false
       },
       serverInfo: {
-        status: 'online',
+        status: 'running',
         name: 'cloud-weasel-game-server',
         hostname: 'opensky.example',
         port: 443,

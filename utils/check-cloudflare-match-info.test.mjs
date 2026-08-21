@@ -7,6 +7,7 @@ import { matchInfoErrors } from './check-cloudflare-match-info.mjs'
 const fixtures = async () => {
   const [
     sourceRegistry,
+    sourceRegistryConstants,
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
@@ -27,6 +28,7 @@ const fixtures = async () => {
     rootPackage
   ] = await Promise.all([
     readFile('server/src/services/RegistryService.ts', 'utf8'),
+    readFile('server/src/registry/index.ts', 'utf8'),
     readFile(
       'matchmaker/lib/matchtrackers/match_in_progress_tracker.go',
       'utf8'
@@ -57,6 +59,7 @@ const fixtures = async () => {
   ])
   return {
     sourceRegistry,
+    sourceRegistryConstants,
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
@@ -94,6 +97,13 @@ test('pins source match/server/recent wires, initialization retry, and timeout l
 test('rejects weakened source, Worker, runtime-test, and build requirements', async () => {
   const value = await fixtures()
   const mutations = [
+    {
+      ...value,
+      sourceRegistryConstants: value.sourceRegistryConstants.replace(
+        "export const GAME_SERVER_STATUS_RUNNING = 'running'",
+        "export const GAME_SERVER_STATUS_RUNNING = 'online'"
+      )
+    },
     {
       ...value,
       sourceMessages: value.sourceMessages.replace(
@@ -345,6 +355,22 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       workerGateway: value.workerGateway.replace(
         'hostname: websocket.hostname,',
         "hostname: websocket.hostname, internalHostname: '',"
+      )
+    },
+    {
+      ...value,
+      workerGateway: value.workerGateway.replace(
+        "status: 'running'",
+        "status: 'online'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('restores the source match-info contract for the requested player'",
+        "status: 'running'",
+        "status: 'online'"
       )
     },
     {

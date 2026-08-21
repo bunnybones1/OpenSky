@@ -28,6 +28,7 @@ const requireOrdered = (errors, label, source, tokens) => {
 
 export const matchInfoErrors = ({
   sourceRegistry,
+  sourceRegistryConstants,
   sourceMatchTracker,
   sourceMessages,
   sourceGameServerInfo,
@@ -245,6 +246,33 @@ export const matchInfoErrors = ({
       'Source public GameServerInfo JSON or omitempty contract changed'
     )
   }
+  if (
+    !sourceRegistryConstants.includes(
+      "export const GAME_SERVER_STATUS_RUNNING = 'running'"
+    )
+  ) {
+    errors.push('Source allocatable game-server status is no longer running')
+  }
+  const sourceServerRegistration = bodyBetween(
+    sourceRegistry,
+    '  registerGameServer(callback?: () => void) {',
+    '\n  isPendingShutdown'
+  )
+  requireOrdered(
+    errors,
+    'Source game-server status publication',
+    sourceServerRegistration,
+    [
+      'const serverStatus = await this._redis.get(',
+      "serverInfo.status = serverStatus || 'unknown'",
+      'this._redis.setex(',
+      'JSON.stringify(serverInfo)',
+      'if (init) {',
+      'this.setRunning()',
+      'serverStatus === GAME_SERVER_STATUS_RUNNING',
+      'this._redis.zadd(GAME_SERVER_RANKING'
+    ]
+  )
   requireOrdered(
     errors,
     'Source pending-match registration',
@@ -460,7 +488,8 @@ export const matchInfoErrors = ({
       'const disconnectTimeout = await matchDisconnectTimeout(env, row, principal)',
       'mode: modes[0]',
       'serverLocationKey: `match:${row.proposal_id}`',
-      'initialized\n        },'
+      'initialized\n        },',
+      "status: 'running'"
     ]
   )
   if (workerProjection.includes('replayID:')) {
@@ -634,6 +663,9 @@ export const matchInfoErrors = ({
     ) {
       errors.push(`Worker ${label} regression expects empty optional internals`)
     }
+    if (!runtimeTest.includes("status: 'running'")) {
+      errors.push(`Worker ${label} regression loses source running status`)
+    }
   }
 
   requireOrdered(
@@ -692,6 +724,7 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     sourceRegistry,
+    sourceRegistryConstants,
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
@@ -712,6 +745,7 @@ const main = async () => {
     rootPackage
   ] = await Promise.all([
     readFile(path.join(root, 'server/src/services/RegistryService.ts'), 'utf8'),
+    readFile(path.join(root, 'server/src/registry/index.ts'), 'utf8'),
     readFile(
       path.join(
         root,
@@ -775,6 +809,7 @@ const main = async () => {
   ])
   const errors = matchInfoErrors({
     sourceRegistry,
+    sourceRegistryConstants,
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
@@ -799,7 +834,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match info preserves public match/server/recent wires, initialization retry, and per-player timeout lifecycles'
+      'Cloudflare match info preserves public match/server/recent wires, source running status, initialization retry, and per-player timeout lifecycles'
     )
   }
 }

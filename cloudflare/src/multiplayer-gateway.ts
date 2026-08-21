@@ -407,7 +407,9 @@ const matchInfo = async (
           initialized
         },
         serverInfo: {
-          status: 'online',
+          // The source registry advertises an allocatable game server as
+          // `running`; `online` was a Cloudflare-only wire value.
+          status: 'running',
           name: 'cloud-weasel-game-server',
           hostname: websocket.hostname,
           port:
