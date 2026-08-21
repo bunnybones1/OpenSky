@@ -316,6 +316,11 @@ including the reported Practice PvP replay shape.
 
 ### 6. Replace background orchestration incrementally
 
+The next selected conversion is the matchmaker alarm boundary in
+[`CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md`](./CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md).
+It retains five observable find windows and per-proposal allocation deadlines
+without copying nine Go runner loops into Durable Object storage.
+
 - Move one responsibility at a time to the selected Workflow, Queue, Durable
   Object alarm, request-path idempotent update, or explicit retirement.
 - Keep D1 business receipts and fail-closed producer gates.

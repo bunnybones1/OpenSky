@@ -235,11 +235,13 @@ Replace:
 - a requirement that every Go find/make loop have a one-to-one target alarm
   representation.
 
-The existing fake-time Workers tests already observe proposal timing,
-independent mode deadlines, accepted-proposal recovery, and direct bot
-allocation. Rewrite their language around latency/deadline effects; a future
-implementation may coalesce alarms as long as no eligible attempt is delayed
-beyond the preserved boundary and ordering remains deterministic.
+The selected target boundary is recorded in
+[`CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md`](./CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md).
+Five compatibility/cadence find windows retain the source grouping and maximum
+wait effects. Fully accepted human proposals own their allocation deadline
+directly, removing four copied maker-runner records. One Durable Object alarm
+may coalesce due effects as long as no eligible attempt is dispatched early or
+delayed beyond the preserved boundary and ordering remains deterministic.
 
 ### `conquest-gate` (converted at `36ca654d`)
 
