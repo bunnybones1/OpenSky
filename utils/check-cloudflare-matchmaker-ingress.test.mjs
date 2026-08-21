@@ -14,6 +14,7 @@ const fixtures = async () => {
     sourceMessageSender,
     sourceBackendService,
     sourceBrowserClient,
+    sourceBrowserHandlers,
     workerProtocol,
     workerRuntime,
     workerProtocolTest,
@@ -31,6 +32,7 @@ const fixtures = async () => {
       'utf8'
     ),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
+    readFile('webapp/src/clients/MatchMakerClient/handlers.ts', 'utf8'),
     readFile('matchmaker-ts/src/protocol.ts', 'utf8'),
     readFile('matchmaker-ts/src/runtime.ts', 'utf8'),
     readFile('matchmaker-ts/test/protocol.test.ts', 'utf8'),
@@ -46,6 +48,7 @@ const fixtures = async () => {
     sourceMessageSender,
     sourceBackendService,
     sourceBrowserClient,
+    sourceBrowserHandlers,
     workerProtocol,
     workerRuntime,
     workerProtocolTest,
@@ -73,6 +76,34 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
       sourceBackendService: value.sourceBackendService.replace(
         'PlayerID:   p.Address()',
         'PlayerID:   opponent.Address()'
+      )
+    },
+    {
+      ...value,
+      sourceMessages: value.sourceMessages.replace(
+        'Type: AcceptMatchType',
+        'Type: DeclineMatchType'
+      )
+    },
+    {
+      ...value,
+      sourceMessages: value.sourceMessages.replace(
+        'Type: matchReadyToStartType',
+        'Type: matchMadeType'
+      )
+    },
+    {
+      ...value,
+      sourceMessageSender: value.sourceMessageSender.replace(
+        'messages.NewAcceptedMatchMessage(ev.PlayerID)',
+        'messages.NewAcceptedMatchMessage(proto.Hash{})'
+      )
+    },
+    {
+      ...value,
+      sourceMessageSender: value.sourceMessageSender.replace(
+        'messages.NewMatchReadyToStartMessage(ev.Mode)',
+        'messages.NewMatchReadyToStartMessage(proto.GameMode_UNKNOWN)'
       )
     },
     {
@@ -147,6 +178,27 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
     },
     {
       ...value,
+      sourceBrowserHandlers: value.sourceBrowserHandlers.replace(
+        '`${env.GAME_URL}?mode=${data.mode}`',
+        '`${env.GAME_URL}`'
+      )
+    },
+    {
+      ...value,
+      sourceBrowserHandlers: value.sourceBrowserHandlers.replace(
+        'if (data.playerID === authedAddress) {',
+        'if (data.playerID !== authedAddress) {'
+      )
+    },
+    {
+      ...value,
+      sourceBrowserHandlers: value.sourceBrowserHandlers.replace(
+        "updatePlayState('matchMakerStatus', MatchMakerStatus.OPPONENT_DECLINED)",
+        "updatePlayState('matchMakerStatus', MatchMakerStatus.TIMED_OUT)"
+      )
+    },
+    {
+      ...value,
       workerProtocol: value.workerProtocol.replace(
         'MAX_CLIENT_MESSAGE_BYTES = 32 * 1024',
         'MAX_CLIENT_MESSAGE_BYTES = 64 * 1024'
@@ -185,6 +237,34 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
       workerRuntime: value.workerRuntime.replace(
         'playerIDs: [participant.player.address, opponent.player.address]',
         'playerIDs: proposal.participants.map(current => current.player.address)'
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
+        "type: 'accept_match',\n        playerID: principal",
+        "type: 'accept_match',\n        playerID: addresses[0]"
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
+        "type: 'decline_match',\n        playerID: principal",
+        "type: 'decline_match',\n        playerID: proposal.participants[0].player.address"
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
+        "this.broadcastProposal(proposal, { type: 'timed_out' })",
+        "this.broadcastProposal(proposal, { type: 'decline_match', playerID: '' })"
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
+        "type: 'match_ready_to_start',\n        mode: participant.player.mode",
+        "type: 'match_ready_to_start',\n        mode: proposal.participants[0].player.mode"
       )
     },
     {
@@ -234,6 +314,27 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'playerIDs: [principals[1], principals[0]]',
         'playerIDs: principals'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        "{ type: 'accept_match', playerID: PRINCIPAL_2 }",
+        "{ type: 'accept_match', playerID: PRINCIPAL_1 }"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replaceAll(
+        'expect(await secondDeclined).toEqual({',
+        'expect(await secondDeclined).toMatchObject({'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        "expect(await secondTimedOut).toEqual({ type: 'timed_out' })",
+        "expect(await secondTimedOut).toMatchObject({ type: 'timed_out' })"
       )
     },
     {

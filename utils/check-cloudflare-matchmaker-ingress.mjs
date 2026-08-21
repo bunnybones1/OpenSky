@@ -35,6 +35,7 @@ export const matchmakerIngressErrors = ({
   sourceMessageSender,
   sourceBackendService,
   sourceBrowserClient,
+  sourceBrowserHandlers,
   workerProtocol,
   workerRuntime,
   workerProtocolTest,
@@ -166,6 +167,98 @@ export const matchmakerIngressErrors = ({
       's.notifier.Message(ctx, matchFoundMessage, p)'
     ]
   )
+  const sourceAcceptedMessage = bodyBetween(
+    sourceMessages,
+    'func NewAcceptedMatchMessage(',
+    'type DeclineMatchMessage struct'
+  )
+  requireOrdered(errors, 'Source accepted-match wire', sourceAcceptedMessage, [
+    'Type: AcceptMatchType',
+    'PlayerID: playerID.String()'
+  ])
+  const sourceDeclinedMessage = bodyBetween(
+    sourceMessages,
+    'func NewDeclinedMatchMessage(',
+    'type MatchFoundMessage struct'
+  )
+  requireOrdered(errors, 'Source declined-match wire', sourceDeclinedMessage, [
+    'Type: DeclineMatchType',
+    'PlayerID: playerID.String()'
+  ])
+  const sourceMadeMessage = bodyBetween(
+    sourceMessages,
+    'func NewMatchMadeMessage(',
+    'type InProgressMatchInfo struct'
+  )
+  requireOrdered(errors, 'Source match-made wire', sourceMadeMessage, [
+    'Type: matchMadeType',
+    'ServerAddress: serverAddress'
+  ])
+  const sourceReadyMessage = bodyBetween(
+    sourceMessages,
+    'func NewMatchReadyToStartMessage(',
+    'type ErrorMessage struct'
+  )
+  requireOrdered(errors, 'Source match-ready wire', sourceReadyMessage, [
+    'Type: matchReadyToStartType',
+    'Mode: mode'
+  ])
+  const sourceTimedOutMessage = bodyBetween(
+    sourceMessages,
+    'func NewTimedOutMessage(',
+    'func NoMatchFoundMessage('
+  )
+  requireOrdered(errors, 'Source timed-out wire', sourceTimedOutMessage, [
+    'Type: timedOutType'
+  ])
+
+  const sourceAcceptedSender = bodyBetween(
+    sourceMessageSender,
+    'func (s *messageSender) SendAcceptedMatchMessage(',
+    'func (s *messageSender) SendMatchedMessage('
+  )
+  requireOrdered(
+    errors,
+    'Source accepted-match publication',
+    sourceAcceptedSender,
+    ['messages.NewAcceptedMatchMessage(ev.PlayerID)', 'client.WriteJSON(msg)']
+  )
+  const sourceMatchedSender = bodyBetween(
+    sourceMessageSender,
+    'func (s *messageSender) SendMatchedMessage(',
+    'func (s *messageSender) SendDeclinedMatchMessage('
+  )
+  requireOrdered(
+    errors,
+    'Source match completion publication',
+    sourceMatchedSender,
+    [
+      'messages.NewMatchMadeMessage(ev.ServerAddress)',
+      'client.WriteJSON(matchMadeMsg)',
+      'messages.NewMatchReadyToStartMessage(ev.Mode)',
+      'client.WriteJSON(matchReadyMsg)'
+    ]
+  )
+  const sourceDeclinedSender = bodyBetween(
+    sourceMessageSender,
+    'func (s *messageSender) SendDeclinedMatchMessage(',
+    'func (s *messageSender) SendEvictedMessage('
+  )
+  requireOrdered(
+    errors,
+    'Source declined-match publication',
+    sourceDeclinedSender,
+    ['messages.NewDeclinedMatchMessage(ev.PlayerID)', 'client.WriteJSON(msg)']
+  )
+  const sourceTimedOutSender = bodyBetween(
+    sourceMessageSender,
+    'func (s *messageSender) SendTimeoutMessage(',
+    'func (s *messageSender) SendErrorMessage('
+  )
+  requireOrdered(errors, 'Source timed-out publication', sourceTimedOutSender, [
+    'messages.NewTimedOutMessage()',
+    'client.WriteJSON(msg)'
+  ])
 
   const browserError = bodyBetween(
     sourceBrowserClient,
@@ -178,6 +271,49 @@ export const matchmakerIngressErrors = ({
     ': WEBSOCKET_NORMAL_CLOSE_CODE',
     'this.ws.manual_disconnect(code)',
     'messageHandlers.onError(data)'
+  ])
+  const browserMatchReady = bodyBetween(
+    sourceBrowserHandlers,
+    'export const onMatchReady = (',
+    'export const onPlayerAccepted = ('
+  )
+  requireOrdered(errors, 'Browser match-ready behavior', browserMatchReady, [
+    'window.location.href = `${env.GAME_URL}?mode=${data.mode}`'
+  ])
+  const browserAccepted = bodyBetween(
+    sourceBrowserHandlers,
+    'export const onPlayerAccepted = (',
+    'export const onPlayerDeclined = ('
+  )
+  requireOrdered(errors, 'Browser accepted-match behavior', browserAccepted, [
+    'authenticationState.gamePrincipal ?? authenticationState.userAddress',
+    'if (data.playerID === authedAddress) {',
+    "updatePlayState('matchMakerStatus', MatchMakerStatus.WAITING_OPPONENT)"
+  ])
+  const browserDeclined = bodyBetween(
+    sourceBrowserHandlers,
+    'export const onPlayerDeclined = (',
+    'export const onMatchFound = ('
+  )
+  requireOrdered(errors, 'Browser declined-match behavior', browserDeclined, [
+    'authenticationState.gamePrincipal ?? authenticationState.userAddress',
+    'if (message.playerID === authedAddress) {',
+    'resetMatchMakerState()',
+    '} else {',
+    'closeDialog()',
+    "updatePlayState('matchMakerStatus', MatchMakerStatus.OPPONENT_DECLINED)"
+  ])
+  const browserTimedOut = bodyBetween(
+    sourceBrowserHandlers,
+    'export const onTimedOut = (',
+    '\n}'
+  )
+  requireOrdered(errors, 'Browser timed-out behavior', browserTimedOut, [
+    'closeDialog()',
+    'playState.matchMakerStatus === MatchMakerStatus.WAITING_OPPONENT',
+    "updatePlayState('matchMakerStatus', MatchMakerStatus.OPPONENT_DECLINED)",
+    '} else {',
+    "updatePlayState('matchMakerStatus', MatchMakerStatus.TIMED_OUT)"
   ])
 
   if (!workerProtocol.includes('MAX_CLIENT_MESSAGE_BYTES = 32 * 1024')) {
@@ -266,6 +402,58 @@ export const matchmakerIngressErrors = ({
       'playerIDs: [participant.player.address, opponent.player.address]'
     ]
   )
+  const workerAccepted = bodyBetween(
+    workerRuntime,
+    'private async recordAcceptance(',
+    'private async beginAcceptedDispatch('
+  )
+  requireOrdered(errors, 'Worker accepted-match publication', workerAccepted, [
+    'proposal.accepted.push(principal)',
+    'this.broadcastProposal(proposal, {',
+    "type: 'accept_match'",
+    'playerID: principal'
+  ])
+  const workerDeclined = bodyBetween(
+    workerRuntime,
+    'private async declineMatch(',
+    'private async attemptFindRunner('
+  )
+  requireOrdered(errors, 'Worker declined-match publication', workerDeclined, [
+    'this.broadcastProposal(proposal, {',
+    "type: 'decline_match'",
+    'playerID: principal',
+    'await this.deleteProposal(proposal)'
+  ])
+  const workerTimedOut = bodyBetween(
+    workerRuntime,
+    'private async expireProposal(',
+    'private async dispatchProposal('
+  )
+  requireOrdered(errors, 'Worker timed-out publication', workerTimedOut, [
+    "this.broadcastProposal(proposal, { type: 'timed_out' })",
+    'await this.penalties.setAcceptTimeoutPenalty(player)',
+    'await this.deleteProposal(proposal)'
+  ])
+  const workerCompleted = bodyBetween(
+    workerRuntime,
+    'private async completeAllocatedProposal(',
+    'private async releaseProposalPlayers('
+  )
+  requireOrdered(
+    errors,
+    'Worker match completion publication',
+    workerCompleted,
+    [
+      'for (const participant of humanParticipants(proposal)) {',
+      'this.sendToPrincipal(participant.player.address, {',
+      "type: 'match_made'",
+      'serverAddress: proposal.serverAddress',
+      'this.sendToPrincipal(participant.player.address, {',
+      "type: 'match_ready_to_start'",
+      'mode: participant.player.mode',
+      'await this.deleteProposal(proposal)'
+    ]
+  )
   const workerFailure = bodyBetween(
     workerRuntime,
     'private failMalformedClientMessage(',
@@ -346,6 +534,57 @@ export const matchmakerIngressErrors = ({
       'playerIDs: [principals[1], principals[0]]'
     ]
   )
+  const acceptedCompletionTest = bodyBetween(
+    workerRuntimeTest,
+    "it('matches two authenticated identities and ignores forged playerID fields'",
+    "it('pairs low-rank practice PVP with ranked constructed as in the source'"
+  )
+  requireOrdered(
+    errors,
+    'Worker accepted and completion wire regression',
+    acceptedCompletionTest,
+    [
+      "first.send(JSON.stringify({ type: 'accept_match', playerID: PRINCIPAL_2 }))",
+      "type: 'accept_match'",
+      'playerID: PRINCIPAL_1',
+      "second.send(JSON.stringify({ type: 'accept_match', playerID: PRINCIPAL_1 }))",
+      "{ type: 'accept_match', playerID: PRINCIPAL_2 }",
+      "type: 'match_made'",
+      "serverAddress: 'wss://match.example/v1/matches/test'",
+      "{ type: 'match_ready_to_start', mode: GameMode.RANKED_CONSTRUCTED }"
+    ]
+  )
+  const declinedTest = bodyBetween(
+    workerRuntimeTest,
+    "it('notifies both clients when a proposal is declined'",
+    "it('preserves the source challenge-mode exemption from refusal penalties'"
+  )
+  requireOrdered(
+    errors,
+    'Worker declined-match wire regression',
+    declinedTest,
+    [
+      "first.send(JSON.stringify({ type: 'decline_match', playerID: PRINCIPAL_2 }))",
+      'expect(await firstDeclined).toEqual({',
+      "type: 'decline_match'",
+      'playerID: PRINCIPAL_1',
+      'expect(await secondDeclined).toEqual({',
+      "type: 'decline_match'",
+      'playerID: PRINCIPAL_1'
+    ]
+  )
+  const timedOutTest = bodyBetween(
+    workerRuntimeTest,
+    "it('penalizes only the player who lets match acceptance time out'",
+    '\n})'
+  )
+  requireOrdered(errors, 'Worker timed-out wire regression', timedOutTest, [
+    "expect(await firstTimedOut).toEqual({ type: 'timed_out' })",
+    "expect(await secondTimedOut).toEqual({ type: 'timed_out' })",
+    'firstReconnect.send(JSON.stringify(findCommand()))',
+    'secondReconnect.send(JSON.stringify(findCommand()))',
+    "type: 'match_refusal_cooldown'"
+  ])
 
   const scripts = rootPackage?.scripts ?? {}
   if (
@@ -377,6 +616,7 @@ const main = async () => {
     sourceMessageSender,
     sourceBackendService,
     sourceBrowserClient,
+    sourceBrowserHandlers,
     workerProtocol,
     workerRuntime,
     workerProtocolTest,
@@ -418,6 +658,10 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(root, 'webapp/src/clients/MatchMakerClient/handlers.ts'),
+      'utf8'
+    ),
     readFile(path.join(root, 'matchmaker-ts/src/protocol.ts'), 'utf8'),
     readFile(path.join(root, 'matchmaker-ts/src/runtime.ts'), 'utf8'),
     readFile(path.join(root, 'matchmaker-ts/test/protocol.test.ts'), 'utf8'),
@@ -436,6 +680,7 @@ const main = async () => {
     sourceMessageSender,
     sourceBackendService,
     sourceBrowserClient,
+    sourceBrowserHandlers,
     workerProtocol,
     workerRuntime,
     workerProtocolTest,
@@ -447,7 +692,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker ingress preserves the source payload, recipient-first match-found wire, exact error alias, and close contract'
+      'Cloudflare matchmaker ingress and completion notifications preserve the source payload, player-relative wires, browser behavior, exact error alias, and close contract'
     )
   }
 }
