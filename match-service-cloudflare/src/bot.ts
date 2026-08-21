@@ -1,16 +1,13 @@
 import { keccak_256 } from '@noble/hashes/sha3'
 import { getPublicKey, utils } from '@noble/secp256k1'
-import { GameMode } from '@opensky/proto'
+import { DeckClass, GameMode } from '@opensky/proto'
 import { AccountWithPrismsAndCosmeticsInfo } from '@opensky/shared/game-server-message-types'
 import { MatchStartPlayerInfo } from '@opensky/shared/matchmaker-message-types'
 import { PrivateSeed } from '@skyweaver/state-metadata'
 
 import { bytesToHex } from './encoding'
+import { STARTER_DECKS } from '../../cloudflare/src/starter-decks'
 
-const STARTER_CARD_IDS = [
-  6, 68, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
-  151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164
-]
 const BOT_NAMES = [
   'Short Circuit',
   'Beta',
@@ -46,6 +43,66 @@ export const botDifficultyForLevel = (level: number) =>
 export const botDifficultyForPlayer = (mode: GameMode, level: number) =>
   mode === GameMode.WARM_UP ? 1 : botDifficultyForLevel(level)
 
+const sourceBotDeckRules = [
+  { minimumLevel: 0, deckClass: DeckClass.STR, heroAbility: '25000' },
+  { minimumLevel: 6, deckClass: DeckClass.AGY, heroAbility: '25001' },
+  { minimumLevel: 11, deckClass: DeckClass.WIS, heroAbility: '25004' },
+  { minimumLevel: 16, deckClass: DeckClass.HRT, heroAbility: '25002' },
+  { minimumLevel: 21, deckClass: DeckClass.INT, heroAbility: '25003' }
+] as const
+
+export interface SourceBotDeck {
+  minimumLevel: number
+  deckClass: DeckClass
+  prism: PrivateSeed['prisms'][number]
+  heroAbility: string
+  cardIds: number[]
+}
+
+const sourceBotDecks = sourceBotDeckRules.map(rule => {
+  const deck = STARTER_DECKS.find(
+    candidate => candidate.deckClass === rule.deckClass
+  )
+  if (!deck) throw new Error(`source bot deck is missing: ${rule.deckClass}`)
+  return {
+    ...rule,
+    prism: rule.deckClass.toLowerCase() as PrivateSeed['prisms'][number],
+    cardIds: deck.cardIds
+  }
+}) satisfies SourceBotDeck[]
+
+export const sourceBotDecksForLevel = (level: number) =>
+  sourceBotDecks.filter(deck => deck.minimumLevel <= level)
+
+const randomSourceBotDeckIndex = (length: number) => {
+  const ceiling = 0x1_0000_0000
+  const unbiasedLimit = ceiling - (ceiling % length)
+  const sample = new Uint32Array(1)
+  do crypto.getRandomValues(sample)
+  while (sample[0] >= unbiasedLimit)
+  return sample[0] % length
+}
+
+export const selectSourceBotDeck = (
+  level: number,
+  pickIndex: (length: number) => number = randomSourceBotDeckIndex
+) => {
+  const decks = sourceBotDecksForLevel(level)
+  const index = pickIndex(decks.length)
+  if (!Number.isInteger(index) || index < 0 || index >= decks.length) {
+    throw new Error('source bot deck selector returned an invalid index')
+  }
+  return decks[index]
+}
+
+// BotMatchMatcher uses the unregistered level-gated source pool only for the
+// always-bot modes. Ranked queues use Go's separate registered-account path,
+// which remains isolated behind ENABLE_RANKED_BOTS.
+const botDeckForPlayer = (mode: GameMode, level: number) =>
+  mode === GameMode.PRACTICE_BOT || mode === GameMode.WARM_UP
+    ? selectSourceBotDeck(level)
+    : sourceBotDecks[0]
+
 export const createBotParticipant = (
   mode: MatchStartPlayerInfo['gameMode'],
   opponentLevel: number
@@ -55,14 +112,15 @@ export const createBotParticipant = (
   const address = addressForBotPrivateKey(walletKey)
   const subkeyAddress = addressForBotPrivateKey(subkey)
   const difficulty = botDifficultyForPlayer(mode, opponentLevel)
+  const deck = botDeckForPlayer(mode, opponentLevel)
   const createdAt = '2020-01-01T00:00:00.000Z'
   const privateSeed: PrivateSeed = {
     player: [...hexAddressBytes(address)],
     subkey: [...hexAddressBytes(subkeyAddress)],
     signature: Array(65).fill(0),
-    prisms: ['str'],
-    heroAbility: '25000',
-    cards: STARTER_CARD_IDS.map(String) as PrivateSeed['cards'],
+    prisms: [deck.prism],
+    heroAbility: deck.heroAbility,
+    cards: deck.cardIds.map(String) as PrivateSeed['cards'],
     randomSeed: [...randomBytes(16)],
     cardRarities: new Map()
   }
@@ -76,7 +134,7 @@ export const createBotParticipant = (
     levelUpXP: 120,
     createdAt,
     updatedAt: createdAt,
-    prisms: ['str'],
+    prisms: [deck.prism],
     deckEquipment: { stickers: [] }
   } as unknown as AccountWithPrismsAndCosmeticsInfo
   return {

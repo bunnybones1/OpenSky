@@ -78,6 +78,9 @@ export const cloudflareBuildScriptErrors = rootPackage => {
   if (!build.includes('pnpm check:cloudflare:bot-difficulty')) {
     errors.push('Cloudflare build must include the source bot-difficulty gate')
   }
+  if (!build.includes('pnpm check:cloudflare:bot-deck')) {
+    errors.push('Cloudflare build must include the source bot-deck gate')
+  }
   if (!build.includes('pnpm check:cloudflare:match-reward-wire')) {
     errors.push(
       'Cloudflare build must include the generated Go match reward wire gate'

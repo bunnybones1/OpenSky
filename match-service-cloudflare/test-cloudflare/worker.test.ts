@@ -1,9 +1,10 @@
-import { GameMode } from '@opensky/proto'
+import { DeckClass, GameMode } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { hexToBytes } from '../src/encoding'
+import { selectSourceBotDeck, sourceBotDecksForLevel } from '../src/bot'
 import {
   BOT_PLACEHOLDER,
   INTERNAL_AUTH_HEADER,
@@ -21,6 +22,7 @@ import { ConquestDrillRepository } from '../../cloudflare/src/conquest-drill'
 import { ConquestReadinessOperationsRepository } from '../../cloudflare/src/conquest-readiness-operations'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
 import { PlayerRepository } from '../../cloudflare/src/player'
+import { STARTER_DECKS } from '../../cloudflare/src/starter-decks'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const SECOND_USER_ID = '22222222-2222-4222-8222-222222222222'
@@ -971,6 +973,74 @@ describe('Cloud Weasel accepted-match service', () => {
       },
       matchSettings: { botDifficulty: 1 }
     })
+  })
+
+  it('preserves every source level-gated unregistered bot deck', () => {
+    expect(
+      [0, 6, 11, 16, 21].map(level =>
+        sourceBotDecksForLevel(level).map(deck => deck.deckClass)
+      )
+    ).toEqual([
+      [DeckClass.STR],
+      [DeckClass.STR, DeckClass.AGY],
+      [DeckClass.STR, DeckClass.AGY, DeckClass.WIS],
+      [DeckClass.STR, DeckClass.AGY, DeckClass.WIS, DeckClass.HRT],
+      [
+        DeckClass.STR,
+        DeckClass.AGY,
+        DeckClass.WIS,
+        DeckClass.HRT,
+        DeckClass.INT
+      ]
+    ])
+    expect(selectSourceBotDeck(21, length => length - 1)).toMatchObject({
+      minimumLevel: 21,
+      deckClass: DeckClass.INT,
+      prism: 'int',
+      heroAbility: '25003',
+      cardIds: STARTER_DECKS[4].cardIds
+    })
+    expect(() => selectSourceBotDeck(21, length => length)).toThrow(
+      'source bot deck selector returned an invalid index'
+    )
+  })
+
+  it('builds a high-level Practice bot from one complete eligible source deck', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE player_profiles SET level = 21 WHERE user_id = ?`
+    )
+      .bind(USER_ID)
+      .run()
+    const accepted = dispatch()
+    accepted.proposalId = 'proposal-source-bot-deck'
+
+    const response = await create(accepted)
+    expect(response.status).toBe(200)
+    const row = await env.AUTH_DB.prepare(
+      `SELECT match_payload_json FROM multiplayer_matches
+       WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{ match_payload_json: string }>()
+    const payload = JSON.parse(row!.match_payload_json)
+    const bot = payload.match.player2
+    const prism = bot.privateSeed.prisms[0]
+    const selected = STARTER_DECKS.find(
+      deck => deck.deckClass.toLowerCase() === prism
+    )
+    const heroAbilities = new Map<DeckClass, string>([
+      [DeckClass.STR, '25000'],
+      [DeckClass.AGY, '25001'],
+      [DeckClass.WIS, '25004'],
+      [DeckClass.HRT, '25002'],
+      [DeckClass.INT, '25003']
+    ])
+    expect(selected).toBeDefined()
+    expect(bot.account.prisms).toEqual([prism])
+    expect(bot.privateSeed.heroAbility).toBe(
+      heroAbilities.get(selected!.deckClass)
+    )
+    expect(bot.privateSeed.cards).toEqual(selected!.cardIds.map(String))
   })
 
   it('uses the identity inventory as the authoritative playable-card source', async () => {
