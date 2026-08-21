@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `e8709dbb`
-  (`Preserve source game socket ingress`)
-- Latest tested runtime commit: `e8709dbb`
-  (`Preserve source game socket ingress`)
+- Last code/test checkpoint: `b9d81cb0`
+  (`Preserve source game decode lifecycle`)
+- Latest tested runtime commit: `b9d81cb0`
+  (`Preserve source game decode lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `e8709dbb` are committed and
+- The runtime changes from `38386294` through `b9d81cb0` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -154,7 +154,9 @@ level-gated bot-deck checkpoint and its handoff at exact pushed head
 `c69a6121` in 10m30s. The later cadence, registered-bot, schema-preflight, and
 service-route checkpoints passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32457861279> at
-`d380c464` in 11m11s. The newer `e8709dbb` game-ingress checkpoint and this
+`d380c464` in 11m11s. The game-ingress checkpoint and handoff passed exact-head
+run <https://github.com/bunnybones1/OpenSky/actions/runs/32459944271> at
+`e66303af` in 9m03s. The newer `b9d81cb0` decode-lifecycle checkpoint and this
 refreshed handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1219,6 +1221,36 @@ timer:
 
 The exact complete local release contract passed with exit code zero for
 `e8709dbb`: 512 main-Worker tests, 35 game-server unit and 119 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source game decode-failure milestone
+
+Commit `b9d81cb0` removes two player-visible responses that the Cloudflare
+runtime had invented at the game WebSocket decode boundary:
+
+- malformed text or binary JSON is silently ignored and the same socket
+  remains usable, matching the source outer server's decode catch;
+- parsed `null` retains the same source outcome because MatchManager catches
+  the resulting property error without changing the connection;
+- a missing or unknown message type reaches the source default lifecycle: an
+  empty close with no preceding state-error message, close code, or reason; and
+- oversize frames and structurally invalid known messages retain the reviewed
+  bounded fail-closed validation rather than weakening Worker safety.
+
+The expanded game-ingress gate now derives the source Server and MatchManager
+error paths as well as the Worker classifications and runtime ordering. Its
+unit and Workers regressions prove malformed text, malformed binary, parsed
+`null`, continued time-sync, the empty unknown-message close, and absence of an
+invented player-facing error.
+
+The exact complete local release contract passed with exit code zero for
+`b9d81cb0`: 512 main-Worker tests, 35 game-server unit and 120 Workers tests,
 45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The

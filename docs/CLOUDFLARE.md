@@ -2485,6 +2485,33 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source game decode-failure parity — 2026-08-21
+
+Milestone `b9d81cb0` restores the original game's player-visible decode and
+unknown-message lifecycle. The Node outer server catches malformed text or
+binary JSON and returns without sending or closing; parsed `null` reaches
+MatchManager, whose catch also leaves the connection unchanged. The Durable
+Object now classifies both outcomes as silent ignores, and a Workers regression
+proves the same socket immediately remains usable for time-sync.
+
+A parsed value with a missing or unknown type follows the different source
+default branch: the server closes the socket without first sending an error and
+without an explicit close code or reason. The Worker now performs that exact
+empty close instead of exposing its internal `state` validation message and a
+`1008` reason. The reviewed message-size bound and structural validation for
+known message types remain fail closed.
+
+The expanded mutation-tested game-ingress gate derives both source error paths
+from `Server.ts` and `MatchManager.ts`, requires explicit Worker error classes
+and routing order, and pins unit plus Workers-runtime regressions. The complete
+local release contract passed for `b9d81cb0`: 512 main-Worker tests, 35
+game-server unit and 120 Workers tests, 45 match-service tests, 62 matchmaker
+unit and 67 Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, both production builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

@@ -20,6 +20,9 @@ wire messages. It is a separate service from `matchmaker-ts`.
   and restore-on-event behavior;
 - source-compatible text and binary WebSocket frame decoding plus the exact
   prefix-based application `PING`/first-ID `PONG` behavior across hibernation;
+- source-compatible decode failures: malformed JSON is silent on the same
+  socket, while missing or unknown message types close without an invented
+  error payload, close code, or reason;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible
