@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `22045837`
-  (`Pin Conquest wire gate to projected points`)
-- Latest tested runtime commit: `7dcff712`
-  (`Preserve source Conquest V2 point publication`)
+- Last code/test checkpoint: `5b3d3306`
+  (`Preserve source multiplayer quest publication`)
+- Latest tested runtime commit: `5b3d3306`
+  (`Preserve source multiplayer quest publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,11 +23,10 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `7dcff712` are committed and
-  tested but are **not deployed**. The exact local build at `64686dae`
-  produced web entry `/assets/index-1eddfd33.js` and game entry
-  `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
-  exact release-gate head `22045837` retained both entries.
+- The runtime changes from `38386294` through `5b3d3306` are committed and
+  tested but are **not deployed**. The complete exact-commit build at
+  `5b3d3306` produced web entry `/assets/index-1eddfd33.js` and game entry
+  `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -204,8 +203,12 @@ refreshed handoff passed exact-head run
 refreshed handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32493951570> at
 `294ebd34` in 10m58s. The newer `7dcff712` Conquest V2 point-publication
-checkpoint, its `22045837` wire-gate checkpoint, and this refreshed handoff
-require a later green exact-head CI run before any production mutation.
+checkpoint, its `22045837` wire-gate checkpoint, and refreshed handoff passed
+exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32495668086> at
+`0c81bee4` in 9m00s. The newer `5b3d3306` multiplayer quest-publication
+checkpoint and its refreshed handoff require a later green exact-head CI run
+before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1998,6 +2001,50 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source multiplayer quest-publication milestone
+
+Commit `5b3d3306` closes the remaining reversed player-visible boundary around
+multiplayer quest progress. The Go API commits `endMatch` and its terminal
+match row before calling `QuestUpdater.UpdateFromMatch`. The retryable Worker
+stages quest mutations and their immutable receipt before
+`publishMatchCompletion` changes the shared multiplayer ledger to `ended`;
+without a projection, a player could therefore see or spend progress from a
+match that every match-facing surface still treated as unfinished.
+
+Quest lists, epic chains, and the identity player-state endpoint now derive
+trusted per-assignment deltas from progression receipts whose multiplayer
+ledger is not `ended`, subtract those deltas, and restore `complete` back to
+`active` when appropriate. Receipt parsing is bounded and fails closed on an
+invalid row ID, delta, object shape, underflow, or a claimed assignment. Reads
+load assignments before receipts so a settlement racing the two statements can
+fail closed but cannot leak the staged state.
+
+Claims, manual rerolls, and automatic period rollover use both a preflight and
+the same non-`ended` receipt predicate inside their D1 mutation batch. A race
+therefore cannot create XP, deactivate an assignment, increment reroll state,
+or insert a replacement quest before publication. Local-bot quest receipts are
+unchanged and remain immediately visible because they do not use the
+multiplayer ledger.
+
+The real Workers regressions stage both a completed claimable quest and a
+rerollable partial quest. They prove ListQuests, the epic chain, identity state,
+claim, reroll, and expired-period behavior before publication; then publish the
+ledger and prove the exact staged values and mutations become available. A
+second regression proves malformed unpublished receipts fail closed and stop
+affecting reads only after their ledger is published. The expanded
+mutation-tested match-completion gate derives the Go match-before-quest order,
+Worker stage order, read projections, mutation predicates, and runtime proof.
+
+The exact complete local release contract passed with exit code zero at
+`5b3d3306`: 519 main-Worker tests across 85 files, 40 game-server unit and 133
+Workers tests, 45 match-service tests, 63 matchmaker unit and 67 Workers tests,
+30 browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -2109,8 +2156,8 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `7dcff712` from exact
-  release-gate head `22045837`. Keep
+- Deploy and verify the tested runtime changes through `5b3d3306` from its
+  exact green release-gate head. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
