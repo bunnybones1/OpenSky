@@ -24,10 +24,10 @@ attempt runner. The production mutation pause remains in force.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `36ca654d`
-  (`Orchestrate Conquest rewards with Workflows and Queues`)
-- Latest tested runtime commit: `36ca654d`
-  (`Orchestrate Conquest rewards with Workflows and Queues`)
+- Last code/test checkpoint: `d5764b4e`
+  (`Schedule matchmaker effects by durable deadlines`)
+- Latest tested runtime commit: `d5764b4e`
+  (`Schedule matchmaker effects by durable deadlines`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -36,7 +36,7 @@ attempt runner. The production mutation pause remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `36ca654d` are committed and
+- The runtime changes from `38386294` through `d5764b4e` are committed and
   tested but are **not deployed**. The most recent complete release build is
   still the earlier `1e7f878c` checkpoint, which produced web entry
   `/assets/index-1eddfd33.js` and game entry
@@ -113,6 +113,34 @@ tests, target gate, and fresh local migration/schema preflight pass. Complete
 exact-head release validation and PR CI remain outstanding. No remote
 preflight, provisioning, migration, deployment, schedule activation, or live
 drill was performed.
+
+## Effect-level matchmaker cadence milestone
+
+Commit `d5764b4e` applies the target boundary selected in
+[`CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md`](./CLOUDFLARE_MATCHMAKER_EFFECT_CADENCE.md):
+
+- five durable find windows preserve the source compatibility groups and
+  five-second/two-second player-visible scan boundaries without representing
+  every Go director goroutine;
+- later compatible tickets share an already armed window while incompatible
+  groups retain independent deadlines;
+- fully accepted human proposals persist their own two-second allocation
+  deadline and alarm, removing four identical maker-runner records;
+- Practice Bot and Warm Up still allocate directly from the due find window;
+- early, duplicate, delayed, and post-eviction alarms preserve deadlines and
+  exact-once proposal identity; and
+- rolling state repairs accepted proposals and removes obsolete maker records
+  without stranding tickets or dispatching early.
+
+The mutation-tested release gate now derives modes, groupings, direct-bot
+behavior, and default timing from Go but requires target boundary outcomes. It
+no longer pins `time.NewTicker`, nine target runners, ticker phase arithmetic,
+storage-key topology, or alarm method order. Validation passes 63/63 unit and
+69/69 Durable Object integration tests, typecheck, cadence/session/ingress/
+deck/relaxation/Conquest/bot gates, and release/target/service/CI audits. No
+remote preflight, migration, provisioning, deployment, bot activation, or live
+drill was performed. Full exact-head release validation and PR CI remain
+outstanding.
 
 ## Multiplayer XP publication milestone
 
@@ -2416,7 +2444,7 @@ handoff guards, and exact reviewed Workflow/Queue/DLQ topology are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `36ca654d` only after a
+- Deploy and verify the tested runtime changes through `d5764b4e` only after a
   later documentation head passes the full release contract and exact-head PR
   CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.

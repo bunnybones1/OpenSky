@@ -162,7 +162,8 @@ The `worker-runners` and `match-completion` conversions were completed at
 retry ceiling, exactly-once application, independent progress, terminal-client
 ordering, and Durable Object eviction recovery. The `conquest-gate` conversion
 completed at `36ca654d` with Workflow/Queue/D1 handoff evidence. The
-`matchmaker-cadence` conversion remains outstanding.
+`matchmaker-cadence` conversion completed at `d5764b4e` with durable
+deadline, eviction, duplicate-alarm, and rolling-upgrade evidence.
 
 ### `worker-runners`
 
@@ -216,7 +217,7 @@ idempotency, serialization, and transactional rollback are exercised in
 also prove recovery/re-drive after more failures than the copied Go terminal
 bound; the mutation-tested gate rejects removal of that evidence.
 
-### `matchmaker-cadence`
+### `matchmaker-cadence` (converted at `d5764b4e`)
 
 Keep:
 
@@ -242,6 +243,9 @@ wait effects. Fully accepted human proposals own their allocation deadline
 directly, removing four copied maker-runner records. One Durable Object alarm
 may coalesce due effects as long as no eligible attempt is dispatched early or
 delayed beyond the preserved boundary and ordering remains deterministic.
+The release gate no longer reads the Go ticker implementation or requires nine
+target runners, exact storage keys, ticker phase arithmetic, or alarm method
+order.
 
 ### `conquest-gate` (converted at `36ca654d`)
 

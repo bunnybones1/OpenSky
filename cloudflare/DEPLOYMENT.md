@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `36ca654d` is tested but not
+- Paused branch checkpoint: runtime commit `d5764b4e` is tested but not
   deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
@@ -22,9 +22,13 @@
   later may be deployed until all seven migrations and the exact reviewed
   bindings exist. Every checked-in deploy command now performs a fail-closed,
   account-pinned, read-only D1 schema preflight first; the migration command is
-  intentionally exempt so it can advance the schema. The current Conquest
-  milestone passed 21 focused integration tests, 531 main-Worker tests before
-  the final assertion-only hardening, TypeScript validation, mutation-tested
+  intentionally exempt so it can advance the schema. The current matchmaker
+  cadence milestone passed 63 unit and 69 Durable Object integration tests,
+  TypeScript validation, the converted mutation-tested cadence gate, and all
+  related session/ingress/deck/relaxation/Conquest/bot, release, target,
+  service, and CI gates. The preceding Conquest milestone passed 21 focused
+  integration tests, 531 main-Worker tests before final assertion-only
+  hardening, TypeScript validation, mutation-tested
   Conquest/runner/production gates, and a fresh local application of every D1
   migration plus the production schema preflight. The last complete local
   release remains `1e7f878c`; it passed 528 main-Worker tests, 40 game-server

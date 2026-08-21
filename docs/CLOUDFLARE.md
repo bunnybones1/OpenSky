@@ -3034,15 +3034,32 @@ A fresh local D1 accepted the full migration chain and passed the production
 schema preflight. No remote preflight, migration, Workflow/Queue provisioning,
 deployment, activation, or live drill was performed.
 
+## Effect-level matchmaker deadlines — 2026-08-21
+
+Commit `d5764b4e` removes the target-side requirement to reproduce the Go
+director's nine goroutines and ticker phases. The `MatchmakerPool` Durable
+Object now retains five durable find windows because their compatibility groups
+and maximum wait boundaries affect players. Fully accepted human proposals own
+their allocation deadline directly, so four identical maker-runner records are
+no longer needed. Practice Bot and Warm Up retain direct allocation from their
+due find window, and Conquest Discovery remains unsupported as in the source.
+
+Boundary tests cover early and duplicate alarms, delayed-window advancement,
+later compatible tickets sharing a window, independent incompatible groups,
+Durable Object eviction, per-proposal allocation timing, direct bot allocation,
+rolling recovery, and obsolete maker-state cleanup. The cadence gate uses Go
+only to derive modes, grouping, timing defaults, and direct-bot behavior; it no
+longer requires `time.NewTicker`, nine target runner records, ticker phase
+arithmetic, exact storage topology, or alarm method order. No production action
+was performed.
+
 ## Suggested next slice
 
-The Conquest and post-match orchestration corrections are complete locally.
-The next safe slice is an effect-level audit of the matchmaker's nine-runner
-cadence gate and alarm topology: preserve player-visible acceptance,
-relaxation, refusal, timeout, bot, and allocation timing while removing any
-requirement that Durable Object alarms reproduce Go ticker grouping or runner
-cadence. Follow it with the remaining main-Worker cron responsibilities one at
-a time; do not redesign the original player interface.
+The Conquest, post-match, and matchmaker-cadence corrections are complete
+locally. The next safe background slice is one remaining main-Worker cron
+responsibility at a time, beginning with an effect/recovery audit rather than a
+topology rewrite. Player-facing parity remains separate and must continue using
+the original interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
 then `0116`, `0117`, `0118`, `0119`, `0120`, and `0121` at the documented

@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: selected local implementation direction after the effect-fidelity
-audit. This document does not authorize deployment, provisioning, bot
-activation, or a live multiplayer drill.
+Status: implemented locally at `d5764b4e` after the effect-fidelity audit.
+This document does not authorize deployment, provisioning, bot activation, or
+a live multiplayer drill.
 
 ## Decision
 
@@ -120,8 +120,7 @@ by its stored deadline, proposal state, ticket ownership, and idempotency key.
 
 ## Required executable evidence
 
-Before this conversion is accepted, black-box or storage-boundary tests must
-prove:
+The black-box and storage-boundary suites prove:
 
 - no match before the first find window and a match at/after the due boundary;
 - later compatible tickets share the already armed window;
