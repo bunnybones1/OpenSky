@@ -88,6 +88,14 @@ from the cryptographically random proposal UUID after canonicalizing addresses,
 so allocation retries cannot reorder `player1`/`player2`. The accepted
 transition is also recoverable by the Durable Object alarm if execution stops
 after the final acceptance was persisted.
+Decline eligibility remains governed by the source pending-match lifetime, not
+proposal status. Explicit decline and final-subscriber cleanup share one path:
+`FOUND`, `ACCEPTED`, and director-owned `TO_BE_MADE`/Worker `DISPATCHING`
+proposals can be declined until that lifetime becomes negative. Conquest still
+rejects the operation and Challenge still avoids the refusal penalty. If a
+director-style allocation is already in flight, its local proposal copy still
+completes after repository deletion, preserving the source's possible
+decline-then-`match_made` ordering instead of orphaning an allocated game.
 
 ## Deployment gates
 

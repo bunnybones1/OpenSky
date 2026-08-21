@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `3099956c`
-  (`Preserve source expired accept lifecycle`)
-- Latest tested runtime commit: `3099956c`
-  (`Preserve source expired accept lifecycle`)
+- Last code/test checkpoint: `2bbf8b6a`
+  (`Preserve source accepted decline lifecycle`)
+- Latest tested runtime commit: `2bbf8b6a`
+  (`Preserve source accepted decline lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `3099956c` are committed and
+- The runtime changes from `38386294` through `2bbf8b6a` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -124,8 +124,10 @@ source-ingress checkpoint and its handoff at exact pushed head `8ea481e7` in
 <https://github.com/bunnybones1/OpenSky/actions/runs/32433389112> passed the
 source read-timeout checkpoint and its handoff at exact pushed head `17590914`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32434673238> passed the
-command-error checkpoint and its handoff at exact pushed head `d331c5dd`. The
-newer `3099956c` expired-accept checkpoint and this refreshed handoff must
+command-error checkpoint and its handoff at exact pushed head `d331c5dd`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32436099294> passed the
+expired-accept checkpoint and its handoff at exact pushed head `85e1e453`. The
+newer `2bbf8b6a` accepted-decline checkpoint and this refreshed handoff must
 receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -692,6 +694,47 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker accepted-decline milestone
+
+Commit `2bbf8b6a` removes a proposal-status restriction that was not present in
+the original matchmaker:
+
+- the source Decliner removes the player from the queue and then uses only the
+  pending-match TTL to decide whether a proposal can still be declined;
+- a live proposal remains declinable in `FOUND`, `ACCEPTED`, or the director's
+  `TO_BE_MADE` phase; the source has no accepted-proposal immunity;
+- the strict source boundary remains intact: a pending lifetime of zero is
+  live, while a negative lifetime makes decline a silent no-op;
+- the final player-channel close invokes that same Decliner after confirming
+  that no subscriber remains, so disconnect uses no separate status rule;
+- Conquest still rejects decline, Challenge still avoids the refusal penalty,
+  and every other live decline is broadcast before proposal deletion and the
+  declining player's penalty; and
+- if the source director already owns an in-memory `TO_BE_MADE` copy, deleting
+  the repository proposal does not cancel that processor. The Worker preserves
+  this interleaving: an already-running idempotent allocation can still deliver
+  `match_made` after the decline notification instead of being orphaned.
+
+Workers regressions cover explicit decline of an `ACCEPTED` proposal, final
+channel closure during `DISPATCHING`, the strict expired-accepted no-op, and a
+blocked in-flight allocation that resumes after the durable proposal is
+declined. They pin both-player notifications, proposal deletion or
+preservation, refusal-penalty ownership, channel state, and the later
+director-copy handoff. The mutation-tested
+`check:cloudflare:matchmaker-session` gate derives queue removal, pending TTL,
+status independence, Conquest and Challenge rules, last-subscriber reuse,
+direct tests, and release wiring from the Go and TypeScript sources.
+
+The exact complete local release contract passed at committed runtime head
+`2bbf8b6a` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 53
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -796,7 +839,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `3099956c`. Keep
+- Deploy and verify the tested runtime changes through `2bbf8b6a`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

@@ -1995,6 +1995,45 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker accepted-decline parity — 2026-08-20
+
+Milestone `2bbf8b6a` restores the source Decliner's status-independent pending
+match lifecycle. The Go service removes the player from its queue, checks the
+pending-match TTL, rejects Conquest, locks and loads the proposal, broadcasts
+the decline, deletes the proposal, and applies the non-Challenge refusal
+penalty. It never checks whether the proposal is `FOUND`, `ACCEPTED`, or
+`TO_BE_MADE`; only a negative pending TTL makes the operation a silent no-op.
+
+Final player-channel closure calls that same Decliner after the pubsub factory
+confirms no subscriber remains. The Worker now reuses its explicit decline
+path for cleanup and no longer gives accepted or dispatching proposals an
+invented disconnect exemption. Its timestamp comparison retains the strict
+source boundary, while Conquest rejection, Challenge exemption, notification
+order, deletion, and penalty ownership remain unchanged.
+
+The source director can already hold an in-memory `TO_BE_MADE` proposal after
+the repository lock is released. A concurrent decline deletes Redis state but
+does not revoke that copy, so the already-running processor may still allocate
+the game and publish `match_made`. A controlled Workers regression blocks the
+match-service call, interleaves a live decline, then resumes allocation and
+proves the same decline-then-match-made behavior without losing the refusal
+penalty or leaving a proposal behind.
+
+Additional Workers regressions cover direct decline of `ACCEPTED`, final
+subscriber loss during `DISPATCHING`, and an expired `ACCEPTED` no-op. The
+mutation-tested session gate derives queue removal, strict pending TTL,
+status independence, the shared close path, Conquest and Challenge behavior,
+the in-flight director-copy regression, and release wiring from source.
+
+The exact complete local contract passed at `2bbf8b6a`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 53 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
