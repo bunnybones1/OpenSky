@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `df44bad0`
-  (`Preserve source Warm Up bot difficulty`)
-- Latest tested runtime commit: `df44bad0`
-  (`Preserve source Warm Up bot difficulty`)
+- Last code/test checkpoint: `96e25086`
+  (`Preserve source level-gated bot decks`)
+- Latest tested runtime commit: `96e25086`
+  (`Preserve source level-gated bot decks`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `df44bad0` are committed and
+- The runtime changes from `38386294` through `96e25086` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-c8882239.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -144,8 +144,11 @@ per-mode relaxation checkpoint and its handoff at exact pushed head `740d2ea7`
 in 10m46s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32445218465> passed the
 Conquest-rank checkpoint and its handoff at exact pushed head `4478e24e` in
-10m45s. The newer `df44bad0` Warm Up bot checkpoint and this refreshed handoff
-must receive exact-head CI before any production mutation.
+10m45s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32446135691> passed the
+Warm Up bot checkpoint and its handoff at exact pushed head `5df2edb0` in
+10m49s. The newer `96e25086` level-gated bot-deck checkpoint and this refreshed
+handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1000,6 +1003,46 @@ are `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source unregistered bot-deck milestone
+
+Commit `96e25086` restores the original level-gated deck pool used for
+unregistered Practice Bot and Warm Up opponents:
+
+- the matchmaker's `BotMatchMatcher` scopes `CreateUnregistered` to
+  `PRACTICE_BOT` and `WARM_UP`, and that factory selects uniformly from every
+  curated deck whose source minimum level has been reached;
+- Cloudflare now uses the exact source thresholds at levels 0, 6, 11, 16, and
+  21, with the canonical Strength, Agility, Wisdom, Heart, and Intellect
+  starter-deck strings, prisms, and hero abilities;
+- one unbiased `crypto.getRandomValues` selection supplies the bot's complete
+  private seed and account prism instead of constructing every opponent from
+  the Strength starter deck; and
+- the source's separate registered-account/deck path for optional ranked/PvP
+  bots is not claimed by this milestone. Both production Workers retain
+  `ENABLE_RANKED_BOTS=false` until that path is ported and verified separately.
+
+Direct regressions pin every eligibility boundary and reject an invalid random
+selector. A D1/Workers allocation raises a Practice player's level to 21 and
+proves the stored opponent uses one internally complete canonical eligible
+deck. The mutation-tested `check:cloudflare:bot-deck` gate derives the two
+always-bot modes, unregistered factory, five Go deck specifications, canonical
+deck bytes, level filter, uniform selection, TypeScript consumers, direct and
+allocation regressions, match-service deployment command, and complete-build
+CI wiring from the source tree.
+
+The match-service Workers suite passed 36/36 tests. The targeted source
+`TestBotSuite/TestCreateBotPlayer` passed twenty randomized runs. The exact
+complete Cloudflare release contract passed at committed runtime head
+`96e25086` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 36 match-service tests, 57 matchmaker unit tests, 61
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries are
+`/assets/index-c8882239.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. Existing Vite chunk-size and PWA
+warnings remained non-fatal. No deployment, migration, provisioning,
+activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1104,8 +1147,10 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `df44bad0`. Keep
+- Deploy and verify the tested runtime changes through `96e25086`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
+- Keep optional ranked/PvP bots disabled until the source registered bot
+  account and unlocked-deck selection path is ported and separately verified.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, deploy the

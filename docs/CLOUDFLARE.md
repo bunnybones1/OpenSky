@@ -2270,6 +2270,41 @@ artifact validation. The assembled entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source unregistered bot decks — 2026-08-20
+
+Milestone `96e25086` restores the source deck pool for unregistered Practice
+Bot and Warm Up opponents. The Go `BotMatchMatcher` uses
+`CreateUnregistered` only for those two always-bot modes. Its bot constructor
+chooses uniformly from every curated deck unlocked by the human account's
+level: Strength at level 0, Agility at 6, Wisdom at 11, Heart at 16, and
+Intellect at 21.
+
+The match service now derives those five entries from the existing canonical
+starter-deck authority and preserves their exact source deck strings, cards,
+prisms, and hero abilities. An unbiased Web Crypto selection supplies one
+complete deck to both the private seed and account snapshot. Direct tests pin
+all five eligibility boundaries and the final Intellect mapping; a real
+Workers/D1 allocation at level 21 proves the stored bot is internally
+consistent with one eligible canonical source deck.
+
+The mutation-tested `check:cloudflare:bot-deck` gate covers the source matcher
+scope, unregistered factory, curated deck specifications, canonical Go and
+TypeScript deck bytes, random selection, both runtime consumers, regression
+tests, match-service deployment path, and non-deploying CI audit. The source's
+separate registered-account and unlocked-deck selection for optional ranked
+and Practice PvP bots remains a later parity slice. Both production Workers
+retain `ENABLE_RANKED_BOTS=false` in the meantime.
+
+The match-service Workers suite passed 36 tests, and the targeted Go bot
+constructor passed twenty randomized runs. The exact complete local contract
+passed at `96e25086`: 510 main-Worker tests, 34 game-server unit and 117 Workers
+tests, 36 match-service tests, 57 matchmaker unit and 61 Workers tests, 30
+browser-game tests, nine analytics tests, all typechecks and source/off-chain
+gates, both builds, and 594-file artifact validation. The assembled entries
+are `/assets/index-c8882239.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
