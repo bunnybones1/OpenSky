@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `30f8aa44`
-  (`Preserve independent pending match lifetime`)
-- Latest tested runtime commit: `30f8aa44`
-  (`Preserve independent pending match lifetime`)
+- Last code/test checkpoint: `469484ab`
+  (`Preserve source orphaned queue cleanup`)
+- Latest tested runtime commit: `469484ab`
+  (`Preserve source orphaned queue cleanup`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `30f8aa44` are committed and
+- The runtime changes from `38386294` through `469484ab` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -129,7 +129,9 @@ command-error checkpoint and its handoff at exact pushed head `d331c5dd`. Run
 expired-accept checkpoint and its handoff at exact pushed head `85e1e453`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32437463277> passed the
 accepted-decline checkpoint and its handoff at exact pushed head `c29d7e19`.
-The newer `30f8aa44` independent-pending-lifetime checkpoint and this refreshed
+Run <https://github.com/bunnybones1/OpenSky/actions/runs/32438805522> passed the
+independent-pending-lifetime checkpoint and its handoff at exact pushed head
+`b3e061a4`. The newer `469484ab` orphaned-queue checkpoint and this refreshed
 handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -773,6 +775,38 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker orphaned-queue milestone
+
+Commit `469484ab` restores the original query service's repair of an
+inconsistent queued player with no active subscriber:
+
+- before matching, Go loads each queue entry and asks the notifier for its
+  subscriber count;
+- a zero count is logged, removed from the player queue, and skipped without a
+  proposal, timeout, refusal penalty, or player notification;
+- the Worker previously filtered such a ticket from candidates but left its
+  durable storage and recurring alarm behind; and
+- the Worker now partitions live and orphaned tickets, deletes every orphan,
+  and only then builds the candidate map and reschedules from repaired storage.
+
+The Workers regression captures a real ticket from a subscribed channel,
+closes the final socket, reinserts the ticket to reproduce the inconsistency,
+and proves the next alarm removes the ticket and then deletes its own otherwise
+unnecessary schedule. The mutation-tested
+`check:cloudflare:matchmaker-session` gate derives the source
+`NumberOfSubscribers` branch and queue removal, Worker partition/deletion
+order, direct regression, and release wiring.
+
+The exact complete local release contract passed at committed runtime head
+`469484ab` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 58
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -877,7 +911,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `30f8aa44`. Keep
+- Deploy and verify the tested runtime changes through `469484ab`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

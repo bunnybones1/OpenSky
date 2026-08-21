@@ -2070,6 +2070,37 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker orphaned queue repair parity — 2026-08-20
+
+Milestone `469484ab` restores the source query service's queue/subscription
+repair. Before returning candidates, Go asks the notifier for each queued
+player's subscriber count. A zero count is an inconsistent orphan: the source
+logs it, removes the player from the queue, and continues without matching that
+player. The Durable Object previously filtered the same ticket out of the
+candidate list but left it persisted, so status remained inflated and its alarm
+could be rescheduled forever.
+
+The Worker now partitions live and orphaned tickets after game-mode draining,
+deletes every orphan before constructing its candidate map, and lets normal
+alarm rescheduling observe the repaired storage. A Workers regression captures
+a real queued ticket, closes its final socket, reinserts the ticket to model the
+source inconsistency, and proves that the next alarm deletes both the ticket and
+its otherwise-recurring alarm without creating a proposal or penalty.
+
+The mutation-tested session gate derives the Go `NumberOfSubscribers` check,
+zero-subscriber branch, queue removal, Worker ordering and durable deletion,
+direct regression, and release wiring. It fails if the Worker merely filters an
+orphan again.
+
+The exact complete local contract passed at `469484ab`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 58 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

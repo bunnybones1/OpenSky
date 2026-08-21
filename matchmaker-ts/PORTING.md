@@ -105,6 +105,11 @@ reference is removed lazily. Legacy string references remain readable during a
 rolling deployment; a surviving proposal supplies their lifetime, while a
 legacy orphan is drained because the old value contains no safe expiry
 authority. Malformed new-format references fail closed.
+Before matching, the source query service also removes a queued player whose
+notifier subscriber count is zero. The Durable Object performs the same repair:
+it deletes orphaned tickets before building its candidate map, rather than only
+filtering them and leaving persistent queue/status/alarm state behind. No
+proposal, notification, or penalty is produced for that repair.
 
 ## Deployment gates
 
