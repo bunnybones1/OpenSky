@@ -44,7 +44,86 @@ interface RecentMatchRow {
   ended_at: string | null
 }
 
+interface MatchRuntimeStatus {
+  initialized?: unknown
+  proposalId?: unknown
+  ended?: unknown
+  players?: unknown
+  timers?: unknown
+}
+
 const RECENT_MATCH_EXPIRY_MS = 24 * 60 * 60 * 1_000
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const remainingMatchTimeoutSeconds = (
+  status: MatchRuntimeStatus,
+  proposalId: string,
+  principal: string,
+  now: number
+) => {
+  if (
+    status.initialized !== true ||
+    status.proposalId !== proposalId ||
+    status.ended === true ||
+    !record(status.players) ||
+    !record(status.timers)
+  ) {
+    return 0
+  }
+  const player = status.players[principal.toLowerCase()]
+  if (!record(player)) return 0
+
+  const deadlines: number[] = []
+  const loadExpiryAtMs = status.timers.loadExpiryAtMs
+  if (
+    player.finishedLoadingAssets === false &&
+    typeof loadExpiryAtMs === 'number' &&
+    Number.isSafeInteger(loadExpiryAtMs) &&
+    loadExpiryAtMs > now
+  ) {
+    deadlines.push(loadExpiryAtMs)
+  }
+  const abandonAtMs = player.abandonAtMs
+  if (
+    typeof abandonAtMs === 'number' &&
+    Number.isSafeInteger(abandonAtMs) &&
+    abandonAtMs > now
+  ) {
+    deadlines.push(abandonAtMs)
+  }
+  return deadlines.length === 0
+    ? 0
+    : Math.floor((Math.min(...deadlines) - now) / 1_000)
+}
+
+const matchDisconnectTimeout = async (
+  env: Env,
+  row: MatchInfoRow,
+  principal: string
+) => {
+  try {
+    const response = await env.GAME_MATCHES.getByName(
+      `match:${row.proposal_id}`
+    ).fetch(
+      new Request('https://game-match/internal/status?scope=match-info', {
+        headers: { [INTERNAL_AUTH_HEADER]: env.INTERNAL_AUTH_SECRET }
+      })
+    )
+    if (!response.ok) return 0
+    const status = (await response.json()) as MatchRuntimeStatus
+    return remainingMatchTimeoutSeconds(
+      status,
+      row.proposal_id,
+      principal,
+      Date.now()
+    )
+  } catch (error) {
+    console.error('match timeout lookup failed', row.proposal_id, error)
+    return 0
+  }
+}
 
 const json = (body: unknown, status: number) =>
   Response.json(body, {
@@ -252,6 +331,7 @@ const matchInfo = async (
       player1_mode: row.player1_mode,
       player2_mode: row.player2_mode
     })
+    const disconnectTimeout = await matchDisconnectTimeout(env, row, principal)
     return json(
       {
         type: 'in_progress_match_info',
@@ -286,8 +366,9 @@ const matchInfo = async (
           },
           releaseVersion
         },
-        // The Go matchmaker reports this duration in seconds.
-        disconnectTimeout: 180
+        // The Go matchmaker reports the minimum remaining per-player loading
+        // and disconnect TTL in whole seconds, or zero when neither applies.
+        disconnectTimeout
       },
       200
     )

@@ -809,6 +809,15 @@ export class GameMatch implements DurableObject {
     const metadata = await this.metadata()
     if (!metadata) return Response.json({ initialized: false }, { status: 404 })
     const [players, timers] = await Promise.all([this.players(), this.timers()])
+    if (new URL(request.url).searchParams.get('scope') === 'match-info') {
+      return Response.json({
+        initialized: true,
+        proposalId: metadata.proposalId,
+        ended: metadata.ended,
+        players,
+        timers
+      })
+    }
     const runtime = await this.ensureRuntime()
     const stateInfo = runtime.stateInfo()
     return Response.json({

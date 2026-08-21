@@ -420,6 +420,33 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
   })
 
+  it('exposes only authenticated durable timeout state to match info', async () => {
+    const path = 'https://match/internal/status?scope=match-info'
+    const anonymous = await stub().fetch(path)
+    expect(anonymous.status).toBe(404)
+    await anonymous.text()
+
+    await initializeMatch()
+    const response = await stub().fetch(path, {
+      headers: { [INTERNAL_AUTH_HEADER]: 'game-server-test-secret' }
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json<Record<string, unknown>>()
+    expect(body).toMatchObject({
+      initialized: true,
+      proposalId,
+      ended: false,
+      players: {
+        [PRINCIPAL_1]: { finishedLoadingAssets: false },
+        [PRINCIPAL_2]: { finishedLoadingAssets: false }
+      },
+      timers: { loadExpiryAtMs: expect.any(Number) }
+    })
+    expect(Object.keys(body).sort()).toEqual(
+      ['ended', 'initialized', 'players', 'proposalId', 'timers'].sort()
+    )
+  })
+
   it('advances the source practice-win counter at most once per match', async () => {
     await insertExperiencePlayers()
     const now = new Date().toISOString()

@@ -28,7 +28,11 @@ const requireOrdered = (errors, label, source, tokens) => {
 
 export const matchInfoErrors = ({
   sourceRegistry,
+  sourceMatchTracker,
   sourceBrowserWorker,
+  sourceInProgressHook,
+  gameWorker,
+  gameRuntimeTest,
   workerGateway,
   workerRuntimeTest,
   rootPackage
@@ -51,6 +55,68 @@ export const matchInfoErrors = ({
       'playerIDs.forEach(p => {',
       'matchInProgressKey(p)',
       'JSON.stringify(info)'
+    ]
+  )
+
+  const sourceDisconnectTimeout = bodyBetween(
+    sourceMatchTracker,
+    'func (c *MatchInProgressTracker) GetMatch',
+    '\nfunc (c *MatchInProgressTracker) getMatchInfo'
+  )
+  requireOrdered(
+    errors,
+    'Source match-info disconnect timeout',
+    sourceDisconnectTimeout,
+    [
+      'loadingAssetsTimeout, err := c.keyValStore.TTL',
+      'abandonTimeout, err := c.keyValStore.TTL',
+      'disconnectTimeout := abandonTimeout',
+      'if abandonTimeout > 0 && loadingAssetsTimeout > 0 {',
+      'math.Min(',
+      'if disconnectTimeout == 0 {',
+      'disconnectTimeout = loadingAssetsTimeout',
+      'InProgressMatchInfoMessage(*matchInfo, *gameServerInfo, disconnectTimeout)'
+    ]
+  )
+
+  requireOrdered(
+    errors,
+    'Source webapp disconnect-timeout consumer',
+    sourceInProgressHook,
+    [
+      'inProgressMatchInfo.disconnectTimeout * 1000',
+      '(inProgressMatchInfo.disconnectTimeout - 1) * 1000'
+    ]
+  )
+
+  const gameStatus = bodyBetween(
+    gameWorker,
+    '  private async status(',
+    '\n  private async recentMatchInfo'
+  )
+  requireOrdered(errors, 'Game Worker internal timeout state', gameWorker, [
+    "if (url.pathname === '/internal/status')",
+    'return await this.status(request)'
+  ])
+  requireOrdered(errors, 'Game Worker internal status projection', gameStatus, [
+    'if (!this.isInternal(request))',
+    'const [players, timers] = await Promise.all(',
+    "searchParams.get('scope') === 'match-info'",
+    'proposalId: metadata.proposalId',
+    'players,',
+    'timers',
+    'const runtime = await this.ensureRuntime()'
+  ])
+  requireOrdered(
+    errors,
+    'Game Worker scoped status runtime regression',
+    gameRuntimeTest,
+    [
+      "it('exposes only authenticated durable timeout state to match info'",
+      "'https://match/internal/status?scope=match-info'",
+      'expect(anonymous.status).toBe(404)',
+      'finishedLoadingAssets: false',
+      "['ended', 'initialized', 'players', 'proposalId', 'timers'].sort()"
     ]
   )
 
@@ -129,7 +195,33 @@ export const matchInfoErrors = ({
       '`/api/game/matches/${encodeURIComponent(row.proposal_id)}`',
       "pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'",
       'serverAddress = pendingAddress.href',
+      'const disconnectTimeout = await matchDisconnectTimeout(env, row, principal)',
       'initialized\n        },'
+    ]
+  )
+
+  const workerDisconnectTimeout = bodyBetween(
+    workerGateway,
+    'const remainingMatchTimeoutSeconds = (',
+    '\nconst json = ('
+  )
+  requireOrdered(
+    errors,
+    'Worker source disconnect-timeout projection',
+    workerDisconnectTimeout,
+    [
+      'status.proposalId !== proposalId',
+      'status.ended === true',
+      'player.finishedLoadingAssets === false',
+      'Number.isSafeInteger(loadExpiryAtMs)',
+      'deadlines.push(loadExpiryAtMs)',
+      'const abandonAtMs = player.abandonAtMs',
+      'Number.isSafeInteger(abandonAtMs)',
+      'deadlines.push(abandonAtMs)',
+      'Math.min(...deadlines)',
+      "new Request('https://game-match/internal/status?scope=match-info'",
+      '[INTERNAL_AUTH_HEADER]: env.INTERNAL_AUTH_SECRET',
+      'return 0'
     ]
   )
 
@@ -143,6 +235,25 @@ export const matchInfoErrors = ({
       'initialized: false',
       "ws: 'wss://opensky.example/api/game/matches/initializing-proposal'",
       "http: 'https://opensky.example/api/game/matches/initializing-proposal'"
+    ]
+  )
+  requireOrdered(
+    errors,
+    'Worker disconnect-timeout runtime regression',
+    workerRuntimeTest,
+    [
+      "it('uses the source minimum remaining loading and disconnect TTL'",
+      "vi.spyOn(Date, 'now').mockReturnValue(deadlineBase)",
+      'abandonAtMs: deadlineBase + 60_900',
+      'loadExpiryAtMs: deadlineBase + 120_900',
+      'expect(active.disconnectTimeout).toBe(60)',
+      'const loadingOnly =',
+      'expect(loadingOnly.disconnectTimeout).toBe(120)',
+      'const abandonOnly =',
+      'expect(abandonOnly.disconnectTimeout).toBe(30)',
+      "proposalId: 'different-proposal'",
+      'finishedLoadingAssets: true',
+      'disconnectTimeout: 0'
     ]
   )
 
@@ -169,14 +280,43 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     sourceRegistry,
+    sourceMatchTracker,
     sourceBrowserWorker,
+    sourceInProgressHook,
+    gameWorker,
+    gameRuntimeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage
   ] = await Promise.all([
     readFile(path.join(root, 'server/src/services/RegistryService.ts'), 'utf8'),
     readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchtrackers/match_in_progress_tracker.go'
+      ),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'game/src/state/worker/multiplayerWorkerState.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare/src/game-match.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare/test-cloudflare/game-match.test.ts'
+      ),
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare/src/multiplayer-gateway.ts'), 'utf8'),
@@ -188,7 +328,11 @@ const main = async () => {
   ])
   const errors = matchInfoErrors({
     sourceRegistry,
+    sourceMatchTracker,
     sourceBrowserWorker,
+    sourceInProgressHook,
+    gameWorker,
+    gameRuntimeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage
@@ -198,7 +342,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match info preserves the source initializing-to-ready client retry lifecycle'
+      'Cloudflare match info preserves source initialization retry and per-player timeout lifecycles'
     )
   }
 }

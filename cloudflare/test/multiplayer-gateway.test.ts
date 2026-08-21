@@ -1,7 +1,7 @@
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { GameMode } from '@opensky/proto'
 import { env } from 'cloudflare:workers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Env } from '../src/env'
 import { createIdentitySession } from '../src/identity-session'
@@ -19,6 +19,8 @@ const namespace = (
 
 let recentMatchResponse = (_request: Request) =>
   new Response('Recent match not found', { status: 404 })
+let matchStatusResponse = (_request: Request) =>
+  new Response('Match status not found', { status: 404 })
 
 const testEnv = {
   ...(env as unknown as Env),
@@ -35,9 +37,11 @@ const testEnv = {
     })
   ),
   GAME_MATCHES: namespace(request => {
-    if (new URL(request.url).pathname === '/internal/recent-match-info') {
+    const pathname = new URL(request.url).pathname
+    if (pathname === '/internal/recent-match-info') {
       return recentMatchResponse(request)
     }
+    if (pathname === '/internal/status') return matchStatusResponse(request)
     return Response.json({
       target: new URL(request.url).pathname,
       principal: request.headers.get('x-cloud-weasel-principal'),
@@ -59,6 +63,8 @@ const gateway = (path: string, headers: HeadersInit) =>
 beforeEach(async () => {
   recentMatchResponse = () =>
     new Response('Recent match not found', { status: 404 })
+  matchStatusResponse = () =>
+    new Response('Match status not found', { status: 404 })
   await env.AUTH_DB.prepare('DELETE FROM multiplayer_matches').run()
   await env.AUTH_DB.prepare('DELETE FROM auth_identities').run()
   await env.AUTH_DB.prepare('DELETE FROM users').run()
@@ -71,6 +77,8 @@ beforeEach(async () => {
     .bind(USER_ID, now, now)
     .run()
 })
+
+afterEach(() => vi.restoreAllMocks())
 
 const authenticatedHeaders = async () => {
   const token = await createIdentitySession(USER_ID, env.SESSION_SIGNING_KEY)
@@ -208,7 +216,7 @@ describe('same-origin multiplayer gateway', () => {
         },
         releaseVersion: 'client-release'
       },
-      disconnectTimeout: 180
+      disconnectTimeout: 0
     })
 
     await env.AUTH_DB.prepare(
@@ -272,7 +280,128 @@ describe('same-origin multiplayer gateway', () => {
         },
         releaseVersion: 'initializing-release'
       },
-      disconnectTimeout: 180
+      disconnectTimeout: 0
+    })
+  })
+
+  it('uses the source minimum remaining loading and disconnect TTL', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const opponent = '0x3333333333333333333333333333333333333333'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, created_at, updated_at)
+       VALUES ('timeout-proposal', 'timeout-replay', 'PRACTICE_PVP',
+               'timeout-release', ?, ?, ?, NULL, ?, ?, 'active', ?, ?)`
+    )
+      .bind(
+        principal,
+        opponent,
+        USER_ID,
+        JSON.stringify({
+          match: {
+            player1: { account: { address: principal } },
+            player2: { account: { address: opponent } }
+          }
+        }),
+        'wss://opensky.example/api/game/matches/timeout-proposal',
+        now,
+        now
+      )
+      .run()
+
+    const deadlineBase = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(deadlineBase)
+    matchStatusResponse = request => {
+      expect(request.headers.get('x-cloud-weasel-internal-auth')).toBe(
+        'multiplayer-gateway-test-secret'
+      )
+      return Response.json({
+        initialized: true,
+        proposalId: 'timeout-proposal',
+        ended: false,
+        players: {
+          [principal]: {
+            finishedLoadingAssets: false,
+            abandonAtMs: deadlineBase + 60_900
+          }
+        },
+        timers: { loadExpiryAtMs: deadlineBase + 120_900 }
+      })
+    }
+
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    const path = `/api/matchmaker/matchinfo/identity:${USER_ID}`
+    const active = (await (await gateway(path, headers)).json()) as {
+      disconnectTimeout: number
+    }
+    expect(active.disconnectTimeout).toBe(60)
+
+    matchStatusResponse = () =>
+      Response.json({
+        initialized: true,
+        proposalId: 'timeout-proposal',
+        ended: false,
+        players: {
+          [principal]: { finishedLoadingAssets: false }
+        },
+        timers: { loadExpiryAtMs: deadlineBase + 120_900 }
+      })
+    const loadingOnly = (await (await gateway(path, headers)).json()) as {
+      disconnectTimeout: number
+    }
+    expect(loadingOnly.disconnectTimeout).toBe(120)
+
+    matchStatusResponse = () =>
+      Response.json({
+        initialized: true,
+        proposalId: 'timeout-proposal',
+        ended: false,
+        players: {
+          [principal]: {
+            finishedLoadingAssets: true,
+            abandonAtMs: deadlineBase + 30_900
+          }
+        },
+        timers: { loadExpiryAtMs: deadlineBase + 120_900 }
+      })
+    const abandonOnly = (await (await gateway(path, headers)).json()) as {
+      disconnectTimeout: number
+    }
+    expect(abandonOnly.disconnectTimeout).toBe(30)
+
+    matchStatusResponse = () =>
+      Response.json({
+        initialized: true,
+        proposalId: 'different-proposal',
+        ended: false,
+        players: {
+          [principal]: {
+            finishedLoadingAssets: false,
+            abandonAtMs: deadlineBase + 60_900
+          }
+        },
+        timers: { loadExpiryAtMs: deadlineBase + 120_900 }
+      })
+    expect(await (await gateway(path, headers)).json()).toMatchObject({
+      disconnectTimeout: 0
+    })
+
+    matchStatusResponse = () =>
+      Response.json({
+        initialized: true,
+        proposalId: 'timeout-proposal',
+        ended: false,
+        players: {
+          [principal]: { finishedLoadingAssets: true }
+        },
+        timers: { loadExpiryAtMs: deadlineBase + 120_900 }
+      })
+    expect(await (await gateway(path, headers)).json()).toMatchObject({
+      disconnectTimeout: 0
     })
   })
 
