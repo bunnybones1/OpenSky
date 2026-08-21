@@ -37,6 +37,11 @@ interface DeliveryRow {
   deliver_at: string
 }
 
+interface PendingDeliveryRow {
+  token_ids_json: string
+  deliver_at: string
+}
+
 interface AuthoritativeDeliveryRow extends DeliveryRow {
   status: string
   application_status: 'READY' | 'PREPARING' | 'APPLIED'
@@ -82,14 +87,14 @@ export const pendingConquestCards = async (
 ): Promise<SourcePendingCardsResponseInput[]> => {
   const rows = await database
     .prepare(
-      `SELECT conquest_id, user_id, card_ids_json, token_ids_json, deliver_at
+      `SELECT token_ids_json, deliver_at
        FROM player_conquest_gold_deliveries
        WHERE user_id = ? AND status IN ('PENDING', 'DISABLED')
          AND application_status = 'READY'
        ORDER BY deliver_at, conquest_id`
     )
     .bind(userId)
-    .all<DeliveryRow>()
+    .all<PendingDeliveryRow>()
   return rows.results.map(row => {
     const tokenIDs = sourceTokenIds(row.token_ids_json)
     const cards = tokenIDs.flatMap(tokenID => {

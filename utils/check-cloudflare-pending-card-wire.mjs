@@ -27,6 +27,20 @@ const section = (source, start, end) => {
   )
 }
 
+const bracedSection = (source, start) => {
+  const startIndex = source.indexOf(start)
+  if (startIndex < 0) return ''
+  const opening = source.indexOf('{', startIndex + start.length)
+  if (opening < 0) return ''
+  let depth = 0
+  for (let cursor = opening; cursor < source.length; cursor += 1) {
+    if (source[cursor] === '{') depth += 1
+    if (source[cursor] === '}') depth -= 1
+    if (depth === 0) return source.slice(startIndex, cursor + 1)
+  }
+  return ''
+}
+
 export const pendingCardWireErrors = (
   generatedSource,
   cardsRPCSource,
@@ -105,10 +119,9 @@ export const pendingCardWireErrors = (
     }
   }
 
-  const repository = section(
+  const repository = bracedSection(
     conquestDelivery,
-    'export const pendingConquestCards = async (',
-    'export interface ConquestDeliveryRun'
+    'export const pendingConquestCards = async ('
   ).replace(/\s+/g, ' ')
   for (const token of [
     'Promise<SourcePendingCardsResponseInput[]>',
@@ -162,7 +175,11 @@ export const pendingCardWireErrors = (
       errors.push(`main Worker GetPendingCards route changed: ${token}`)
     }
   }
-  if (!api.includes("import { sourcePendingCardsListWire } from './pending-card-wire'")) {
+  if (
+    !api.includes(
+      "import { sourcePendingCardsListWire } from './pending-card-wire'"
+    )
+  ) {
     errors.push('main Worker GetPendingCards route lost its wire import')
   }
 

@@ -31,6 +31,17 @@ test('derives and enforces the complete PendingCardsResponse wire', async () => 
   assert.deepEqual(errorsFor(await fixtures()), [])
 })
 
+test('scopes pending-card wire assertions to the player projection', async () => {
+  const value = await fixtures()
+  const withIndependentDeliveryAuthority = {
+    ...value,
+    conquestDelivery:
+      value.conquestDelivery +
+      '\nconst queueConsumerAuthority = "card_ids_json"\n'
+  }
+  assert.deepEqual(errorsFor(withIndependentDeliveryAuthority), [])
+})
+
 test('rejects source drift, invented card state, and projection bypasses', async () => {
   const value = await fixtures()
   const mutations = [
@@ -113,10 +124,7 @@ test('rejects source drift, invented card state, and projection bypasses', async
     },
     {
       ...value,
-      api: value.api.replace(
-        'res: sourcePendingCardsListWire(',
-        'res: ('
-      )
+      api: value.api.replace('res: sourcePendingCardsListWire(', 'res: (')
     },
     {
       ...value,
