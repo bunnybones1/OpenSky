@@ -883,6 +883,13 @@ describe('Cloud Weasel accepted-match service', () => {
         `UPDATE player_profiles SET level = 2, xp = 0 WHERE user_id = ?`
       ).bind(USER_ID),
       env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank, loss_streak,
+            player_rank_stage, created_at, updated_at)
+         VALUES (?, 'RANKED_DISCOVERY', 126, 900, 'MASTER', 0,
+                 'STAGE_NONE', ?, ?)`
+      ).bind(USER_ID, now, now),
+      env.AUTH_DB.prepare(
         `INSERT INTO multiplayer_matches
            (proposal_id, replay_id, mode, version, player1_principal,
             player2_principal, player1_user_id, player2_user_id,
@@ -921,6 +928,8 @@ describe('Cloud Weasel accepted-match service', () => {
       profile: {
         score: 1600,
         rank: 'EXPERT',
+        rankedConstructedRank: 'EXPERT',
+        rankedDiscoveryRank: 'MASTER',
         rankedEligible: true,
         lostLastMatch: true,
         cards: expect.arrayContaining([[6, 'base']]),

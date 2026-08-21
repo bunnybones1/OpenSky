@@ -125,6 +125,8 @@ export interface NewMultiplayerMatch {
 export interface MatchmakingProfile {
   score: number
   rank: PlayerRank
+  rankedConstructedRank: PlayerRank
+  rankedDiscoveryRank: PlayerRank
   lostLastMatch: boolean
   cards: Array<[number, 'base' | 'silver' | 'gold']>
   recentMatches: Array<{ opponentId: string }>
@@ -163,6 +165,11 @@ interface MatchmakingStatsRow {
   score: number
   player_rank: PlayerRank
   loss_streak: number
+}
+
+interface MatchmakingRankRow {
+  game_mode: GameMode
+  player_rank: PlayerRank
 }
 
 interface MatchmakingItemRow {
@@ -339,71 +346,88 @@ export class MatchRepository {
     const isConquest =
       mode === GameMode.CONQUEST_CONSTRUCTED ||
       mode === GameMode.CONQUEST_DISCOVERY
-    const [user, stats, items, recent, active, abandonPenalty, conquest] =
-      await Promise.all([
-        this.database
-          .prepare(
-            `SELECT profile.level, profile.xp
+    const [
+      user,
+      stats,
+      rankedRanks,
+      items,
+      recent,
+      active,
+      abandonPenalty,
+      conquest
+    ] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT profile.level, profile.xp
            FROM users JOIN player_profiles profile ON profile.user_id = users.id
            WHERE users.id = ? AND users.user_kind = 'PLAYER'`
-          )
-          .bind(userId)
-          .first<MatchmakingUserRow>(),
-        statsMode
-          ? this.database
-              .prepare(
-                `SELECT score, player_rank, loss_streak
+        )
+        .bind(userId)
+        .first<MatchmakingUserRow>(),
+      statsMode
+        ? this.database
+            .prepare(
+              `SELECT score, player_rank, loss_streak
                FROM player_account_stats
                WHERE user_id = ? AND game_mode = ? AND season = ?`
-              )
-              .bind(userId, statsMode, currentSeason)
-              .first<MatchmakingStatsRow>()
-          : Promise.resolve(null),
-        this.database
-          .prepare(
-            `SELECT token_id AS card_id, item_type
+            )
+            .bind(userId, statsMode, currentSeason)
+            .first<MatchmakingStatsRow>()
+        : Promise.resolve(null),
+      this.database
+        .prepare(
+          `SELECT game_mode, player_rank
+             FROM player_account_stats
+             WHERE user_id = ? AND season = ?
+               AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
+        )
+        .bind(userId, currentSeason)
+        .all<MatchmakingRankRow>(),
+      this.database
+        .prepare(
+          `SELECT token_id AS card_id, item_type
            FROM player_items
            WHERE user_id = ? AND balance > 0 AND item_type IN
              ('SW_BASE_CARDS', 'SW_SILVER_CARDS', 'SW_GOLD_CARDS')`
-          )
-          .bind(userId)
-          .all<MatchmakingItemRow>(),
-        this.database
-          .prepare(
-            `SELECT player1_principal, player2_principal
+        )
+        .bind(userId)
+        .all<MatchmakingItemRow>(),
+      this.database
+        .prepare(
+          `SELECT player1_principal, player2_principal
            FROM multiplayer_matches
            WHERE status = 'ended'
              AND winner_player IS NOT NULL
              AND (player1_principal = ? OR player2_principal = ?)
            ORDER BY ended_at DESC, id DESC
            LIMIT 1`
-          )
-          .bind(principal, principal)
-          .first<MatchmakingHistoryRow>(),
-        this.database
-          .prepare(
-            `SELECT mode, player1_mode, player2_mode, player1_principal,
+        )
+        .bind(principal, principal)
+        .first<MatchmakingHistoryRow>(),
+      this.database
+        .prepare(
+          `SELECT mode, player1_mode, player2_mode, player1_principal,
                     server_address
            FROM multiplayer_matches
            WHERE status = 'active' AND server_address IS NOT NULL
              AND (player1_principal = ? OR player2_principal = ?)
            ORDER BY updated_at DESC, id DESC
            LIMIT 1`
-          )
-          .bind(principal, principal)
-          .first<ActiveMatchRow>(),
-        this.database
-          .prepare(
-            `SELECT cooldown_expires_at
+        )
+        .bind(principal, principal)
+        .first<ActiveMatchRow>(),
+      this.database
+        .prepare(
+          `SELECT cooldown_expires_at
            FROM player_abandon_penalties
            WHERE principal = ? AND release_version = ?`
-          )
-          .bind(principal, releaseVersion)
-          .first<AbandonPenaltyRow>(),
-        isConquest
-          ? new ConquestRepository(this.database).status(userId)
-          : Promise.resolve(null)
-      ])
+        )
+        .bind(principal, releaseVersion)
+        .first<AbandonPenaltyRow>(),
+      isConquest
+        ? new ConquestRepository(this.database).status(userId)
+        : Promise.resolve(null)
+    ])
     if (!user) throw new Error('player was not found')
 
     const cards = new Map<number, 'base' | 'silver' | 'gold'>()
@@ -429,9 +453,17 @@ export class MatchRepository {
     const cooldownExpiresAt = abandonPenalty?.cooldown_expires_at
       ? Date.parse(abandonPenalty.cooldown_expires_at)
       : 0
+    const rankedRanksByMode = new Map(
+      rankedRanks.results.map(row => [row.game_mode, row.player_rank])
+    )
     return {
       score: Math.min(1600, stats?.score ?? 0),
       rank: stats?.player_rank ?? PlayerRank.UNKNOWN,
+      rankedConstructedRank:
+        rankedRanksByMode.get(GameMode.RANKED_CONSTRUCTED) ??
+        PlayerRank.UNKNOWN,
+      rankedDiscoveryRank:
+        rankedRanksByMode.get(GameMode.RANKED_DISCOVERY) ?? PlayerRank.UNKNOWN,
       lostLastMatch: (stats?.loss_streak ?? 0) > 0,
       cards: [...cards.entries()].sort(([left], [right]) => left - right),
       recentMatches,

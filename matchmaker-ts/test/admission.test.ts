@@ -1,8 +1,9 @@
-import { GameMode } from '@opensky/proto'
+import { GameMode, PlayerRank } from '@opensky/proto'
 import { CardLibrary } from '@skyweaver/state-metadata'
 import { describe, expect, it } from 'vitest'
 
 import {
+  hasMinimumConquestRank,
   normalizePrivateSeedForIdentity,
   validateGameModeDataConsistency,
   validateOwnedDeckForAdmission
@@ -177,5 +178,38 @@ describe('source owned-deck admission', () => {
         )
       )
     ).toBe('SERVER_ERROR')
+  })
+})
+
+describe('source Conquest rank admission', () => {
+  it('admits either ranked ladder at the configured minimum', () => {
+    expect(
+      hasMinimumConquestRank(
+        PlayerRank.APPRENTICE,
+        PlayerRank.UNKNOWN,
+        PlayerRank.APPRENTICE
+      )
+    ).toBe(true)
+    expect(
+      hasMinimumConquestRank(
+        PlayerRank.UNKNOWN,
+        PlayerRank.EXPERT,
+        PlayerRank.APPRENTICE
+      )
+    ).toBe(true)
+    expect(
+      hasMinimumConquestRank(
+        PlayerRank.TRAINEE,
+        PlayerRank.WANDERER,
+        PlayerRank.APPRENTICE
+      )
+    ).toBe(false)
+    expect(
+      hasMinimumConquestRank(
+        PlayerRank.UNKNOWN,
+        PlayerRank.UNKNOWN,
+        PlayerRank.UNKNOWN
+      )
+    ).toBe(true)
   })
 })

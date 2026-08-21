@@ -1,7 +1,7 @@
-import { CardClass, DeckClass, GameMode } from '@opensky/proto'
+import { CardClass, DeckClass, GameMode, PlayerRank } from '@opensky/proto'
 import { BaseCard, CardLibrary } from '@skyweaver/state-metadata'
 
-import { prismsToDeckClass } from './model'
+import { compareRanks, prismsToDeckClass } from './model'
 import { FindMatchCommand, ProtocolError } from './protocol'
 
 const prismMap: Record<string, CardClass> = {
@@ -138,6 +138,17 @@ export const validateGameModeDataConsistency = (command: FindMatchCommand) => {
 }
 
 const invalidDeck = () => new ProtocolError('SERVER_ERROR', 'invalid deck')
+
+// Source oracle: frontend/findmatch/validators/conquest.go admits Conquest
+// when either ranked ladder reaches the configured minimum. Missing stats are
+// UNKNOWN and therefore compare below every nonzero minimum.
+export const hasMinimumConquestRank = (
+  rankedConstructed: PlayerRank,
+  rankedDiscovery: PlayerRank,
+  minimum: PlayerRank
+) =>
+  compareRanks(rankedConstructed, minimum) >= 0 ||
+  compareRanks(rankedDiscovery, minimum) >= 0
 
 // Source oracle: player_factory.go removes unowned cards before deck.go calls
 // CheckDeck. The API then rejects duplicates/oversize through ownership/count

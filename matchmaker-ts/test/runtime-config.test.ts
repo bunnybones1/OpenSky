@@ -1,6 +1,7 @@
+import { PlayerRank } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
-import { readRelaxMatchingRuleIntervals } from '../src'
+import { readMinimumConquestRank, readRelaxMatchingRuleIntervals } from '../src'
 
 describe('source relax-matching interval configuration', () => {
   it('keeps independent intervals for every source-selected game mode', () => {
@@ -44,5 +45,18 @@ describe('source relax-matching interval configuration', () => {
       conquestConstructedMs: 30_000,
       conquestDiscoveryMs: 30_000
     })
+  })
+})
+
+describe('source Conquest rank configuration', () => {
+  it('maps source ordinals and rejects malformed production policy', () => {
+    expect(readMinimumConquestRank('4')).toBe(PlayerRank.APPRENTICE)
+    expect(readMinimumConquestRank('7')).toBe(PlayerRank.GRANDWEAVER)
+    expect(readMinimumConquestRank(undefined)).toBe(PlayerRank.UNKNOWN)
+    for (const value of ['', '-1', '4.0', '8', 'APPRENTICE']) {
+      expect(() => readMinimumConquestRank(value)).toThrow(
+        'MIN_RANK_TO_PLAY_CONQUEST must be a source rank ordinal'
+      )
+    }
   })
 })

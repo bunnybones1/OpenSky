@@ -783,6 +783,22 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
+  it('rejects Conquest before run validation when both ranked ladders are too low', async () => {
+    const [player] = track(await connect(PRINCIPAL_8, '192.0.2.8'))
+    const error = nextMessage(player)
+    const closed = nextClose(player)
+    player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
+    await runInDurableObject(pool(), async (_instance, state) => {
+      expect(await state.storage.get(`ticket:${PRINCIPAL_8}`)).toBeUndefined()
+    })
+  })
+
   it('rejects a deck that differs from the hero locked in conquest', async () => {
     const [player] = track(await connect(PRINCIPAL_5, '192.0.2.5'))
     const error = nextMessage(player)

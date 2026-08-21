@@ -141,6 +141,16 @@ export default defineConfig({
                 profile: {
                   score: body.userId.includes('1111') ? 450 : 500,
                   rank: 'APPRENTICE',
+                  rankedConstructedRank:
+                    body.principal ===
+                    '0x8888888888888888888888888888888888888888'
+                      ? 'TRAINEE'
+                      : 'APPRENTICE',
+                  rankedDiscoveryRank:
+                    body.principal ===
+                    '0x8888888888888888888888888888888888888888'
+                      ? 'WANDERER'
+                      : 'UNKNOWN',
                   lostLastMatch: body.userId.includes('1111'),
                   abandonPenaltyMs:
                     body.principal ===

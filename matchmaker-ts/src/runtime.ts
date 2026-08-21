@@ -24,6 +24,7 @@ import {
 } from './criteria'
 import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import {
+  hasMinimumConquestRank,
   normalizePrivateSeedForIdentity,
   prismsFromPrivateSeed,
   validateGameModeDataConsistency,
@@ -72,6 +73,7 @@ export interface MatchmakerEnv {
   MATCH_REFUSAL_WINDOW_MS?: string
   MATCH_REFUSAL_PENALTY_SECONDS?: string
   MATCH_TICK_MS?: string
+  MIN_RANK_TO_PLAY_CONQUEST?: string
   RELAX_MATCHING_INTERVAL_MS?: string
   RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS?: string
   RELAX_MATCHING_RANKED_DISCOVERY_INTERVAL_MS?: string
@@ -156,6 +158,7 @@ interface RuntimeConfig {
   authenticationTimeoutMs: number
   acceptanceTimeoutMs: number
   tickMs: number
+  minRankToPlayConquest: PlayerRank
   relaxIntervals: RelaxMatchingRuleIntervals
   dispatchMaxAttempts: number
   gameModeStatusCacheTtlMs: number
@@ -169,6 +172,8 @@ interface MatchmakingProfile {
   gameModeEnabled: boolean
   score: number
   rank: PlayerRank
+  rankedConstructedRank: PlayerRank
+  rankedDiscoveryRank: PlayerRank
   lostLastMatch: boolean
   cards: Array<[number, Rarity]>
   recentMatches: Array<{ opponentId: string }>
@@ -209,6 +214,29 @@ const parsePositiveInteger = (
 
 const bool = (value: string | undefined, fallback: boolean) =>
   value === undefined ? fallback : value.toLowerCase() === 'true'
+
+const sourcePlayerRanks = [
+  PlayerRank.UNKNOWN,
+  PlayerRank.UNRANKED,
+  PlayerRank.WANDERER,
+  PlayerRank.TRAINEE,
+  PlayerRank.APPRENTICE,
+  PlayerRank.EXPERT,
+  PlayerRank.MASTER,
+  PlayerRank.GRANDWEAVER
+] as const
+
+export const readMinimumConquestRank = (value: string | undefined) => {
+  if (value === undefined) return PlayerRank.UNKNOWN
+  if (!/^\d+$/.test(value)) {
+    throw new Error('MIN_RANK_TO_PLAY_CONQUEST must be a source rank ordinal')
+  }
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed >= sourcePlayerRanks.length) {
+    throw new Error('MIN_RANK_TO_PLAY_CONQUEST must be a source rank ordinal')
+  }
+  return sourcePlayerRanks[parsed]
+}
 
 export const readRelaxMatchingRuleIntervals = (
   env: Pick<
@@ -274,6 +302,9 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
       120_000
     ),
     tickMs: parsePositiveInteger(env.MATCH_TICK_MS, 2_000, 30_000),
+    minRankToPlayConquest: readMinimumConquestRank(
+      env.MIN_RANK_TO_PLAY_CONQUEST
+    ),
     relaxIntervals: readRelaxMatchingRuleIntervals(env),
     dispatchMaxAttempts: parsePositiveInteger(
       env.MATCH_DISPATCH_MAX_ATTEMPTS,
@@ -572,6 +603,15 @@ export class MatchmakerPool implements DurableObject {
       command.mode === GameMode.CONQUEST_CONSTRUCTED ||
       command.mode === GameMode.CONQUEST_DISCOVERY
     ) {
+      if (
+        !hasMinimumConquestRank(
+          profile.rankedConstructedRank,
+          profile.rankedDiscoveryRank,
+          this.config.minRankToPlayConquest
+        )
+      ) {
+        throw new ProtocolError('INVALID_ACCOUNT', 'rank is too low')
+      }
       if (!profile.conquest) {
         throw new ProtocolError('INVALID_ACCOUNT', 'conquest info is missing')
       }
@@ -744,6 +784,8 @@ export class MatchmakerPool implements DurableObject {
       !Number.isSafeInteger(profile.score) ||
       Math.abs(profile.score as number) > 2_147_483_647 ||
       !playerRanks.has(profile.rank as PlayerRank) ||
+      !playerRanks.has(profile.rankedConstructedRank as PlayerRank) ||
+      !playerRanks.has(profile.rankedDiscoveryRank as PlayerRank) ||
       typeof profile.lostLastMatch !== 'boolean' ||
       !Number.isSafeInteger(profile.abandonPenaltyMs) ||
       (profile.abandonPenaltyMs as number) < 0 ||
@@ -831,6 +873,8 @@ export class MatchmakerPool implements DurableObject {
       gameModeEnabled: body.gameModeEnabled,
       score: profile.score as number,
       rank: profile.rank as PlayerRank,
+      rankedConstructedRank: profile.rankedConstructedRank as PlayerRank,
+      rankedDiscoveryRank: profile.rankedDiscoveryRank as PlayerRank,
       lostLastMatch: profile.lostLastMatch,
       cards,
       recentMatches,
