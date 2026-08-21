@@ -19,6 +19,17 @@ export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url)
     if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      url.pathname.toLowerCase() === '/ping'
+    ) {
+      return new Response(request.method === 'HEAD' ? null : '.', {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain'
+        }
+      })
+    }
+    if (
       url.pathname === '/api/matchmaker' ||
       url.pathname.startsWith('/api/matchmaker/') ||
       url.pathname.startsWith('/api/game/matches/')

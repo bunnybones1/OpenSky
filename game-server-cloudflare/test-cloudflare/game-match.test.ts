@@ -1522,6 +1522,29 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   })
 
   it('enforces public gateway and request-boundary safeties', async () => {
+    const root = await SELF.fetch('https://game.example/')
+    expect(root.status).toBe(200)
+    expect(root.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(root.headers.get('cache-control')).toBe(
+      'no-store, no-cache, must-revalidate, proxy-revalidate'
+    )
+    expect(root.headers.get('access-control-allow-origin')).toBe('*')
+    expect(root.headers.get('surrogate-control')).toBe('no-store')
+    expect(root.headers.get('pragma')).toBe('no-cache')
+    expect(root.headers.get('expires')).toBe('0')
+    expect(await root.text()).toBe('.')
+
+    const ping = await SELF.fetch('https://game.example/PiNg/')
+    expect(ping.status).toBe(200)
+    expect(ping.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(await ping.text()).toBe('pong')
+
+    const pingHead = await SELF.fetch('https://game.example/ping', {
+      method: 'HEAD'
+    })
+    expect(pingHead.status).toBe(200)
+    expect(await pingHead.text()).toBe('')
+
     const health = await SELF.fetch('https://game.example/health')
     expect(await health.json()).toEqual({
       ok: true,

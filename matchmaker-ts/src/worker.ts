@@ -46,6 +46,17 @@ const hasTrustedGatewayIdentity = (request: Request, env: MatchmakerEnv) => {
 export default {
   async fetch(request: Request, env: MatchmakerEnv): Promise<Response> {
     const url = new URL(request.url)
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      url.pathname.toLowerCase() === '/ping'
+    ) {
+      return new Response(request.method === 'HEAD' ? null : '.', {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain'
+        }
+      })
+    }
     if (request.method === 'GET' && url.pathname === '/health') {
       return json({
         ok: true,

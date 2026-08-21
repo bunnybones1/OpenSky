@@ -318,6 +318,21 @@ const track = <T extends WebSocket>(...sockets: T[]) => {
 }
 
 describe('Cloudflare matchmaker Worker', () => {
+  it('preserves the source case-insensitive GET and HEAD heartbeat', async () => {
+    const get = await SELF.fetch('https://matchmaker.example/PiNg')
+    expect(get.status).toBe(200)
+    expect(get.headers.get('content-type')).toBe('text/plain')
+    expect(get.headers.get('cache-control')).toBeNull()
+    expect(await get.text()).toBe('.')
+
+    const head = await SELF.fetch('https://matchmaker.example/ping', {
+      method: 'HEAD'
+    })
+    expect(head.status).toBe(200)
+    expect(head.headers.get('content-type')).toBe('text/plain')
+    expect(await head.text()).toBe('')
+  })
+
   it('exposes a public health check but protects the WebSocket boundary', async () => {
     const health = await SELF.fetch('https://matchmaker.example/health')
     expect(health.status).toBe(200)
@@ -489,10 +504,7 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await found).toMatchObject({
       type: 'match_found',
       mode: GameMode.RANKED_CONSTRUCTED,
-      playerIDs: [
-        PRINCIPAL_1,
-        '0x9999999999999999999999999999999999999999'
-      ]
+      playerIDs: [PRINCIPAL_1, '0x9999999999999999999999999999999999999999']
     })
     await runInDurableObject(stub, async (_instance, state) => {
       const proposals = await state.storage.list<{

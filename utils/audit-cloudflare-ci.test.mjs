@@ -57,6 +57,19 @@ test('requires generated wire and browser lifecycle gates in the complete build'
       scripts: {
         ...rootPackage.scripts,
         'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:service-routes && ',
+          ''
+        )
+      }
+    })[0],
+    /service-route inventory/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
           'pnpm check:cloudflare:match-wire && ',
           ''
         )

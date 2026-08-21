@@ -37,9 +37,34 @@ const allowedOrigin = (request: Request, env: GameServerEnv) => {
   )
 }
 
+const sourceServiceResponse = (request: Request, body: string) =>
+  new Response(request.method === 'HEAD' ? null : body, {
+    status: 200,
+    headers: {
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'content-type': 'text/html; charset=utf-8',
+      expires: '0',
+      pragma: 'no-cache',
+      'surrogate-control': 'no-store'
+    }
+  })
+
+// The source process-global /metrics scrape is superseded by Cloudflare's
+// Worker and Durable Object telemetry. A single Worker request cannot
+// truthfully aggregate hibernating match objects, so do not expose a partial
+// Prometheus view as if it retained source authority.
+
 export default {
   async fetch(request: Request, env: GameServerEnv): Promise<Response> {
     const url = new URL(request.url)
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const sourcePath = url.pathname.toLowerCase()
+      if (sourcePath === '/') return sourceServiceResponse(request, '.')
+      if (sourcePath === '/ping' || sourcePath === '/ping/') {
+        return sourceServiceResponse(request, 'pong')
+      }
+    }
     if (request.method === 'GET' && url.pathname === '/health') {
       return json({
         ok: true,
