@@ -121,10 +121,22 @@ the stricter `false` setting in both Worker configurations, so the port preserve
 the source branch while documenting that configuration choice rather than
 claiming the sample exercised it.
 
+The source player factory also hydrates account inventory and removes unowned
+cards before its ordered validators run. The Worker now mirrors that boundary:
+after Conquest-exclusive validation it filters unknown/unowned claims, sorts
+card IDs as the Go deck-string encoder does, and rejects duplicates, more than
+30 cards, or more than two card prisms before game-mode status, active-match
+reconnect, pending-match, penalty, and durable queueing. The match service keeps
+the same checks at dispatch as a second fail-closed boundary. The
+mutation-tested `check:cloudflare:matchmaker-deck` gate derives this ordering,
+filtering, source deck/API constraints, direct tests, and release wiring from
+the checked-in Go implementation.
+
 ## Deployment gates
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
+- `pnpm check:cloudflare:matchmaker-deck`
 - `pnpm check:cloudflare:release`
 - `go test ./matchmaker/lib/matchmaker/matching/matchers/...`
 - Set the same long `INTERNAL_AUTH_SECRET` on the gateway and matchmaker.

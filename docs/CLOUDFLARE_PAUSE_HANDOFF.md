@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9621ee09`
-  (`Preserve source empty IP admission`)
-- Latest tested runtime commit: `9621ee09`
-  (`Preserve source empty IP admission`)
+- Last code/test checkpoint: `e23c2a0c`
+  (`Preserve source pre-queue deck validation`)
+- Latest tested runtime commit: `e23c2a0c`
+  (`Preserve source pre-queue deck validation`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `9621ee09` are committed and
+- The runtime changes from `38386294` through `e23c2a0c` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-c8882239.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -845,6 +845,42 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker pre-queue deck-admission milestone
+
+Commit `e23c2a0c` restores the original matchmaker's authoritative deck check
+before reconnect, pending-match, penalty, and queue behavior:
+
+- the Go player factory hydrates account inventory and removes unowned cards
+  before its ordered validators run;
+- the source Conquest-exclusive validator runs first, followed by deck
+  validation, game-mode status, active-match reconnect, pending-match, and
+  penalty validation;
+- Cloudflare now filters unknown and unowned card claims from the normalized
+  seed, sorts the remaining IDs as the source deck-string encoder does, and
+  rejects duplicate cards, decks larger than 30 cards, and decks spanning more
+  than two card prisms before a durable ticket can exist; and
+- the match service retains its independent dispatch-time validation, so a
+  stale or corrupted durable ticket still fails closed at the allocation
+  boundary.
+
+The Workers regressions prove that the persisted ticket contains only the
+source-authoritative filtered deck and that an invalid deck fails before an
+otherwise-live active match can be replayed. The new mutation-tested
+`check:cloudflare:matchmaker-deck` gate derives player-factory hydration,
+filtering, canonical encoding, validator order, API ownership/count behavior,
+deck-size and prism bounds, both TypeScript boundaries, direct regressions,
+the metadata dependency, and build/deployment wiring from the Go source.
+
+The exact complete local release contract passed at committed runtime head
+`e23c2a0c` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 53 matchmaker unit tests, 60
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries are
+`/assets/index-c8882239.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -949,7 +985,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `9621ee09`. Keep
+- Deploy and verify the tested runtime changes through `e23c2a0c`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

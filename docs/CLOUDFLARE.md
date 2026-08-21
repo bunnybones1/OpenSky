@@ -450,11 +450,14 @@ and progress are not migrated.
   identity snapshots.
   Matchmaker admission now preserves the source discovery/challenge seed
   contract and exact `DECK_IS_NOT_RANDOM` / `SESSION_IS_EMPTY` errors before a
-  queue ticket is written. Final dispatch repeats the discovery and constructed
-  deck checks against authoritative inventory, removes unknown/unowned claims
-  in the source player-factory order, validates the accepted request's session
-  against its queued player, and carries the challenge code into the game
-  payload's `matchmakingCode`.
+  queue ticket is written. After authoritative profile hydration, it also
+  removes unknown/unowned card claims in the source player-factory order,
+  canonicalizes the remaining IDs, and performs the source deck bounds before
+  reconnect, pending-match, penalty, or durable queue behavior. Final dispatch
+  repeats the discovery and constructed deck checks against authoritative
+  inventory, validates the accepted request's session against its queued
+  player, and carries the challenge code into the game payload's
+  `matchmakingCode`.
   Private seeds are normalized at queue admission: the trusted Google-session
   principal replaces the browser identity claim, malformed key material/prisms/
   cards receive `INVALID_PRIVATE_SEED`, and client rarity claims are discarded.
@@ -2130,6 +2133,41 @@ matchmaker unit and 59 Workers tests, 30 browser-game tests, nine analytics
 tests, all typechecks and source/off-chain gates, both builds, and 594-file
 artifact validation. The assembled entries remain
 `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
+## Source matchmaker pre-queue deck parity — 2026-08-20
+
+Milestone `e23c2a0c` restores the source deck boundary that exists between
+player hydration and queue admission. The Go player factory loads account
+inventory, removes unowned cards from `PrivateSeed`, and re-encodes the deck in
+canonical numeric order before the Conquest-exclusive and deck validators run.
+The deck RPC then rejects duplicate ownership counts, more than 30 cards, and
+more than two represented card prisms. Go performs those checks before
+game-mode status, active-match reconnect, pending-match, and penalty behavior.
+
+The Cloudflare matchmaker now filters the normalized card list against its
+authoritative D1 profile, removes unknown metadata IDs, sorts the accepted IDs,
+and enforces the same count and prism bounds before writing any durable ticket.
+An invalid constructed deck therefore cannot wait in queue, consume another
+player, or bypass validation through an existing active-match reconnect. The
+separate match service still repeats inventory and deck validation immediately
+before allocation as a defense against stale or corrupted durable state.
+
+Unit regressions cover filtering/canonicalization, duplicate cards, more than
+two prisms, and the 30-card bound. Workers regressions prove the stored request
+contains the filtered deck and that invalid input fails before active-match
+messages. The mutation-tested `check:cloudflare:matchmaker-deck` gate derives
+the player-factory and validator order, source encoder, API ownership and deck
+bounds, both TypeScript boundaries, tests, dependency, and release wiring from
+the checked-in Go implementation.
+
+The exact complete local contract passed at `e23c2a0c`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 53
+matchmaker unit and 60 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries are
+`/assets/index-c8882239.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
