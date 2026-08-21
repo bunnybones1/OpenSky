@@ -197,6 +197,14 @@ environment value. This matters when the local Wrangler login can access more
 than one Cloudflare account; do not replace these scripts with a direct remote
 Wrangler command.
 
+Before any deploy operation, that runner also uses the reviewed root config to
+execute a fixed read-only query against the production auth D1 database. It
+requires migration `0116`, the authoritative-deck table from `0115`, the
+registered-bot registry and immutable guards, and the narrowed match-allocation
+guard. It refuses to spawn the deploy process on a missing, malformed,
+unsuccessful, duplicate, or unexpected result. The migration command is
+intentionally exempt so it can bring the schema forward before a deploy.
+
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
 
@@ -2390,12 +2398,41 @@ entries are `/assets/index-874772de.js` and
 `ENABLE_RANKED_BOTS=false`. Migration `0116` was not applied and no deployment,
 provisioning, activation, live match, or production mutation was performed.
 
+## Fail-closed production schema preflight — 2026-08-20
+
+Milestone `152138fe` closes the remaining deployment gap between a locally
+tested migration-dependent Worker and an older production D1 database. Every
+production deploy target now has a two-step plan: first execute one fixed,
+account-pinned, read-only D1 query through `wrangler.jsonc`; only after its
+result validates may the reviewed target's Wrangler deploy command run.
+
+The query proves that migration `0116_registered_matchmaker_bots.sql`, the
+`0115` authoritative-deck table, the registered-bot registry, its two immutable
+identity triggers, and the registered-bot-aware ordinary-match guard are all
+present. The parser requires one successful row with the exact five scalar
+values. Tests reject missing or multiple results, unsuccessful statements,
+schema omissions, unexpected mutation metadata, conflicting accounts, and any
+attempt to run the deploy operation after a failed preflight. The static
+service audit is mutation-tested so removing the plan, parser, or sequencing
+also fails the release gate.
+
+The migration operation remains intentionally preflight-exempt: it is the
+reviewed operation used to apply `0115` and `0116` before deployment. A fresh
+temporary local D1 accepted all 116 migrations and returned every expected
+preflight value. The exact complete local release contract then passed at
+`152138fe` with 511 main-Worker tests, 34 game-server unit and 118 Workers
+tests, 45 match-service tests, 62 matchmaker unit and 66 Workers tests, 30
+browser-game tests, nine analytics tests, all source/off-chain gates and
+typechecks, both production builds, and 594-file artifact validation. No
+remote preflight or production mutation was performed.
+
 ## Suggested next slice
 
 No known dormant matchmaker parity slice remains after the registered-bot
-milestone. The next safe local step is a completion audit for any source-backed
-cross-service behavior not already covered by the RPC, runner, reward,
-matchmaker, and service inventories. Production activation remains a separate
+and deployment-preflight milestones. The next safe local step is a completion
+audit for any source-backed cross-service behavior not already covered by the
+RPC, runner, reward, matchmaker, and service inventories. Production
+activation remains a separate
 authorized exercise: apply `0115` and then `0116` at the documented quiescent
 boundary, deploy the exact tested Workers with both bot flags still false, and
 only consider a bounded ranked/PvP-bot soak after the ordinary multiplayer and

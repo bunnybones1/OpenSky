@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `60292a03`
-  (`Preserve source matchmaker cadence`)
-- Latest tested runtime commit: `60292a03`
-  (`Preserve source matchmaker cadence`)
+- Last code/test checkpoint: `152138fe`
+  (`Require production schema before deployment`)
+- Latest tested runtime commit: `152138fe`
+  (`Require production schema before deployment`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,14 +23,15 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `60292a03` are committed and
+- The runtime changes from `38386294` through `152138fe` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
-- Migration `0115_authoritative_match_decks.sql` is committed locally but has
-  **not** been applied to production. The new game-server runtime must not be
-  deployed until this migration exists, and migration/runtime rollout must be
-  performed with match allocation quiescent as described below.
+- Migrations `0115_authoritative_match_decks.sql` and
+  `0116_registered_matchmaker_bots.sql` are committed but have **not** been
+  applied to production. No Worker from `90ebe652` or later may be deployed
+  until both exist, and the migration/runtime rollout must be performed with
+  match allocation quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -1134,6 +1135,34 @@ validation. The assembled entries are `/assets/index-874772de.js` and
 no deployment, provisioning, activation, live match, or production mutation
 was performed.
 
+## Fail-closed production schema preflight milestone
+
+Commit `152138fe` makes every checked-in production deploy command prove that
+the shared remote D1 schema is ready before Wrangler may deploy a Worker. The
+account-pinned runner executes one fixed read-only query through the reviewed
+root `wrangler.jsonc` and requires exactly one successful result proving:
+
+- migration `0116_registered_matchmaker_bots.sql` is recorded;
+- the `multiplayer_match_authoritative_decks` table from `0115` exists;
+- the registered-bot table and both immutable-identity triggers exist; and
+- the ordinary-match user-kind guard contains the registered-bot exception.
+
+Missing, duplicate, malformed, unsuccessful, or unexpected scalar results
+fail closed before the requested deploy process is spawned. The migration
+operation deliberately does not run this preflight, because it is the guarded
+path that must be able to bring an older database forward. Static service
+audits and mutation regressions prove that the runner cannot bypass the plan,
+parser, or result check.
+
+A fresh temporary local D1 accepted all 116 migrations and returned the exact
+five expected schema values. The complete local release contract then passed
+with exit code zero at `152138fe`: 511 main-Worker tests, 34 game-server unit
+and 118 Workers tests, 45 match-service tests, 62 matchmaker unit and 66
+Workers tests, 30 browser-game tests, nine analytics tests, every source and
+off-chain gate, all typechecks, both production builds, and 594-file artifact
+validation. No remote preflight, deployment, migration, provisioning,
+activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1235,7 +1264,9 @@ production migration state. Migrations `0115_authoritative_match_decks.sql`
 and `0116_registered_matchmaker_bots.sql` are not: apply `0115` first at its
 quiescent game-server boundary, then apply `0116` before deploying any Worker
 from `90ebe652`. Keep both ranked-bot flags false throughout that baseline
-rollout.
+rollout. After those migrations, every checked-in deploy command performs the
+read-only schema preflight from `152138fe` and refuses to spawn Wrangler if the
+five required invariants are not present.
 
 ## Other outstanding work
 
@@ -1243,7 +1274,7 @@ rollout.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `90ebe652`. Keep
+- Deploy and verify the tested runtime changes through `152138fe`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
@@ -1308,6 +1339,9 @@ At the pause audit:
 - every original deployable service had a reviewed Cloudflare disposition;
 - the source registered ranked/PvP bot path was ported and verified locally,
   but migration `0116`, deployment, and activation remain paused;
+- every production deploy command now fails closed until the remote D1 proves
+  both `0115` and `0116` invariants; the migration command remains the only
+  preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;
