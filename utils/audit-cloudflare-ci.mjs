@@ -55,6 +55,9 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the generated Go match wire gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:game-ingress')) {
+    errors.push('Cloudflare build must include the source game ingress gate')
+  }
   if (!build.includes('pnpm check:cloudflare:match-completion')) {
     errors.push(
       'Cloudflare build must include the transactional match completion gate'

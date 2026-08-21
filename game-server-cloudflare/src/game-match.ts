@@ -44,9 +44,11 @@ import {
 import {
   AcceptedClientMessage,
   CreateMatchRequest,
+  decodeClientFrame,
   GameProtocolError,
   INTERNAL_AUTH_HEADER,
   parseClientMessage,
+  parseSourcePing,
   stateError,
   TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
@@ -443,12 +445,21 @@ export class GameMatch implements DurableObject {
         socket.close(1008, 'Missing identity')
         return
       }
-      if (typeof raw === 'string' && raw.startsWith('PING:')) {
-        this.safeSend(socket, `PONG:${raw.slice(5, 128)}`)
-        return
-      }
       try {
-        const message = parseClientMessage(raw)
+        const frame = decodeClientFrame(raw)
+        const ping = parseSourcePing(frame)
+        if (ping.handled) {
+          if (ping.id !== undefined) {
+            this.safeSend(socket, `PONG:${ping.id}`)
+          }
+          // The source Node process arms a per-connection timer here.
+          // Cloudflare owns protocol ping/pong and disconnect detection for
+          // hibernating WebSockets, while the preserved browser still closes
+          // and reconnects when this application PONG is missed. Do not wake
+          // every hibernating match with a duplicate five-second alarm.
+          return
+        }
+        const message = parseClientMessage(frame)
         const role = attachment.role ?? 'player'
         if (!attachment.joined) {
           if (

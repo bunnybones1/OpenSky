@@ -38,15 +38,32 @@ export class GameProtocolError extends Error {}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-export const parseClientMessage = (raw: string | ArrayBuffer) => {
-  if (typeof raw !== 'string')
-    throw new GameProtocolError('binary messages are not supported')
-  if (new TextEncoder().encode(raw).byteLength > MAX_GAME_MESSAGE_BYTES) {
+export const decodeClientFrame = (raw: string | ArrayBuffer) => {
+  const bytes =
+    typeof raw === 'string'
+      ? new TextEncoder().encode(raw)
+      : new Uint8Array(raw)
+  if (bytes.byteLength > MAX_GAME_MESSAGE_BYTES) {
     throw new GameProtocolError('message is too large')
   }
+  return typeof raw === 'string' ? raw : new TextDecoder().decode(bytes)
+}
+
+export const parseSourcePing = (
+  frame: string
+): { handled: false } | { handled: true; id?: string } => {
+  if (!frame.startsWith('PING')) return { handled: false }
+  const fields = frame.split(':')
+  return fields.length < 2
+    ? { handled: true }
+    : { handled: true, id: fields[1] }
+}
+
+export const parseClientMessage = (raw: string | ArrayBuffer) => {
+  const frame = decodeClientFrame(raw)
   let value: unknown
   try {
-    value = JSON.parse(raw)
+    value = JSON.parse(frame)
   } catch {
     throw new GameProtocolError('message is not valid JSON')
   }
@@ -138,8 +155,7 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
           typeof value.emote === 'string' &&
             Emotes.includes(value.emote as never),
           typeof value.chat === 'string' && value.chat.length <= 500,
-          Number.isSafeInteger(value.sticker) &&
-            (value.sticker as number) >= 0
+          Number.isSafeInteger(value.sticker) && (value.sticker as number) >= 0
         ].filter(Boolean).length !== 1
       ) {
         throw new GameProtocolError('invalid emote')

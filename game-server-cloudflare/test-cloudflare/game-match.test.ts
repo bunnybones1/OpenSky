@@ -318,6 +318,20 @@ const collectMessages = (socket: WebSocket, count: number) =>
 const nextMessage = async (socket: WebSocket) =>
   (await collectMessages(socket, 1))[0]
 
+const nextRawMessage = (socket: WebSocket) =>
+  new Promise<string | ArrayBuffer>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('timed out waiting for raw message')),
+      2_000
+    )
+    const listener = (event: MessageEvent) => {
+      clearTimeout(timeout)
+      socket.removeEventListener('message', listener)
+      resolve(event.data)
+    }
+    socket.addEventListener('message', listener)
+  })
+
 const join = (socket: WebSocket, subkeyByte: number, loadingProgress = 1) => {
   socket.send(
     JSON.stringify({
@@ -1585,6 +1599,28 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       }
     )
     await evictDurableObject(stub())
+  })
+
+  it('preserves source text and binary game frames across hibernation', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+
+    const pong = nextRawMessage(first)
+    first.send('PINGlegacy:roundtrip:ignored')
+    expect(await pong).toBe('PONG:roundtrip')
+
+    await evictDurableObject(stub())
+    const timeSync = nextMessage(first)
+    first.send('PING')
+    first.send(
+      new TextEncoder().encode(
+        JSON.stringify({ type: 'timesync', clientTime: 1234 })
+      ).buffer as ArrayBuffer
+    )
+    expect(await timeSync).toMatchObject({
+      type: 'timesync',
+      clientTime: 1234
+    })
   })
 
   it('creates a WASM match idempotently and rejects conflicting reuse', async () => {

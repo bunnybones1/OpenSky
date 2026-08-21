@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { GameProtocolError, parseClientMessage } from '../src/protocol'
+import {
+  GameProtocolError,
+  MAX_GAME_MESSAGE_BYTES,
+  parseClientMessage,
+  parseSourcePing
+} from '../src/protocol'
 
 const joinMessage = (loadingProgress: unknown = 0.5) => ({
   type: 'join_server',
@@ -34,6 +39,18 @@ describe('game WebSocket protocol validation', () => {
     })
   })
 
+  it('preserves the source PING prefix and first colon-delimited ID', () => {
+    expect(parseSourcePing('PING:123')).toEqual({ handled: true, id: '123' })
+    expect(parseSourcePing('PINGlegacy:123:ignored')).toEqual({
+      handled: true,
+      id: '123'
+    })
+    expect(parseSourcePing('PING')).toEqual({ handled: true })
+    expect(parseSourcePing('{"type":"timesync"}')).toEqual({
+      handled: false
+    })
+  })
+
   it('rejects invalid join loading state before it reaches durable storage', () => {
     const missing = joinMessage()
     delete (missing as { loadingProgress?: unknown }).loadingProgress
@@ -41,9 +58,9 @@ describe('game WebSocket protocol validation', () => {
       GameProtocolError
     )
     for (const progress of [null, Number.NaN, -0.1, 1.1]) {
-      expect(() => parseClientMessage(JSON.stringify(joinMessage(progress)))).toThrow(
-        GameProtocolError
-      )
+      expect(() =>
+        parseClientMessage(JSON.stringify(joinMessage(progress)))
+      ).toThrow(GameProtocolError)
     }
   })
 
@@ -60,9 +77,7 @@ describe('game WebSocket protocol validation', () => {
 
   it('requires emotes to use exactly one source union variant', () => {
     expect(
-      parseClientMessage(
-        JSON.stringify({ type: 'emote', sticker: 5 })
-      )
+      parseClientMessage(JSON.stringify({ type: 'emote', sticker: 5 }))
     ).toEqual({ type: 'emote', sticker: 5 })
     for (const message of [
       { type: 'emote' },
@@ -76,9 +91,18 @@ describe('game WebSocket protocol validation', () => {
     }
   })
 
-  it('rejects binary, malformed, and unsupported messages', () => {
+  it('accepts source-compatible binary JSON and bounds malformed messages', () => {
+    const binary = new TextEncoder().encode(JSON.stringify(joinMessage()))
+      .buffer as ArrayBuffer
+    expect(parseClientMessage(binary)).toMatchObject({
+      type: 'join_server',
+      loadingProgress: 0.5
+    })
+    expect(() =>
+      parseClientMessage(new ArrayBuffer(MAX_GAME_MESSAGE_BYTES + 1))
+    ).toThrow('message is too large')
     expect(() => parseClientMessage(new ArrayBuffer(1))).toThrow(
-      'binary messages are not supported'
+      'message is not valid JSON'
     )
     expect(() => parseClientMessage('{')).toThrow('message is not valid JSON')
     expect(() => parseClientMessage('{"type":"abandon_match"}')).toThrow(

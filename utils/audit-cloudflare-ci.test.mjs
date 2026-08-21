@@ -70,6 +70,19 @@ test('requires generated wire and browser lifecycle gates in the complete build'
       scripts: {
         ...rootPackage.scripts,
         'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:game-ingress && ',
+          ''
+        )
+      }
+    })[0],
+    /game ingress gate/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
           'pnpm check:cloudflare:match-wire && ',
           ''
         )
