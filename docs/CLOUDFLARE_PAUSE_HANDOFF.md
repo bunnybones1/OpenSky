@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9f44672e`
-  (`Preserve source mixed match modes`)
-- Latest tested runtime commit: `9f44672e`
-  (`Preserve source mixed match modes`)
+- Last code/test checkpoint: `29996d35`
+  (`Preserve source game server status`)
+- Latest tested runtime commit: `29996d35`
+  (`Preserve source game server status`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `9f44672e` are committed and
-  tested but are **not deployed**. The exact local build at `9f44672e`
-  produced web entry `/assets/index-fd3d9163.js` and game entry
+- The runtime changes from `38386294` through `29996d35` are committed and
+  tested but are **not deployed**. The exact local build at `29996d35`
+  produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -182,7 +182,7 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
-The newer `9f44672e` mixed-match-mode checkpoint and its refreshed handoff
+The newer `29996d35` game-server-status checkpoint and its refreshed handoff
 require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1607,6 +1607,31 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries are `/assets/index-fd3d9163.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source game-server status milestone
+
+Commit `29996d35` removes the Cloudflare-only `online` value from the public
+`GameServerInfo.status` wire. The original registry publishes its stored
+status and makes a server allocatable only after the `running` status has been
+set. A normal per-proposal Cloudflare Durable Object serving an active or
+initializing match now reports that same `running` value.
+
+The exact initialized and creating Workers regressions both require
+`status: 'running'`. The mutation-tested `check:cloudflare:match-info` gate
+derives the literal from the original registry constants, verifies the source
+health publication and ranking path, and rejects drift in the gateway or
+either exact runtime response. Other public server fields, initialization,
+disconnect timeouts, and allocation behavior are unchanged.
+
+The exact complete local release contract passed with exit code zero for
+`29996d35`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.

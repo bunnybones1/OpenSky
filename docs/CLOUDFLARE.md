@@ -2793,6 +2793,28 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-fd3d9163.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source game-server status parity — 2026-08-21
+
+Milestone `29996d35` replaces the Cloudflare-only public server status
+`online` with the original registry's `running` value. The source publishes
+its stored game-server status and adds a server to the allocation ranking only
+after the running status is established. An active or initializing
+per-proposal Durable Object is therefore represented by the same public
+status without changing any internal allocation state.
+
+Exact Workers responses require `status: 'running'` on both initialization
+paths. The mutation-tested `check:cloudflare:match-info` gate derives the
+literal and publication lifecycle from the original registry, and rejects
+gateway or runtime-test drift.
+
+The complete local release contract passed for `29996d35`: 514 main-Worker
+tests, 37 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
