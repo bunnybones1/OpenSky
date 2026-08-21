@@ -176,10 +176,10 @@ The scoped timeout hardening, initializing-match checkpoint, and refreshed
 handoff then passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32471248703> at
 `e34ad958`. Run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32472939789> is exercising
-the timeout-countdown checkpoint and its handoff at `dab12467`. The newer
-`9071de09` public-wire checkpoint and this refreshed handoff require a later
-green exact-head CI run before any production mutation.
+<https://github.com/bunnybones1/OpenSky/actions/runs/32472939789> passed the
+timeout-countdown checkpoint and its handoff at exact pushed head `dab12467`.
+The newer `9071de09` public-wire checkpoint and this refreshed handoff require
+a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
