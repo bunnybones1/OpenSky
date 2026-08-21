@@ -15,8 +15,13 @@ export const REVIEWED_CONQUEST_V2_QUEUE =
   'cloud-weasel-conquest-v2-reward-delivery'
 export const REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE =
   'cloud-weasel-conquest-v2-reward-delivery-dlq'
+export const REVIEWED_LEADERBOARD_WORKFLOW = 'cloud-weasel-leaderboard-rewards'
+export const REVIEWED_LEADERBOARD_QUEUE =
+  'cloud-weasel-leaderboard-reward-delivery'
+export const REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE =
+  'cloud-weasel-leaderboard-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0121_conquest_v2_workflow_handoffs.sql'
+  '0122_leaderboard_reward_workflow_handoffs.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -165,7 +170,35 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       (name = 'conquest_v2_reward_delivery_failures_insert_guard'
         AND instr(sql, "cycle.status = 'DELIVERING'") > 0
         AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
-    )) AS conquest_v2_workflow_contract_guards_present;`
+    )) AS conquest_v2_workflow_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'leaderboard_reward_cycle_orchestrations',
+      'leaderboard_reward_delivery_failures'
+    )) AS leaderboard_workflow_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'leaderboard_reward_cycle_orchestration_insert_guard',
+      'leaderboard_reward_cycle_orchestration_update_guard',
+      'leaderboard_reward_cycle_orchestrations_no_delete',
+      'leaderboard_reward_delivery_failures_insert_guard',
+      'leaderboard_reward_delivery_failures_no_update',
+      'leaderboard_reward_delivery_failures_no_delete'
+    )) AS leaderboard_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND (
+      (name = 'leaderboard_reward_cycle_orchestration_insert_guard'
+        AND instr(sql, 'leaderboard_reward_schedule_activations') > 0
+        AND instr(sql, "activation.status = 'ACTIVE'") > 0)
+      OR
+      (name = 'leaderboard_reward_cycle_orchestration_update_guard'
+        AND instr(sql, 'leaderboard_rank_reset_receipts') > 0
+        AND instr(sql, "award.application_status = 'APPLIED'") > 0)
+      OR
+      (name = 'leaderboard_reward_delivery_failures_insert_guard'
+        AND instr(sql, "cycle.status = 'DELIVERING'") > 0
+        AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
+    )) AS leaderboard_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -174,7 +207,7 @@ export const REVIEWED_PRODUCTION_TARGETS = new Map([
       name: 'opensky-webapp',
       requiresAuthDatabase: true,
       supportsClientFeedback: true,
-      requiresConquestV2Orchestration: true
+      requiresRewardOrchestration: true
     }
   ],
   [
@@ -299,7 +332,7 @@ const optionalClientFeedbackErrors = config => {
   return []
 }
 
-const conquestV2OrchestrationErrors = config => {
+const rewardOrchestrationErrors = config => {
   const workflows = config?.workflows ?? []
   const producers = config?.queues?.producers ?? []
   const consumers = config?.queues?.consumers ?? []
@@ -312,17 +345,31 @@ const conquestV2OrchestrationErrors = config => {
   const consumer = consumers.find(
     value => value.queue === REVIEWED_CONQUEST_V2_QUEUE
   )
+  const leaderboardWorkflow = workflows.find(
+    value => value.binding === 'LEADERBOARD_REWARD_WORKFLOW'
+  )
+  const leaderboardProducer = producers.find(
+    value => value.binding === 'LEADERBOARD_REWARD_QUEUE'
+  )
+  const leaderboardConsumer = consumers.find(
+    value => value.queue === REVIEWED_LEADERBOARD_QUEUE
+  )
   if (
-    workflows.length !== 1 ||
+    workflows.length !== 2 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
-    producers.length !== 1 ||
+    producers.length !== 2 ||
     producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
-    consumers.length !== 1 ||
-    consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE
+    consumers.length !== 2 ||
+    consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE ||
+    leaderboardWorkflow?.name !== REVIEWED_LEADERBOARD_WORKFLOW ||
+    leaderboardWorkflow?.class_name !== 'LeaderboardRewardWorkflow' ||
+    leaderboardProducer?.queue !== REVIEWED_LEADERBOARD_QUEUE ||
+    leaderboardConsumer?.dead_letter_queue !==
+      REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE
   ) {
     return [
-      'main Worker must retain the reviewed Conquest V2 Workflow, Queue, and dead-letter topology'
+      'main Worker must retain the reviewed Conquest V2 and leaderboard Workflow, Queue, and dead-letter topology'
     ]
   }
   return []
@@ -381,8 +428,8 @@ export const productionTargetErrors = (
   if (reviewed.supportsClientFeedback) {
     errors.push(...optionalClientFeedbackErrors(config))
   }
-  if (reviewed.requiresConquestV2Orchestration) {
-    errors.push(...conquestV2OrchestrationErrors(config))
+  if (reviewed.requiresRewardOrchestration) {
+    errors.push(...rewardOrchestrationErrors(config))
   }
   return errors
 }
@@ -482,7 +529,10 @@ export const productionSchemaRow = output => {
     row?.deck_rank_job_contract_guards_present !== 3 ||
     row?.conquest_v2_workflow_tables_present !== 2 ||
     row?.conquest_v2_workflow_guards_present !== 6 ||
-    row?.conquest_v2_workflow_contract_guards_present !== 3
+    row?.conquest_v2_workflow_contract_guards_present !== 3 ||
+    row?.leaderboard_workflow_tables_present !== 2 ||
+    row?.leaderboard_workflow_guards_present !== 6 ||
+    row?.leaderboard_workflow_contract_guards_present !== 3
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

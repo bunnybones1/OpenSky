@@ -19,6 +19,9 @@ import {
   REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE,
   REVIEWED_CONQUEST_V2_QUEUE,
   REVIEWED_CONQUEST_V2_WORKFLOW,
+  REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE,
+  REVIEWED_LEADERBOARD_QUEUE,
+  REVIEWED_LEADERBOARD_WORKFLOW,
   REVIEWED_PRODUCTION_TARGETS,
   REQUIRED_PRODUCTION_SCHEMA_MIGRATION
 } from './run-cloudflare-production.mjs'
@@ -61,13 +64,18 @@ const configFor = target => ({
         vars: { ANALYTICS_RELEASE_VERSION: 'cloudflare' }
       }
     : {}),
-  ...(target.requiresConquestV2Orchestration
+  ...(target.requiresRewardOrchestration
     ? {
         workflows: [
           {
             name: REVIEWED_CONQUEST_V2_WORKFLOW,
             binding: 'CONQUEST_V2_REWARD_WORKFLOW',
             class_name: 'ConquestV2RewardWorkflow'
+          },
+          {
+            name: REVIEWED_LEADERBOARD_WORKFLOW,
+            binding: 'LEADERBOARD_REWARD_WORKFLOW',
+            class_name: 'LeaderboardRewardWorkflow'
           }
         ],
         queues: {
@@ -75,12 +83,20 @@ const configFor = target => ({
             {
               queue: REVIEWED_CONQUEST_V2_QUEUE,
               binding: 'CONQUEST_V2_REWARD_QUEUE'
+            },
+            {
+              queue: REVIEWED_LEADERBOARD_QUEUE,
+              binding: 'LEADERBOARD_REWARD_QUEUE'
             }
           ],
           consumers: [
             {
               queue: REVIEWED_CONQUEST_V2_QUEUE,
               dead_letter_queue: REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE
+            },
+            {
+              queue: REVIEWED_LEADERBOARD_QUEUE,
+              dead_letter_queue: REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE
             }
           ]
         }
@@ -120,7 +136,7 @@ test('rejects account, environment, Worker, and database drift', () => {
   )
 })
 
-test('pins the Conquest V2 Workflow, Queue, and dead-letter topology', () => {
+test('pins both reward Workflow, Queue, and dead-letter topologies', () => {
   const targetPath = 'wrangler.jsonc'
   const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
   for (const changed of [
@@ -131,6 +147,13 @@ test('pins the Conquest V2 Workflow, Queue, and dead-letter topology', () => {
         { ...baseline.workflows[0], name: 'lookalike-conquest-workflow' }
       ]
     },
+    {
+      ...baseline,
+      workflows: [
+        baseline.workflows[0],
+        { ...baseline.workflows[1], name: 'lookalike-leaderboard-workflow' }
+      ]
+    },
     { ...baseline, queues: { ...baseline.queues, producers: [] } },
     {
       ...baseline,
@@ -138,6 +161,16 @@ test('pins the Conquest V2 Workflow, Queue, and dead-letter topology', () => {
         ...baseline.queues,
         consumers: [
           { ...baseline.queues.consumers[0], dead_letter_queue: undefined }
+        ]
+      }
+    },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        consumers: [
+          baseline.queues.consumers[0],
+          { ...baseline.queues.consumers[1], dead_letter_queue: undefined }
         ]
       }
     }
@@ -346,7 +379,14 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'conquest_v2_reward_cycle_orchestration_update_guard',
     'conquest_v2_reward_delivery_failures_insert_guard',
     "cycle.status = 'DELIVERING'",
-    'orchestration.completed_at IS NULL'
+    'orchestration.completed_at IS NULL',
+    'leaderboard_reward_cycle_orchestrations',
+    'leaderboard_reward_delivery_failures',
+    'leaderboard_reward_cycle_orchestration_insert_guard',
+    'leaderboard_reward_cycle_orchestration_update_guard',
+    'leaderboard_reward_delivery_failures_insert_guard',
+    'leaderboard_rank_reset_receipts',
+    "activation.status = 'ACTIVE'"
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -421,7 +461,10 @@ test('accepts only one successful complete read-only schema row', () => {
     deck_rank_job_contract_guards_present: 3,
     conquest_v2_workflow_tables_present: 2,
     conquest_v2_workflow_guards_present: 6,
-    conquest_v2_workflow_contract_guards_present: 3
+    conquest_v2_workflow_contract_guards_present: 3,
+    leaderboard_workflow_tables_present: 2,
+    leaderboard_workflow_guards_present: 6,
+    leaderboard_workflow_contract_guards_present: 3
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -531,6 +574,26 @@ test('accepts only one successful complete read-only schema row', () => {
       {
         results: [
           { ...complete, conquest_v2_workflow_contract_guards_present: 2 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, leaderboard_workflow_tables_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, leaderboard_workflow_guards_present: 5 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, leaderboard_workflow_contract_guards_present: 2 }
         ],
         success: true
       }

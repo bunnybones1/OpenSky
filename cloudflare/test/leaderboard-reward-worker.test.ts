@@ -5,11 +5,23 @@ import cardLibrary from '../src/generated/card-library.json'
 import { ContentRepository } from '../src/content'
 
 import {
+  acceptDueLeaderboardRewardCycle,
   leaderboardRewardCardIds,
   mostRecentLeaderboardRewardTime,
   nextLeaderboardRewardTime,
   runDueLeaderboardRewards
 } from '../src/leaderboard-reward-worker'
+import {
+  applyLeaderboardRewardQueueMessage,
+  dispatchDueLeaderboardRewards,
+  handleLeaderboardRewardQueue,
+  LEADERBOARD_REWARD_QUEUE_NAME,
+  publishUnappliedLeaderboardRewards,
+  runLeaderboardRewardWorkflow,
+  snapshotAcceptedLeaderboardRewardCycle,
+  type LeaderboardRewardQueueMessage
+} from '../src/leaderboard-reward-orchestration'
+import type { Env } from '../src/env'
 import {
   calculatedLeaderboardRewardPolicyHash,
   LEADERBOARD_REWARD_POLICY_HASH,
@@ -123,6 +135,38 @@ const inventoryTotals = async (userId: string) =>
     .bind(userId)
     .first<{ silver: number; tickets: number }>()
 
+const queueMessage = (
+  body: LeaderboardRewardQueueMessage,
+  id: string,
+  attempts: number
+) => {
+  const outcome = { acked: false, retried: false }
+  const message = {
+    id,
+    timestamp: NOW,
+    body,
+    attempts,
+    ack: () => {
+      outcome.acked = true
+    },
+    retry: () => {
+      outcome.retried = true
+    }
+  } as Message<LeaderboardRewardQueueMessage>
+  return { message, outcome }
+}
+
+const messageBatch = (messages: Message<LeaderboardRewardQueueMessage>[]) =>
+  ({
+    messages,
+    queue: LEADERBOARD_REWARD_QUEUE_NAME,
+    metadata: {
+      metrics: { backlogCount: messages.length, backlogBytes: 0 }
+    },
+    ackAll: () => undefined,
+    retryAll: () => undefined
+  }) as MessageBatch<LeaderboardRewardQueueMessage>
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
@@ -130,6 +174,9 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS reject_leaderboard_reward_completion'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS reject_one_leaderboard_queue_player'
     ),
     env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_leaderboard_rank_reset'),
     env.AUTH_DB.prepare(
@@ -155,6 +202,12 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS leaderboard_reward_cycle_policy_receipts_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS leaderboard_reward_cycle_orchestrations_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS leaderboard_reward_delivery_failures_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
@@ -163,6 +216,8 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare('DELETE FROM player_leaderboard_reward_feed_events'),
     env.AUTH_DB.prepare('DELETE FROM player_leaderboard_reward_awards'),
+    env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_delivery_failures'),
+    env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycle_orchestrations'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_entries'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_rank_reset_receipts'),
     env.AUTH_DB.prepare('DELETE FROM leaderboard_reward_cycle_policy_receipts'),
@@ -229,6 +284,20 @@ beforeEach(async () => {
        BEFORE DELETE ON leaderboard_reward_cycle_policy_receipts
        BEGIN
          SELECT RAISE(ABORT, 'leaderboard reward cycle policy receipts are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER leaderboard_reward_cycle_orchestrations_no_delete
+       BEFORE DELETE ON leaderboard_reward_cycle_orchestrations
+       BEGIN
+         SELECT RAISE(ABORT, 'leaderboard orchestration receipts are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER leaderboard_reward_delivery_failures_no_delete
+       BEFORE DELETE ON leaderboard_reward_delivery_failures
+       BEGIN
+         SELECT RAISE(ABORT, 'leaderboard delivery failures are immutable');
        END`
     )
   ])
@@ -867,7 +936,7 @@ describe('weekly leaderboard reward worker', () => {
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count FROM leaderboard_reward_cycles`
       ).first()
-    ).toEqual({ status: 'DELIVERING', attempt_count: 1 })
+    ).toEqual({ status: 'DELIVERING', attempt_count: 0 })
 
     await env.AUTH_DB.prepare(
       'DROP TRIGGER reject_leaderboard_reward_grant'
@@ -1005,7 +1074,7 @@ describe('weekly leaderboard reward worker', () => {
            (SELECT COUNT(*) FROM leaderboard_rank_reset_receipts) AS resets,
            (SELECT attempt_count FROM leaderboard_reward_cycles) AS attempts`
       ).first()
-    ).toEqual({ awards: 1, resets: 0, attempts: 1 })
+    ).toEqual({ awards: 1, resets: 0, attempts: 0 })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT json_extract(player_rank_state, '$[2]') AS deviation
@@ -1083,10 +1152,9 @@ describe('weekly leaderboard reward worker', () => {
     ).toBe(125)
   })
 
-  // This intentionally creates and settles more players than one cron batch.
-  // Shared CI Worker-pool scheduling can exceed Vitest's five-second default
-  // even though the exact 20-plus-5 receipt assertions still run unchanged.
-  it('bounds each cron batch and resumes remaining players from receipts', async () => {
+  // The compatibility harness intentionally has no copied 20-player cron
+  // page. Production fan-out is owned by Queue platform limits instead.
+  it('does not preserve the old fixed player batch as product behavior', async () => {
     for (let index = 0; index < 25; index++) {
       await setupPlayer(
         `reward-batch-${String(index).padStart(2, '0')}`,
@@ -1097,12 +1165,8 @@ describe('weekly leaderboard reward worker', () => {
     }
     await enableSchedule()
     expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
-      status: 'in_progress',
-      delivered: 20
-    })
-    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
       status: 'completed',
-      delivered: 5
+      delivered: 25
     })
     expect(
       await env.AUTH_DB.prepare(
@@ -1117,7 +1181,7 @@ describe('weekly leaderboard reward worker', () => {
     ).toEqual({ awards: 25, notifications: 25, tickets: 50 })
   }, 15_000)
 
-  it('dead-letters a repeatedly failing cycle after five attempts', async () => {
+  it('does not abandon an entitlement at the source attempt ceiling', async () => {
     await setupPlayer('reward-dead-letter', 2_000, NOW.toISOString())
     await enableSchedule()
     await env.AUTH_DB.prepare(
@@ -1129,7 +1193,7 @@ describe('weekly leaderboard reward worker', () => {
        END`
     ).run()
 
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    for (let attempt = 1; attempt <= 6; attempt++) {
       await expect(runDueLeaderboardRewards(env.AUTH_DB, NOW)).rejects.toThrow(
         'persistent leaderboard reward failure'
       )
@@ -1138,17 +1202,334 @@ describe('weekly leaderboard reward worker', () => {
           `SELECT status, attempt_count FROM leaderboard_reward_cycles`
         ).first()
       ).toEqual({
-        status: attempt === 5 ? 'FAILED' : 'DELIVERING',
-        attempt_count: attempt
+        status: 'DELIVERING',
+        attempt_count: 0
       })
     }
-    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
-      status: 'failed',
-      delivered: 0
-    })
     expect(await inventoryTotals('reward-dead-letter')).toEqual({
       silver: 0,
       tickets: 0
     })
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_leaderboard_reward_grant'
+    ).run()
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed',
+      delivered: 1
+    })
+    expect(await inventoryTotals('reward-dead-letter')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+  })
+
+  it('recovers a D1-to-Workflow creation gap after a later schedule disable', async () => {
+    await setupPlayer('reward-workflow-gap', 2_000, NOW.toISOString())
+    await enableSchedule()
+    const unavailableWorkflow = {
+      create: async () => {
+        throw new Error('injected leaderboard Workflow creation failure')
+      },
+      get: async () => {
+        throw new Error('Workflow instance does not exist')
+      }
+    } as unknown as Workflow
+    await expect(
+      dispatchDueLeaderboardRewards(
+        {
+          AUTH_DB: env.AUTH_DB,
+          LEADERBOARD_REWARD_WORKFLOW: unavailableWorkflow
+        } as Pick<Env, 'AUTH_DB' | 'LEADERBOARD_REWARD_WORKFLOW'>,
+        NOW
+      )
+    ).rejects.toThrow('injected leaderboard Workflow creation failure')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM leaderboard_reward_cycles) AS cycles,
+           (SELECT COUNT(*)
+            FROM leaderboard_reward_cycle_orchestrations) AS orchestrations,
+           (SELECT COUNT(*) FROM leaderboard_reward_entries) AS entries`
+      ).first()
+    ).toEqual({ cycles: 1, orchestrations: 1, entries: 0 })
+    const identity = await env.AUTH_DB.prepare(
+      `SELECT cycle_id, workflow_instance_id
+       FROM leaderboard_reward_cycle_orchestrations`
+    ).first<{ cycle_id: number; workflow_instance_id: string }>()
+
+    const disabledAt = new Date(NOW.getTime() - 1).toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO leaderboard_reward_schedule_versions
+         (version, enabled, starts_at, reason, created_at)
+       VALUES (2, 0, ?, 'disable after acceptance', ?)`
+    )
+      .bind(disabledAt, disabledAt)
+      .run()
+
+    const creations: Array<{ id?: string; params?: unknown }> = []
+    const recoveredWorkflow = {
+      create: async (options?: { id?: string; params?: unknown }) => {
+        creations.push(options ?? {})
+        return { id: options?.id }
+      }
+    } as unknown as Workflow
+    expect(
+      await dispatchDueLeaderboardRewards(
+        {
+          AUTH_DB: env.AUTH_DB,
+          LEADERBOARD_REWARD_WORKFLOW: recoveredWorkflow
+        } as Pick<Env, 'AUTH_DB' | 'LEADERBOARD_REWARD_WORKFLOW'>,
+        NOW
+      )
+    ).toEqual({
+      status: 'started',
+      cycleId: identity!.cycle_id,
+      workflowInstanceId: identity!.workflow_instance_id
+    })
+    expect(creations).toEqual([
+      {
+        id: identity!.workflow_instance_id,
+        params: { cycleId: identity!.cycle_id }
+      }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM leaderboard_reward_cycles) AS cycles,
+           (SELECT COUNT(*)
+            FROM leaderboard_reward_cycle_orchestrations) AS orchestrations`
+      ).first()
+    ).toEqual({ cycles: 1, orchestrations: 1 })
+  })
+
+  it('runs one Workflow through Queue receipts and one guarded rank reset', async () => {
+    await setupPlayer('reward-workflow-player', 2_000, NOW.toISOString())
+    await enableSchedule()
+    const accepted = await acceptDueLeaderboardRewardCycle(env.AUTH_DB, NOW)
+    expect(accepted.status).toBe('accepted')
+    const cycle = accepted.cycle!
+    const instanceId = accepted.orchestration!.workflowInstanceId
+    const deliveredBodies: LeaderboardRewardQueueMessage[] = []
+    const queue = {
+      sendBatch: async (
+        messages: Iterable<{ body: LeaderboardRewardQueueMessage }>
+      ) => {
+        for (const message of messages) {
+          deliveredBodies.push(message.body)
+          await applyLeaderboardRewardQueueMessage(
+            env.AUTH_DB,
+            message.body,
+            NOW
+          )
+        }
+        return {
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } }
+        }
+      }
+    } as unknown as Queue<LeaderboardRewardQueueMessage>
+    const calls: Array<{ kind: string; name: string }> = []
+    const step = {
+      do: async (name: string, ...args: unknown[]) => {
+        calls.push({ kind: 'do', name })
+        const callback = args.find(value => typeof value === 'function') as
+          | (() => Promise<unknown>)
+          | undefined
+        if (!callback) throw new Error('missing Workflow callback')
+        return callback()
+      },
+      sleep: async (name: string) => {
+        calls.push({ kind: 'sleep', name })
+      }
+    } as unknown as Parameters<typeof runLeaderboardRewardWorkflow>[2]
+
+    expect(
+      await runLeaderboardRewardWorkflow(
+        { AUTH_DB: env.AUTH_DB, LEADERBOARD_REWARD_QUEUE: queue },
+        {
+          payload: { cycleId: cycle.id },
+          timestamp: NOW,
+          instanceId,
+          workflowName: 'cloud-weasel-leaderboard-rewards'
+        },
+        step
+      )
+    ).toEqual({ cycleId: cycle.id, completed: true })
+    expect(deliveredBodies).toEqual([
+      {
+        kind: 'LEADERBOARD_REWARD',
+        version: 1,
+        cycleId: cycle.id,
+        userId: 'reward-workflow-player'
+      }
+    ])
+    expect(calls.some(call => call.kind === 'sleep')).toBe(true)
+    expect(await inventoryTotals('reward-workflow-player')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+    expect(
+      await applyLeaderboardRewardQueueMessage(
+        env.AUTH_DB,
+        deliveredBodies[0],
+        NOW
+      )
+    ).toBe('duplicate')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT cycle.status, orchestration.completed_at,
+                (SELECT COUNT(*) FROM leaderboard_rank_reset_receipts
+                 WHERE cycle_id = cycle.id) AS resets
+         FROM leaderboard_reward_cycles cycle
+         JOIN leaderboard_reward_cycle_orchestrations orchestration
+           ON orchestration.cycle_id = cycle.id
+         WHERE cycle.id = ?`
+      )
+        .bind(cycle.id)
+        .first()
+    ).toEqual({
+      status: 'COMPLETED',
+      completed_at: expect.any(String),
+      resets: 1
+    })
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_cycle_orchestrations
+         SET workflow_instance_id = 'rewritten' WHERE cycle_id = ?`
+      )
+        .bind(cycle.id)
+        .run()
+    ).rejects.toThrow('orchestration completion is invalid')
+  })
+
+  it('isolates Queue players and recovers attempt seven after six failures', async () => {
+    await setupPlayer('reward-queue-fault', 2_000, NOW.toISOString())
+    await setupPlayer('reward-queue-success', 1_999, NOW.toISOString())
+    await enableSchedule()
+    const accepted = await acceptDueLeaderboardRewardCycle(env.AUTH_DB, NOW)
+    const cycle = accepted.cycle!
+    await snapshotAcceptedLeaderboardRewardCycle(
+      env.AUTH_DB,
+      cycle.id,
+      accepted.orchestration!.workflowInstanceId,
+      NOW
+    )
+    const bodies: LeaderboardRewardQueueMessage[] = []
+    const queue = {
+      sendBatch: async (
+        messages: Iterable<{ body: LeaderboardRewardQueueMessage }>
+      ) => {
+        bodies.push(...[...messages].map(message => message.body))
+        return {
+          metadata: {
+            metrics: { backlogCount: bodies.length, backlogBytes: 0 }
+          }
+        }
+      }
+    } as unknown as Queue<LeaderboardRewardQueueMessage>
+    expect(
+      await publishUnappliedLeaderboardRewards(
+        { AUTH_DB: env.AUTH_DB, LEADERBOARD_REWARD_QUEUE: queue },
+        cycle.id,
+        NOW
+      )
+    ).toEqual({ completed: false, published: 2 })
+    const faultBody = bodies.find(body => body.userId === 'reward-queue-fault')!
+    const successBody = bodies.find(
+      body => body.userId === 'reward-queue-success'
+    )!
+    await expect(
+      applyLeaderboardRewardQueueMessage(
+        env.AUTH_DB,
+        { ...faultBody, rank: 1 },
+        NOW
+      )
+    ).rejects.toThrow('Queue message is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE leaderboard_reward_cycle_orchestrations
+         SET completed_at = ? WHERE cycle_id = ?`
+      )
+        .bind(NOW.toISOString(), cycle.id)
+        .run()
+    ).rejects.toThrow('orchestration completion is invalid')
+
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_one_leaderboard_queue_player
+       BEFORE INSERT ON player_items
+       WHEN NEW.unlock_source LIKE 'leaderboard:%'
+         AND NEW.user_id = 'reward-queue-fault'
+       BEGIN SELECT RAISE(ABORT, 'injected per-player Queue failure'); END`
+    ).run()
+    const faultOne = queueMessage(faultBody, 'leaderboard-fault', 1)
+    const successOne = queueMessage(successBody, 'leaderboard-success', 1)
+    await handleLeaderboardRewardQueue(
+      messageBatch([faultOne.message, successOne.message]),
+      env.AUTH_DB,
+      NOW
+    )
+    expect(faultOne.outcome).toEqual({ acked: false, retried: true })
+    expect(successOne.outcome).toEqual({ acked: true, retried: false })
+    for (let attempt = 2; attempt <= 6; attempt += 1) {
+      const failed = queueMessage(faultBody, 'leaderboard-fault', attempt)
+      await handleLeaderboardRewardQueue(
+        messageBatch([failed.message]),
+        env.AUTH_DB,
+        NOW
+      )
+      expect(failed.outcome).toEqual({ acked: false, retried: true })
+    }
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM leaderboard_reward_delivery_failures
+         WHERE cycle_id = ? AND user_id = 'reward-queue-fault'`
+      )
+        .bind(cycle.id)
+        .first('count')
+    ).toBe(6)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM leaderboard_reward_cycles
+         WHERE id = ?`
+      )
+        .bind(cycle.id)
+        .first()
+    ).toEqual({ status: 'DELIVERING', attempt_count: 0 })
+    expect(await inventoryTotals('reward-queue-fault')).toEqual({
+      silver: 0,
+      tickets: 0
+    })
+    expect(await inventoryTotals('reward-queue-success')).toEqual({
+      silver: 18,
+      tickets: 4
+    })
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_one_leaderboard_queue_player'
+    ).run()
+    const recovered = queueMessage(faultBody, 'leaderboard-fault', 7)
+    await handleLeaderboardRewardQueue(
+      messageBatch([recovered.message]),
+      env.AUTH_DB,
+      NOW
+    )
+    expect(recovered.outcome).toEqual({ acked: true, retried: false })
+    const duplicate = queueMessage(faultBody, 'leaderboard-fault', 8)
+    await handleLeaderboardRewardQueue(
+      messageBatch([duplicate.message]),
+      env.AUTH_DB,
+      NOW
+    )
+    expect(duplicate.outcome).toEqual({ acked: true, retried: false })
+    expect(await inventoryTotals('reward-queue-fault')).toEqual({
+      silver: 20,
+      tickets: 4
+    })
+    expect(
+      await publishUnappliedLeaderboardRewards(
+        { AUTH_DB: env.AUTH_DB, LEADERBOARD_REWARD_QUEUE: queue },
+        cycle.id,
+        NOW
+      )
+    ).toEqual({ completed: true, published: 0 })
   })
 })

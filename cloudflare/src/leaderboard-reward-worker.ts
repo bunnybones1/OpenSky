@@ -10,8 +10,6 @@ import { noUnpublishedAccountStatsInScopeSQL } from './rank-publication'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
-const MAX_ATTEMPTS = 5
-const MAX_PLAYERS_PER_RUN = 20
 const CONQUEST_TICKET_TOKEN_ID = 16_646_145
 const RANKED_MODES = ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const
 
@@ -31,7 +29,7 @@ interface ScheduleRow {
   policy_hash: string | null
 }
 
-interface CycleRow {
+export interface LeaderboardRewardCycleRow {
   id: number
   schedule_version: number
   scheduled_at: string
@@ -40,9 +38,10 @@ interface CycleRow {
   random_seed: string
   status: 'PREPARING' | 'DELIVERING' | 'COMPLETED' | 'FAILED'
   attempt_count: number
+  completed_at: string | null
 }
 
-interface EntryRow {
+export interface LeaderboardRewardEntryRow {
   user_id: string
   game_mode: RankedMode
   rank: number
@@ -88,6 +87,19 @@ export interface LeaderboardRewardRun {
   delivered: number
 }
 
+export interface LeaderboardRewardOrchestrationReceipt {
+  cycleId: number
+  workflowInstanceId: string
+  acceptedAt: string
+  completedAt?: string
+}
+
+export interface AcceptedLeaderboardRewardCycle {
+  status: 'disabled' | 'not_due' | 'accepted' | 'already_completed'
+  cycle?: LeaderboardRewardCycleRow
+  orchestration?: LeaderboardRewardOrchestrationReceipt
+}
+
 export { leaderboardRewardCardIds } from './leaderboard-reward-policy'
 
 export const mostRecentLeaderboardRewardTime = (
@@ -105,33 +117,56 @@ export const mostRecentLeaderboardRewardTime = (
   return new Date(firstRunAt.getTime() + weeks * WEEK_MS)
 }
 
+const scheduleSelect = `
+  SELECT schedule.version, schedule.enabled, schedule.weekday_utc,
+         schedule.hour_utc, schedule.minute_utc, schedule.first_run_at,
+         schedule.starts_at, activation.status AS activation_status,
+         activation.activated_at AS policy_activated_at,
+         activation.policy_version, activation.policy_hash
+  FROM leaderboard_reward_schedule_versions schedule
+  LEFT JOIN leaderboard_reward_schedule_activations activation
+    ON activation.schedule_version = schedule.version`
+
+const approvedSchedule = (schedule: ScheduleRow | null, now: Date) =>
+  schedule?.enabled === 1 &&
+  schedule.activation_status === 'ACTIVE' &&
+  schedule.policy_activated_at !== null &&
+  schedule.policy_activated_at <= now.toISOString() &&
+  schedule.policy_version === LEADERBOARD_REWARD_POLICY_VERSION &&
+  schedule.policy_hash === LEADERBOARD_REWARD_POLICY_HASH
+
 const activeSchedule = async (
   database: D1Database,
   now: Date
 ): Promise<ScheduleRow | null> => {
   const schedule = await database
     .prepare(
-      `SELECT schedule.version, schedule.enabled, schedule.weekday_utc,
-              schedule.hour_utc, schedule.minute_utc, schedule.first_run_at,
-              schedule.starts_at, activation.status AS activation_status,
-              activation.activated_at AS policy_activated_at,
-              activation.policy_version, activation.policy_hash
-       FROM leaderboard_reward_schedule_versions schedule
-       LEFT JOIN leaderboard_reward_schedule_activations activation
-         ON activation.schedule_version = schedule.version
+      `${scheduleSelect}
        WHERE schedule.starts_at <= ?
        ORDER BY schedule.version DESC LIMIT 1`
     )
     .bind(now.toISOString())
     .first<ScheduleRow>()
-  return schedule?.enabled === 1 &&
-    schedule.activation_status === 'ACTIVE' &&
-    schedule.policy_activated_at !== null &&
-    schedule.policy_activated_at <= now.toISOString() &&
-    schedule.policy_version === LEADERBOARD_REWARD_POLICY_VERSION &&
-    schedule.policy_hash === LEADERBOARD_REWARD_POLICY_HASH
-    ? schedule
-    : null
+  return approvedSchedule(schedule, now) ? schedule : null
+}
+
+const resumableSchedule = async (
+  database: D1Database,
+  now: Date
+): Promise<ScheduleRow | null> => {
+  // A later disabled schedule stops future cycles, not a cycle whose stable
+  // D1 identity was already accepted. This intentionally does not select the
+  // newest schedule version.
+  const schedule = await database
+    .prepare(
+      `${scheduleSelect}
+       JOIN leaderboard_reward_cycles cycle
+         ON cycle.schedule_version = schedule.version
+       WHERE cycle.status <> 'COMPLETED'
+       ORDER BY cycle.scheduled_at, cycle.id LIMIT 1`
+    )
+    .first<ScheduleRow>()
+  return approvedSchedule(schedule, now) ? schedule : null
 }
 
 const validatedFirstRun = (schedule: ScheduleRow): Date => {
@@ -182,16 +217,29 @@ const cycleBySchedule = async (
   database: D1Database,
   scheduleVersion: number,
   scheduledAt: string
-): Promise<CycleRow | null> =>
+): Promise<LeaderboardRewardCycleRow | null> =>
   database
     .prepare(
       `SELECT id, schedule_version, scheduled_at, season, week, random_seed,
-              status, attempt_count
+              status, attempt_count, completed_at
        FROM leaderboard_reward_cycles
        WHERE schedule_version = ? AND scheduled_at = ?`
     )
     .bind(scheduleVersion, scheduledAt)
-    .first<CycleRow>()
+    .first<LeaderboardRewardCycleRow>()
+
+export const leaderboardRewardCycleById = async (
+  database: D1Database,
+  cycleId: number
+): Promise<LeaderboardRewardCycleRow | null> =>
+  database
+    .prepare(
+      `SELECT id, schedule_version, scheduled_at, season, week, random_seed,
+              status, attempt_count, completed_at
+       FROM leaderboard_reward_cycles WHERE id = ?`
+    )
+    .bind(cycleId)
+    .first<LeaderboardRewardCycleRow>()
 
 const nextDueTime = async (
   database: D1Database,
@@ -206,7 +254,10 @@ const nextDueTime = async (
        ORDER BY scheduled_at DESC LIMIT 1`
     )
     .bind(schedule.version)
-    .first<{ scheduled_at: string; status: CycleRow['status'] }>()
+    .first<{
+      scheduled_at: string
+      status: LeaderboardRewardCycleRow['status']
+    }>()
   if (latest && latest.status !== 'COMPLETED') {
     return new Date(latest.scheduled_at)
   }
@@ -221,7 +272,7 @@ const ensureCycle = async (
   schedule: ScheduleRow,
   scheduledAt: Date,
   now: Date
-): Promise<CycleRow> => {
+): Promise<LeaderboardRewardCycleRow> => {
   const rewarded = seasonWeekFromDate(new Date(scheduledAt.getTime() - DAY_MS))
   if (rewarded.week < 1 || rewarded.week > 4) {
     throw new Error('leaderboard reward cycle week is invalid')
@@ -251,9 +302,88 @@ const ensureCycle = async (
   return cycle
 }
 
-const snapshotCycle = async (
+const orchestrationReceipt = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycleId: number
+): Promise<LeaderboardRewardOrchestrationReceipt | null> => {
+  const row = await database
+    .prepare(
+      `SELECT cycle_id, workflow_instance_id, accepted_at, completed_at
+       FROM leaderboard_reward_cycle_orchestrations WHERE cycle_id = ?`
+    )
+    .bind(cycleId)
+    .first<{
+      cycle_id: number
+      workflow_instance_id: string
+      accepted_at: string
+      completed_at: string | null
+    }>()
+  return row
+    ? {
+        cycleId: row.cycle_id,
+        workflowInstanceId: row.workflow_instance_id,
+        acceptedAt: row.accepted_at,
+        ...(row.completed_at ? { completedAt: row.completed_at } : {})
+      }
+    : null
+}
+
+export const ensureLeaderboardRewardOrchestration = async (
+  database: D1Database,
+  cycle: LeaderboardRewardCycleRow,
+  now: Date
+): Promise<LeaderboardRewardOrchestrationReceipt> => {
+  const existing = await orchestrationReceipt(database, cycle.id)
+  if (existing) return existing
+  const workflowInstanceId = `leaderboard-cycle-${cycle.id}`
+  await database
+    .prepare(
+      `INSERT OR IGNORE INTO leaderboard_reward_cycle_orchestrations
+         (cycle_id, workflow_instance_id, accepted_at, completed_at)
+       VALUES (?, ?, ?, NULL)`
+    )
+    .bind(cycle.id, workflowInstanceId, now.toISOString())
+    .run()
+  const receipt = await orchestrationReceipt(database, cycle.id)
+  if (!receipt) {
+    throw new Error('leaderboard reward orchestration receipt was not created')
+  }
+  return receipt
+}
+
+/**
+ * Accepts at most one approved due cycle as durable D1 business work. Cron may
+ * call this repeatedly: the schedule/cycle key and Workflow identity are
+ * stable, including across a D1-to-Workflow creation gap.
+ */
+export const acceptDueLeaderboardRewardCycle = async (
+  database: D1Database,
+  now = new Date()
+): Promise<AcceptedLeaderboardRewardCycle> => {
+  const schedule =
+    (await resumableSchedule(database, now)) ??
+    (await activeSchedule(database, now))
+  if (!schedule) return { status: 'disabled' }
+  const scheduledAt = await nextDueTime(database, schedule, now)
+  if (!scheduledAt) return { status: 'not_due' }
+  const cycle = await ensureCycle(database, schedule, scheduledAt, now)
+  if (cycle.status === 'COMPLETED') {
+    return { status: 'already_completed', cycle }
+  }
+  return {
+    status: 'accepted',
+    cycle,
+    orchestration: await ensureLeaderboardRewardOrchestration(
+      database,
+      cycle,
+      now
+    )
+  }
+}
+
+export const snapshotLeaderboardRewardCycle = async (
+  database: D1Database,
+  cycle: LeaderboardRewardCycleRow,
   now: Date
 ): Promise<void> => {
   const publicationGuard = noUnpublishedAccountStatsInScopeSQL(
@@ -414,11 +544,11 @@ const modeTokenIds = (award: ModeAward): number[] => [
   ...Array.from({ length: award.tickets }, () => CONQUEST_TICKET_TOKEN_ID)
 ]
 
-const deliverPlayer = async (
+export const deliverLeaderboardRewardPlayer = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycle: LeaderboardRewardCycleRow,
   userId: string,
-  entries: EntryRow[],
+  entries: LeaderboardRewardEntryRow[],
   now: Date
 ): Promise<boolean> => {
   const pool = leaderboardRewardCardIds(cycle.season)
@@ -682,7 +812,7 @@ const deliverPlayer = async (
 
 const deliverCycle = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycle: LeaderboardRewardCycleRow,
   now: Date
 ): Promise<number> => {
   const players = await database
@@ -696,10 +826,9 @@ const deliverCycle = async (
        WHERE entries.cycle_id = ? AND entries.rank <= 250
          AND award.id IS NULL
        GROUP BY entries.user_id
-       ORDER BY best_rank, entries.user_id
-       LIMIT ?`
+       ORDER BY best_rank, entries.user_id`
     )
-    .bind(cycle.id, MAX_PLAYERS_PER_RUN)
+    .bind(cycle.id)
     .all<{ user_id: string; best_rank: number }>()
   let delivered = 0
   for (const player of players.results) {
@@ -711,9 +840,15 @@ const deliverCycle = async (
          ORDER BY game_mode`
       )
       .bind(cycle.id, player.user_id)
-      .all<EntryRow>()
+      .all<LeaderboardRewardEntryRow>()
     if (
-      await deliverPlayer(database, cycle, player.user_id, entries.results, now)
+      await deliverLeaderboardRewardPlayer(
+        database,
+        cycle,
+        player.user_id,
+        entries.results,
+        now
+      )
     ) {
       delivered++
     }
@@ -721,7 +856,7 @@ const deliverCycle = async (
   return delivered
 }
 
-const cycleDeliveryComplete = async (
+export const leaderboardRewardDeliveryComplete = async (
   database: D1Database,
   cycleId: number
 ): Promise<boolean> => {
@@ -739,85 +874,68 @@ const cycleDeliveryComplete = async (
   return row?.expected === row?.delivered
 }
 
-const recordFailure = async (
+export const completeLeaderboardRewardCycle = async (
   database: D1Database,
-  cycle: CycleRow,
-  error: unknown,
-  now: Date
-) => {
-  const message = (
-    error instanceof Error
-      ? error.message
-      : 'leaderboard reward delivery failed'
-  ).slice(0, 1_000)
+  cycleId: number,
+  now = new Date()
+): Promise<boolean> => {
+  if (!(await leaderboardRewardDeliveryComplete(database, cycleId))) {
+    return false
+  }
+  const reset = await applyLeaderboardRankReset(database, cycleId, now)
+  if (reset === 'waiting_for_match_publication') return false
+  const completed = await database
+    .prepare(
+      `SELECT completed_at FROM leaderboard_reward_cycles
+       WHERE id = ? AND status = 'COMPLETED'`
+    )
+    .bind(cycleId)
+    .first<{ completed_at: string }>()
+  if (!completed) return false
   await database
     .prepare(
-      `UPDATE leaderboard_reward_cycles
-       SET attempt_count = attempt_count + 1,
-           status = CASE WHEN attempt_count + 1 >= ?
-                         THEN 'FAILED' ELSE status END,
-           last_error = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE NULL END,
-           completed_at = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE NULL END
-       WHERE id = ? AND status IN ('PREPARING', 'DELIVERING')`
+      `UPDATE leaderboard_reward_cycle_orchestrations
+       SET completed_at = ?
+       WHERE cycle_id = ? AND completed_at IS NULL`
     )
-    .bind(
-      MAX_ATTEMPTS,
-      MAX_ATTEMPTS,
-      message,
-      MAX_ATTEMPTS,
-      now.toISOString(),
-      cycle.id
-    )
+    .bind(completed.completed_at, cycleId)
     .run()
+  return true
 }
 
 /**
- * Runs at most the most recent due weekly cycle. With no enabled schedule row
- * (the production default), this is a read-only no-op.
+ * Compatibility harness for focused business-rule tests. Production cron
+ * dispatches the Workflow and never performs player delivery through this
+ * function.
  */
 export const runDueLeaderboardRewards = async (
   database: D1Database,
   now = new Date()
 ): Promise<LeaderboardRewardRun> => {
-  const schedule = await activeSchedule(database, now)
-  if (!schedule) return { status: 'disabled', delivered: 0 }
-  const scheduledAt = await nextDueTime(database, schedule, now)
-  if (!scheduledAt) return { status: 'not_due', delivered: 0 }
-  let cycle = await ensureCycle(database, schedule, scheduledAt, now)
-  if (cycle.status === 'COMPLETED') {
+  const accepted = await acceptDueLeaderboardRewardCycle(database, now)
+  if (accepted.status === 'disabled' || accepted.status === 'not_due') {
+    return { status: accepted.status, delivered: 0 }
+  }
+  let cycle = accepted.cycle!
+  if (accepted.status === 'already_completed') {
     return { status: 'already_completed', cycleId: cycle.id, delivered: 0 }
   }
   if (cycle.status === 'FAILED') {
     return { status: 'failed', cycleId: cycle.id, delivered: 0 }
   }
-  try {
+  if (cycle.status === 'PREPARING') {
+    await snapshotLeaderboardRewardCycle(database, cycle, now)
+    cycle = (await leaderboardRewardCycleById(database, cycle.id))!
     if (cycle.status === 'PREPARING') {
-      await snapshotCycle(database, cycle, now)
-      cycle = (await cycleBySchedule(
-        database,
-        schedule.version,
-        scheduledAt.toISOString()
-      ))!
-      if (cycle.status === 'PREPARING') {
-        return { status: 'in_progress', cycleId: cycle.id, delivered: 0 }
-      }
+      return { status: 'in_progress', cycleId: cycle.id, delivered: 0 }
     }
-    const delivered = await deliverCycle(database, cycle, now)
-    if (await cycleDeliveryComplete(database, cycle.id)) {
-      await applyLeaderboardRankReset(database, cycle.id, now)
-    }
-    const completed = await cycleBySchedule(
-      database,
-      schedule.version,
-      scheduledAt.toISOString()
-    )
-    return {
-      status: completed?.status === 'COMPLETED' ? 'completed' : 'in_progress',
-      cycleId: cycle.id,
-      delivered
-    }
-  } catch (error) {
-    await recordFailure(database, cycle, error, now)
-    throw error
+  }
+  const delivered = await deliverCycle(database, cycle, now)
+  await completeLeaderboardRewardCycle(database, cycle.id, now)
+  const completed = await leaderboardRewardCycleById(database, cycle.id)
+  return {
+    status: completed?.status === 'COMPLETED' ? 'completed' : 'in_progress',
+    cycleId: cycle.id,
+    delivered
   }
 }

@@ -17,6 +17,8 @@ import {
 
 // sendBatch accepts at most 100 messages. This is a platform boundary, not a
 // copied source-runner batch size or a release-level product invariant.
+export const CONQUEST_V2_REWARD_QUEUE_NAME =
+  'cloud-weasel-conquest-v2-reward-delivery'
 const QUEUE_PUBLISH_PAGE_SIZE = 100
 const DELIVERY_RECONCILE_SLEEP = '30 seconds'
 

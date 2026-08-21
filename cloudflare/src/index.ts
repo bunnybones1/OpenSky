@@ -4,6 +4,7 @@ import { applyAssetCachePolicy } from './asset-cache'
 import { deliverDueConquestGold } from './conquest-delivery'
 import { runConquestReadinessDrills } from './conquest-drill'
 import {
+  CONQUEST_V2_REWARD_QUEUE_NAME,
   ConquestV2RewardWorkflow,
   dispatchDueConquestV2Rewards,
   handleConquestV2RewardQueue,
@@ -11,7 +12,13 @@ import {
 } from './conquest-v2-reward-orchestration'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
-import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
+import {
+  dispatchDueLeaderboardRewards,
+  handleLeaderboardRewardQueue,
+  LEADERBOARD_REWARD_QUEUE_NAME,
+  LeaderboardRewardWorkflow,
+  type LeaderboardRewardQueueMessage
+} from './leaderboard-reward-orchestration'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
 import { runPushNotifications } from './push-notifications'
@@ -56,7 +63,7 @@ export default {
         deliverDueConquestGold(env.AUTH_DB),
         runConquestReadinessDrills(env),
         dispatchDueConquestV2Rewards(env),
-        runDueLeaderboardRewards(env.AUTH_DB),
+        dispatchDueLeaderboardRewards(env),
         runReferralStickerRewards(env.AUTH_DB),
         runDueSkypassAutoClaims(env.AUTH_DB),
         runPushNotifications(env.AUTH_DB, env),
@@ -69,11 +76,30 @@ export default {
     )
   },
   async queue(
-    batch: MessageBatch<ConquestV2RewardQueueMessage>,
+    batch: MessageBatch<
+      ConquestV2RewardQueueMessage | LeaderboardRewardQueueMessage
+    >,
     env
   ): Promise<void> {
-    await handleConquestV2RewardQueue(batch, env.AUTH_DB)
+    if (batch.queue === CONQUEST_V2_REWARD_QUEUE_NAME) {
+      await handleConquestV2RewardQueue(
+        batch as MessageBatch<ConquestV2RewardQueueMessage>,
+        env.AUTH_DB
+      )
+      return
+    }
+    if (batch.queue === LEADERBOARD_REWARD_QUEUE_NAME) {
+      await handleLeaderboardRewardQueue(
+        batch as MessageBatch<LeaderboardRewardQueueMessage>,
+        env.AUTH_DB
+      )
+      return
+    }
+    throw new Error(`unsupported Queue binding: ${batch.queue}`)
   }
-} satisfies ExportedHandler<Env, ConquestV2RewardQueueMessage>
+} satisfies ExportedHandler<
+  Env,
+  ConquestV2RewardQueueMessage | LeaderboardRewardQueueMessage
+>
 
-export { ConquestV2RewardWorkflow }
+export { ConquestV2RewardWorkflow, LeaderboardRewardWorkflow }

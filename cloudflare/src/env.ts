@@ -2,6 +2,10 @@ import type {
   ConquestV2RewardQueueMessage,
   ConquestV2RewardWorkflowParams
 } from './conquest-v2-reward-orchestration'
+import type {
+  LeaderboardRewardQueueMessage,
+  LeaderboardRewardWorkflowParams
+} from './leaderboard-reward-orchestration'
 
 export interface Env {
   ASSETS: Fetcher
@@ -42,5 +46,7 @@ export interface Env {
   MATCH_SERVICE: Fetcher
   CONQUEST_V2_REWARD_WORKFLOW?: Workflow<ConquestV2RewardWorkflowParams>
   CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>
+  LEADERBOARD_REWARD_WORKFLOW?: Workflow<LeaderboardRewardWorkflowParams>
+  LEADERBOARD_REWARD_QUEUE?: Queue<LeaderboardRewardQueueMessage>
   WORKER_VERSION: WorkerVersionMetadata
 }

@@ -55,48 +55,165 @@ export const leaderboardGateErrors = (evidence = {}) => {
     "case 'GMActivateLeaderboardRewardSchedule'",
     "case 'GMDisableLeaderboardRewardSchedule'"
   ])
+  requireTokens(evidence.handoffMigration, 'Workflow handoff schema', [
+    'CREATE TABLE leaderboard_reward_cycle_orchestrations',
+    "workflow_instance_id = 'leaderboard-cycle-' || cycle_id",
+    'CREATE TRIGGER leaderboard_reward_cycle_orchestration_insert_guard',
+    'CREATE TRIGGER leaderboard_reward_cycle_orchestration_update_guard',
+    "award.application_status = 'APPLIED'",
+    'CREATE TABLE leaderboard_reward_delivery_failures',
+    'CREATE TRIGGER leaderboard_reward_delivery_failures_insert_guard',
+    "cycle.status = 'DELIVERING'",
+    'orchestration.completed_at IS NULL',
+    'leaderboard delivery failures are immutable'
+  ])
+  requireTokens(evidence.orchestration, 'Workflow and Queue runtime', [
+    'class LeaderboardRewardWorkflow extends WorkflowEntrypoint',
+    'dispatchDueLeaderboardRewards',
+    'acceptDueLeaderboardRewardCycle',
+    'publishUnappliedLeaderboardRewards',
+    'applyLeaderboardRewardQueueMessage',
+    'handleLeaderboardRewardQueue',
+    'completeLeaderboardRewardCycle',
+    "kind: 'LEADERBOARD_REWARD'",
+    'message.retry()'
+  ])
+  requireTokens(evidence.rewardWorker, 'reward business runtime', [
+    'snapshotLeaderboardRewardCycle',
+    'deliverLeaderboardRewardPlayer',
+    'leaderboardRewardDeliveryComplete',
+    'completeLeaderboardRewardCycle'
+  ])
+  requireTokens(evidence.worker, 'scheduled and Queue routing', [
+    'dispatchDueLeaderboardRewards(env)',
+    'LEADERBOARD_REWARD_QUEUE_NAME',
+    'handleLeaderboardRewardQueue(',
+    'LeaderboardRewardWorkflow'
+  ])
+  requireTokens(evidence.tests, 'effect tests', [
+    'recovers a D1-to-Workflow creation gap after a later schedule disable',
+    'runs one Workflow through Queue receipts and one guarded rank reset',
+    'isolates Queue players and recovers attempt seven after six failures',
+    'does not preserve the old fixed player batch as product behavior',
+    'does not abandon an entitlement at the source attempt ceiling'
+  ])
+  if (evidence.worker?.includes('runDueLeaderboardRewards(env.AUTH_DB)')) {
+    errors.push('leaderboard cron still performs player delivery directly')
+  }
+  for (const copiedMechanism of [
+    'MAX_PLAYERS_PER_RUN',
+    'MAX_ATTEMPTS',
+    'attempt_count = attempt_count + 1'
+  ]) {
+    if (evidence.rewardWorker?.includes(copiedMechanism)) {
+      errors.push(
+        `leaderboard runtime still copies source execution mechanism: ${copiedMechanism}`
+      )
+    }
+  }
+  if (evidence.config !== undefined) {
+    const workflows = evidence.config?.workflows ?? []
+    const producers = evidence.config?.queues?.producers ?? []
+    const consumers = evidence.config?.queues?.consumers ?? []
+    const workflow = workflows.find(
+      value => value.binding === 'LEADERBOARD_REWARD_WORKFLOW'
+    )
+    const producer = producers.find(
+      value => value.binding === 'LEADERBOARD_REWARD_QUEUE'
+    )
+    const consumer = consumers.find(value => value.queue === producer?.queue)
+    if (
+      workflow?.class_name !== 'LeaderboardRewardWorkflow' ||
+      !workflow.name ||
+      !producer?.queue ||
+      !consumer?.dead_letter_queue
+    ) {
+      errors.push(
+        'leaderboard Workflow, Queue producer, consumer, and DLQ must fail closed together'
+      )
+    }
+  }
   return errors
 }
 
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const [policy, activationMigration, operationsMigration, operations, staff, api] =
-    await Promise.all([
-      readFile(
-        path.join(root, 'cloudflare/src/leaderboard-reward-policy.ts'),
-        'utf8'
+  const [
+    policy,
+    activationMigration,
+    operationsMigration,
+    operations,
+    staff,
+    api,
+    handoffMigration,
+    orchestration,
+    rewardWorker,
+    worker,
+    tests,
+    configText
+  ] = await Promise.all([
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-policy.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
       ),
-      readFile(
-        path.join(
-          root,
-          'cloudflare/migrations/0088_leaderboard_reward_policy_activation.sql'
-        ),
-        'utf8'
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0096_leaderboard_reward_schedule_operations.sql'
       ),
-      readFile(
-        path.join(
-          root,
-          'cloudflare/migrations/0096_leaderboard_reward_schedule_operations.sql'
-        ),
-        'utf8'
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/src/leaderboard-reward-schedule-operations.ts'
       ),
-      readFile(
-        path.join(
-          root,
-          'cloudflare/src/leaderboard-reward-schedule-operations.ts'
-        ),
-        'utf8'
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'cloudflare/migrations/0122_leaderboard_reward_workflow_handoffs.sql'
       ),
-      readFile(path.join(root, 'cloudflare/src/staff.ts'), 'utf8'),
-      readFile(path.join(root, 'cloudflare/src/api.ts'), 'utf8')
-    ])
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-orchestration.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare/src/leaderboard-reward-worker.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare/src/index.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare/test/leaderboard-reward-worker.test.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'wrangler.jsonc'), 'utf8')
+  ])
   const errors = leaderboardGateErrors({
     policy,
     activationMigration,
     operationsMigration,
     operations,
     staff,
-    api
+    api,
+    handoffMigration,
+    orchestration,
+    rewardWorker,
+    worker,
+    tests,
+    config: JSON.parse(configText)
   })
   if (errors.length) {
     process.stderr.write(`${errors.join('\n')}\n`)
@@ -104,7 +221,7 @@ const main = async () => {
     return
   }
   process.stdout.write(
-    'Leaderboard cadence operations preserve pinned policy, independent approval, and dormant defaults\n'
+    'Leaderboard cadence and Workflow/Queue delivery preserve policy, independent approval, exact outcomes, and re-drivable failure\n'
   )
 }
 

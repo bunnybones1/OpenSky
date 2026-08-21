@@ -44,6 +44,11 @@
       "name": "cloud-weasel-conquest-v2-rewards",
       "binding": "CONQUEST_V2_REWARD_WORKFLOW",
       "class_name": "ConquestV2RewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-leaderboard-rewards",
+      "binding": "LEADERBOARD_REWARD_WORKFLOW",
+      "class_name": "LeaderboardRewardWorkflow"
     }
   ],
   "queues": {
@@ -51,12 +56,20 @@
       {
         "queue": "cloud-weasel-conquest-v2-reward-delivery",
         "binding": "CONQUEST_V2_REWARD_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-leaderboard-reward-delivery",
+        "binding": "LEADERBOARD_REWARD_QUEUE"
       }
     ],
     "consumers": [
       {
         "queue": "cloud-weasel-conquest-v2-reward-delivery",
         "dead_letter_queue": "cloud-weasel-conquest-v2-reward-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-leaderboard-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-leaderboard-reward-delivery-dlq"
       }
     ]
   },

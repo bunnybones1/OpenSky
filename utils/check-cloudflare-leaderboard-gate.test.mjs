@@ -46,7 +46,72 @@ const validEvidence = () => ({
     "case 'GMProposeLeaderboardRewardSchedule'",
     "case 'GMActivateLeaderboardRewardSchedule'",
     "case 'GMDisableLeaderboardRewardSchedule'"
-  ].join('\n')
+  ].join('\n'),
+  handoffMigration: [
+    'CREATE TABLE leaderboard_reward_cycle_orchestrations',
+    "workflow_instance_id = 'leaderboard-cycle-' || cycle_id",
+    'CREATE TRIGGER leaderboard_reward_cycle_orchestration_insert_guard',
+    'CREATE TRIGGER leaderboard_reward_cycle_orchestration_update_guard',
+    "award.application_status = 'APPLIED'",
+    'CREATE TABLE leaderboard_reward_delivery_failures',
+    'CREATE TRIGGER leaderboard_reward_delivery_failures_insert_guard',
+    "cycle.status = 'DELIVERING'",
+    'orchestration.completed_at IS NULL',
+    'leaderboard delivery failures are immutable'
+  ].join('\n'),
+  orchestration: [
+    'class LeaderboardRewardWorkflow extends WorkflowEntrypoint',
+    'dispatchDueLeaderboardRewards',
+    'acceptDueLeaderboardRewardCycle',
+    'publishUnappliedLeaderboardRewards',
+    'applyLeaderboardRewardQueueMessage',
+    'handleLeaderboardRewardQueue',
+    'completeLeaderboardRewardCycle',
+    "kind: 'LEADERBOARD_REWARD'",
+    'message.retry()'
+  ].join('\n'),
+  rewardWorker: [
+    'snapshotLeaderboardRewardCycle',
+    'deliverLeaderboardRewardPlayer',
+    'leaderboardRewardDeliveryComplete',
+    'completeLeaderboardRewardCycle'
+  ].join('\n'),
+  worker: [
+    'dispatchDueLeaderboardRewards(env)',
+    'LEADERBOARD_REWARD_QUEUE_NAME',
+    'handleLeaderboardRewardQueue(',
+    'LeaderboardRewardWorkflow'
+  ].join('\n'),
+  tests: [
+    'recovers a D1-to-Workflow creation gap after a later schedule disable',
+    'runs one Workflow through Queue receipts and one guarded rank reset',
+    'isolates Queue players and recovers attempt seven after six failures',
+    'does not preserve the old fixed player batch as product behavior',
+    'does not abandon an entitlement at the source attempt ceiling'
+  ].join('\n'),
+  config: {
+    workflows: [
+      {
+        name: 'cloud-weasel-leaderboard-rewards',
+        binding: 'LEADERBOARD_REWARD_WORKFLOW',
+        class_name: 'LeaderboardRewardWorkflow'
+      }
+    ],
+    queues: {
+      producers: [
+        {
+          queue: 'cloud-weasel-leaderboard-reward-delivery',
+          binding: 'LEADERBOARD_REWARD_QUEUE'
+        }
+      ],
+      consumers: [
+        {
+          queue: 'cloud-weasel-leaderboard-reward-delivery',
+          dead_letter_queue: 'cloud-weasel-leaderboard-reward-delivery-dlq'
+        }
+      ]
+    }
+  }
 })
 
 test('accepts the reviewed leaderboard operations boundary', () => {
@@ -83,4 +148,54 @@ test('fails closed when monotonic version or independent approval disappears', (
       )
     }).some(error => error.includes('activated_at'))
   )
+})
+
+test('rejects direct cron delivery and copied retry or player limits', () => {
+  const evidence = validEvidence()
+  assert.ok(
+    leaderboardGateErrors({
+      ...evidence,
+      worker: `${evidence.worker}\nrunDueLeaderboardRewards(env.AUTH_DB)`
+    }).some(error => error.includes('cron'))
+  )
+  for (const copied of [
+    'MAX_PLAYERS_PER_RUN',
+    'MAX_ATTEMPTS',
+    'attempt_count = attempt_count + 1'
+  ]) {
+    assert.ok(
+      leaderboardGateErrors({
+        ...evidence,
+        rewardWorker: `${evidence.rewardWorker}\n${copied}`
+      }).some(error => error.includes(copied))
+    )
+  }
+})
+
+test('requires the Workflow, Queue, consumer, and DLQ together', () => {
+  const evidence = validEvidence()
+  for (const config of [
+    { ...evidence.config, workflows: [] },
+    {
+      ...evidence.config,
+      queues: { ...evidence.config.queues, producers: [] }
+    },
+    {
+      ...evidence.config,
+      queues: {
+        ...evidence.config.queues,
+        consumers: [
+          {
+            queue: 'cloud-weasel-leaderboard-reward-delivery'
+          }
+        ]
+      }
+    }
+  ]) {
+    assert.ok(
+      leaderboardGateErrors({ ...evidence, config }).some(error =>
+        error.includes('fail closed')
+      )
+    )
+  }
 })
