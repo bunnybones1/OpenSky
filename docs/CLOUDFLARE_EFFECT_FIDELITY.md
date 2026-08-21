@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: proposed architecture contract; runtime implementation is frozen pending
-review. This document does not authorize provisioning, migration, deployment,
-feature activation, or a live drill.
+Status: ratified architecture contract. Runtime implementation may continue
+under this contract, but this document does not authorize provisioning,
+migration, deployment, feature activation, or a live drill.
 
 ## Purpose
 
@@ -240,17 +240,16 @@ assertion must exercise the TypeScript/Cloudflare behavior.
 Each completed milestone receives its own commit. Runtime milestones are not
 deployed while the production pause remains active.
 
-### 1. Ratify this contract and dispose of the frozen WIP
+### 1. Ratify this contract and dispose of the frozen WIP (completed)
 
-- Review this document as the architecture rule.
-- Preserve the current uncommitted Conquest work until disposition is
-  approved, then discard `0121` and its attempt-lifecycle changes rather than
-  committing them.
+- This document was ratified as the architecture rule on 2026-08-21.
+- The uncommitted Conquest `0121` migration and its four attempt-lifecycle
+  source/test/gate changes were discarded rather than committed.
 - Salvage only independently justified behavior, such as an immutable atomic
   snapshot, in a later clean change.
 
-Exit evidence: clean worktree except user-owned `temp/`, this contract
-committed, and no runtime change hidden in the documentation commit.
+Exit evidence: clean worktree except user-owned `temp/`, the contract and gate
+audit committed, and no runtime change hidden in either documentation commit.
 
 ### 2. Build the behavior map and reclassify gates
 

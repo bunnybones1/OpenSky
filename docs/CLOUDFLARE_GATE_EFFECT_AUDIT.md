@@ -2,7 +2,7 @@
 
 Status date: 2026-08-21
 
-Status: audit-only companion to
+Status: ratified gate classification and companion to
 [`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). It does not
 authorize runtime changes, migration, deployment, or feature activation.
 
@@ -236,8 +236,8 @@ beyond the preserved boundary and ordering remains deterministic.
 
 ### `conquest-gate`
 
-The current worktree version includes uncommitted `0121` audit material. It is
-not accepted release architecture.
+The uncommitted `0121` audit material was discarded when the effect-fidelity
+contract was ratified. It is not accepted release architecture.
 
 Keep:
 
@@ -281,15 +281,14 @@ replacement test must fail when the protected effect is deliberately broken.
 
 ## Recommended conversion order
 
-1. Exclude the uncommitted Conquest `0121` lifecycle from release evidence.
-2. Split exact retry constants out of `worker-runners`.
-3. Add post-match recovery/re-drive tests, then split the same constants,
+1. Split exact retry constants out of `worker-runners`.
+2. Add post-match recovery/re-drive tests, then split the same constants,
    ticker, batch, and work-group tokens out of `match-completion`.
-4. Convert `matchmaker-cadence` from a nine-runner topology check to
+3. Convert `matchmaker-cadence` from a nine-runner topology check to
    fake-time latency, mode coverage, ordering, and eviction recovery.
-5. Narrow the one source-ticker assertion in `matchmaker-session` to its
+4. Narrow the one source-ticker assertion in `matchmaker-session` to its
    already-tested authentication/read deadline effect.
-6. Let the Conquest Workflow/Queue decision provide the final target evidence
+5. Let the Conquest Workflow/Queue decision provide the final target evidence
    for `conquest-gate`.
 
 This order preserves the strongest existing safety boundaries while removing

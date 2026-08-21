@@ -7,13 +7,13 @@ source-faithful code, test, documentation, PR, and CI work may continue, but do
 not resume deployment, provisioning, product activation, or live drills
 without a new user request.
 
-Runtime implementation is additionally frozen while the effect-fidelity audit
-is reviewed. The Go services are behavioral oracles, not architecture
-templates; the proposed contract and revised milestone plan are in
-[`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). Until that
-direction is ratified, do not commit the uncommitted Conquest `0121` attempt
-lifecycle, simplify committed migrations `0119` or `0120`, or begin a
-Workflow/Queue spike. Read-only audit and documentation work remain safe.
+The effect-fidelity contract was ratified on 2026-08-21, so local runtime,
+test, and architecture work may resume under
+[`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). The Go
+services are behavioral oracles, not architecture templates. The uncommitted
+Conquest `0121` attempt lifecycle was discarded; migrations `0119` and `0120`
+must be reassessed before production. The production mutation pause remains in
+force.
 
 ## Exact checkpoint
 
