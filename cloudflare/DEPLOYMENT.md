@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `9071de09` is tested but not
+- Paused branch checkpoint: runtime commit `942cc42b` is tested but not
   deployed and passed the complete local release contract. Migrations
   `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
@@ -66,6 +66,11 @@
   and `initialized`. The location key is the addressed per-proposal Durable
   Object name (`match:<proposal-id>`); registry-only `replayID` is excluded
   while the separate recent-match and replay contracts remain unchanged.
+  The nested public `serverInfo` also follows the Go `GameServerInfo`
+  optionality contract: absent `internalHostname` and `internalHttp` values are
+  omitted instead of serialized as empty strings. Public `ws`, `http`, and
+  `releaseVersion` values are unchanged, and no internal service address is
+  exposed.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game

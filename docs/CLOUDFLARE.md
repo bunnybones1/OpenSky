@@ -2717,6 +2717,28 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source public match-server wire parity — 2026-08-21
+
+Milestone `942cc42b` preserves the Go matchmaker's public `GameServerInfo`
+JSON boundary. The source declares `internalHostname` and `internalHttp` with
+`omitempty`; Cloudflare has no internal player endpoint, so the gateway now
+omits those fields instead of returning empty-string placeholders. Its public
+`ws`, `http`, and `releaseVersion` values remain unchanged.
+
+The mutation-tested `check:cloudflare:match-info` gate derives the source
+server fields and optionality from the Go JSON tags. It rejects lost
+`omitempty` markers, reintroduced Worker placeholders, weakened exact runtime
+assertions, and missing complete-build wiring. Exact initialized and creating
+Workers responses cover the public server object.
+
+The complete local release contract passed for `942cc42b`: 514 main-Worker
+tests, 36 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

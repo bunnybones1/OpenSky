@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9071de09`
-  (`Preserve source match info wire`)
-- Latest tested runtime commit: `9071de09`
-  (`Preserve source match info wire`)
+- Last code/test checkpoint: `942cc42b`
+  (`Preserve source match server wire`)
+- Latest tested runtime commit: `942cc42b`
+  (`Preserve source match server wire`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,8 +23,8 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `9071de09` are committed and
-  tested but are **not deployed**. The exact local build at `9071de09`
+- The runtime changes from `38386294` through `942cc42b` are committed and
+  tested but are **not deployed**. The exact local build at `942cc42b`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
@@ -178,8 +178,10 @@ handoff then passed exact-head run
 `e34ad958`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32472939789> passed the
 timeout-countdown checkpoint and its handoff at exact pushed head `dab12467`.
-The newer `9071de09` public-wire checkpoint and this refreshed handoff require
-a later green exact-head CI run before any production mutation.
+Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
+public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
+The newer `942cc42b` public-server-wire checkpoint and this refreshed handoff
+require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1509,6 +1511,31 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source public match-server wire milestone
+
+Commit `942cc42b` preserves the Go matchmaker's public `GameServerInfo` JSON
+boundary. The source marks `internalHostname` and `internalHttp` as optional
+with `omitempty`; because Cloudflare has no internal player endpoint, the
+gateway now omits those fields instead of serializing invented empty strings.
+The browser-facing `ws`, `http`, and `releaseVersion` fields are unchanged,
+and no internal service address is exposed.
+
+The same mutation-tested `check:cloudflare:match-info` gate now derives the
+server field names and optionality directly from the Go JSON tags. It rejects
+a source `omitempty` drift, reintroduced empty internal fields, weakened
+exact-equality Workers assertions, and missing complete-build wiring. Active
+and initializing match regressions both assert the exact public server object.
+
+The exact complete local release contract passed with exit code zero for
+`942cc42b`: 514 main-Worker tests, 36 game-server unit and 130 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
