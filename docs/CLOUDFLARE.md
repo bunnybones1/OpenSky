@@ -2768,6 +2768,31 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-c8882239.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source mixed-match mode parity — 2026-08-21
+
+Milestone `9f44672e` preserves the source's two distinct mixed-match mode
+projections. Pending and active registry information uses player one's mode in
+the single `MatchInfo.mode` field and returns the same object to both players.
+The game server's match-wide mode instead remains the common mode when both
+inputs agree and becomes `UNKNOWN` for a mixed Practice PvP/ranked pair; that
+value drives replay initialization and completed recent-match recovery.
+
+The Cloudflare gateway now returns `modes[0]` for either active participant,
+and a shared game-server helper derives the source equal-or-`UNKNOWN` value for
+both replay and recent-match persistence. Exact Workers regressions cover both
+participants, and unit tests cover equal inputs plus either mixed ordering.
+The mutation-tested `check:cloudflare:match-info` gate derives the registry and
+game-server rules from the original TypeScript `Server`, `MatchCollection`,
+and `Match` sources and pins every Cloudflare consumer and regression.
+
+The complete local release contract passed for `9f44672e`: 514 main-Worker
+tests, 37 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-fd3d9163.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

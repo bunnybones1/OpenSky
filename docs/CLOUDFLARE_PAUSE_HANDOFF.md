@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `0e928b59`
-  (`Preserve source recent match wire`)
-- Latest tested runtime commit: `0e928b59`
-  (`Preserve source recent match wire`)
+- Last code/test checkpoint: `9f44672e`
+  (`Preserve source mixed match modes`)
+- Latest tested runtime commit: `9f44672e`
+  (`Preserve source mixed match modes`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `0e928b59` are committed and
-  tested but are **not deployed**. The exact local build at `0e928b59`
-  produced web entry `/assets/index-c8882239.js` and game entry
+- The runtime changes from `38386294` through `9f44672e` are committed and
+  tested but are **not deployed**. The exact local build at `9f44672e`
+  produced web entry `/assets/index-fd3d9163.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -182,7 +182,7 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
-The newer `0e928b59` recent-match-wire checkpoint and this refreshed handoff
+The newer `9f44672e` mixed-match-mode checkpoint and its refreshed handoff
 require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1573,6 +1573,40 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries are `/assets/index-c8882239.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source mixed-match mode milestone
+
+Commit `9f44672e` preserves the original distinction between registry-visible
+and completed mixed-match modes. While a source match is pending or active,
+the registry stores player one's requested mode in the single public
+`MatchInfo.mode` field and returns that same object to both participants. The
+source game server separately reduces equal modes to that shared mode and a
+mixed Practice PvP/ranked pair to `UNKNOWN`; that match-wide value is used by
+the replay bootstrap and completed recent-match record.
+
+Cloudflare now follows both rules. The gateway projects `modes[0]` for either
+participant's in-progress match info, while one shared TypeScript helper
+derives the equal-or-`UNKNOWN` game-server value for replay initialization and
+recent-match persistence. Per-participant matchmaking modes, deck admission,
+and allocation remain unchanged.
+
+Exact gateway Workers regressions prove both participants observe player
+one's Practice PvP mode for a mixed active match. Focused unit tests cover
+equal modes and both mixed input orderings. The expanded mutation-tested
+`check:cloudflare:match-info` gate derives both behaviors from the original
+TypeScript `Server`, `MatchCollection`, and `Match` implementations and rejects
+drift in the gateway, shared helper, runtime evidence, or complete-build
+wiring.
+
+The exact complete local release contract passed with exit code zero for
+`9f44672e`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-fd3d9163.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
