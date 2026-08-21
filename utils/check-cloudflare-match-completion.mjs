@@ -1026,11 +1026,15 @@ export const rankPublicationErrors = value => {
     sourceMatches,
     sourceRankUpper,
     sourceGrandweaverTask,
+    sourceDeckRankUpdater,
+    sourceDeckRankTask,
     sourceLeveller,
     gameMatch,
+    publication,
     progression,
     deckRanks,
     migration,
+    deckRankMigration,
     rankPublication,
     competitive,
     conquest,
@@ -1101,6 +1105,34 @@ export const rankPublicationErrors = value => {
     errors.push('Source level-up no longer promotes ranked modes')
   }
 
+  for (const token of [
+    'if match == nil || match.ID == 0',
+    'if !match.IsRankedConstructed()',
+    'EnqueueTaskIgnoringDuplicates(jobqueue.DeckRankUpdateWorkGroup',
+    'jobqueue.DeckRankUpdateTask{',
+    'MatchID: match.ID',
+    'Season:  season'
+  ]) {
+    if (!sourceDeckRankUpdater.includes(token)) {
+      errors.push(`Source asynchronous deck-rank enqueue changed: ${token}`)
+    }
+  }
+  for (const token of [
+    'DeckRankUpdateRetryDelay = 5',
+    'DeckRankUpdateMaxRetries = 5',
+    'func (r *DeckRankUpdateRunner) MaxBatchSize() int',
+    'return 5',
+    'time.NewTicker(time.Minute)',
+    'FindByID(taskPayload.MatchID)',
+    'r.deckRankUpdater.UpdateFromMatch(sess, match, taskPayload.Season)',
+    'UpdateFailedTasks([]*data.Task{task}, DeckRankUpdateRetryDelay, DeckRankUpdateMaxRetries)',
+    'UpdateCompletedTasks([]*data.Task{task})'
+  ]) {
+    if (!sourceDeckRankTask.includes(token)) {
+      errors.push(`Source deck-rank task changed: ${token}`)
+    }
+  }
+
   const compactMigration = migration.replace(/\s+/g, ' ')
   for (const token of [
     'ADD COLUMN ranked_discovery_before',
@@ -1127,6 +1159,31 @@ export const rankPublicationErrors = value => {
     }
   }
 
+  const compactDeckRankMigration = deckRankMigration.replace(/\s+/g, ' ')
+  for (const token of [
+    'CREATE TABLE multiplayer_match_deck_rank_jobs',
+    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
+    'attempt_count BETWEEN 0 AND 5',
+    'multiplayer_match_deck_rank_job_guard',
+    "ledger.status = 'active'",
+    "'$.match.matchSettings.season'",
+    'multiplayer_match_authoritative_decks',
+    'multiplayer_match_stats_applied',
+    'multiplayer_match_experience',
+    'multiplayer_match_deck_rank_job_update_guard',
+    'OLD.attempt_count < 5',
+    "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
+    'multiplayer_match_deck_rank_receipt_guard',
+    "ledger.status = 'ended'",
+    'multiplayer_match_deck_rank_receipt_apply_job',
+    'multiplayer_match_deck_rank_receipt_no_update',
+    'multiplayer_match_deck_rank_receipt_no_delete'
+  ]) {
+    if (!compactDeckRankMigration.includes(token)) {
+      errors.push(`deck-rank task migration is missing: ${token}`)
+    }
+  }
+
   const compactProgression = progression.replace(/\s+/g, ' ')
   for (const token of [
     "type AccountStatPublicationPhase = 'RANKED_STATS' | 'EXPERIENCE_UNLOCK'",
@@ -1144,6 +1201,36 @@ export const rankPublicationErrors = value => {
   ]) {
     if (!compactProgression.includes(token)) {
       errors.push(`rank receipt coordinator is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000',
+    'stageDeckRankJob',
+    'INSERT OR IGNORE INTO multiplayer_match_deck_rank_jobs',
+    'runDeckRankJob',
+    "ledger.status !== 'ended'",
+    "throw new DeckRankJobPendingError('waiting for terminal match publication')",
+    'job.attempt_count + 1',
+    'DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount',
+    'await applyDeckRanks(',
+    'failExhaustedDeckRankJob('
+  ]) {
+    if (!deckRanks.includes(token)) {
+      errors.push(`asynchronous deck-rank task is missing: ${token}`)
+    }
+  }
+  if (!/DECK_RANK_UPDATE_MAX_ATTEMPTS\s*=\s*5\b/.test(deckRanks)) {
+    errors.push('asynchronous deck-rank task is missing: exact five attempts')
+  }
+  for (const token of [
+    'deckRankJob: boolean',
+    'multiplayer_match_deck_rank_jobs job',
+    "job.status = 'PENDING'",
+    'job.attempt_count = 0',
+    'job.created_at = ?'
+  ]) {
+    if (!publication.includes(token)) {
+      errors.push(`deck-rank publication barrier is missing: ${token}`)
     }
   }
   for (const token of [
@@ -1194,16 +1281,68 @@ export const rankPublicationErrors = value => {
       'this.finishMatchSockets()'
     ]
   )
+  requireOrdered(
+    errors,
+    'Worker asynchronous deck-rank lifecycle',
+    workerCompletion,
+    [
+      'applyMatchExperience(',
+      '/internal/stage-deck-rank',
+      'await publishMatchCompletion(this.env.AUTH_DB, {',
+      'deckRankJob: requiresDeckRankJob',
+      'metadata.deckRankUpdatePending = deckRankJob.state ===',
+      'metadata.completionRecorded = true',
+      "type: 'rewards'",
+      'this.finishMatchSockets()',
+      'DECK_RANK_UPDATE_RETRY_DELAY_MS'
+    ]
+  )
+  const synchronousCompletion = bodyBetween(
+    gameMatch,
+    'private async recordCompletionWithRetry(',
+    'private async retryDeckRankUpdateWithRetry('
+  )
+  if (synchronousCompletion.includes('/internal/apply-deck-rank')) {
+    errors.push('Worker applies deck ranks before terminal client delivery')
+  }
+  for (const token of [
+    'private async retryDeckRankUpdateWithRetry(',
+    '/internal/apply-deck-rank',
+    'metadata.deckRankUpdatePending = job.state ===',
+    'metadata.deckRankUpdatePending ||'
+  ]) {
+    if (!gameMatch.includes(token)) {
+      errors.push(`Worker deck-rank alarm lifecycle is missing: ${token}`)
+    }
+  }
   for (const token of [
     'metadata.grandweaverRecalculationPending = true',
+    'const GRANDWEAVER_RETRY_DELAY_MS = 15_000',
+    'private async retryPostCompletionJobs(',
     'retryGrandweaverRecalculationWithRetry(',
     'metadata.grandweaverRecalculationPending',
-    'await this.state.storage.setAlarm(now + 10_000)'
+    'return now + GRANDWEAVER_RETRY_DELAY_MS'
   ]) {
     if (!gameMatch.includes(token)) {
       errors.push(`asynchronous Grandweaver retry is missing: ${token}`)
     }
   }
+  requireOrdered(
+    errors,
+    'independent post-completion task runners',
+    bodyBetween(
+      gameMatch,
+      'private async retryPostCompletionJobs(',
+      'private async retryDeckRankUpdateWithRetry('
+    ),
+    [
+      'if (metadata.deckRankUpdatePending)',
+      'await this.retryDeckRankUpdateWithRetry(metadata, now)',
+      'if (metadata.grandweaverRecalculationPending)',
+      'await this.retryGrandweaverRecalculationWithRetry(',
+      'Math.min(...deadlines)'
+    ]
+  )
 
   const compactProjection = rankPublication.replace(/\s+/g, ' ')
   for (const token of [
@@ -1251,7 +1390,10 @@ export const rankPublicationErrors = value => {
     'toEqual([ 200, 409 ])',
     "error: 'waiting_for_match_publication'",
     "SET status = 'ended'",
-    'expect(retry.status).toBe(200)'
+    'expect(retry.status).toBe(200)',
+    "it('fails closed after the source five attempts and rejects job or receipt tampering'",
+    "state: attempt === 5 ? 'failed' : 'pending'",
+    "toThrow('deck rank receipt is invalid')"
   ]) {
     if (!compactDeckRanksTest.includes(token)) {
       errors.push(`deck-rank publication retry regression is missing: ${token}`)
@@ -1281,6 +1423,11 @@ export const rankPublicationErrors = value => {
       'game-server rank receipts',
       gameServerTest,
       'multiplayer_match_account_stat_outcomes'
+    ],
+    [
+      'post-terminal deck-rank task',
+      gameServerTest,
+      'Only a later alarm may execute both'
     ],
     [
       'asynchronous Grandweaver job',
@@ -1464,9 +1611,12 @@ const main = async () => {
   const [
     sourceRankUpper,
     sourceGrandweaverTask,
+    sourceDeckRankUpdater,
+    sourceDeckRankTask,
     deckRanks,
     deckRanksTest,
     rankMigration,
+    deckRankMigration,
     rankPublication,
     conquest,
     progressionSupport,
@@ -1492,6 +1642,11 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(path.join(root, 'api', 'lib', 'decks', 'rank_updater.go'), 'utf8'),
+    readFile(
+      path.join(root, 'api', 'lib', 'jobqueue', 'deck_rank_update_runner.go'),
+      'utf8'
+    ),
     readFile(
       path.join(root, 'game-server-cloudflare', 'src', 'deck-ranks.ts'),
       'utf8'
@@ -1511,6 +1666,15 @@ const main = async () => {
         'cloudflare',
         'migrations',
         '0118_match_account_stat_publication.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0119_match_deck_rank_jobs.sql'
       ),
       'utf8'
     ),
@@ -1612,11 +1776,15 @@ const main = async () => {
       sourceMatches,
       sourceRankUpper,
       sourceGrandweaverTask,
+      sourceDeckRankUpdater,
+      sourceDeckRankTask,
       sourceLeveller,
       gameMatch,
+      publication,
       progression,
       deckRanks,
       migration: rankMigration,
+      deckRankMigration,
       rankPublication,
       competitive,
       conquest,

@@ -12,6 +12,7 @@ import { ReplayAnalyticsMessage } from '@opensky/shared/gameAnalytics'
 import { prismsToDeckClass } from '@opensky/shared/helpers'
 import {
   conquestMatchMode,
+  isRankedConstructedMatchModes,
   isRankedMatchModes,
   sourceGameServerMode
 } from '@opensky/shared/match-modes'
@@ -34,7 +35,11 @@ import {
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
 import { publishMatchCompletion } from './completion-publication'
-import type { RankedSettlementReceipt } from './deck-ranks'
+import {
+  DECK_RANK_UPDATE_RETRY_DELAY_MS,
+  type DeckRankJobReceipt,
+  type RankedSettlementReceipt
+} from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
@@ -80,6 +85,7 @@ const QUEST_PROGRESS_KEY = 'match:quest-progress'
 const REPLAY_RECORD_PREFIX = 'match:replay:'
 const REPLAY_NEXT_INDEX_KEY = 'match:replay-next-index'
 const MAX_REPLAY_RECORD_BYTES = 1024 * 1024
+const GRANDWEAVER_RETRY_DELAY_MS = 15_000
 
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
@@ -113,6 +119,7 @@ interface MatchMetadata {
   result?: MatchResult
   expiredBeforeLoad?: boolean
   completionRecorded?: boolean
+  deckRankUpdatePending?: boolean
   grandweaverRecalculationPending?: boolean
   analyticsEnqueuedAt?: string
   // Source ThreadPlayerContext.realDeckString values, captured once from the
@@ -574,11 +581,11 @@ export class GameMatch implements DurableObject {
               await this.questProgress()
             )
           }
-        } else if (metadata.grandweaverRecalculationPending) {
-          await this.retryGrandweaverRecalculationWithRetry(
-            metadata,
-            Date.now()
-          )
+        } else if (
+          metadata.deckRankUpdatePending ||
+          metadata.grandweaverRecalculationPending
+        ) {
+          await this.retryPostCompletionJobs(metadata, Date.now())
         } else if (
           !metadata.expiredBeforeLoad &&
           !metadata.analyticsEnqueuedAt
@@ -847,6 +854,7 @@ export class GameMatch implements DurableObject {
       state: stateInfo,
       questProgress: runtime.questProgress(),
       completionRecorded: metadata.completionRecorded === true,
+      deckRankUpdatePending: metadata.deckRankUpdatePending === true,
       analyticsEnqueuedAt: metadata.analyticsEnqueuedAt,
       sockets: this.state.getWebSockets().length
     })
@@ -1696,6 +1704,37 @@ export class GameMatch implements DurableObject {
         endedAt,
         stats.rewards
       )
+      const deckRankJobResponse =
+        await this.env.DECK_RANK_COORDINATOR.getByName('current-library').fetch(
+          new Request(
+            'https://deck-rank-coordinator/internal/stage-deck-rank',
+            {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+              },
+              body: JSON.stringify({
+                proposalId: metadata.proposalId,
+                season: metadata.match.matchSettings.season,
+                processedAt: endedAt
+              })
+            }
+          )
+        )
+      if (!deckRankJobResponse.ok) {
+        throw new Error(
+          `deck-rank job staging returned ${deckRankJobResponse.status}`
+        )
+      }
+      const deckRankJob = await deckRankJobResponse.json<DeckRankJobReceipt>()
+      const requiresDeckRankJob = isRankedConstructedMatchModes(gameModes)
+      if (
+        (requiresDeckRankJob && deckRankJob.state !== 'pending') ||
+        (!requiresDeckRankJob && deckRankJob.state !== 'not_applicable')
+      ) {
+        throw new Error('deck-rank job staging result is invalid')
+      }
       const rewards: [Reward[], Reward[]] = [
         sourceMatchEndRewardListWire({
           rankAndStats: stats.rewards[0],
@@ -1741,6 +1780,7 @@ export class GameMatch implements DurableObject {
         endedAt,
         requirements: {
           rankedStats: isRankedMatchModes(gameModes),
+          deckRankJob: requiresDeckRankJob,
           warmUpProgress:
             warmUpProgressPlayer(gameModes, winner, status) !== undefined,
           conquestMode,
@@ -1750,6 +1790,7 @@ export class GameMatch implements DurableObject {
             isLeavePenaltyMode(gameModes[loser])
         }
       })
+      metadata.deckRankUpdatePending = deckRankJob.state === 'pending'
       try {
         metadata.grandweaverRecalculationPending =
           (await applyPublishedGrandweavers(
@@ -1780,8 +1821,16 @@ export class GameMatch implements DurableObject {
         })
       }
       this.finishMatchSockets()
-      if (metadata.grandweaverRecalculationPending) {
-        await this.state.storage.setAlarm(now + 10_000)
+      const taskDeadlines = [
+        metadata.deckRankUpdatePending
+          ? now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+          : undefined,
+        metadata.grandweaverRecalculationPending
+          ? now + GRANDWEAVER_RETRY_DELAY_MS
+          : undefined
+      ].filter((deadline): deadline is number => deadline !== undefined)
+      if (taskDeadlines.length > 0) {
+        await this.state.storage.setAlarm(Math.min(...taskDeadlines))
       } else {
         await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
       }
@@ -1795,10 +1844,86 @@ export class GameMatch implements DurableObject {
     }
   }
 
+  private async retryPostCompletionJobs(metadata: MatchMetadata, now: number) {
+    // The Go DeckRankUpdateRunner and PromoteGrandmastersRunner are separate
+    // work groups. A failed or delayed task must not prevent the other task
+    // from making progress merely because Durable Objects expose one alarm.
+    const deadlines: number[] = []
+    if (metadata.deckRankUpdatePending) {
+      const deadline = await this.retryDeckRankUpdateWithRetry(metadata, now)
+      if (deadline !== undefined) deadlines.push(deadline)
+    }
+    if (metadata.grandweaverRecalculationPending) {
+      const deadline = await this.retryGrandweaverRecalculationWithRetry(
+        metadata,
+        now
+      )
+      if (deadline !== undefined) deadlines.push(deadline)
+    }
+    if (
+      !metadata.deckRankUpdatePending &&
+      !metadata.grandweaverRecalculationPending
+    ) {
+      await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
+      return
+    }
+    await this.state.storage.setAlarm(
+      deadlines.length > 0
+        ? Math.min(...deadlines)
+        : now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+    )
+  }
+
+  private async retryDeckRankUpdateWithRetry(
+    metadata: MatchMetadata,
+    now: number
+  ): Promise<number | undefined> {
+    try {
+      const response = await this.env.DECK_RANK_COORDINATOR.getByName(
+        'current-library'
+      ).fetch(
+        new Request('https://deck-rank-coordinator/internal/apply-deck-rank', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+          },
+          body: JSON.stringify({
+            proposalId: metadata.proposalId,
+            attemptedAt: new Date(now).toISOString()
+          })
+        })
+      )
+      if (!response.ok) {
+        throw new Error(`deck-rank task returned ${response.status}`)
+      }
+      const job = await response.json<DeckRankJobReceipt>()
+      if (!['pending', 'applied', 'failed'].includes(job.state)) {
+        throw new Error('deck-rank task result is invalid')
+      }
+      metadata.deckRankUpdatePending = job.state === 'pending'
+      await this.state.storage.put(METADATA_KEY, metadata)
+      if (metadata.deckRankUpdatePending) {
+        const nextAttemptAt = job.nextAttemptAt
+          ? Date.parse(job.nextAttemptAt)
+          : Number.NaN
+        return Number.isFinite(nextAttemptAt) && nextAttemptAt > now
+          ? nextAttemptAt
+          : now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+      }
+      return undefined
+    } catch (error) {
+      // This source worker is post-commit. Its task can retry or become FAILED,
+      // but must never reopen the ledger or suppress terminal client delivery.
+      console.error('deck rank update retry failed', metadata.proposalId, error)
+      return now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+    }
+  }
+
   private async retryGrandweaverRecalculationWithRetry(
     metadata: MatchMetadata,
     now: number
-  ) {
+  ): Promise<number | undefined> {
     try {
       const result = await applyPublishedGrandweavers(
         this.env.AUTH_DB,
@@ -1807,17 +1932,16 @@ export class GameMatch implements DurableObject {
       metadata.grandweaverRecalculationPending = result === 'waiting'
       await this.state.storage.put(METADATA_KEY, metadata)
       if (metadata.grandweaverRecalculationPending) {
-        await this.state.storage.setAlarm(now + 10_000)
-      } else {
-        await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
+        return now + GRANDWEAVER_RETRY_DELAY_MS
       }
+      return undefined
     } catch (error) {
       console.error(
         'grandweaver recalculation retry failed',
         metadata.proposalId,
         error
       )
-      await this.state.storage.setAlarm(now + 10_000)
+      return now + GRANDWEAVER_RETRY_DELAY_MS
     }
   }
 
@@ -1829,6 +1953,7 @@ export class GameMatch implements DurableObject {
       metadata.analyticsEnqueuedAt ||
       metadata.expiredBeforeLoad ||
       !metadata.completionRecorded ||
+      metadata.deckRankUpdatePending ||
       metadata.grandweaverRecalculationPending
     ) {
       return

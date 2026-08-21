@@ -388,6 +388,9 @@ const join = (socket: WebSocket, subkeyByte: number, loadingProgress = 1) => {
 beforeEach(async () => {
   proposalId = `proposal-test-${crypto.randomUUID()}`
   await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare('DELETE FROM users'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
+    env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_rank_jobs'),
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_deck_ranks_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_rank_wins'),
     env.AUTH_DB.prepare('DELETE FROM player_deck_ranks'),
@@ -396,9 +399,7 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM multiplayer_match_stats_applied'),
     env.AUTH_DB.prepare('DELETE FROM player_rank_up_rewards'),
     env.AUTH_DB.prepare('DELETE FROM player_account_stats'),
-    env.AUTH_DB.prepare('DELETE FROM multiplayer_matches'),
-    env.AUTH_DB.prepare('DELETE FROM player_quests'),
-    env.AUTH_DB.prepare('DELETE FROM users')
+    env.AUTH_DB.prepare('DELETE FROM player_quests')
   ])
 })
 
@@ -3869,6 +3870,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(await endedStatus.json()).toMatchObject({
       ended: true,
       completionRecorded: true,
+      deckRankUpdatePending: true,
       state: { statusType: 'GameOver', winner: 1 },
       questProgress: [{ 7001: 0 }, { 7002: 1 }]
     })
@@ -3889,6 +3891,80 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       winner_player: 1,
       ended_at: expect.any(String)
     })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_match_deck_rank_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'PENDING', attempt_count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT 1 FROM multiplayer_match_deck_ranks_applied
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toBeNull()
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_deck_ranks'
+      ).first('count')
+    ).toBe(0)
+
+    // The source deck-rank and Grandweaver tasks use independent work groups.
+    // Make both responsibilities pending on the same Durable Object alarm and
+    // prove that completing the deck task does not postpone the other runner.
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const metadata = await state.storage.get<{
+          grandweaverRecalculationPending?: boolean
+        }>('match:metadata')
+        if (!metadata) throw new Error('match metadata was not persisted')
+        metadata.grandweaverRecalculationPending = true
+        await state.storage.put('match:metadata', metadata)
+      }
+    )
+
+    // Terminal rewards and match_ended were already delivered and the player
+    // socket was already closed above. Only a later alarm may execute both
+    // independent source tasks against the committed match.
+    expect(await runDurableObjectAlarm(stub())).toBe(true)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_match_deck_rank_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'APPLIED', attempt_count: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_deck_ranks_applied WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        'SELECT COUNT(*) AS count FROM player_deck_ranks'
+      ).first('count')
+    ).toBe(2)
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        expect(
+          (
+            await state.storage.get<{
+              grandweaverRecalculationPending?: boolean
+            }>('match:metadata')
+          )?.grandweaverRecalculationPending
+        ).toBe(false)
+      }
+    )
     const realDecks = await readAuthoritativeMatchDecks(env.AUTH_DB, proposalId)
     expect(realDecks.map(deck => deck.cardIds.length)).toEqual([30, 30])
     expect(fixture().match.player1.privateSeed.cards).toEqual([])

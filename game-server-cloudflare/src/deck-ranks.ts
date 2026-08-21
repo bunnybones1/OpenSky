@@ -46,6 +46,24 @@ interface MatchRow {
   player2_user_id: string | null
 }
 
+interface TerminalMatchRow extends MatchRow {
+  status: string
+  winner_player: number | null
+  result_json: string | null
+}
+
+interface DeckRankJobRow {
+  proposal_id: string
+  library_revision: string
+  season: number
+  status: 'PENDING' | 'APPLIED' | 'FAILED'
+  attempt_count: number
+  created_at: string
+  last_attempt_at: string | null
+  next_attempt_at: string | null
+  applied_at: string | null
+}
+
 interface RankRow {
   deck_string: string
   deck_class: DeckClass
@@ -92,8 +110,21 @@ export interface DeckRankReceipt {
 
 export interface RankedSettlementReceipt {
   stats: MatchStatsReceipt
-  deckRanks: DeckRankReceipt
 }
+
+export interface DeckRankJobReceipt {
+  state: 'not_applicable' | 'pending' | 'applied' | 'failed'
+  attemptCount: number
+  createdAt?: string
+  lastAttemptAt?: string
+  nextAttemptAt?: string
+  appliedAt?: string
+}
+
+export const DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000
+export const DECK_RANK_UPDATE_MAX_ATTEMPTS = 5
+
+export class DeckRankJobPendingError extends Error {}
 
 const parseDeck = (
   deck: AuthoritativeMatchDeck,
@@ -228,6 +259,101 @@ const storedReceipt = async (
         processedAt: row.processed_at
       }
     : undefined
+}
+
+const validTimestamp = (value: string) => {
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+}
+
+const readDeckRankJob = (
+  database: D1Database,
+  proposalId: string
+): Promise<DeckRankJobRow | null> =>
+  database
+    .prepare(
+      `SELECT proposal_id, library_revision, season, status, attempt_count,
+              created_at, last_attempt_at, next_attempt_at, applied_at
+       FROM multiplayer_match_deck_rank_jobs WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<DeckRankJobRow>()
+
+const jobReceipt = (job: DeckRankJobRow): DeckRankJobReceipt => ({
+  state:
+    job.status === 'APPLIED'
+      ? 'applied'
+      : job.status === 'FAILED'
+        ? 'failed'
+        : 'pending',
+  attemptCount: job.attempt_count,
+  createdAt: job.created_at,
+  ...(job.last_attempt_at
+    ? { lastAttemptAt: job.last_attempt_at }
+    : {}),
+  ...(job.next_attempt_at
+    ? { nextAttemptAt: job.next_attempt_at }
+    : {}),
+  ...(job.applied_at ? { appliedAt: job.applied_at } : {})
+})
+
+const readMatch = (
+  database: D1Database,
+  proposalId: string
+): Promise<MatchRow | null> =>
+  database
+    .prepare(
+      `SELECT mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<MatchRow>()
+
+/**
+ * Mirrors AsyncRankUpdater.UpdateFromMatch: the end-match transaction records
+ * one duplicate-safe task for ranked-constructed matches and does not touch
+ * the deck aggregates. The publication barrier makes this job and the ended
+ * ledger visible together to player-facing readers.
+ */
+export const stageDeckRankJob = async (
+  database: D1Database,
+  proposalId: string,
+  season: number,
+  createdAt: string
+): Promise<DeckRankJobReceipt> => {
+  if (
+    !Number.isSafeInteger(season) ||
+    season < 1 ||
+    season > 10_000 ||
+    !validTimestamp(createdAt)
+  ) {
+    throw new Error('deck rank job input is invalid')
+  }
+  const match = await readMatch(database, proposalId)
+  if (!match) throw new Error('match ledger row was not found')
+  if (!isRankedConstructedMatchModes(storedMatchModes(match))) {
+    return { state: 'not_applicable', attemptCount: 0 }
+  }
+  await database
+    .prepare(
+      `INSERT OR IGNORE INTO multiplayer_match_deck_rank_jobs
+         (proposal_id, library_revision, season, status, attempt_count,
+          created_at, last_attempt_at, next_attempt_at, applied_at)
+       VALUES (?, ?, ?, 'PENDING', 0, ?, NULL, NULL, NULL)`
+    )
+    .bind(proposalId, LIBRARY_REVISION, season, createdAt)
+    .run()
+  const stored = await readDeckRankJob(database, proposalId)
+  if (
+    !stored ||
+    stored.library_revision !== LIBRARY_REVISION ||
+    stored.season !== season ||
+    stored.created_at !== createdAt
+  ) {
+    throw new Error('deck rank job conflicts with match settlement')
+  }
+  return jobReceipt(stored)
 }
 
 /**
@@ -442,6 +568,132 @@ export const applyDeckRanks = async (
   return stored
 }
 
+const terminalMatch = (
+  database: D1Database,
+  proposalId: string
+): Promise<TerminalMatchRow | null> =>
+  database
+    .prepare(
+      `SELECT mode, player1_mode, player2_mode, player1_user_id,
+              player2_user_id, status, winner_player, result_json
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<TerminalMatchRow>()
+
+const failExhaustedDeckRankJob = async (
+  database: D1Database,
+  proposalId: string
+) => {
+  await database
+    .prepare(
+      `UPDATE multiplayer_match_deck_rank_jobs
+       SET status = 'FAILED', next_attempt_at = NULL
+       WHERE proposal_id = ? AND status = 'PENDING' AND attempt_count = ?`
+    )
+    .bind(proposalId, DECK_RANK_UPDATE_MAX_ATTEMPTS)
+    .run()
+}
+
+/**
+ * Runs one source DeckRankUpdateRunner attempt. Winner and status are derived
+ * from the committed ledger rather than accepted from the caller. Starting an
+ * attempt stores its linear retry deadline first, so a Durable Object eviction
+ * cannot strand the responsibility between mutation and rescheduling.
+ */
+export const runDeckRankJob = async (
+  database: D1Database,
+  proposalId: string,
+  attemptedAt: string
+): Promise<DeckRankJobReceipt> => {
+  if (!validTimestamp(attemptedAt)) {
+    throw new Error('deck rank attempt time is invalid')
+  }
+  let job = await readDeckRankJob(database, proposalId)
+  if (!job) throw new Error('deck rank job was not found')
+  if (job.status !== 'PENDING') return jobReceipt(job)
+
+  const ledger = await terminalMatch(database, proposalId)
+  if (!ledger || ledger.status !== 'ended') {
+    throw new DeckRankJobPendingError('waiting for terminal match publication')
+  }
+  if (
+    job.next_attempt_at &&
+    Date.parse(job.next_attempt_at) > Date.parse(attemptedAt)
+  ) {
+    return jobReceipt(job)
+  }
+  if (job.attempt_count >= DECK_RANK_UPDATE_MAX_ATTEMPTS) {
+    await failExhaustedDeckRankJob(database, proposalId)
+    job = await readDeckRankJob(database, proposalId)
+    if (!job) throw new Error('deck rank job disappeared')
+    return jobReceipt(job)
+  }
+
+  const attemptCount = job.attempt_count + 1
+  const nextAttemptAt = new Date(
+    Date.parse(attemptedAt) +
+      DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount
+  ).toISOString()
+  const started = await database
+    .prepare(
+      `UPDATE multiplayer_match_deck_rank_jobs
+       SET attempt_count = attempt_count + 1, last_attempt_at = ?,
+           next_attempt_at = ?
+       WHERE proposal_id = ? AND status = 'PENDING'
+         AND attempt_count = ?
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)`
+    )
+    .bind(
+      attemptedAt,
+      nextAttemptAt,
+      proposalId,
+      job.attempt_count,
+      attemptedAt
+    )
+    .run()
+  if ((started.meta.changes ?? 0) < 1) {
+    job = await readDeckRankJob(database, proposalId)
+    if (!job) throw new Error('deck rank job disappeared')
+    return jobReceipt(job)
+  }
+
+  try {
+    const winner =
+      ledger.winner_player === null
+        ? undefined
+        : ledger.winner_player === 0 || ledger.winner_player === 1
+          ? ledger.winner_player
+          : (() => {
+              throw new Error('terminal match winner is invalid')
+            })()
+    const result = ledger.result_json
+      ? (JSON.parse(ledger.result_json) as { status?: unknown })
+      : {}
+    const status = result.status ?? MatchStatus.COMPLETED
+    if (!Object.values(MatchStatus).includes(status as MatchStatus)) {
+      throw new Error('terminal match status is invalid')
+    }
+    await applyDeckRanks(
+      database,
+      proposalId,
+      job.season,
+      winner,
+      status as MatchStatus,
+      attemptedAt
+    )
+  } catch (error) {
+    console.error('deck rank update task failed', proposalId, error)
+    if (attemptCount >= DECK_RANK_UPDATE_MAX_ATTEMPTS) {
+      await failExhaustedDeckRankJob(database, proposalId)
+    }
+  }
+
+  job = await readDeckRankJob(database, proposalId)
+  if (!job) throw new Error('deck rank job disappeared')
+  return jobReceipt(job)
+}
+
 export class DeckRankCoordinator implements DurableObject {
   constructor(
     private readonly state: DurableObjectState,
@@ -457,73 +709,116 @@ export class DeckRankCoordinator implements DurableObject {
       return Response.json({ error: 'not found' }, { status: 404 })
     }
     return this.state.blockConcurrencyWhile(async () => {
-      const body = (await request.json()) as {
-        proposalId?: unknown
-        season?: unknown
-        winner?: unknown
-        status?: unknown
-        processedAt?: unknown
-      }
-      if (
-        typeof body.proposalId !== 'string' ||
-        typeof body.season !== 'number' ||
-        ![undefined, 0, 1].includes(body.winner as undefined | number) ||
-        !Object.values(MatchStatus).includes(body.status as MatchStatus) ||
-        typeof body.processedAt !== 'string'
-      ) {
-        return Response.json(
-          { error: 'invalid deck-rank request' },
-          { status: 400 }
-        )
-      }
-      // Player and deck ratings both depend on their immediately preceding
-      // Glicko state. Keep them under one global coordinator lock and preserve
-      // the source order: player stats first, then deck ranks.
-      let stats: MatchStatsReceipt
+      const pathname = new URL(request.url).pathname
+      let body: Record<string, unknown>
       try {
-        stats = await applyMatchStats(
-          this.env.AUTH_DB,
-          body.proposalId,
-          body.season,
-          body.winner as 0 | 1 | undefined,
-          body.status as MatchStatus,
-          body.processedAt
-        )
-      } catch (error) {
-        if (error instanceof RankPublicationPendingError) {
+        body = (await request.json()) as Record<string, unknown>
+      } catch {
+        return Response.json({ error: 'invalid JSON' }, { status: 400 })
+      }
+
+      if (pathname === '/internal/apply') {
+        if (
+          typeof body.proposalId !== 'string' ||
+          typeof body.season !== 'number' ||
+          ![undefined, 0, 1].includes(body.winner as undefined | number) ||
+          !Object.values(MatchStatus).includes(body.status as MatchStatus) ||
+          typeof body.processedAt !== 'string'
+        ) {
           return Response.json(
-            { error: 'waiting_for_match_publication' },
-            { status: 409 }
+            { error: 'invalid ranked-stat request' },
+            { status: 400 }
           )
         }
-        throw error
+        // Both account ratings depend on their immediately preceding Glicko
+        // state. The same global coordinator later serializes deck-task
+        // attempts, matching each source runner's single work-group lock.
+        let stats: MatchStatsReceipt
+        try {
+          stats = await applyMatchStats(
+            this.env.AUTH_DB,
+            body.proposalId,
+            body.season,
+            body.winner as 0 | 1 | undefined,
+            body.status as MatchStatus,
+            body.processedAt
+          )
+        } catch (error) {
+          if (error instanceof RankPublicationPendingError) {
+            return Response.json(
+              { error: 'waiting_for_match_publication' },
+              { status: 409 }
+            )
+          }
+          throw error
+        }
+        // The source recalculates this rolling matchmaking score after saving
+        // the match and deliberately treats a score failure as non-fatal.
+        try {
+          await applyConquestScores(
+            this.env.AUTH_DB,
+            body.proposalId,
+            body.season,
+            body.winner as 0 | 1 | undefined,
+            body.status as MatchStatus,
+            body.processedAt
+          )
+        } catch (error) {
+          console.error('recalculate Conquest scores failed', error)
+        }
+        return Response.json({ stats } satisfies RankedSettlementReceipt)
       }
-      const deckRanks = await applyDeckRanks(
-        this.env.AUTH_DB,
-        body.proposalId,
-        body.season,
-        body.winner as 0 | 1 | undefined,
-        body.status as MatchStatus,
-        body.processedAt
-      )
-      // The source recalculates this rolling matchmaking score after saving
-      // the match and deliberately treats a score failure as non-fatal.
-      try {
-        await applyConquestScores(
+
+      if (pathname === '/internal/stage-deck-rank') {
+        if (
+          typeof body.proposalId !== 'string' ||
+          typeof body.season !== 'number' ||
+          typeof body.processedAt !== 'string'
+        ) {
+          return Response.json(
+            { error: 'invalid deck-rank job request' },
+            { status: 400 }
+          )
+        }
+        const job = await stageDeckRankJob(
           this.env.AUTH_DB,
           body.proposalId,
           body.season,
-          body.winner as 0 | 1 | undefined,
-          body.status as MatchStatus,
           body.processedAt
         )
-      } catch (error) {
-        console.error('recalculate Conquest scores failed', error)
+        return Response.json(job)
       }
-      return Response.json({
-        stats,
-        deckRanks
-      } satisfies RankedSettlementReceipt)
+
+      if (pathname === '/internal/apply-deck-rank') {
+        if (
+          typeof body.proposalId !== 'string' ||
+          typeof body.attemptedAt !== 'string'
+        ) {
+          return Response.json(
+            { error: 'invalid deck-rank task request' },
+            { status: 400 }
+          )
+        }
+        try {
+          return Response.json(
+            await runDeckRankJob(
+              this.env.AUTH_DB,
+              body.proposalId,
+              body.attemptedAt
+            )
+          )
+        } catch (error) {
+          if (error instanceof DeckRankJobPendingError) {
+            return Response.json(
+              { error: 'waiting_for_match_publication' },
+              { status: 409 }
+            )
+          }
+          throw error
+        }
+      }
+
+      return Response.json({ error: 'not found' }, { status: 404 })
     })
   }
 }

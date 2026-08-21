@@ -238,12 +238,16 @@ const rankFixtures = async () => {
       sourceMatches: 'api/rpc/matches.go',
       sourceRankUpper: 'api/lib/rankup/match_player_rank_upper.go',
       sourceGrandweaverTask: 'api/lib/jobqueue/promote_grandmasters_runner.go',
+      sourceDeckRankUpdater: 'api/lib/decks/rank_updater.go',
+      sourceDeckRankTask: 'api/lib/jobqueue/deck_rank_update_runner.go',
       sourceLeveller: 'api/lib/levels/xp/leveller.go',
       gameMatch: 'game-server-cloudflare/src/game-match.ts',
+      publication: 'game-server-cloudflare/src/completion-publication.ts',
       progression: 'game-server-cloudflare/src/progression.ts',
       deckRanks: 'game-server-cloudflare/src/deck-ranks.ts',
       migration:
         'cloudflare/migrations/0118_match_account_stat_publication.sql',
+      deckRankMigration: 'cloudflare/migrations/0119_match_deck_rank_jobs.sql',
       rankPublication: 'cloudflare/src/rank-publication.ts',
       competitive: 'cloudflare/src/competitive.ts',
       conquest: 'cloudflare/src/conquest.ts',
@@ -948,9 +952,44 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     },
     {
       ...value,
+      sourceDeckRankUpdater: value.sourceDeckRankUpdater.replace(
+        'EnqueueTaskIgnoringDuplicates(jobqueue.DeckRankUpdateWorkGroup',
+        'SkipTask(jobqueue.DeckRankUpdateWorkGroup'
+      )
+    },
+    {
+      ...value,
+      sourceDeckRankTask: value.sourceDeckRankTask.replace(
+        'DeckRankUpdateMaxRetries = 5',
+        'DeckRankUpdateMaxRetries = 0'
+      )
+    },
+    {
+      ...value,
       migration: value.migration.replace(
         "'$.match.matchSettings.season'",
         "'$.matchSettings.season'"
+      )
+    },
+    {
+      ...value,
+      deckRankMigration: value.deckRankMigration.replace(
+        'multiplayer_match_deck_rank_receipt_guard',
+        'removed_match_deck_rank_receipt_guard'
+      )
+    },
+    {
+      ...value,
+      deckRankMigration: value.deckRankMigration.replace(
+        "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
+        "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'active'"
+      )
+    },
+    {
+      ...value,
+      publication: value.publication.replace(
+        'multiplayer_match_deck_rank_jobs job',
+        'removed_match_deck_rank_jobs job'
       )
     },
     {
@@ -977,8 +1016,43 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       deckRanks: value.deckRanks.replace(
-        "{ error: 'waiting_for_match_publication' },\n            { status: 409 }",
-        "{ error: 'waiting_for_match_publication' },\n            { status: 200 }"
+        'error instanceof RankPublicationPendingError',
+        'error instanceof Error'
+      )
+    },
+    {
+      ...value,
+      deckRanks: value.deckRanks.replace(
+        'DECK_RANK_UPDATE_MAX_ATTEMPTS = 5',
+        'DECK_RANK_UPDATE_MAX_ATTEMPTS = 50'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        '/internal/stage-deck-rank',
+        '/internal/apply-deck-rank'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'private async retryDeckRankUpdateWithRetry(',
+        'private async skipDeckRankUpdateWithRetry('
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'private async retryPostCompletionJobs(',
+        'private async serializePostCompletionJobs('
+      )
+    },
+    {
+      ...value,
+      deckRanksTest: value.deckRanksTest.replace(
+        'fails closed after the source five attempts and rejects job or receipt tampering',
+        'retries deck ranks'
       )
     },
     {

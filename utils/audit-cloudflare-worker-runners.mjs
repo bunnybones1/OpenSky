@@ -42,7 +42,12 @@ export const EXPECTED_RUNNERS = {
     disposition: 'ported',
     evidenceFile: 'game-server-cloudflare/src/deck-ranks.ts',
     evidence: [
-      'api/lib/decks/rank_updater.go',
+      'stageDeckRankJob',
+      'runDeckRankJob',
+      'multiplayer_match_deck_rank_jobs',
+      'DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000',
+      'DECK_RANK_UPDATE_MAX_ATTEMPTS = 5',
+      'waiting for terminal match publication',
       'multiplayer_match_deck_ranks_applied'
     ]
   },

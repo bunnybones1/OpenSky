@@ -11,7 +11,7 @@ export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0118_match_account_stat_publication.sql'
+  '0119_match_deck_rank_jobs.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -79,7 +79,34 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
     WHERE type = 'trigger'
       AND name = 'multiplayer_match_account_stat_snapshot_guard'
       AND instr(sql, '$.match.matchSettings.season') > 0)
-    AS account_stat_payload_guard_present;`
+    AS account_stat_payload_guard_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'multiplayer_match_deck_rank_jobs')
+    AS deck_rank_job_table_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'multiplayer_match_deck_rank_job_guard',
+      'multiplayer_match_deck_rank_job_update_guard',
+      'multiplayer_match_deck_rank_job_no_delete',
+      'multiplayer_match_deck_rank_receipt_guard',
+      'multiplayer_match_deck_rank_receipt_apply_job',
+      'multiplayer_match_deck_rank_receipt_no_update',
+      'multiplayer_match_deck_rank_receipt_no_delete'
+    )) AS deck_rank_job_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND (
+      (name = 'multiplayer_match_deck_rank_job_guard'
+        AND instr(sql, '$.match.matchSettings.season') > 0
+        AND instr(sql, 'multiplayer_match_experience') > 0)
+      OR
+      (name = 'multiplayer_match_deck_rank_job_update_guard'
+        AND instr(sql, 'OLD.attempt_count < 5') > 0
+        AND instr(sql, "ledger.status = 'ended'") > 0)
+      OR
+      (name = 'multiplayer_match_deck_rank_receipt_guard'
+        AND instr(sql, "ledger.status = 'ended'") > 0)
+    )) AS deck_rank_job_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -355,7 +382,10 @@ export const productionSchemaRow = output => {
     row?.account_stat_publication_columns_present !== 1 ||
     row?.account_stat_publication_tables_present !== 3 ||
     row?.account_stat_publication_guards_present !== 12 ||
-    row?.account_stat_payload_guard_present !== 1
+    row?.account_stat_payload_guard_present !== 1 ||
+    row?.deck_rank_job_table_present !== 1 ||
+    row?.deck_rank_job_guards_present !== 7 ||
+    row?.deck_rank_job_contract_guards_present !== 3
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

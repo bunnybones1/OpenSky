@@ -2,6 +2,7 @@ import type { GameMode } from '@opensky/proto'
 
 export interface MatchCompletionRequirements {
   rankedStats: boolean
+  deckRankJob: boolean
   warmUpProgress: boolean
   conquestMode?: GameMode
   abandonPenalty: boolean
@@ -68,6 +69,20 @@ export const publishMatchCompletion = async (
          )
          AND (
            ? = 0 OR EXISTS (
+             SELECT 1 FROM multiplayer_match_deck_rank_jobs job
+             WHERE job.proposal_id = ledger.proposal_id
+               AND job.created_at = ?
+               AND (
+                 ledger.status = 'ended'
+                 OR (
+                   job.status = 'PENDING'
+                   AND job.attempt_count = 0
+                 )
+               )
+           )
+         )
+         AND (
+           ? = 0 OR EXISTS (
              SELECT 1 FROM multiplayer_match_warmups_applied warmup
              WHERE warmup.proposal_id = ledger.proposal_id
                AND warmup.processed_at = ?
@@ -119,6 +134,8 @@ export const publishMatchCompletion = async (
       publication.endedAt,
       publication.endedAt,
       publication.requirements.rankedStats ? 1 : 0,
+      publication.endedAt,
+      publication.requirements.deckRankJob ? 1 : 0,
       publication.endedAt,
       publication.requirements.warmUpProgress ? 1 : 0,
       publication.endedAt,

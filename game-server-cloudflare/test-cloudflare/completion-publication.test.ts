@@ -11,6 +11,7 @@ import {
 const endedAt = '2026-08-20T21:00:00.000Z'
 const emptyRequirements = (): MatchCompletionRequirements => ({
   rankedStats: false,
+  deckRankJob: false,
   warmUpProgress: false,
   abandonPenalty: false
 })
