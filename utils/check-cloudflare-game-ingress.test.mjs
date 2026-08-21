@@ -88,6 +88,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handleJoinServer = async (',
+        "this.sendError(context, 'invalid authentication')",
+        "this.sendError(context, 'authentication failed')"
+      )
+    },
+    {
+      ...value,
       sourceMatchManager: value.sourceMatchManager.replace(
         'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      return',
         'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      context.connection.close()\n      return'
@@ -220,6 +229,22 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       workerMatch: value.workerMatch.replace(
         'this.safeSend(socket, `PONG:${ping.id}`)',
         "this.safeSend(socket, 'PONG')"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "message.type === 'join_server' ||",
+        "(role === 'player' && message.type === 'join_server') ||"
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        "case 'join_server': {",
+        "throw new SourceGameError('invalid authentication', 'server')",
+        "throw new GameProtocolError('not authorized')"
       )
     },
     {
@@ -384,6 +409,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('preserves source no-game gameplay before join_server'",
         "message: 'You have no game in progress!'",
         "message: 'Error: join_server is required first'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves source join authentication and unavailable-match errors'",
+        "message: 'invalid authentication'",
+        "message: 'Error: invalid authentication'"
       )
     },
     {

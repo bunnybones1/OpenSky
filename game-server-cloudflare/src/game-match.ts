@@ -493,7 +493,7 @@ export class GameMatch implements DurableObject {
           }
           const bootstrapAllowed =
             message.type === 'timesync' ||
-            (role === 'player' && message.type === 'join_server') ||
+            message.type === 'join_server' ||
             message.type === 'spectate_server'
           if (!bootstrapAllowed) {
             throw new GameProtocolError(
@@ -968,8 +968,16 @@ export class GameMatch implements DurableObject {
     const role = attachment.role ?? 'player'
     switch (message.type) {
       case 'join_server': {
-        if (role !== 'player')
-          throw new GameProtocolError('spectator cannot join as a player')
+        if (role !== 'player') {
+          // Google identity at the gateway supersedes the source JWT check.
+          // Preserve the source's two observable outcomes: an anonymous
+          // connection is unauthenticated, while an authenticated identity
+          // without this match receives the ordinary unavailable-match wire.
+          if (attachment.anonymousSpectator) {
+            throw new SourceGameError('invalid authentication', 'server')
+          }
+          throw new SourceGameError('match ended or cannot be found.', 'server')
+        }
         // MatchProxy.updateContext treats even the same socket as the prior
         // active context: it emits the source server-level displacement
         // notice, keeps the connection open, and then processes the rejoin.

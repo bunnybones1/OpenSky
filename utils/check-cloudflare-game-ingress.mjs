@@ -61,6 +61,21 @@ export const gameIngressErrors = ({
     'handleMessage = (',
     '\n\n  disconnect ='
   )
+
+  const sourceJoin = bodyBetween(
+    sourceMatchManager,
+    'private handleJoinServer = async (',
+    'private handleSpectate = async ('
+  )
+  requireOrdered(errors, 'Source explicit join errors', sourceJoin, [
+    'const playerID = this.authenticate(message.authToken)',
+    'if (!playerID) {',
+    "this.sendError(context, 'invalid authentication')",
+    'const match = matchbook.getMatchByPlayerID(playerID)',
+    "? 'match initializing, please try again later'",
+    ": 'match ended or cannot be found.'",
+    'this.sendError(context, message)'
+  ])
   requireOrdered(
     errors,
     'Source game unknown-message lifecycle',
@@ -333,11 +348,19 @@ export const gameIngressErrors = ({
       "message.type === 'error'",
       'return',
       'const bootstrapAllowed =',
+      "message.type === 'join_server'",
       "message.type === 'spectate_server'"
     ]
   )
   if (workerUnjoined.includes('attachment.detachedPlayerSession &&')) {
     errors.push('Worker no-game gameplay remains limited to detached players')
+  }
+  if (
+    workerUnjoined.includes(
+      "role === 'player' && message.type === 'join_server'"
+    )
+  ) {
+    errors.push('Worker still chooses join bootstrap from gateway role')
   }
   if (
     workerUnjoined.includes(
@@ -355,9 +378,9 @@ export const gameIngressErrors = ({
   const sourceUnavailableErrorCount = workerMatch.match(
     /throw new SourceGameError\('match ended or cannot be found\.', 'server'\)/g
   )?.length
-  if (sourceUnavailableErrorCount !== 3) {
+  if (sourceUnavailableErrorCount !== 4) {
     errors.push(
-      `Worker source unavailable-match errors changed: expected 3, found ${sourceUnavailableErrorCount ?? 0}`
+      `Worker source unavailable-match errors changed: expected 4, found ${sourceUnavailableErrorCount ?? 0}`
     )
   }
   const sourceStickerErrorCount = workerMatch.match(
@@ -378,6 +401,11 @@ export const gameIngressErrors = ({
     'Worker source message-selected spectator role',
     workerHandleMessage,
     [
+      "case 'join_server': {",
+      "if (role !== 'player') {",
+      'if (attachment.anonymousSpectator) {',
+      "throw new SourceGameError('invalid authentication', 'server')",
+      "throw new SourceGameError('match ended or cannot be found.', 'server')",
       "case 'spectate_server': {",
       'if (attachment.joined)',
       'await this.spectate(socket, attachment, message)',
@@ -489,6 +517,8 @@ export const gameIngressErrors = ({
         "it('preserves source no-game gameplay before join_server'",
         "message: 'You have no game in progress!'",
         "code: 1005, reason: ''",
+        "it('preserves source join authentication and unavailable-match errors'",
+        "message: 'invalid authentication'",
         "it('rejects player stickers outside the accepted match equipment'",
         "message: 'player used unowned sticker'",
         "it('preserves source spectate validation errors and empty closes'",
@@ -552,6 +582,24 @@ export const gameIngressErrors = ({
       "level: 'user'",
       "message: 'You have no game in progress!'",
       "code: 1005, reason: ''"
+    ]
+  )
+  const workerJoinErrorTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves source join authentication and unavailable-match errors'",
+    "it('restores the authoritative WASM snapshot"
+  )
+  requireOrdered(
+    errors,
+    'Worker source join-error runtime regression',
+    workerJoinErrorTest,
+    [
+      "[TRUSTED_ANONYMOUS_SPECTATOR_HEADER]: '1'",
+      "message: 'invalid authentication'",
+      'code: 1005,',
+      'const nonparticipant = await connectAs(',
+      "message: 'match ended or cannot be found.'",
+      'code: 1005,'
     ]
   )
   const workerStickerErrorTest = bodyBetween(

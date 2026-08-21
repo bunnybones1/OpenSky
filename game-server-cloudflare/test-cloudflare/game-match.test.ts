@@ -3037,6 +3037,49 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
   })
 
+  it('preserves source join authentication and unavailable-match errors', async () => {
+    await initializeMatch()
+
+    const anonymous = await connectAs(
+      SPECTATOR_PRINCIPAL,
+      ANONYMOUS_SPECTATOR_ID,
+      { [TRUSTED_ANONYMOUS_SPECTATOR_HEADER]: '1' }
+    )
+    const anonymousError = nextMessage(anonymous)
+    const anonymousClosed = new Promise<CloseEvent>(resolve =>
+      anonymous.addEventListener('close', resolve, { once: true })
+    )
+    join(anonymous, 0x31)
+    await expect(anonymousError).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'invalid authentication'
+    })
+    await expect(anonymousClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+
+    const nonparticipant = await connectAs(
+      SPECTATOR_PRINCIPAL,
+      SPECTATOR_USER_ID
+    )
+    const unavailableError = nextMessage(nonparticipant)
+    const unavailableClosed = new Promise<CloseEvent>(resolve =>
+      nonparticipant.addEventListener('close', resolve, { once: true })
+    )
+    join(nonparticipant, 0x32)
+    await expect(unavailableError).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'match ended or cannot be found.'
+    })
+    await expect(unavailableClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+  })
+
   it('restores the authoritative WASM snapshot and socket attachment after eviction', async () => {
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
