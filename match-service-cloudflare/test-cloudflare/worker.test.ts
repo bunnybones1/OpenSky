@@ -19,7 +19,7 @@ import matchServiceWorker, {
 } from '../src/worker'
 import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest-settlement'
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
-import { deliverDueConquestGold } from '../../cloudflare/src/conquest-delivery'
+import { applyConquestGoldDeliveryQueueMessage } from '../../cloudflare/src/conquest-delivery'
 import { ConquestDrillRepository } from '../../cloudflare/src/conquest-drill'
 import { ConquestReadinessOperationsRepository } from '../../cloudflare/src/conquest-readiness-operations'
 import { isConquestQueueReady } from '../../cloudflare/src/conquest-readiness'
@@ -495,8 +495,16 @@ const provisionReceiptBackedConquestReadiness = async () => {
   ).rejects.toThrow('verified off-chain Conquest drill receipts required')
 
   expect(
-    await deliverDueConquestGold(env.AUTH_DB, new Date(deliveredAt))
-  ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    await applyConquestGoldDeliveryQueueMessage(
+      env.AUTH_DB,
+      {
+        kind: 'CONQUEST_GOLD',
+        version: 1,
+        conquestId: conquest!.id
+      },
+      new Date(deliveredAt)
+    )
+  ).toBe('applied')
   const evidence = await env.AUTH_DB.prepare(
     `SELECT settlement.settlement_key, delivery.delivery_key
      FROM player_conquest_settlements settlement
