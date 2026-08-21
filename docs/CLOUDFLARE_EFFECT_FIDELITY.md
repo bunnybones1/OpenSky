@@ -328,8 +328,11 @@ then classified in
 The weekly leaderboard reward/reset conversion completed locally at
 `e555f930`: one Workflow per accepted cycle, one Queue message per snapshotted
 player, and D1 business receipts replace direct cron delivery and copied
-page/attempt limits. The other responsibilities remain separate later slices;
-none is selected without its own effect/recovery audit.
+page/attempt limits. Delayed Conquest Gold is the next independently audited
+slice, with its Queue/D1 boundary selected in
+[`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md).
+The other responsibilities remain separate later slices; none is selected
+without its own effect/recovery audit.
 
 - Move one responsibility at a time to the selected Workflow, Queue, Durable
   Object alarm, request-path idempotent update, or explicit retirement.

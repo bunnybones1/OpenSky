@@ -338,3 +338,11 @@ Continue with one unconverted main-Worker responsibility at a time from
 [`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md).
 Each next slice requires its own effect/recovery audit before a target topology
 or gate conversion is selected.
+
+Delayed Conquest Gold is now the selected next boundary. Its replacement gate
+must preserve the exact 24-hour D1 entitlement, pending-card visibility,
+moderation, atomic off-chain inventory/feed application, duplicate safety, and
+recoverability while rejecting direct cron grants and terminal abandonment
+after a copied attempt ceiling. The decision is recorded in
+[`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md);
+runtime and gate conversion remain a later milestone.

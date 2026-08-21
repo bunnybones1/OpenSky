@@ -2,7 +2,8 @@
 
 Status date: 2026-08-21
 
-Status: implemented locally at `e555f930`. This audit and milestone do not
+Status: leaderboard implemented locally at `e555f930`; delayed Conquest Gold
+selected as the next independently audited slice. This audit and milestone do not
 authorize provisioning, migration, activation, deployment, a live drill, or
 any production mutation.
 
@@ -15,11 +16,17 @@ one generic task engine, and do not preserve a Go runner's ticker, work group,
 batch size, retry delay, attempt ceiling, or task-table shape unless changing it
 would alter a player, client, authorization, publication, or recovery outcome.
 
-The selected implementation slice was the weekly leaderboard reward and
-rank-reset cycle. It now uses one deterministically named Workflow per accepted
-cycle, one Queue message per snapshotted player entitlement, and D1 business
-receipts for the immutable snapshot, off-chain inventory, feed/notification
-publication, rank reset, failures, and completion.
+The weekly leaderboard reward and rank-reset slice now uses one
+deterministically named Workflow per accepted cycle, one Queue message per
+snapshotted player entitlement, and D1 business receipts for the immutable
+snapshot, off-chain inventory, feed/notification publication, rank reset,
+failures, and completion.
+
+The next selected slice is delayed Conquest Gold delivery. Its separate effect
+and recovery decision is recorded in
+[`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md).
+It uses a delayed Queue message per D1 entitlement plus due-only cron re-drive;
+it does not need a Workflow or a copied task runner.
 
 ## Current fan-out
 
@@ -30,7 +37,7 @@ and recovery needs.
 
 | Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                      |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `deliverDueConquestGold`                | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Queue per pending D1 delivery, with a narrow discovery/re-drive trigger                 | Later slice; remove copied 100-item/five-attempt terminal behavior               |
+| `deliverDueConquestGold`                | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Selected next slice; remove copied 100-item/five-attempt terminal behavior       |
 | `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress               |
 | `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                          |
 | `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                          |
@@ -218,3 +225,8 @@ Workflow, Queue, DLQ, migration, and code must remain unprovisioned and
 undeployed until separately authorized after exact-head CI. Schedule activation
 is a later two-actor operation and is not implied by deploying dormant
 infrastructure.
+
+The selected delayed Gold Queue and its migration are likewise only an
+architecture decision at this checkpoint. They remain unimplemented and cannot
+be provisioned or deployed without a later tested runtime milestone and the
+same explicit authorization.
