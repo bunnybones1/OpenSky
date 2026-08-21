@@ -2659,6 +2659,39 @@ complete local release contract passed again at `9c905d01`, producing web
 entry `/assets/index-c8882239.js`; no suite-wide timeout or production runtime
 behavior changed.
 
+## Source per-player match timeout parity — 2026-08-21
+
+Milestone `a34af4c9` replaces the Cloudflare gateway's fixed
+`disconnectTimeout: 180` with the original match tracker's player-specific
+calculation. The remaining loading-assets TTL and scheduled disconnected-player
+abandon TTL are candidates; when both exist the source minimum wins, and when
+neither exists the value is zero. This preserves the original webapp's
+countdown and local timeout behavior without inventing a three-minute deadline.
+
+The main Worker reads an authenticated, deliberately narrow `match-info`
+projection from the addressed game Durable Object. It requires the expected
+proposal ID, initialized and nonterminal state, the target player's loading
+state, and safe-integer future deadlines before returning whole remaining
+seconds. Unavailable, malformed, stale, or mismatched status fails closed to
+zero. The scoped game status route is handled before runtime restoration, so
+the read does not reload the WASM engine or expose the existing full internal
+status response.
+
+The mutation-tested `check:cloudflare:match-info` gate now parses the Go
+minimum/fallback logic, the preserved webapp consumer, the narrow pre-runtime
+game route, both Worker regressions, and the complete-build wiring. Direct
+tests cover both deadlines, each deadline alone, finished loading, mismatched
+proposals, unavailable status, internal authentication, and the exact scoped
+response boundary.
+
+The complete local release contract passed for `a34af4c9`: 514 main-Worker
+tests, 36 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-874772de.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

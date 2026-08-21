@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9c905d01`
-  (`Stabilize leaderboard batch verification`)
-- Latest tested runtime commit: `f8b1601a`
-  (`Preserve source initializing match retry`)
+- Last code/test checkpoint: `a34af4c9`
+  (`Preserve source match timeout countdown`)
+- Latest tested runtime commit: `a34af4c9`
+  (`Preserve source match timeout countdown`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `f8b1601a` are committed and
-  tested but are **not deployed**. The exact local build at `9c905d01`
-  produced web entry `/assets/index-c8882239.js` and game entry
+- The runtime changes from `38386294` through `a34af4c9` are committed and
+  tested but are **not deployed**. The exact local build at `a34af4c9`
+  produced web entry `/assets/index-874772de.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -172,9 +172,12 @@ spectator-admission checkpoint and its refreshed handoff at exact pushed head
 join-admission checkpoint and refreshed handoff at `e864ee8a`, but one
 leaderboard batch test exceeded its five-second timeout after the other 511
 main-Worker tests passed. The same complete release contract passed locally.
-That CI timing failure must be reproduced or hardened, and the newer
-`f8b1601a` initializing-match checkpoint plus this refreshed handoff must
-receive green exact-head CI before any production mutation.
+The scoped timeout hardening, initializing-match checkpoint, and refreshed
+handoff then passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32471248703> at
+`e34ad958`. The newer `a34af4c9` timeout-countdown checkpoint and this
+refreshed handoff still require green exact-head CI before any production
+mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1439,6 +1442,43 @@ before shared-runner scheduling exceeded Vitest's five-second default; the
 case passed locally in 185 ms when isolated. The complete local release
 contract then passed at `9c905d01` with all counts above and web entry
 `/assets/index-c8882239.js`. The suite-wide timeout remains unchanged.
+
+## Source per-player match timeout milestone
+
+Commit `a34af4c9` replaces the Cloudflare gateway's invented fixed
+three-minute `disconnectTimeout` with the original match tracker's per-player
+deadline calculation:
+
+- while a player is still loading, the remaining loading-assets TTL is a
+  candidate;
+- while a disconnected player has a scheduled abandon, that remaining TTL is
+  a candidate;
+- when both apply, the source minimum wins; and
+- when neither applies or authoritative status cannot be validated, the
+  result is zero rather than a fabricated countdown.
+
+The main Worker obtains only the target game Durable Object's authenticated
+`match-info` status projection and verifies initialization, immutable proposal
+ID, nonterminal state, player loading state, safe-integer future deadlines,
+and timer shape before calculating whole remaining seconds. The scoped game
+status route executes before runtime restoration, so this read neither reloads
+the WASM state engine nor exposes the full internal status payload.
+
+The expanded mutation-tested `check:cloudflare:match-info` gate now derives
+the minimum/fallback algorithm from the Go tracker and its countdown/timeout
+consumer from the original webapp. Direct Workers tests cover both deadlines,
+each deadline alone, finished loading, proposal mismatch, malformed or
+unavailable status, authentication, and the scoped five-key game boundary.
+
+The exact complete local release contract passed with exit code zero for
+`a34af4c9`: 514 main-Worker tests, 36 game-server unit and 130 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-874772de.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
 
 ## Storage safety milestone
 

@@ -7,9 +7,9 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `f8b1601a` is tested but not
-  deployed; follow-up test checkpoint `9c905d01` passed the complete local
-  release contract. Migrations `0115_authoritative_match_decks.sql` and
+- Paused branch checkpoint: runtime commit `a34af4c9` is tested but not
+  deployed and passed the complete local release contract. Migrations
+  `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
   them in that order at the documented quiescent boundary before deploying
   any Worker from `90ebe652` or later. Every checked-in deploy command now
@@ -53,6 +53,14 @@
   original browser therefore performs its three-second retry instead of
   receiving a transient `no_match_found`; the ready `active` path still
   requires and validates its authoritative server address and match payload.
+  Active match info also derives the source player-specific
+  `disconnectTimeout` from the minimum future loading-assets and scheduled
+  abandon deadlines. The main Worker validates a narrow authenticated game
+  Durable Object status projection, its immutable proposal, terminal state,
+  player state, and safe-integer deadlines; unavailable or invalid state
+  returns zero rather than the previous invented three-minute countdown. The
+  scoped read is handled before runtime restoration and does not reload WASM
+  or expose the full internal game status.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game

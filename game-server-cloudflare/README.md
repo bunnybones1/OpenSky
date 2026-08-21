@@ -52,6 +52,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
   codes, emotes, connection limits, and hibernation-safe attachments; and
 - source-shaped initialization/gameplay replay records exposed through
   capability-protected same-origin archive URLs; and
+- a narrow authenticated pre-runtime `match-info` status projection used by
+  the API gateway to reproduce the source minimum of each player's remaining
+  loading-assets and scheduled-abandon deadlines without reloading WASM or
+  exposing the full internal game state; and
 - source-compatible, release-scoped ranked/Conquest abandon counts and
   cooldowns bridged through D1 to the matchmaker, with idempotent completion
   markers; and
