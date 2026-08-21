@@ -27,6 +27,11 @@ wire messages. It is a separate service from `matchmaker-ts`.
   the original no-game user error and empty close, while loading progress,
   emote, mute, and client-error frames remain silent until a match context is
   linked;
+- source-compatible explicit error routing: spectator validation,
+  self-spectating, unavailable matches, duplicate spectators, and unowned
+  stickers retain the original message/level and empty close, while a
+  same-socket player replacement receives the source displacement message,
+  rejoins, and remains open;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible

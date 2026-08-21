@@ -2533,6 +2533,33 @@ artifact validation. The assembled entries remain
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source explicit game-error lifecycle parity — 2026-08-21
+
+Milestone `5ecbb79f` preserves the original `MatchManager` wire behavior for
+the explicit player-facing errors that were still falling through the
+Cloudflare Worker's generic state-error boundary. Invalid spectator player and
+code values, self-spectating, unavailable matches, and unowned stickers now
+retain the source message and `user`/`server` level followed by an empty close.
+This includes the source's literal tab in `you can\t spectate yourself`.
+
+Repeating `spectate_server` on the same joined spectator now sends the source
+user-level `connected in another location` response and empty-closes that
+socket. Repeating `join_server` on the same joined player follows the distinct
+`MatchProxy.updateContext` lifecycle: the player receives the source
+server-level displacement notice, rejoins, receives reconnect/loading state,
+and remains open for time-sync. Oversize frames and structurally invalid known
+messages retain the reviewed Cloudflare fail-closed `1008` boundary.
+
+The mutation-tested game-ingress and match-completion gates derive the exact
+source messages, levels, close ordering, callsite counts, and nonterminal
+player-rejoin behavior. The complete local release contract passed for
+`5ecbb79f`: 512 main-Worker tests, 36 game-server unit and 126 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

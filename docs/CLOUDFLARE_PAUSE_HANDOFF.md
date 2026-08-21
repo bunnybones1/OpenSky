@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `d07c7511`
-  (`Preserve source pre-join game lifecycle`)
-- Latest tested runtime commit: `d07c7511`
-  (`Preserve source pre-join game lifecycle`)
+- Last code/test checkpoint: `5ecbb79f`
+  (`Preserve source explicit game errors`)
+- Latest tested runtime commit: `5ecbb79f`
+  (`Preserve source explicit game errors`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `d07c7511` are committed and
+- The runtime changes from `38386294` through `5ecbb79f` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -159,8 +159,11 @@ run <https://github.com/bunnybones1/OpenSky/actions/runs/32459944271> at
 `e66303af` in 9m03s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32461447573> passed the
 decode-lifecycle checkpoint and its handoff at exact pushed head `294d6608` in
-11m25s. The newer `d07c7511` pre-join-lifecycle checkpoint and this refreshed
-handoff must receive exact-head CI before any production mutation.
+11m25s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32463523815> passed the
+pre-join-lifecycle checkpoint and its handoff at exact pushed head `a4de29fb`.
+The newer `5ecbb79f` explicit-error checkpoint and this refreshed handoff must
+receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1284,6 +1287,33 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source explicit game-error lifecycle milestone
+
+Commit `5ecbb79f` restores the remaining reviewed explicit `MatchManager` and
+`MatchProxy` error wires without weakening Cloudflare's structural bounds:
+
+- invalid spectator player/code values, self-spectating, unavailable matches,
+  and unowned stickers preserve their exact source message and level, then
+  empty-close without an invented state-error wrapper or `1008` reason;
+- the self-spectate message deliberately retains the source's literal tab;
+- a same-socket duplicate spectator receives the source user-level
+  `connected in another location` response and empty close; and
+- a same-socket player receives the source server-level displacement notice,
+  rejoins, receives reconnect/loading state, and remains open for time-sync.
+
+The game-ingress and match-completion gates mutation-test the source handlers,
+Worker error class/routing order, exact error callsite counts, empty closes,
+and the nonterminal player-rejoin lifecycle. The exact complete local release
+contract passed with exit code zero for `5ecbb79f`: 512 main-Worker tests, 36
+game-server unit and 126 Workers tests, 45 match-service tests, 62 matchmaker
+unit and 67 Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, both production builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
