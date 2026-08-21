@@ -2692,6 +2692,31 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-874772de.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source public match-info wire parity — 2026-08-21
+
+Milestone `9071de09` makes the in-progress `matchInfo` object preserve the Go
+matchmaker's external struct rather than serializing the wider TypeScript game
+registry object. Its exact public fields are now `id`, `mode`, `playerIDs`,
+`serverLocationKey`, `version`, and `initialized`. The Cloudflare adapter uses
+the actual per-proposal Durable Object name, `match:<proposal-id>`, as the
+location key and no longer leaks the registry-only `replayID`. The distinct
+recent-match and replay contracts still expose their source-defined replay
+identifiers.
+
+Exact-equality Workers regressions cover initialized and creating responses;
+authenticated and public spectator lookups also require the same location
+key. The expanded mutation-tested `check:cloudflare:match-info` gate derives
+the ordered field list from the Go JSON tags, rejects registry-field leakage,
+and pins both Worker projection and runtime evidence.
+
+The complete local release contract passed for `9071de09`: 514 main-Worker
+tests, 36 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

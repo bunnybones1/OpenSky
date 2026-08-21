@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `a34af4c9` is tested but not
+- Paused branch checkpoint: runtime commit `9071de09` is tested but not
   deployed and passed the complete local release contract. Migrations
   `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
@@ -61,6 +61,11 @@
   returns zero rather than the previous invented three-minute countdown. The
   scoped read is handled before runtime restoration and does not reload WASM
   or expose the full internal game status.
+  The public in-progress `matchInfo` projection also preserves the exact Go
+  struct fields: `id`, `mode`, `playerIDs`, `serverLocationKey`, `version`,
+  and `initialized`. The location key is the addressed per-proposal Durable
+  Object name (`match:<proposal-id>`); registry-only `replayID` is excluded
+  while the separate recent-match and replay contracts remain unchanged.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
