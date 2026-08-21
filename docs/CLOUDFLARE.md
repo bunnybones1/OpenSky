@@ -2453,6 +2453,38 @@ typecheck, both production builds, and 594-file artifact validation. The
 assembled entries are `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source game-socket ingress parity — 2026-08-21
+
+Milestone `e8709dbb` closes a game-server frame compatibility gap found by the
+completion audit. The original Node server calls `toString()` on every incoming
+WebSocket payload, so text and binary JSON frames follow the same parse path.
+It also consumes every string beginning with `PING`, silently ignores one with
+no colon, and responds with only the first colon-delimited ID. The Durable
+Object now preserves all of those behaviors while retaining its reviewed 256
+KiB message bound.
+
+The source process arms an adaptive connection timer after an application
+PING. The Cloudflare port does not reproduce that process timer with a
+recurring Durable Object alarm: the hibernating WebSocket lifecycle owns
+network disconnect detection, and the unchanged browser already closes and
+reconnects when its application PONG is missed. This keeps the observable
+client contract without waking every idle match every five seconds.
+
+Unit tests pin binary JSON, the size boundary, and exact PING prefix/field
+behavior. A Workers-runtime regression verifies text PONG, a silent no-colon
+PING, binary time-sync, and the same live socket after Durable Object eviction.
+The mutation-tested `check:cloudflare:game-ingress` gate derives the source
+server, player-context, and browser requirements and is mandatory in both the
+complete release contract and game-server deploy path.
+
+The exact complete local release contract passed for `e8709dbb`: 512 main
+Worker tests, 35 game-server unit and 119 Workers tests, 45 match-service tests,
+62 matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

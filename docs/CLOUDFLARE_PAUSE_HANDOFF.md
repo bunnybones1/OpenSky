@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `7802aab4`
-  (`Preserve source service health routes`)
-- Latest tested runtime commit: `7802aab4`
-  (`Preserve source service health routes`)
+- Last code/test checkpoint: `e8709dbb`
+  (`Preserve source game socket ingress`)
+- Latest tested runtime commit: `e8709dbb`
+  (`Preserve source game socket ingress`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `7802aab4` are committed and
+- The runtime changes from `38386294` through `e8709dbb` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -151,7 +151,10 @@ Warm Up bot checkpoint and its handoff at exact pushed head `5df2edb0` in
 10m49s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32447434380> passed the
 level-gated bot-deck checkpoint and its handoff at exact pushed head
-`c69a6121` in 10m30s. The newer `60292a03` cadence checkpoint and this
+`c69a6121` in 10m30s. The later cadence, registered-bot, schema-preflight, and
+service-route checkpoints passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32457861279> at
+`d380c464` in 11m11s. The newer `e8709dbb` game-ingress checkpoint and this
 refreshed handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1190,6 +1193,36 @@ and 118 Workers tests, 45 match-service tests, 62 matchmaker unit and 67
 Workers tests, 30 browser-game tests, nine analytics tests, every source and
 off-chain gate, all typechecks, both production builds, and 594-file artifact
 validation. The assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source game-socket ingress milestone
+
+Commit `e8709dbb` preserves the original TypeScript game server's frame and
+application-heartbeat behavior without adding a hibernation-defeating process
+timer:
+
+- both source text frames and binary frames are decoded as UTF-8 before the
+  existing bounded JSON validation, rather than rejecting valid binary game
+  messages;
+- every frame beginning with the source `PING` prefix is consumed before JSON
+  parsing, a missing colon remains silent, and a colon-delimited frame returns
+  `PONG` with only the first source ID field;
+- the browser's preserved five-second application heartbeat still detects a
+  missing PONG and reconnects, while Cloudflare's hibernating WebSocket
+  lifecycle owns network disconnect detection instead of a duplicate recurring
+  Durable Object alarm; and
+- a mutation-tested source gate derives the Node server, player context, and
+  browser contracts, requires unit and Workers-runtime regressions, and is
+  mandatory in both the complete build and game-server deployment path.
+
+The exact complete local release contract passed with exit code zero for
+`e8709dbb`: 512 main-Worker tests, 35 game-server unit and 119 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.

@@ -18,6 +18,8 @@ wire messages. It is a separate service from `matchmaker-ts`.
   timesync, disconnect, abandon, and match-ended messages;
 - WebSocket hibernation, duplicate-connection eviction, Durable Object alarms,
   and restore-on-event behavior;
+- source-compatible text and binary WebSocket frame decoding plus the exact
+  prefix-based application `PING`/first-ID `PONG` behavior across hibernation;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible

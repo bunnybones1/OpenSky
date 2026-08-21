@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `7802aab4` is tested but not
+- Paused branch checkpoint: runtime commit `e8709dbb` is tested but not
   deployed. Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
   them in that order at the documented quiescent boundary before deploying
@@ -17,7 +17,10 @@
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed
   4/4/5-route inventory is required by the complete release contract and the
-  affected component deploy commands.
+  affected component deploy commands. The game server also accepts the source
+  text and binary WebSocket frames and exact application `PING` prefix/ID
+  behavior across Durable Object hibernation. Its mutation-tested source gate
+  is required by the complete and game-server deployment contracts.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
