@@ -1139,7 +1139,6 @@ export class GameMatch implements DurableObject {
     this.sendToOpponent(metadata.match, attachment.principal, {
       type: 'opponent_connected'
     })
-    this.sendToSpectators({ type: 'opponent_connected' })
     if (this.spectatorSockets(attachment.principal).length > 0) {
       this.updateSpectators(attachment.principal)
     }
@@ -1279,7 +1278,6 @@ export class GameMatch implements DurableObject {
       matchAbandonTime
     } as const
     this.sendToPrincipal(opponentPrincipal, loadingForOpponent)
-    this.sendToSpectators(loadingForOpponent)
     const opponent = players[opponentPrincipal]
     const loadingForPlayer = {
       type: 'opponent_loading_progress',
@@ -1287,7 +1285,6 @@ export class GameMatch implements DurableObject {
       matchAbandonTime
     } as const
     this.sendToPrincipal(principal, loadingForPlayer)
-    this.sendToSpectators(loadingForPlayer)
     await this.state.storage.put(PLAYERS_KEY, players)
     const allPlayersLoaded = Object.values(players).every(
       current => current.finishedLoadingAssets
@@ -2131,7 +2128,6 @@ export class GameMatch implements DurableObject {
     this.sendToOpponent(metadata.match, attachment.principal, {
       type: 'opponent_disconnected'
     })
-    this.sendToSpectators({ type: 'opponent_disconnected' })
     const runtime = await this.ensureRuntime()
     const info = runtime.stateInfo()
     const timers = await this.timers()

@@ -54,6 +54,9 @@ wire messages. It is a separate service from `matchmaker-ts`.
   path, spectator visibility, and fail-closed disabled production default; and
 - source player-mute timing: mute state is ignored until both players finish
   loading, then persists in that player's reconnect projection; and
+- source lifecycle recipient boundaries: connection, disconnection, and
+  intermediate loading progress remain player-only, while joined spectators
+  receive the worker-relayed all-players-loaded completion; and
 - source-shaped initialization/gameplay replay records exposed through
   capability-protected same-origin archive URLs; and
 - a narrow authenticated pre-runtime `match-info` status projection used by

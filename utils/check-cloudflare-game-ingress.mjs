@@ -83,6 +83,14 @@ export const gameIngressErrors = ({
     ": 'match ended or cannot be found.'",
     'this.sendError(context, message)'
   ])
+  requireOrdered(errors, 'Source player-only connection relay', sourceJoin, [
+    'context.opponent?.send({',
+    "type: 'opponent_connected'",
+    'this.handleLoadingProgress('
+  ])
+  if (sourceJoin.includes('match.spectators')) {
+    errors.push('Source player join unexpectedly relays to spectators')
+  }
   requireOrdered(
     errors,
     'Source game unknown-message lifecycle',
@@ -107,6 +115,26 @@ export const gameIngressErrors = ({
     'if (!context.matchProxy) {',
     'return'
   ])
+  requireOrdered(
+    errors,
+    'Source player-only loading progress relay',
+    sourceLoading,
+    [
+      'context.opponent?.send({',
+      "type: 'opponent_loading_progress'",
+      'progress: msg.progress',
+      'context.send({',
+      "type: 'opponent_loading_progress'",
+      'progress: opponentIsBot ? 1 : context.opponent?.loadingProgress || 0',
+      'context.processMessage({',
+      "type: 'player_finished_loading_assets'"
+    ]
+  )
+  if (sourceLoading.includes('spectator')) {
+    errors.push(
+      'Source intermediate loading progress unexpectedly relays to spectators'
+    )
+  }
   if (sourceLoading.includes('connection.close(')) {
     errors.push('Source unlinked loading-progress handler became terminal')
   }
@@ -120,6 +148,38 @@ export const gameIngressErrors = ({
   }
   if (sourceClientError.includes('connection.close(')) {
     errors.push('Source client-error handler became terminal')
+  }
+  const sourceFinishedLoading = bodyBetween(
+    sourceMatchHandler,
+    'handlePlayerFinishLoadingAssets = (',
+    'handleAbandonMessage = ('
+  )
+  requireOrdered(
+    errors,
+    'Source completed-loading spectator relay boundary',
+    sourceFinishedLoading,
+    [
+      'if (player && !player.finishedLoadingAssets) {',
+      'if (this.playerContexts.every(p => p.finishedLoadingAssets)) {',
+      'player?.send({',
+      "type: 'opponent_loading_progress'",
+      'progress: 1,',
+      'matchAbandonTime: -1'
+    ]
+  )
+  const sourceDisconnect = bodyBetween(
+    sourceMatchManager,
+    'disconnect = (context: PlayerContext, code: number) => {',
+    'private authenticate('
+  )
+  requireOrdered(
+    errors,
+    'Source player-only disconnect relay',
+    sourceDisconnect,
+    ['context.opponent?.send({', "type: 'opponent_disconnected'"]
+  )
+  if (sourceDisconnect.includes('spectators')) {
+    errors.push('Source player disconnect unexpectedly relays to spectators')
   }
   const sourceEmote = bodyBetween(
     sourceMatchManager,
@@ -598,6 +658,19 @@ export const gameIngressErrors = ({
     'players[attachment.principal].opponentMuted = message.muted',
     'await this.state.storage.put(PLAYERS_KEY, players)'
   ])
+  const workerJoin = bodyBetween(
+    workerMatch,
+    'private async join(',
+    'private async spectate('
+  )
+  requireOrdered(errors, 'Worker player-only connection relay', workerJoin, [
+    'this.sendToOpponent(metadata.match, attachment.principal, {',
+    "type: 'opponent_connected'",
+    'await this.updateLoading(attachment.principal, message.loadingProgress)'
+  ])
+  if (workerJoin.includes('this.sendToSpectators(')) {
+    errors.push('Worker leaks player connection lifecycle to spectators')
+  }
   const workerSpectate = bodyBetween(
     workerMatch,
     'private async spectate(',
@@ -618,6 +691,47 @@ export const gameIngressErrors = ({
       'attachment.joined = true'
     ]
   )
+  const workerLoading = bodyBetween(
+    workerMatch,
+    'private async updateLoading(',
+    'private async gameplay('
+  )
+  requireOrdered(
+    errors,
+    'Worker source loading recipient boundary',
+    workerLoading,
+    [
+      'this.sendToPrincipal(opponentPrincipal, loadingForOpponent)',
+      'this.sendToPrincipal(principal, loadingForPlayer)',
+      'const loadingComplete = {',
+      'this.sendToPrincipal(principal, loadingComplete)',
+      'this.sendToSpectators(loadingComplete)'
+    ]
+  )
+  const workerLoadingSpectatorRelays =
+    workerLoading.match(/this\.sendToSpectators\(/g)?.length ?? 0
+  if (workerLoadingSpectatorRelays !== 1) {
+    errors.push(
+      `Worker loading spectator relay count changed: expected completion-only 1, found ${workerLoadingSpectatorRelays}`
+    )
+  }
+  const workerDisconnect = bodyBetween(
+    workerMatch,
+    'private async disconnectPlayer(',
+    'private replayRecordKey('
+  )
+  requireOrdered(
+    errors,
+    'Worker player-only disconnect relay',
+    workerDisconnect,
+    [
+      'this.sendToOpponent(metadata.match, attachment.principal, {',
+      "type: 'opponent_disconnected'"
+    ]
+  )
+  if (workerDisconnect.includes('this.sendToSpectators(')) {
+    errors.push('Worker leaks player disconnect lifecycle to spectators')
+  }
   requireOrdered(errors, 'Worker spectator socket safety bound', workerMatch, [
     'const MAX_SPECTATORS = 50',
     'const MAX_SPECTATOR_SOCKETS = 64',
@@ -718,6 +832,11 @@ export const gameIngressErrors = ({
         'clientTime: 9102',
         '.toBe(true)',
         'opponentMuted: true',
+        "it('keeps source connection and loading lifecycle player-only until completion'",
+        'expect(connectionLeaks).toEqual([])',
+        'expect(intermediateLeaks).toEqual([])',
+        'await expect(spectatorCompletion).resolves.toEqual({',
+        'expect(disconnectLeaks).toEqual([])',
         "it('preserves source spectate validation errors and empty closes'",
         "message: 'invalid spectate player'",
         "message: 'you can\\t spectate yourself'",
@@ -843,6 +962,30 @@ export const gameIngressErrors = ({
       "message: 'You connected in another session, please play there.'",
       "type: 'reconnect'",
       'opponentMuted: true'
+    ]
+  )
+  const workerLifecycleRecipientTest = bodyBetween(
+    workerRuntimeTest,
+    "it('keeps source connection and loading lifecycle player-only until completion'",
+    "it('restores public and private spectator state"
+  )
+  requireOrdered(
+    errors,
+    'Worker source lifecycle recipient runtime regression',
+    workerLifecycleRecipientTest,
+    [
+      'spectate(viewer, `identity:${USER_ID_1}`)',
+      "type: 'opponent_connected'",
+      'progress: 0.5',
+      'clientTime: 9201',
+      'expect(connectionLeaks).toEqual([])',
+      'progress: 0.75',
+      'expect(intermediateLeaks).toEqual([])',
+      'const spectatorCompletion = nextMessage(viewer)',
+      'matchAbandonTime: -1',
+      "first.close(1000, 'source lifecycle recipient test')",
+      "type: 'opponent_disconnected'",
+      'expect(disconnectLeaks).toEqual([])'
     ]
   )
   requireOrdered(
@@ -1083,7 +1226,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare game ingress preserves source text/binary frames, PING, decode errors, configurable chat/emote behavior, and loaded-player mute state'
+      'Cloudflare game ingress preserves source text/binary frames, PING, decode errors, configurable chat/emote behavior, loaded-player mute state, and player-only lifecycle recipients'
     )
   }
 }

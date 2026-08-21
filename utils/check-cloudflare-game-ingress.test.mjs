@@ -120,9 +120,27 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handleJoinServer = async (',
+        'context.opponent?.send({',
+        'context.send({'
+      )
+    },
+    {
+      ...value,
       sourceMatchManager: value.sourceMatchManager.replace(
         'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      return',
         'private handleLoadingProgress = (\n    msg: LoadingProgressMessage,\n    context: PlayerContext\n  ) => {\n    if (!context.matchProxy) {\n      context.connection.close()\n      return'
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handleLoadingProgress = (',
+        'context.opponent?.send({',
+        'context.send({'
       )
     },
     {
@@ -168,6 +186,24 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         'handleJoin = (message: JoinServerMessage) => {',
         'opponentMuted: player.opponentMuted',
         'opponentMuted: false'
+      )
+    },
+    {
+      ...value,
+      sourceMatchHandler: replaceAfter(
+        value.sourceMatchHandler,
+        'handlePlayerFinishLoadingAssets = (',
+        'player?.send({',
+        'opponent?.send({'
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'disconnect = (context: PlayerContext, code: number) => {',
+        'context.opponent?.send({',
+        'context.send({'
       )
     },
     {
@@ -421,6 +457,33 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'private async join(',
+        'await this.updateLoading(attachment.principal, message.loadingProgress)',
+        "this.sendToSpectators({ type: 'opponent_connected' })\n    await this.updateLoading(attachment.principal, message.loadingProgress)"
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'private async updateLoading(',
+        'this.sendToPrincipal(opponentPrincipal, loadingForOpponent)',
+        'this.sendToPrincipal(opponentPrincipal, loadingForOpponent)\n    this.sendToSpectators(loadingForOpponent)'
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'private async disconnectPlayer(',
+        'const runtime = await this.ensureRuntime()',
+        "this.sendToSpectators({ type: 'opponent_disconnected' })\n    const runtime = await this.ensureRuntime()"
+      )
+    },
+    {
+      ...value,
       workerMatch: value.workerMatch.replace(
         'this.sendToSpectators(message)',
         'void message'
@@ -586,6 +649,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('preserves the source loaded-player mute gate and reconnect state'",
         '.toBe(false)',
         '.toBe(true)'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('keeps source connection and loading lifecycle player-only until completion'",
+        'expect(connectionLeaks).toEqual([])',
+        "expect(connectionLeaks).toEqual([{ type: 'opponent_connected' }])"
       )
     },
     {

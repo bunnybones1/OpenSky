@@ -2515,6 +2515,129 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ])
   })
 
+  it('keeps source connection and loading lifecycle player-only until completion', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const first = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31, 0.25)
+    await firstJoined
+
+    const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const viewerJoined = collectMessages(viewer, 2)
+    const firstSpectatorList = nextMessage(first)
+    spectate(viewer, `identity:${USER_ID_1}`)
+    await viewerJoined
+    await firstSpectatorList
+
+    const connectionLeaks: Record<string, unknown>[] = []
+    const connectionListener = (event: MessageEvent) =>
+      connectionLeaks.push(JSON.parse(event.data as string))
+    viewer.addEventListener('message', connectionListener)
+    const second = await connectAs(PRINCIPAL_2, USER_ID_2)
+    const firstConnection = collectMessages(first, 2)
+    const secondJoined = collectMessages(second, 2)
+    join(second, 0x32, 0.5)
+    await expect(firstConnection).resolves.toEqual([
+      { type: 'opponent_connected' },
+      expect.objectContaining({
+        type: 'opponent_loading_progress',
+        progress: 0.5
+      })
+    ])
+    await expect(secondJoined).resolves.toEqual([
+      expect.objectContaining({ type: 'reconnect' }),
+      expect.objectContaining({
+        type: 'opponent_loading_progress',
+        progress: 0.25
+      })
+    ])
+    const joinedSync = nextMessage(second)
+    second.send(JSON.stringify({ type: 'timesync', clientTime: 9201 }))
+    await expect(joinedSync).resolves.toMatchObject({
+      type: 'timesync',
+      clientTime: 9201
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    viewer.removeEventListener('message', connectionListener)
+    expect(connectionLeaks).toEqual([])
+
+    const intermediateLeaks: Record<string, unknown>[] = []
+    const intermediateListener = (event: MessageEvent) =>
+      intermediateLeaks.push(JSON.parse(event.data as string))
+    viewer.addEventListener('message', intermediateListener)
+    const firstIntermediate = nextMessage(first)
+    const secondIntermediate = nextMessage(second)
+    second.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 0.75 })
+    )
+    await expect(firstIntermediate).resolves.toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 0.75
+    })
+    await expect(secondIntermediate).resolves.toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 0.25
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    viewer.removeEventListener('message', intermediateListener)
+    expect(intermediateLeaks).toEqual([])
+
+    const firstFinishedForSecond = nextMessage(second)
+    const firstProgressForSelf = nextMessage(first)
+    first.send(JSON.stringify({ type: 'player_loading_progress', progress: 1 }))
+    await expect(firstFinishedForSecond).resolves.toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 1
+    })
+    await expect(firstProgressForSelf).resolves.toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 0.75
+    })
+
+    const secondFinishedForFirst = nextMessage(first)
+    const secondCompletion = collectMessages(second, 2)
+    const spectatorCompletion = nextMessage(viewer)
+    second.send(
+      JSON.stringify({ type: 'player_loading_progress', progress: 1 })
+    )
+    await expect(secondFinishedForFirst).resolves.toMatchObject({
+      type: 'opponent_loading_progress',
+      progress: 1
+    })
+    await expect(secondCompletion).resolves.toEqual([
+      expect.objectContaining({
+        type: 'opponent_loading_progress',
+        progress: 1
+      }),
+      {
+        type: 'opponent_loading_progress',
+        progress: 1,
+        matchAbandonTime: -1
+      }
+    ])
+    await expect(spectatorCompletion).resolves.toEqual({
+      type: 'opponent_loading_progress',
+      progress: 1,
+      matchAbandonTime: -1
+    })
+
+    const disconnectLeaks: Record<string, unknown>[] = []
+    const disconnectListener = (event: MessageEvent) =>
+      disconnectLeaks.push(JSON.parse(event.data as string))
+    viewer.addEventListener('message', disconnectListener)
+    const disconnected = nextMessage(second)
+    first.close(1000, 'source lifecycle recipient test')
+    await expect(disconnected).resolves.toEqual({
+      type: 'opponent_disconnected'
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    viewer.removeEventListener('message', disconnectListener)
+    expect(disconnectLeaks).toEqual([])
+  })
+
   it('restores public and private spectator state without exposing it to public viewers', async () => {
     await insertSpectateIdentities()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
