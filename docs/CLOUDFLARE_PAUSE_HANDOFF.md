@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `6683a1fc`
-  (`Preserve source matchmaker read timeout`)
-- Latest tested runtime commit: `6683a1fc`
-  (`Preserve source matchmaker read timeout`)
+- Last code/test checkpoint: `57dc88ef`
+  (`Preserve source matchmaker command errors`)
+- Latest tested runtime commit: `57dc88ef`
+  (`Preserve source matchmaker command errors`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `6683a1fc` are committed and
+- The runtime changes from `38386294` through `57dc88ef` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -120,8 +120,11 @@ handoff passed exact-head run
 `07deac2b` in 11m02s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32431059778> passed the
 source-ingress checkpoint and its handoff at exact pushed head `8ea481e7` in
-11m13s. The newer `6683a1fc` checkpoint and this refreshed handoff must receive
-exact-head CI before any production mutation.
+11m13s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32433389112> passed the
+source read-timeout checkpoint and its handoff at exact pushed head `17590914`.
+The newer `57dc88ef` command-error checkpoint and this refreshed handoff must
+receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -616,6 +619,40 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker command-error milestone
+
+Commit `57dc88ef` restores the original matchmaker's command-error boundary
+after a channel is established:
+
+- a `find_match` or `accept_match` handler failure escapes the source listener,
+  so the outer handler sends the exact generic `SERVER_ERROR` envelope and
+  closes the client with an empty close;
+- only `decline_match` treats the source `ErrInvalidOperation` specially,
+  returning that exact error without closing the established channel;
+- detailed validation reasons are no longer exposed through fatal find or
+  accept failures;
+- accept processing checks proposal timeout before repeated acceptance, in the
+  same order as the Go service; and
+- a pending duplicate socket that fails an accept or decline cannot replace or
+  disconnect the active subscriber for that player.
+
+Direct Workers regressions cover exact error fields and close semantics for
+find, accept, and decline; queue/socket cleanup; proposal preservation; and
+duplicate-socket isolation. The mutation-tested
+`check:cloudflare:matchmaker-session` gate now derives the asymmetric outer
+error handling, empty fatal close, accept ordering, Worker command-aware catch,
+direct tests, and release wiring from the preserved Go and TypeScript sources.
+
+The exact complete local release contract passed at committed runtime head
+`57dc88ef` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 49
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -720,7 +757,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `6683a1fc`. Keep
+- Deploy and verify the tested runtime changes through `57dc88ef`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

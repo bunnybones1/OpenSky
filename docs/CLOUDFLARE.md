@@ -1931,6 +1931,36 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker command-error parity — 2026-08-20
+
+Milestone `57dc88ef` restores the Go matchmaker's asymmetric command-error
+contract. Errors from `find_match` and `accept_match` escape the source
+listener, so its outer handler emits the exact generic `SERVER_ERROR` envelope
+and closes the client without an invented close code or reason. The Worker now
+uses that fatal path instead of leaking detailed validation reasons.
+
+The source makes one narrower exception: `decline_match` catches
+`ErrInvalidOperation`, sends that exact protocol error, and keeps the channel
+open. The Worker now preserves this command-specific behavior. Accept processing
+also checks proposal timeout before its repeated-acceptance no-op, matching the
+source service's ordering. Fatal commands from pending duplicate sockets clean
+up only that socket and cannot displace an existing subscriber.
+
+Workers regressions pin the exact find, accept, and decline error envelopes;
+empty fatal closes; queue/socket cleanup; proposal preservation; and
+duplicate-socket isolation. The mutation-tested matchmaker session gate derives
+the source outer handler, listener exception, Worker command-aware catch,
+accept/decline error identity and ordering, direct tests, and release wiring.
+
+The exact complete local contract passed at `57dc88ef`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 49 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
