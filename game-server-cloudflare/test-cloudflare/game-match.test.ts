@@ -751,6 +751,47 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(
       (
         await env.AUTH_DB.prepare(
+          `SELECT user_id, before_skypass_xp,
+                  season_stats_existed_before,
+                  season_initial_account_level_before,
+                  season_achieved_account_level_before,
+                  profile_updated_at_before,
+                  inviter_sticker_points_existed_before,
+                  inviter_sticker_points_created_at_before,
+                  inviter_sticker_points_updated_at_before
+           FROM multiplayer_match_experience_players
+           WHERE proposal_id = ? ORDER BY player_index`
+        )
+          .bind(proposalId)
+          .all()
+      ).results
+    ).toEqual([
+      {
+        user_id: USER_ID_1,
+        before_skypass_xp: 170,
+        season_stats_existed_before: 0,
+        season_initial_account_level_before: -1,
+        season_achieved_account_level_before: -1,
+        profile_updated_at_before: expect.any(String),
+        inviter_sticker_points_existed_before: 0,
+        inviter_sticker_points_created_at_before: '',
+        inviter_sticker_points_updated_at_before: ''
+      },
+      {
+        user_id: USER_ID_2,
+        before_skypass_xp: 0,
+        season_stats_existed_before: 0,
+        season_initial_account_level_before: -1,
+        season_achieved_account_level_before: -1,
+        profile_updated_at_before: expect.any(String),
+        inviter_sticker_points_existed_before: 0,
+        inviter_sticker_points_created_at_before: '',
+        inviter_sticker_points_updated_at_before: ''
+      }
+    ])
+    expect(
+      (
+        await env.AUTH_DB.prepare(
           `SELECT user_id, initial_account_level, achieved_account_level
            FROM player_skypass_season_stats WHERE season = 126
            ORDER BY user_id`
@@ -1013,6 +1054,26 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
          WHERE season = 126`
       ).first('count')
     ).toBe(0)
+  })
+
+  it('rejects a new match XP receipt without exact publication state', async () => {
+    await insertExperiencePlayers()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    const settlementToken = crypto.randomUUID()
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_experience_players
+           (proposal_id, player_index, user_id, season, settlement_token,
+            experience_gain, before_level, before_xp, before_skypass_level,
+            after_level, after_xp, ranked_constructed_before,
+            inviter_levels_before, inviter_sticker_points_before,
+            rewards_json, processed_at)
+         VALUES (?, 0, ?, 126, ?, 30, 1, 170, 1, 2, 0, 'UNRANKED',
+                 0, 0, '[]', ?)`
+      )
+        .bind(proposalId, USER_ID_1, settlementToken, new Date().toISOString())
+        .run()
+    ).rejects.toThrow('match experience publication state is invalid')
   })
 
   it('adds a source rank-up bonus to match XP once per season and stage', async () => {

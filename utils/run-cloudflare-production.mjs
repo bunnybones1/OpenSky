@@ -11,7 +11,7 @@ export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0116_registered_matchmaker_bots.sql'
+  '0117_match_experience_publication_state.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -32,7 +32,24 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
     WHERE type = 'trigger'
       AND name = 'multiplayer_matches_user_kind_insert_guard'
       AND instr(sql, 'registered_matchmaker_bots') > 0)
-    AS registered_bot_allocation_guard_present;`
+    AS registered_bot_allocation_guard_present,
+  (SELECT COUNT(*)
+     FROM pragma_table_info('multiplayer_match_experience_players')
+     WHERE name IN (
+       'before_skypass_xp',
+       'season_stats_existed_before',
+       'season_initial_account_level_before',
+       'season_achieved_account_level_before',
+       'profile_updated_at_before',
+       'inviter_sticker_points_existed_before',
+       'inviter_sticker_points_created_at_before',
+       'inviter_sticker_points_updated_at_before'
+     )) AS experience_publication_columns_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'multiplayer_match_experience_player_publication_state_guard',
+      'multiplayer_match_experience_publication_complete_guard'
+    )) AS experience_publication_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -302,7 +319,9 @@ export const productionSchemaRow = output => {
     row?.authoritative_decks_present !== 1 ||
     row?.registered_bots_present !== 1 ||
     row?.registered_bot_guards_present !== 2 ||
-    row?.registered_bot_allocation_guard_present !== 1
+    row?.registered_bot_allocation_guard_present !== 1 ||
+    row?.experience_publication_columns_present !== 8 ||
+    row?.experience_publication_guards_present !== 2
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

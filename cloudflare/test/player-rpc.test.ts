@@ -485,6 +485,302 @@ describe('legacy player RPC compatibility', () => {
     await expectPublishedWarmUps(3)
   })
 
+  it('publishes match XP, SkyPass, and referral progress with the terminal match', async () => {
+    await addInviter()
+    const season = seasonFromDate()
+    const proposalId = `experience-publication-${crypto.randomUUID()}`
+    const settlementToken = crypto.randomUUID()
+    const playerPrincipal = await deriveGamePrincipal(userId)
+    const beforeAt = '2026-08-21T15:50:00.000Z'
+    const stagedAt = '2026-08-21T15:50:01.000Z'
+    const inviterItemCreatedAt = '2026-08-20T12:00:00.000Z'
+    const inviterItemUpdatedAt = '2026-08-20T13:00:00.000Z'
+
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles
+         SET level = 4, xp = 180, next_level_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(beforeAt, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 4, basic_skypass_xp = 180,
+             basic_skypass_next_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(beforeAt, userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_skypass_season_stats
+           (user_id, season, has_premium, created_at, updated_at,
+            initial_account_level, achieved_account_level)
+         VALUES (?, ?, 0, ?, ?, 1, 3)`
+      ).bind(userId, season, beforeAt, beforeAt),
+      ...['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
+        env.AUTH_DB.prepare(
+          `UPDATE player_account_stats
+           SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
+               score = 25, updated_at = ?
+           WHERE user_id = ? AND game_mode = ? AND season = ?`
+        ).bind(beforeAt, userId, mode, season)
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_friend_points
+           (invitee_user_id, inviter_user_id, season, levels,
+            points_carried, points_spent, updated_at)
+         VALUES (?, ?, ?, 2, 5, 0, ?)`
+      ).bind(userId, inviterUserId, season, beforeAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKER_POINTS', 0, 10, 0, 'friend-level', ?, ?)`
+      ).bind(inviterUserId, inviterItemCreatedAt, inviterItemUpdatedAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'PRACTICE_PVP', 'PRACTICE_PVP', 'PRACTICE_PVP',
+                 'experience-publication-test', ?, ?, ?, NULL, '{}', 'active',
+                 ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        playerPrincipal,
+        `identity:bot:${proposalId}`,
+        userId,
+        stagedAt,
+        stagedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_experience_players
+           (proposal_id, player_index, user_id, season, settlement_token,
+            experience_gain, before_level, before_xp, before_skypass_level,
+            before_skypass_xp, season_stats_existed_before,
+            season_initial_account_level_before,
+            season_achieved_account_level_before,
+            profile_updated_at_before, after_level, after_xp,
+            ranked_constructed_before, inviter_user_id,
+            inviter_levels_before, inviter_sticker_points_before,
+            inviter_sticker_points_existed_before,
+            inviter_sticker_points_created_at_before,
+            inviter_sticker_points_updated_at_before, rewards_json,
+            processed_at)
+         VALUES (?, 0, ?, ?, ?, 50, 4, 180, 4, 180, 1, 1, 3, ?,
+                 5, 30, 'WANDERER', ?, 2, 10, 1, ?, ?, '[]', ?)`
+      ).bind(
+        proposalId,
+        userId,
+        season,
+        settlementToken,
+        beforeAt,
+        inviterUserId,
+        inviterItemCreatedAt,
+        inviterItemUpdatedAt,
+        stagedAt
+      ),
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles
+         SET level = 5, xp = 30, next_level_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(stagedAt, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 5, basic_skypass_xp = 30,
+             basic_skypass_next_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(stagedAt, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_skypass_season_stats
+         SET achieved_account_level = 4, updated_at = ?
+         WHERE user_id = ? AND season = ?`
+      ).bind(stagedAt, userId, season),
+      env.AUTH_DB.prepare(
+        `UPDATE player_friend_points SET levels = 3, updated_at = ?
+         WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+      ).bind(stagedAt, userId, inviterUserId, season),
+      env.AUTH_DB.prepare(
+        `UPDATE player_items SET balance = 11, updated_at = ?
+         WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
+           AND token_id = 0`
+      ).bind(stagedAt, inviterUserId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_experience
+           (proposal_id, player1_rewards_json, player2_rewards_json,
+            processed_at, player_count, settlement_token)
+         VALUES (?, '[]', '[]', ?, 1, ?)`
+      ).bind(proposalId, stagedAt, settlementToken)
+    ])
+
+    const expectVisible = async (expected: {
+      level: number
+      xp: number
+      seasonLevel: number
+      profileUpdatedAt: string
+      referralLevels: number
+      referralPoints: number
+      stickerPoints: number
+      stickerUpdatedAt: string
+    }) => {
+      const account = await rpc('GetAccount', { address: identityReference })
+      expect(account.status).toBe(200)
+      expect(await account.json()).toMatchObject({
+        account: {
+          level: expected.level,
+          experience: expected.xp,
+          seasonLevel: expected.seasonLevel,
+          updatedAt: expected.profileUpdatedAt
+        }
+      })
+
+      const state = await new PlayerRepository(env.AUTH_DB).getState(userId)
+      expect(state).toMatchObject({
+        profile: { level: expected.level, xp: expected.xp },
+        basicSkyPass: {
+          level: expected.seasonLevel,
+          xp: expected.xp,
+          nextLevelXp: 200
+        }
+      })
+
+      const friends = await rpcAs(inviterUserId, 'GetFriendPoints', {})
+      expect(friends.status).toBe(200)
+      expect(await friends.json()).toMatchObject({
+        total: expected.stickerPoints,
+        friends: [
+          {
+            account: { level: expected.level },
+            levels: expected.referralLevels,
+            points: expected.referralPoints
+          }
+        ]
+      })
+
+      const gifted = await rpc('GetPointsGifted', {
+        address: identityReference
+      })
+      expect(gifted.status).toBe(200)
+      expect(await gifted.json()).toMatchObject({
+        total: expected.referralLevels
+      })
+
+      const items = await new PlayerRpcRepository(env.AUTH_DB).listItems(
+        inviterUserId,
+        ['SW_STICKER_POINTS' as never]
+      )
+      expect(items).toEqual([
+        expect.objectContaining({
+          balance: String(expected.stickerPoints),
+          createdAt: inviterItemCreatedAt,
+          updatedAt: expected.stickerUpdatedAt
+        })
+      ])
+
+      const leaderboard = await rpc(
+        'ListLeaderboard',
+        {
+          page: { pageSize: 10 },
+          req: { gameMode: 'RANKED_CONSTRUCTED', season }
+        },
+        false
+      )
+      expect(leaderboard.status).toBe(200)
+      const leaderboardBody = await leaderboard.json<{
+        res: Array<{
+          account: {
+            address: string
+            level: number
+            experience: number
+            updatedAt: string
+          }
+        }>
+      }>()
+      expect(
+        leaderboardBody.res.find(
+          entry => entry.account.address === identityReference
+        )
+      ).toMatchObject({
+        account: {
+          level: expected.level,
+          experience: expected.xp,
+          updatedAt: expected.profileUpdatedAt
+        }
+      })
+    }
+
+    await expectVisible({
+      level: 4,
+      xp: 180,
+      seasonLevel: 2,
+      profileUpdatedAt: beforeAt,
+      referralLevels: 2,
+      referralPoints: 7,
+      stickerPoints: 10,
+      stickerUpdatedAt: inviterItemUpdatedAt
+    })
+
+    const pendingSkyPass = await rpc('ListSkypassRewards', { season })
+    const pendingLevel = (
+      await pendingSkyPass.json<{
+        res: {
+          levels: Array<{
+            level: number
+            earned: boolean
+            rewards: Array<{
+              id: number
+              claimable: boolean
+              claimed: boolean
+            }>
+          }>
+        }
+      }>()
+    ).res.levels.find(level => level.level === 3)
+    expect(pendingLevel?.earned).toBe(false)
+    const pendingReward = pendingLevel?.rewards.find(
+      reward => reward.claimable && !reward.claimed
+    )
+    expect(pendingReward).toBeDefined()
+    expect(
+      (await rpc('ClaimSkypassRewards', { ids: [pendingReward!.id] })).status
+    ).toBe(500)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(stagedAt, stagedAt, proposalId)
+      .run()
+
+    await expectVisible({
+      level: 5,
+      xp: 30,
+      seasonLevel: 3,
+      profileUpdatedAt: stagedAt,
+      referralLevels: 3,
+      referralPoints: 8,
+      stickerPoints: 11,
+      stickerUpdatedAt: stagedAt
+    })
+
+    const publishedSkyPass = await rpc('ListSkypassRewards', { season })
+    const publishedLevel = (
+      await publishedSkyPass.json<{
+        res: {
+          levels: Array<{
+            level: number
+            earned: boolean
+            rewards: Array<{ id: number }>
+          }>
+        }
+      }>()
+    ).res.levels.find(level => level.level === 3)
+    expect(publishedLevel?.earned).toBe(true)
+    expect(
+      (await rpc('ClaimSkypassRewards', { ids: [pendingReward!.id] })).status
+    ).toBe(200)
+  })
+
   it('fails closed on a mismatched unpublished Warm Up receipt', async () => {
     const processedAt = '2026-08-21T15:41:00.000Z'
     const proposalId = `invalid-warm-up-publication-${crypto.randomUUID()}`

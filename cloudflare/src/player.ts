@@ -4,6 +4,16 @@ import {
   projectUnpublishedQuestProgress,
   unpublishedQuestProgress
 } from './quest-publication'
+import {
+  publishedAccountLevelSQL,
+  publishedAccountXpSQL,
+  publishedSeasonAchievedLevelSQL,
+  publishedSeasonInitialLevelSQL,
+  publishedSkypassXpSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleExperienceXp,
+  sourceVisibleSeasonProgress
+} from './experience-publication'
 
 export { STRENGTH_STARTER_DECK } from './starter-decks'
 
@@ -346,7 +356,15 @@ export class PlayerRepository {
         .prepare(
           `SELECT account.name, account.locale, account.region,
                   account.tag_art_id, account.title_id,
-                  profile.level, profile.xp, profile.next_level_xp,
+                  ${publishedAccountLevelSQL(
+                    'profile.user_id',
+                    'profile.level'
+                  )} AS level,
+                  ${publishedAccountXpSQL(
+                    'profile.user_id',
+                    'profile.xp'
+                  )} AS xp,
+                  profile.next_level_xp,
                   profile.created_at, account.updated_at
            FROM player_profiles profile
            JOIN player_account_settings account
@@ -357,19 +375,38 @@ export class PlayerRepository {
         .first<ProfileRow>(),
       this.database
         .prepare(
-          `SELECT basic_skypass_level, basic_skypass_xp, basic_skypass_next_xp,
+          `SELECT basic_skypass_level,
+                  ${publishedSkypassXpSQL(
+                    'progression.user_id',
+                    'progression.basic_skypass_xp'
+                  )} AS basic_skypass_xp,
+                  basic_skypass_next_xp,
                   tutorial_completed
-           FROM player_progression WHERE user_id = ?`
+           FROM player_progression progression WHERE user_id = ?`
         )
         .bind(userId)
         .first<ProgressionRow>(),
       this.database
         .prepare(
-          `SELECT initial_account_level, achieved_account_level
-             FROM player_skypass_season_stats
-             WHERE user_id = ? AND season = ?`
+          `WITH current_season(season) AS (VALUES (?))
+           SELECT ${publishedSeasonInitialLevelSQL(
+             'profile.user_id',
+             'current_season.season',
+             'stats.initial_account_level'
+           )} AS initial_account_level,
+                  ${publishedSeasonAchievedLevelSQL(
+                    'profile.user_id',
+                    'current_season.season',
+                    'stats.achieved_account_level'
+                  )} AS achieved_account_level
+           FROM player_profiles profile
+           CROSS JOIN current_season
+           LEFT JOIN player_skypass_season_stats stats
+             ON stats.user_id = profile.user_id
+            AND stats.season = current_season.season
+           WHERE profile.user_id = ?`
         )
-        .bind(userId, seasonFromDate())
+        .bind(seasonFromDate(), userId)
         .first<SkypassSeasonProgressRow>(),
       this.database
         .prepare(
@@ -400,6 +437,15 @@ export class PlayerRepository {
     ])
 
     if (!profile || !progression) return
+    const visibleLevel = sourceVisibleAccountLevel(profile.level)
+    const visibleXp = sourceVisibleExperienceXp(profile.xp)
+    const visibleSkypassXp = sourceVisibleExperienceXp(
+      progression.basic_skypass_xp
+    )
+    const visibleSeason = sourceVisibleSeasonProgress(
+      seasonProgress?.initial_account_level ?? null,
+      seasonProgress?.achieved_account_level ?? null
+    )
     const questDeltas = await unpublishedQuestProgress(this.database, userId)
     const quests = projectUnpublishedQuestProgress(
       questsResult.results,
@@ -420,18 +466,18 @@ export class PlayerRepository {
         ...(profile.region ? { region: profile.region } : {}),
         ...(profile.tag_art_id ? { tagArtID: profile.tag_art_id } : {}),
         ...(profile.title_id !== null ? { titleID: profile.title_id } : {}),
-        level: profile.level,
-        xp: profile.xp,
+        level: visibleLevel,
+        xp: visibleXp,
         nextLevelXp: profile.next_level_xp,
         createdAt: profile.created_at,
         updatedAt: profile.updated_at
       },
       basicSkyPass: {
-        level: seasonProgress
-          ? seasonProgress.achieved_account_level -
-            seasonProgress.initial_account_level
-          : 0,
-        xp: progression.basic_skypass_xp,
+        level:
+          visibleSeason.initial !== null && visibleSeason.achieved !== null
+            ? visibleSeason.achieved - visibleSeason.initial
+            : 0,
+        xp: visibleSkypassXp,
         nextLevelXp: progression.basic_skypass_next_xp
       },
       tutorialCompleted: progression.tutorial_completed === 1,

@@ -1,4 +1,13 @@
 import { invalidArgument } from './errors'
+import {
+  publishedAccountLevelSQL,
+  publishedAccountXpSQL,
+  publishedSeasonAchievedLevelSQL,
+  publishedSeasonInitialLevelSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleExperienceXp,
+  sourceVisibleSeasonProgress
+} from './experience-publication'
 import { seasonFromDate } from './legacy-seasons'
 
 const TUTORIAL_LEVELS = ['LEVEL_1', 'LEVEL_2', 'LEVEL_3', 'LEVEL_4'] as const
@@ -28,7 +37,8 @@ interface PlayerProgressRow {
   level: number
   xp: number
   next_level_xp: number
-  season_level: number
+  initial_account_level: number
+  achieved_account_level: number
 }
 
 interface QuestRow {
@@ -168,21 +178,45 @@ export class BotMatchRepository {
 
     const player = await this.database
       .prepare(
-        `SELECT profile.level, profile.xp, profile.next_level_xp,
-                COALESCE(MAX(
-                  0,
-                  stats.achieved_account_level - stats.initial_account_level
-                ), 0) AS season_level
+        `WITH current_season(season) AS (VALUES (?))
+         SELECT ${publishedAccountLevelSQL(
+           'profile.user_id',
+           'profile.level'
+         )} AS level,
+                ${publishedAccountXpSQL('profile.user_id', 'profile.xp')} AS xp,
+                profile.next_level_xp,
+                ${publishedSeasonInitialLevelSQL(
+                  'profile.user_id',
+                  'current_season.season',
+                  'stats.initial_account_level'
+                )} AS initial_account_level,
+                ${publishedSeasonAchievedLevelSQL(
+                  'profile.user_id',
+                  'current_season.season',
+                  'stats.achieved_account_level'
+                )} AS achieved_account_level
          FROM player_profiles profile
+         CROSS JOIN current_season
          JOIN player_progression progression
            ON progression.user_id = profile.user_id
          LEFT JOIN player_skypass_season_stats stats
-           ON stats.user_id = profile.user_id AND stats.season = ?
+           ON stats.user_id = profile.user_id
+          AND stats.season = current_season.season
          WHERE profile.user_id = ?`
       )
       .bind(seasonFromDate(), userId)
       .first<PlayerProgressRow>()
     if (!player) throw new Error('player progression is missing')
+    sourceVisibleAccountLevel(player.level)
+    const visibleXp = sourceVisibleExperienceXp(player.xp)
+    const visibleSeason = sourceVisibleSeasonProgress(
+      player.initial_account_level,
+      player.achieved_account_level
+    )
+    const visibleSeasonLevel =
+      visibleSeason.initial === null || visibleSeason.achieved === null
+        ? 0
+        : visibleSeason.achieved - visibleSeason.initial
 
     await this.questRows(userId, questProgress)
     const now = new Date().toISOString()
@@ -193,9 +227,9 @@ export class BotMatchRepository {
         exp: {
           amount: 0,
           reason: 'TutorialCompleted',
-          currentLevel: player.season_level,
+          currentLevel: visibleSeasonLevel,
           requiredExp: player.next_level_xp,
-          beforeMatchExp: player.xp
+          beforeMatchExp: visibleXp
         }
       }
     ]

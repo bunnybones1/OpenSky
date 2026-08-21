@@ -25,6 +25,15 @@ import { decodeDeckString, encodeDeckString } from './deck-codec'
 import { sourceCrystalIDSQL } from './account-wire'
 import { sourceLeaderboardEntryWire } from './competitive-wire'
 import { invalidArgument, notFound, permissionDenied } from './errors'
+import {
+  noUnpublishedMatchExperienceSQL,
+  publishedAccountLevelSQL,
+  publishedAccountXpSQL,
+  publishedProfileUpdatedAtSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleExperienceXp,
+  sourceVisibleTimestamp
+} from './experience-publication'
 import { goFloat32FloorHundredthsRatio, goFloat32Ratio } from './go-numbers'
 import { nextLeaderboardRewardTime } from './leaderboard-reward-worker'
 import { leaderboardRewardsForRank } from './leaderboard-rewards'
@@ -553,7 +562,10 @@ const statFromRow = (
   projection: 'account' | 'leaderboard' = 'account'
 ): AccountStat => {
   const gamesPlayed = row.win_count + row.loss_count + row.tie_count
-  const experience = totalExperience(row.level ?? 1, row.xp ?? 0)
+  const experience = totalExperience(
+    sourceVisibleAccountLevel(row.level),
+    sourceVisibleExperienceXp(row.xp)
+  )
   const position = projection === 'account' ? projectedRank(row) : undefined
   let rankProgress: number | undefined
   if (projection === 'account') {
@@ -593,7 +605,9 @@ const statFromRow = (
 }
 
 const accountStatRowsQuery = (where: string): string => `
-  SELECT stats.*, profile.level, profile.xp,
+  SELECT stats.*,
+         ${publishedAccountLevelSQL('stats.user_id', 'profile.level')} AS level,
+         ${publishedAccountXpSQL('stats.user_id', 'profile.xp')} AS xp,
          CASE
            WHEN COALESCE(settings.account_status, 'ACTIVE') IN (
              'BANNED', 'SUSPENDED', 'DELETED'
@@ -804,11 +818,12 @@ const matchPlayer = (
   const registeredBot = userId?.startsWith('system:bot:') === true
   return {
     id: Number.isSafeInteger(account.id) ? account.id! : 0,
-    address: userId && !registeredBot
-      ? identityReferenceFor(userId)
-      : typeof account.address === 'string'
-        ? account.address
-        : '',
+    address:
+      userId && !registeredBot
+        ? identityReferenceFor(userId)
+        : typeof account.address === 'string'
+          ? account.address
+          : '',
     name: typeof account.name === 'string' ? account.name : 'Unknown Player',
     ...(typeof account.region === 'string' ? { region: account.region } : {}),
     ...(typeof account.tagArtID === 'string'
@@ -940,7 +955,10 @@ export class CompetitiveRepository {
                SELECT 1 FROM player_profiles profile
                WHERE profile.user_id = player_account_stats.user_id
                  AND ((MAX(profile.level, 1) - 1) * 200 + profile.xp) >= 200
-             )`
+             )
+             AND ${noUnpublishedMatchExperienceSQL(
+               'player_account_stats.user_id'
+             )}`
         )
         .bind(INITIAL_RANK_STATE_JSON, now, userId, season)
     ])
@@ -975,7 +993,11 @@ export class CompetitiveRepository {
     const userId = address.slice('identity:'.length)
     const profile = await this.database
       .prepare(
-        `SELECT profile.level, profile.xp
+        `SELECT ${publishedAccountLevelSQL(
+          'profile.user_id',
+          'profile.level'
+        )} AS level,
+                ${publishedAccountXpSQL('profile.user_id', 'profile.xp')} AS xp
          FROM player_profiles profile
          JOIN users ON users.id = profile.user_id
          WHERE profile.user_id = ? AND users.user_kind = 'PLAYER'`
@@ -983,6 +1005,10 @@ export class CompetitiveRepository {
       .bind(userId)
       .first<{ level: number; xp: number }>()
     if (!profile) return null
+    const visibleProfile = {
+      level: sourceVisibleAccountLevel(profile.level),
+      xp: sourceVisibleExperienceXp(profile.xp)
+    }
 
     const currentSeason = seasonFromDate()
     const requested =
@@ -1022,7 +1048,12 @@ export class CompetitiveRepository {
           const row = byKey.get(`${season}:${mode}`)
           return row
             ? statFromRow(row)
-            : syntheticStat(mode, season, profile.level, profile.xp)
+            : syntheticStat(
+                mode,
+                season,
+                visibleProfile.level,
+                visibleProfile.xp
+              )
         })
     return {
       constructedStats: statsFor('RANKED_CONSTRUCTED' as GameMode),
@@ -1048,8 +1079,16 @@ export class CompetitiveRepository {
                 account.tag_art_id, account.title_id,
                 ${sourceCrystalIDSQL('stats.user_id')} AS crystal_id,
                 users.created_at AS user_created_at,
-                profile.updated_at AS profile_updated_at,
-                profile.level, profile.xp, profile.next_level_xp,
+                ${publishedProfileUpdatedAtSQL(
+                  'stats.user_id',
+                  'profile.updated_at'
+                )} AS profile_updated_at,
+                ${publishedAccountLevelSQL(
+                  'stats.user_id',
+                  'profile.level'
+                )} AS level,
+                ${publishedAccountXpSQL('stats.user_id', 'profile.xp')} AS xp,
+                profile.next_level_xp,
                 ${publishedWarmUpsSQL(
                   'stats.user_id',
                   'account.warm_ups'
@@ -1069,6 +1108,9 @@ export class CompetitiveRepository {
     let rows = projectLeaderboardRows(
       result.results.map(row => ({
         ...row,
+        level: sourceVisibleAccountLevel(row.level),
+        xp: sourceVisibleExperienceXp(row.xp),
+        profile_updated_at: sourceVisibleTimestamp(row.profile_updated_at),
         warm_ups: sourceVisibleWarmUps(row.warm_ups)
       }))
     )

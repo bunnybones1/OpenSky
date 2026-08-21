@@ -17,6 +17,16 @@ import {
 } from '@opensky/shared/ranked-progression'
 import { sourceHeroSkinIdForDeckClass } from '@opensky/shared/source-hero-skins'
 import { ConquestRepository } from '../../cloudflare/src/conquest'
+import {
+  noUnpublishedMatchExperienceSQL,
+  publishedAccountLevelSQL,
+  publishedAccountXpSQL,
+  publishedSeasonAchievedLevelSQL,
+  publishedSeasonInitialLevelSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleExperienceXp,
+  sourceVisibleSeasonProgress
+} from '../../cloudflare/src/experience-publication'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
 import {
   publishedWarmUpsSQL,
@@ -38,7 +48,8 @@ interface HumanProfileRow {
   level: number
   xp: number
   next_level_xp: number
-  season_level: number
+  initial_account_level: number
+  achieved_account_level: number
 }
 
 interface HumanStatRow {
@@ -362,7 +373,14 @@ export class MatchRepository {
     ] = await Promise.all([
       this.database
         .prepare(
-          `SELECT profile.level, profile.xp
+          `SELECT ${publishedAccountLevelSQL(
+            'profile.user_id',
+            'profile.level'
+          )} AS level,
+                  ${publishedAccountXpSQL(
+                    'profile.user_id',
+                    'profile.xp'
+                  )} AS xp
            FROM users JOIN player_profiles profile ON profile.user_id = users.id
            WHERE users.id = ? AND users.user_kind = 'PLAYER'`
         )
@@ -433,6 +451,10 @@ export class MatchRepository {
         : Promise.resolve(null)
     ])
     if (!user) throw new Error('player was not found')
+    const visibleUser = {
+      level: sourceVisibleAccountLevel(user.level),
+      xp: sourceVisibleExperienceXp(user.xp)
+    }
 
     const cards = new Map<number, 'base' | 'silver' | 'gold'>()
     for (const item of items.results) {
@@ -471,7 +493,7 @@ export class MatchRepository {
       lostLastMatch: (stats?.loss_streak ?? 0) > 0,
       cards: [...cards.entries()].sort(([left], [right]) => left - right),
       recentMatches,
-      rankedEligible: hasUnlockedRanked(user.level, user.xp),
+      rankedEligible: hasUnlockedRanked(visibleUser.level, visibleUser.xp),
       abandonPenaltyMs: Math.max(0, cooldownExpiresAt - now),
       ...(conquest ? { conquest } : {}),
       ...(active
@@ -548,7 +570,10 @@ export class MatchRepository {
                SELECT 1 FROM player_profiles profile
                WHERE profile.user_id = player_account_stats.user_id
                  AND ((MAX(profile.level, 1) - 1) * 200 + profile.xp) >= 200
-             )`
+             )
+             AND ${noUnpublishedMatchExperienceSQL(
+               'player_account_stats.user_id'
+             )}`
         )
         .bind(INITIAL_RANK_STATE_JSON, now, userId, currentSeason)
     ])
@@ -565,7 +590,8 @@ export class MatchRepository {
     ] = await Promise.all([
       this.database
         .prepare(
-          `SELECT account.name AS account_name,
+          `WITH current_season(season) AS (VALUES (?))
+           SELECT account.name AS account_name,
                   account.locale,
                   account.region,
                   account.tag_art_id,
@@ -576,20 +602,27 @@ export class MatchRepository {
                   )} AS warm_ups,
                   u.created_at AS user_created_at,
                   account.updated_at AS account_updated_at,
-                  p.level,
-                  p.xp,
+                  ${publishedAccountLevelSQL('u.id', 'p.level')} AS level,
+                  ${publishedAccountXpSQL('u.id', 'p.xp')} AS xp,
                   p.next_level_xp,
-                  COALESCE(MAX(
-                    0,
-                    skypass.achieved_account_level
-                      - skypass.initial_account_level
-                  ), 0) AS season_level
+                  ${publishedSeasonInitialLevelSQL(
+                    'u.id',
+                    'current_season.season',
+                    'skypass.initial_account_level'
+                  )} AS initial_account_level,
+                  ${publishedSeasonAchievedLevelSQL(
+                    'u.id',
+                    'current_season.season',
+                    'skypass.achieved_account_level'
+                  )} AS achieved_account_level
            FROM users u
+           CROSS JOIN current_season
            JOIN player_profiles p ON p.user_id = u.id
            JOIN player_progression progression ON progression.user_id = u.id
            JOIN player_account_settings account ON account.user_id = u.id
            LEFT JOIN player_skypass_season_stats skypass
-             ON skypass.user_id = u.id AND skypass.season = ?
+             ON skypass.user_id = u.id
+            AND skypass.season = current_season.season
            WHERE u.id = ?`
         )
         .bind(currentSeason, userId)
@@ -648,11 +681,21 @@ export class MatchRepository {
     ])
     if (!profile || !gameAccount)
       throw new Error('player profile is not initialized')
+    const visibleLevel = sourceVisibleAccountLevel(profile.level)
+    const visibleXp = sourceVisibleExperienceXp(profile.xp)
+    const visibleSeason = sourceVisibleSeasonProgress(
+      profile.initial_account_level,
+      profile.achieved_account_level
+    )
+    const visibleSeasonLevel =
+      visibleSeason.initial === null || visibleSeason.achieved === null
+        ? 0
+        : visibleSeason.achieved - visibleSeason.initial
 
     if (
       (gameMode === GameMode.RANKED_CONSTRUCTED ||
         gameMode === GameMode.RANKED_DISCOVERY) &&
-      !hasUnlockedRanked(profile.level, profile.xp)
+      !hasUnlockedRanked(visibleLevel, visibleXp)
     ) {
       throw new MatchPreconditionError(
         'RANK_TOO_LOW',
@@ -718,7 +761,7 @@ export class MatchRepository {
       ...(ownsHeroSkin ? { heroSkin } : {})
     }
     return {
-      level: profile.level,
+      level: visibleLevel,
       ...(isConquest ? { conquestInfo: conquest! } : {}),
       unlockedCards: cards,
       spectateCode,
@@ -750,12 +793,12 @@ export class MatchRepository {
         locale: profile.locale,
         createdAt: profile.user_created_at,
         updatedAt: profile.account_updated_at,
-        experience: profile.xp,
+        experience: visibleXp,
         warmUps: sourceVisibleWarmUps(profile.warm_ups),
-        level: profile.level,
-        seasonLevel: profile.season_level,
+        level: visibleLevel,
+        seasonLevel: visibleSeasonLevel,
         levelUpXP: profile.next_level_xp,
-        stats: statsFromRows(statRows.results, profile.level, profile.xp),
+        stats: statsFromRows(statRows.results, visibleLevel, visibleXp),
         isBurnerWallet: false,
         ...(profile.region ? { region: profile.region } : {}),
         ...(profile.tag_art_id ? { tagArtID: profile.tag_art_id } : {}),

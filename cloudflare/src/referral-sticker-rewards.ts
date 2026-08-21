@@ -1,3 +1,7 @@
+import {
+  noUnpublishedReferralLevelsSQL,
+  noUnpublishedReferralPointsSQL
+} from './experience-publication'
 import { seasonFromDate } from './legacy-seasons'
 
 const STICKER_REWARD_AMOUNT = 100
@@ -54,6 +58,11 @@ const carryPointsIntoSeason = async (
               levels + points_carried - points_spent, 0, ?
        FROM player_friend_points
        WHERE season = ? AND levels + points_carried - points_spent > 0
+         AND ${noUnpublishedReferralLevelsSQL(
+           'player_friend_points.invitee_user_id',
+           'player_friend_points.inviter_user_id',
+           'player_friend_points.season'
+         )}
        ON CONFLICT(invitee_user_id, inviter_user_id, season)
        DO UPDATE SET points_carried = excluded.points_carried,
                      updated_at = excluded.updated_at`
@@ -76,6 +85,7 @@ const candidateUsers = async (
        WHERE item.item_type = 'SW_STICKER_POINTS' AND item.token_id = 0
          AND item.balance >= ?
          AND settings.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')
+         AND ${noUnpublishedReferralPointsSQL('item.user_id', String(season))}
          AND EXISTS (
            SELECT 1 FROM referral_sticker_active_schedule_entries sticker
            WHERE sticker.season = ? AND sticker.schedule_version = ?
@@ -183,7 +193,7 @@ const prepareForUser = async (
            SELECT 1 FROM referral_sticker_reward_batches
            WHERE user_id = ? AND season = ?
              AND status IN ('PREPARING', 'PENDING', 'DELIVERING')
-         )`
+         ) AND ${noUnpublishedReferralPointsSQL('?', '?')}`
       )
       .bind(
         userId,
@@ -196,6 +206,8 @@ const prepareForUser = async (
         nowText,
         userId,
         pointsDeducted,
+        userId,
+        season,
         userId,
         season
       ),

@@ -1,3 +1,4 @@
+import { noUnpublishedMatchExperienceSQL } from './experience-publication'
 import { seasonName, seasonStart } from './legacy-seasons'
 import { PlayerRpcRepository } from './player-rpc'
 
@@ -74,6 +75,7 @@ const pendingPlayers = (database: D1Database, season: number) =>
        FROM player_skypass_season_stats stats
        WHERE stats.season = ?
          AND stats.achieved_account_level > stats.initial_account_level
+         AND ${noUnpublishedMatchExperienceSQL('stats.user_id', 'stats.season')}
          AND NOT EXISTS (
            SELECT 1 FROM player_skypass_auto_claims receipt
          WHERE receipt.user_id = stats.user_id
@@ -127,20 +129,23 @@ const recordPlayerCompletion = async (
   rewardCount: number,
   gainedRewards: Array<Record<string, unknown>>,
   completedAt: string
-): Promise<void> => {
+): Promise<boolean> => {
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
         `INSERT OR IGNORE INTO player_skypass_auto_claims
            (user_id, season, claimed_reward_count, gained_rewards, completed_at)
-         VALUES (?, ?, ?, ?, ?)`
+         SELECT ?, ?, ?, ?, ?
+         WHERE ${noUnpublishedMatchExperienceSQL('?', '?')}`
       )
       .bind(
         userId,
         season,
         rewardCount,
         JSON.stringify(gainedRewards),
-        completedAt
+        completedAt,
+        userId,
+        season
       )
   ]
   if (rewardCount > 0) {
@@ -178,6 +183,15 @@ const recordPlayerCompletion = async (
     )
   }
   await database.batch(statements)
+  return (
+    (await database
+      .prepare(
+        `SELECT 1 FROM player_skypass_auto_claims
+         WHERE user_id = ? AND season = ?`
+      )
+      .bind(userId, season)
+      .first()) !== null
+  )
 }
 
 const claimForPlayer = async (
@@ -234,7 +248,7 @@ const claimForPlayer = async (
       completed: false
     }
   }
-  await recordPlayerCompletion(
+  const completed = await recordPlayerCompletion(
     database,
     userId,
     season,
@@ -244,7 +258,7 @@ const claimForPlayer = async (
   )
   return {
     claimed: autoClaims.results.length - (priorAutoClaims?.count ?? 0),
-    completed: true
+    completed
   }
 }
 
@@ -252,6 +266,18 @@ const cycleStillHasPendingPlayers = async (
   database: D1Database,
   season: number
 ): Promise<boolean> => {
+  const unpublishedExperience = await database
+    .prepare(
+      `SELECT 1
+       FROM multiplayer_match_experience_players experience
+       JOIN multiplayer_matches match
+         ON match.proposal_id = experience.proposal_id
+       WHERE experience.season = ? AND match.status <> 'ended'
+       LIMIT 1`
+    )
+    .bind(season)
+    .first()
+  if (unpublishedExperience) return true
   const pending = await pendingPlayers(database, season)
   return pending.results.length > 0
 }

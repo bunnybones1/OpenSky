@@ -25,15 +25,18 @@ export const REVIEWED_SEASON_PROGRESS_CONTRACTS = {
     [
       'cloudflare/src/player-rpc.ts',
       'cloudflare/src/player.ts',
+      'cloudflare/src/experience-publication.ts',
       'match-service-cloudflare/src/repository.ts',
       'cloudflare/test/player-rpc.test.ts',
       'match-service-cloudflare/test-cloudflare/worker.test.ts'
     ],
     [
       'effectiveSkypassSeasonLevel(',
-      'seasonProgress.achieved_account_level -',
-      'skypass.achieved_account_level',
-      '- skypass.initial_account_level',
+      'publishedSeasonInitialLevelSQL(',
+      'publishedSeasonAchievedLevelSQL(',
+      'sourceVisibleSeasonProgress(',
+      'visibleSeason.initial,',
+      'visibleSeason.achieved',
       ').toMatchObject({ seasonLevel: 0 })',
       'seasonLevel: 0'
     ]
@@ -53,10 +56,17 @@ export const REVIEWED_SEASON_PROGRESS_CONTRACTS = {
     ]
   ),
   'tutorial-experience-level': contract(
-    ['cloudflare/src/bot-match.ts', 'cloudflare/test/bot-match-rpc.test.ts'],
     [
-      'stats.achieved_account_level - stats.initial_account_level',
-      'currentLevel: player.season_level',
+      'cloudflare/src/bot-match.ts',
+      'cloudflare/src/experience-publication.ts',
+      'cloudflare/test/bot-match-rpc.test.ts'
+    ],
+    [
+      'publishedSeasonInitialLevelSQL(',
+      'publishedSeasonAchievedLevelSQL(',
+      'sourceVisibleSeasonProgress(',
+      'visibleSeason.achieved - visibleSeason.initial',
+      'currentLevel: visibleSeasonLevel',
       "reason: 'TutorialCompleted'",
       'currentLevel: 0'
     ]
@@ -139,7 +149,9 @@ export const seasonProgressAuditErrors = ({
 
   for (const [file, count] of Object.entries(actualCalls)) {
     if (!(file in reviewedSourceCalls)) {
-      errors.push(`unreviewed source LevelProgress consumer: ${file} (${count})`)
+      errors.push(
+        `unreviewed source LevelProgress consumer: ${file} (${count})`
+      )
     }
   }
   for (const [file, expectedCount] of Object.entries(reviewedSourceCalls)) {
@@ -179,7 +191,10 @@ export const readExecutableGoSources = async root => {
       const absolute = path.join(directory, entry.name)
       if (entry.isDirectory()) {
         await visit(absolute)
-      } else if (entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')) {
+      } else if (
+        entry.name.endsWith('.go') &&
+        !entry.name.endsWith('_test.go')
+      ) {
         const relative = path.relative(root, absolute).split(path.sep).join('/')
         sources[relative] = await readFile(absolute, 'utf8')
       }

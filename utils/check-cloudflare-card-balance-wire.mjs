@@ -163,7 +163,9 @@ export const cardBalanceWireErrors = (
     }
   }
   if (!cardLibrary.includes('sourceCardBalanceItemTypes.has(item.itemType)')) {
-    errors.push('Worker SearchCards does not apply the source balance type range')
+    errors.push(
+      'Worker SearchCards does not apply the source balance type range'
+    )
   }
   if (searchProjection.includes('item.isNew')) {
     errors.push('Worker SearchCards invents a non-source IsNew value')
@@ -195,8 +197,8 @@ export const cardBalanceWireErrors = (
     'async itemSummary('
   )
   if (
-    !inventoryQuery.includes('WHERE user_id = ? AND balance > 0') ||
-    inventoryQuery.includes('item_type IN')
+    !inventoryQuery.includes('WHERE item.user_id = ? AND item.balance > 0') ||
+    inventoryQuery.includes('item.item_type IN')
   ) {
     errors.push(
       'Worker card-search inventory no longer preserves the source range'

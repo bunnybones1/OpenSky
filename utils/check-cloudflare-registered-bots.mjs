@@ -119,17 +119,22 @@ export const registeredBotErrors = value => {
     'func (s *Server) InternalGetBotAccounts(',
     'func (s *Server) GetAccount('
   )
-  requireOrdered(errors, 'Source compatible bot account query', sourceAccounts, [
-    '"is_bot": true',
-    '"season":     data.CurrentSeason()',
-    '"game_mode":  *req.GameMode',
-    '"player_rank": db.Lte(*req.OpponentRank)',
-    '"score": db.Lte(req.OpponentScore + 200)',
-    'NOT EXISTS (SELECT 1 FROM matches',
-    'rand.Shuffle(len(accounts)',
-    'math.Abs(float64(req.OpponentScore)',
-    'return filtered, nil'
-  ])
+  requireOrdered(
+    errors,
+    'Source compatible bot account query',
+    sourceAccounts,
+    [
+      '"is_bot": true',
+      '"season":     data.CurrentSeason()',
+      '"game_mode":  *req.GameMode',
+      '"player_rank": db.Lte(*req.OpponentRank)',
+      '"score": db.Lte(req.OpponentScore + 200)',
+      'NOT EXISTS (SELECT 1 FROM matches',
+      'rand.Shuffle(len(accounts)',
+      'math.Abs(float64(req.OpponentScore)',
+      'return filtered, nil'
+    ]
+  )
 
   const sourceMatcher = between(
     value.sourceMatcher,
@@ -203,28 +208,45 @@ export const registeredBotErrors = value => {
     'continue'
   ])
 
-  requireOrdered(errors, 'Match-service registered bot contract', value.protocol, [
-    'registeredBot?: RegisteredBotSelection',
-    "const botPrisms = new Set(['str', 'hrt', 'agy', 'int', 'wis'])",
-    'const parseRegisteredBot =',
-    "!policy.enableRankedBots",
-    "'registered bots are disabled for this game mode'"
-  ])
-  requireOrdered(errors, 'Match-service registered bot allocation', value.worker, [
-    'const registeredBotSelection = async',
-    'explicitlyEnabled(env.ENABLE_RANKED_BOTS)',
-    'selectRegisteredBot(',
-    "url.pathname === '/internal/matchmaker/registered-bot'",
-    'dispatch.participants[0].registeredBot?.userId',
-    'validateRegisteredBotSelection(',
-    'buildMatch('
-  ])
-  requireOrdered(errors, 'Player-facing registered bot visibility', value.competitive, [
-    "userId?.startsWith('system:bot:')",
-    'address: userId && !registeredBot',
-    'LEFT JOIN registered_matchmaker_bots bot ON bot.user_id = account.id',
-    "account.user_kind = 'SYSTEM' AND bot.user_id IS NULL"
-  ])
+  requireOrdered(
+    errors,
+    'Match-service registered bot contract',
+    value.protocol,
+    [
+      'registeredBot?: RegisteredBotSelection',
+      "const botPrisms = new Set(['str', 'hrt', 'agy', 'int', 'wis'])",
+      'const parseRegisteredBot =',
+      '!policy.enableRankedBots',
+      "'registered bots are disabled for this game mode'"
+    ]
+  )
+  requireOrdered(
+    errors,
+    'Match-service registered bot allocation',
+    value.worker,
+    [
+      'const registeredBotSelection = async',
+      'explicitlyEnabled(env.ENABLE_RANKED_BOTS)',
+      'selectRegisteredBot(',
+      "url.pathname === '/internal/matchmaker/registered-bot'",
+      'dispatch.participants[0].registeredBot?.userId',
+      'validateRegisteredBotSelection(',
+      'buildMatch('
+    ]
+  )
+  requireOrdered(
+    errors,
+    'Player-facing registered bot visibility',
+    value.competitive,
+    [
+      "userId?.startsWith('system:bot:')",
+      'address:',
+      'userId && !registeredBot',
+      'identityReferenceFor(userId)',
+      'LEFT JOIN registered_matchmaker_bots bot ON bot.user_id = account.id',
+      "account.user_kind = 'SYSTEM' AND bot.user_id IS NULL"
+    ]
+  )
 
   for (const title of [
     'keeps registry identity immutable and disabled bots out of allocations',
@@ -236,7 +258,9 @@ export const registeredBotErrors = value => {
     'allocates a registered bot snapshot only through the enabled internal contract'
   ]) {
     if (!value.matchServiceTest.includes(title)) {
-      errors.push(`Match-service registered bot regression is missing: ${title}`)
+      errors.push(
+        `Match-service registered bot regression is missing: ${title}`
+      )
     }
   }
   if (
@@ -270,9 +294,8 @@ export const registeredBotErrors = value => {
     }
   }
 
-  const command = value.rootPackage.scripts?.[
-    'check:cloudflare:registered-bots'
-  ] ?? ''
+  const command =
+    value.rootPackage.scripts?.['check:cloudflare:registered-bots'] ?? ''
   if (
     !command.includes('check-cloudflare-registered-bots.test.mjs') ||
     !command.includes('check-cloudflare-registered-bots.mjs')
@@ -300,11 +323,11 @@ export const registeredBotErrors = value => {
     errors.push('CI audit does not require the registered bot gate')
   }
   if (
-    !value.ciAuditTest.includes(
-      "'pnpm check:cloudflare:registered-bots && '"
-    )
+    !value.ciAuditTest.includes("'pnpm check:cloudflare:registered-bots && '")
   ) {
-    errors.push('CI audit test does not mutation-test registered bot gate removal')
+    errors.push(
+      'CI audit test does not mutation-test registered bot gate removal'
+    )
   }
   return errors
 }

@@ -46,6 +46,21 @@ import {
   notFound,
   permissionDenied
 } from './errors'
+import {
+  publishedAccountLevelSQL,
+  publishedAccountXpSQL,
+  publishedProfileUpdatedAtSQL,
+  publishedReferralStickerCreatedAtSQL,
+  publishedReferralStickerPointsSQL,
+  publishedReferralStickerUpdatedAtSQL,
+  publishedSeasonAchievedLevelSQL,
+  publishedSeasonInitialLevelSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleExperienceXp,
+  sourceVisibleNonNegative,
+  sourceVisibleSeasonProgress,
+  sourceVisibleTimestamp
+} from './experience-publication'
 import { seasonFromDate } from './legacy-seasons'
 import {
   nextSourceEpicSpec,
@@ -1174,7 +1189,8 @@ export class PlayerRpcRepository {
     const currentSeason = seasonFromDate()
     const row = await this.database
       .prepare(
-        `SELECT u.display_name, game.id AS game_account_id,
+        `WITH current_season(season) AS (VALUES (?))
+         SELECT u.display_name, game.id AS game_account_id,
                 account.name AS account_name,
                 account.locale,
                 account.region,
@@ -1189,18 +1205,31 @@ export class PlayerRpcRepository {
                 account.spectate_code,
                 account.spectate_code_expires_at,
                 u.created_at AS user_created_at,
-                p.updated_at AS profile_updated_at,
-                p.level,
-                p.xp,
+                ${publishedProfileUpdatedAtSQL(
+                  'u.id',
+                  'p.updated_at'
+                )} AS profile_updated_at,
+                ${publishedAccountLevelSQL('u.id', 'p.level')} AS level,
+                ${publishedAccountXpSQL('u.id', 'p.xp')} AS xp,
                 p.next_level_xp,
-                skypass.initial_account_level,
-                skypass.achieved_account_level,
+                ${publishedSeasonInitialLevelSQL(
+                  'u.id',
+                  'current_season.season',
+                  'skypass.initial_account_level'
+                )} AS initial_account_level,
+                ${publishedSeasonAchievedLevelSQL(
+                  'u.id',
+                  'current_season.season',
+                  'skypass.achieved_account_level'
+                )} AS achieved_account_level,
                 invite.inviter_user_id
          FROM users u
+         CROSS JOIN current_season
          JOIN player_profiles p ON p.user_id = u.id
          JOIN player_progression g ON g.user_id = u.id
          LEFT JOIN player_skypass_season_stats skypass
-           ON skypass.user_id = u.id AND skypass.season = ?
+           ON skypass.user_id = u.id
+          AND skypass.season = current_season.season
          LEFT JOIN player_account_settings account ON account.user_id = u.id
          LEFT JOIN game_accounts game ON game.user_id = u.id
          LEFT JOIN player_invites invite ON invite.invitee_user_id = u.id
@@ -1209,6 +1238,12 @@ export class PlayerRpcRepository {
       .bind(currentSeason, userId)
       .first<AccountRow>()
     if (!row) return null
+    const visibleLevel = sourceVisibleAccountLevel(row.level)
+    const visibleXp = sourceVisibleExperienceXp(row.xp)
+    const visibleSeason = sourceVisibleSeasonProgress(
+      row.initial_account_level,
+      row.achieved_account_level
+    )
 
     return sourceAccountWire({
       id: row.game_account_id ?? 0,
@@ -1216,17 +1251,16 @@ export class PlayerRpcRepository {
       name: row.account_name || row.display_name,
       locale: row.locale || 'en',
       createdAt: row.user_created_at,
-      updatedAt: row.profile_updated_at,
-      experience: row.xp,
+      updatedAt: sourceVisibleTimestamp(row.profile_updated_at),
+      experience: visibleXp,
       warmUps: sourceVisibleWarmUps(row.warm_ups),
-      level: row.level,
+      level: visibleLevel,
       seasonLevel:
-        row.initial_account_level === null ||
-        row.achieved_account_level === null
+        visibleSeason.initial === null || visibleSeason.achieved === null
           ? 0
           : effectiveSkypassSeasonLevel(
-              row.initial_account_level,
-              row.achieved_account_level
+              visibleSeason.initial,
+              visibleSeason.achieved
             ),
       levelUpXP: row.next_level_xp,
       stats,
@@ -1802,10 +1836,7 @@ export class PlayerRpcRepository {
       DeckClass.STR,
       ...heroes.results
         .filter(hero => hero.token_id !== 1)
-        .map(
-          hero =>
-            HERO_DECK_CLASS[hero.token_id] || DeckClass.UNKNOWN_CLASS
-        )
+        .map(hero => HERO_DECK_CLASS[hero.token_id] || DeckClass.UNKNOWN_CLASS)
     ]
   }
 
@@ -1866,15 +1897,45 @@ export class PlayerRpcRepository {
     await this.applyDeferredItemUpdates(userId)
     const result = await this.database
       .prepare(
-        `SELECT id, item_type, token_id, balance, created_at, updated_at, is_new
-         FROM player_items
-         WHERE user_id = ? AND balance > 0
-         ORDER BY item_type ASC, token_id ASC`
+        `SELECT item.id, item.item_type, item.token_id,
+                CASE WHEN item.item_type = 'SW_STICKER_POINTS'
+                       AND item.token_id = 0
+                  THEN ${publishedReferralStickerPointsSQL(
+                    'item.user_id',
+                    'item.balance'
+                  )}
+                  ELSE item.balance
+                END AS balance,
+                CASE WHEN item.item_type = 'SW_STICKER_POINTS'
+                       AND item.token_id = 0
+                  THEN ${publishedReferralStickerCreatedAtSQL(
+                    'item.user_id',
+                    'item.created_at'
+                  )}
+                  ELSE item.created_at
+                END AS created_at,
+                CASE WHEN item.item_type = 'SW_STICKER_POINTS'
+                       AND item.token_id = 0
+                  THEN ${publishedReferralStickerUpdatedAtSQL(
+                    'item.user_id',
+                    'item.updated_at'
+                  )}
+                  ELSE item.updated_at
+                END AS updated_at,
+                item.is_new
+         FROM player_items item
+         WHERE item.user_id = ? AND item.balance > 0
+         ORDER BY item.item_type ASC, item.token_id ASC`
       )
       .bind(userId)
       .all<InventoryRow>()
     const requested = itemTypes?.length ? new Set(itemTypes) : undefined
     return result.results
+      .map(row => ({
+        ...row,
+        balance: sourceVisibleNonNegative(row.balance)
+      }))
+      .filter(row => row.balance > 0)
       .filter(row => !requested || requested.has(row.item_type))
       .map(row =>
         sourceItemWire({
@@ -1883,8 +1944,8 @@ export class PlayerRpcRepository {
           tokenID: row.token_id,
           balance: String(row.balance),
           lastUpdateID: 0,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
+          createdAt: sourceVisibleTimestamp(row.created_at),
+          updatedAt: sourceVisibleTimestamp(row.updated_at),
           isNew: row.is_new === 1
         })
       )
@@ -1901,20 +1962,44 @@ export class PlayerRpcRepository {
   > {
     const result = await this.database
       .prepare(
-        `SELECT item_type, token_id, balance, is_new, created_at
-         FROM player_items
-         WHERE user_id = ? AND balance > 0
-         ORDER BY token_id ASC, item_type ASC`
+        `SELECT item.item_type, item.token_id,
+                CASE WHEN item.item_type = 'SW_STICKER_POINTS'
+                       AND item.token_id = 0
+                  THEN ${publishedReferralStickerPointsSQL(
+                    'item.user_id',
+                    'item.balance'
+                  )}
+                  ELSE item.balance
+                END AS balance,
+                item.is_new,
+                CASE WHEN item.item_type = 'SW_STICKER_POINTS'
+                       AND item.token_id = 0
+                  THEN ${publishedReferralStickerCreatedAtSQL(
+                    'item.user_id',
+                    'item.created_at'
+                  )}
+                  ELSE item.created_at
+                END AS created_at
+         FROM player_items item
+         WHERE item.user_id = ? AND item.balance > 0
+         ORDER BY item.token_id ASC, item.item_type ASC`
       )
       .bind(userId)
       .all<InventoryRow>()
-    return result.results.map(row => ({
-      itemType: row.item_type,
-      tokenId: row.token_id,
-      balance: row.balance,
-      isNew: row.is_new === 1,
-      createdAt: row.created_at
-    }))
+    return result.results.flatMap(row => {
+      const balance = sourceVisibleNonNegative(row.balance)
+      return balance > 0
+        ? [
+            {
+              itemType: row.item_type,
+              tokenId: row.token_id,
+              balance,
+              isNew: row.is_new === 1,
+              createdAt: sourceVisibleTimestamp(row.created_at)
+            }
+          ]
+        : []
+    })
   }
 
   async itemSummary(
@@ -2411,7 +2496,13 @@ export class PlayerRpcRepository {
   private async questEligibility(userId: string): Promise<QuestEligibility> {
     const [profile, items] = await Promise.all([
       this.database
-        .prepare(`SELECT level FROM player_profiles WHERE user_id = ?`)
+        .prepare(
+          `SELECT ${publishedAccountLevelSQL(
+            'profile.user_id',
+            'profile.level'
+          )} AS level
+           FROM player_profiles profile WHERE user_id = ?`
+        )
         .bind(userId)
         .first<{ level: number }>(),
       this.database
@@ -2435,7 +2526,11 @@ export class PlayerRpcRepository {
         ownedCards.add(item.token_id)
       }
     }
-    return { level: profile.level, ownedHeroes, ownedCards }
+    return {
+      level: sourceVisibleAccountLevel(profile.level),
+      ownedHeroes,
+      ownedCards
+    }
   }
 
   private async latestQuestRerolls(
@@ -3456,24 +3551,50 @@ export class PlayerRpcRepository {
   ): Promise<{ levels: SkypassLevel[]; hasPremium: boolean }> {
     const [profile, seasonStats] = await Promise.all([
       this.database
-        .prepare(`SELECT level FROM player_profiles WHERE user_id = ?`)
+        .prepare(
+          `SELECT ${publishedAccountLevelSQL(
+            'profile.user_id',
+            'profile.level'
+          )} AS level
+           FROM player_profiles profile WHERE user_id = ?`
+        )
         .bind(userId)
         .first<{ level: number }>(),
       this.database
         .prepare(
-          `SELECT has_premium, initial_account_level, achieved_account_level
-           FROM player_skypass_season_stats
-           WHERE user_id = ? AND season = ?`
+          `WITH requested_season(season) AS (VALUES (?))
+           SELECT COALESCE(stats.has_premium, 0) AS has_premium,
+                  ${publishedSeasonInitialLevelSQL(
+                    'profile.user_id',
+                    'requested_season.season',
+                    'stats.initial_account_level'
+                  )} AS initial_account_level,
+                  ${publishedSeasonAchievedLevelSQL(
+                    'profile.user_id',
+                    'requested_season.season',
+                    'stats.achieved_account_level'
+                  )} AS achieved_account_level
+           FROM player_profiles profile
+           CROSS JOIN requested_season
+           LEFT JOIN player_skypass_season_stats stats
+             ON stats.user_id = profile.user_id
+            AND stats.season = requested_season.season
+           WHERE profile.user_id = ?`
         )
-        .bind(userId, season)
+        .bind(season, userId)
         .first<SkypassSeasonStatRow>()
     ])
+    const visibleProfileLevel = profile
+      ? sourceVisibleAccountLevel(profile.level)
+      : 1
+    const visibleSeason = sourceVisibleSeasonProgress(
+      seasonStats?.initial_account_level ?? null,
+      seasonStats?.achieved_account_level ?? null
+    )
     const fallbackSourceLevel =
-      season === seasonFromDate() ? Math.max(0, (profile?.level ?? 1) - 1) : 0
-    const initialAccountLevel =
-      seasonStats?.initial_account_level ?? fallbackSourceLevel
-    const achievedAccountLevel =
-      seasonStats?.achieved_account_level ?? fallbackSourceLevel
+      season === seasonFromDate() ? Math.max(0, visibleProfileLevel - 1) : 0
+    const initialAccountLevel = visibleSeason.initial ?? fallbackSourceLevel
+    const achievedAccountLevel = visibleSeason.achieved ?? fallbackSourceLevel
     // Preserve SkypassSeasonStat.LevelProgress exactly: achieved - initial.
     const progress = effectiveSkypassSeasonLevel(
       initialAccountLevel,

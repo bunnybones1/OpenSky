@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
+  experiencePublicationErrors,
   matchCompletionErrors,
   questPublicationErrors,
   warmUpPublicationErrors
@@ -126,6 +127,108 @@ const warmUpErrorsFor = value =>
     value.matchRepository,
     value.playerRpcTest,
     value.matchServiceTest
+  )
+
+const experienceFixtures = async () => {
+  const [
+    sourceMatches,
+    sourceAwarder,
+    sourceUpdater,
+    sourceLeveller,
+    gameMatch,
+    progression,
+    migration,
+    experiencePublication,
+    playerRpc,
+    playerState,
+    social,
+    competitive,
+    botMatch,
+    skypassAutoClaim,
+    referralStickerRewards,
+    matchRepository,
+    playerRpcTest,
+    gameServerTest,
+    matchServiceTest,
+    skypassAutoClaimTest,
+    referralStickerRewardsTest
+  ] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('api/lib/levels/xp/awarder.go', 'utf8'),
+    readFile('api/lib/levels/xp/updater.go', 'utf8'),
+    readFile('api/lib/levels/xp/leveller.go', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/progression.ts', 'utf8'),
+    readFile(
+      'cloudflare/migrations/0117_match_experience_publication_state.sql',
+      'utf8'
+    ),
+    readFile('cloudflare/src/experience-publication.ts', 'utf8'),
+    readFile('cloudflare/src/player-rpc.ts', 'utf8'),
+    readFile('cloudflare/src/player.ts', 'utf8'),
+    readFile('cloudflare/src/social.ts', 'utf8'),
+    readFile('cloudflare/src/competitive.ts', 'utf8'),
+    readFile('cloudflare/src/bot-match.ts', 'utf8'),
+    readFile('cloudflare/src/skypass-auto-claim.ts', 'utf8'),
+    readFile('cloudflare/src/referral-sticker-rewards.ts', 'utf8'),
+    readFile('match-service-cloudflare/src/repository.ts', 'utf8'),
+    readFile('cloudflare/test/player-rpc.test.ts', 'utf8'),
+    readFile(
+      'game-server-cloudflare/test-cloudflare/game-match.test.ts',
+      'utf8'
+    ),
+    readFile('match-service-cloudflare/test-cloudflare/worker.test.ts', 'utf8'),
+    readFile('cloudflare/test/skypass-auto-claim.test.ts', 'utf8'),
+    readFile('cloudflare/test/referral-sticker-rewards.test.ts', 'utf8')
+  ])
+  return {
+    sourceMatches,
+    sourceAwarder,
+    sourceUpdater,
+    sourceLeveller,
+    gameMatch,
+    progression,
+    migration,
+    experiencePublication,
+    playerRpc,
+    playerState,
+    social,
+    competitive,
+    botMatch,
+    skypassAutoClaim,
+    referralStickerRewards,
+    matchRepository,
+    playerRpcTest,
+    gameServerTest,
+    matchServiceTest,
+    skypassAutoClaimTest,
+    referralStickerRewardsTest
+  }
+}
+
+const experienceErrorsFor = value =>
+  experiencePublicationErrors(
+    value.sourceMatches,
+    value.sourceAwarder,
+    value.sourceUpdater,
+    value.sourceLeveller,
+    value.gameMatch,
+    value.progression,
+    value.migration,
+    value.experiencePublication,
+    value.playerRpc,
+    value.playerState,
+    value.social,
+    value.competitive,
+    value.botMatch,
+    value.skypassAutoClaim,
+    value.referralStickerRewards,
+    value.matchRepository,
+    value.playerRpcTest,
+    value.gameServerTest,
+    value.matchServiceTest,
+    value.skypassAutoClaimTest,
+    value.referralStickerRewardsTest
   )
 
 test('pins source transaction semantics and the Worker publication barrier', async () => {
@@ -594,6 +697,184 @@ test('rejects weakened Warm Up projections or runtime proof', async () => {
       warmUpErrorsFor(mutation),
       [],
       `Warm Up publication mutation ${index + 1} was not detected`
+    )
+  }
+})
+
+test('pins source-transactional multiplayer XP publication', async () => {
+  assert.deepEqual(experienceErrorsFor(await experienceFixtures()), [])
+})
+
+test('rejects weakened XP snapshots, projections, guards, or runtime proof', async () => {
+  const value = await experienceFixtures()
+  const mutations = [
+    {
+      ...value,
+      sourceMatches: value.sourceMatches.replace(
+        'MatchXPUpdater.UpdateFromMatch(tx, match',
+        'MatchXPUpdater.UpdateAfterMatch(tx, match'
+      )
+    },
+    {
+      ...value,
+      sourceLeveller: value.sourceLeveller.replace(
+        'data.DB.SkypassSeasonStats(sess).UpdateProgress(',
+        'data.DB.SkypassSeasonStats(sess).SkipProgress('
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'await applyMatchExperience(',
+        'await skipMatchExperience('
+      )
+    },
+    {
+      ...value,
+      progression: value.progression.replace(
+        'progression.basic_skypass_xp AS before_skypass_xp',
+        '0 AS before_skypass_xp'
+      )
+    },
+    {
+      ...value,
+      migration: value.migration.replace(
+        'multiplayer_match_experience_player_publication_state_guard',
+        'removed_match_experience_publication_state_guard'
+      )
+    },
+    {
+      ...value,
+      migration: value.migration.replace(
+        'profile.level = NEW.before_level',
+        'profile.level >= NEW.before_level'
+      )
+    },
+    {
+      ...value,
+      experiencePublication: value.experiencePublication.replaceAll(
+        "pending_match.status <> 'ended'",
+        "pending_match.status <> 'failed'"
+      )
+    },
+    {
+      ...value,
+      experiencePublication: value.experiencePublication.replaceAll(
+        'ORDER BY pending_experience.rowid ASC',
+        'ORDER BY pending_experience.processed_at ASC'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replace(
+        'publishedProfileUpdatedAtSQL(',
+        'rawProfileUpdatedAtSQL('
+      )
+    },
+    {
+      ...value,
+      playerState: value.playerState.replace(
+        'publishedSkypassXpSQL(',
+        'rawSkypassXpSQL('
+      )
+    },
+    {
+      ...value,
+      social: value.social.replaceAll(
+        'publishedReferralLevelsSQL(',
+        'rawReferralLevelsSQL('
+      )
+    },
+    {
+      ...value,
+      competitive: value.competitive.replaceAll(
+        'publishedAccountXpSQL(',
+        'rawAccountXpSQL('
+      )
+    },
+    {
+      ...value,
+      botMatch: value.botMatch.replace(
+        'publishedSeasonAchievedLevelSQL(',
+        'rawSeasonAchievedLevelSQL('
+      )
+    },
+    {
+      ...value,
+      skypassAutoClaim: value.skypassAutoClaim.replace(
+        'noUnpublishedMatchExperienceSQL(',
+        'allowUnpublishedMatchExperienceSQL('
+      )
+    },
+    {
+      ...value,
+      skypassAutoClaim: value.skypassAutoClaim.replace(
+        "match.status <> 'ended'",
+        "match.status <> 'failed'"
+      )
+    },
+    {
+      ...value,
+      referralStickerRewards: value.referralStickerRewards.replaceAll(
+        'noUnpublishedReferralPointsSQL(',
+        'allowUnpublishedReferralPointsSQL('
+      )
+    },
+    {
+      ...value,
+      referralStickerRewards: value.referralStickerRewards.replace(
+        'noUnpublishedReferralLevelsSQL(',
+        'allowUnpublishedReferralLevelsSQL('
+      )
+    },
+    {
+      ...value,
+      matchRepository: value.matchRepository.replaceAll(
+        'publishedAccountXpSQL(',
+        'rawAccountXpSQL('
+      )
+    },
+    {
+      ...value,
+      playerRpcTest: value.playerRpcTest.replace(
+        'publishes match XP, SkyPass, and referral progress with the terminal match',
+        'shows match XP immediately'
+      )
+    },
+    {
+      ...value,
+      gameServerTest: value.gameServerTest.replace(
+        'rejects a new match XP receipt without exact publication state',
+        'accepts partial XP receipts'
+      )
+    },
+    {
+      ...value,
+      matchServiceTest: value.matchServiceTest.replace(
+        'projects unpublished match experience into authoritative match accounts',
+        'loads raw match experience'
+      )
+    },
+    {
+      ...value,
+      skypassAutoClaimTest: value.skypassAutoClaimTest.replace(
+        'keeps a season close open until staged match XP publishes',
+        'closes the season over staged XP'
+      )
+    },
+    {
+      ...value,
+      referralStickerRewardsTest: value.referralStickerRewardsTest.replace(
+        'waits for staged referral points to publish before preparing rewards',
+        'spends staged referral points'
+      )
+    }
+  ]
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notDeepEqual(
+      experienceErrorsFor(mutation),
+      [],
+      `XP publication mutation ${index + 1} was not detected`
     )
   }
 })

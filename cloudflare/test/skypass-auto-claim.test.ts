@@ -39,6 +39,88 @@ const setupPlayer = async (
   }
 }
 
+const stageUnpublishedExperience = async (userId: string) => {
+  const proposalId = `skypass-pending-xp-${crypto.randomUUID()}`
+  const settlementToken = crypto.randomUUID()
+  const beforeAt = '2026-08-21T15:54:00.000Z'
+  const stagedAt = '2026-08-21T15:54:01.000Z'
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE player_profiles
+       SET level = 1, xp = 170, next_level_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(beforeAt, userId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 1, basic_skypass_xp = 170,
+           basic_skypass_next_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(beforeAt, userId),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+          player1_principal, player2_principal, player1_user_id,
+          player2_user_id, match_payload_json, status, created_at, updated_at)
+       VALUES (?, ?, 'PRACTICE_PVP', 'PRACTICE_PVP', 'PRACTICE_PVP',
+               'skypass-auto-claim-test', ?, ?, ?, NULL, '{}', 'active', ?, ?)`
+    ).bind(
+      proposalId,
+      `${proposalId}-replay`,
+      `identity:${userId}`,
+      `identity:bot:${proposalId}`,
+      userId,
+      stagedAt,
+      stagedAt
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_experience_players
+         (proposal_id, player_index, user_id, season, settlement_token,
+          experience_gain, before_level, before_xp, before_skypass_level,
+          before_skypass_xp, season_stats_existed_before,
+          season_initial_account_level_before,
+          season_achieved_account_level_before, profile_updated_at_before,
+          after_level, after_xp, ranked_constructed_before, inviter_user_id,
+          inviter_levels_before, inviter_sticker_points_before,
+          inviter_sticker_points_existed_before,
+          inviter_sticker_points_created_at_before,
+          inviter_sticker_points_updated_at_before, rewards_json, processed_at)
+       VALUES (?, 0, ?, ?, ?, 50, 1, 170, 1, 170, 1, 0, 0, ?,
+               2, 20, 'UNRANKED', NULL, 0, 0, 0, '', '', '[]', ?)`
+    ).bind(proposalId, userId, SEASON, settlementToken, beforeAt, stagedAt),
+    env.AUTH_DB.prepare(
+      `UPDATE player_profiles
+       SET level = 2, xp = 20, next_level_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(stagedAt, userId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 2, basic_skypass_xp = 20,
+           basic_skypass_next_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(stagedAt, userId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_skypass_season_stats
+       SET achieved_account_level = 1, updated_at = ?
+       WHERE user_id = ? AND season = ?`
+    ).bind(stagedAt, userId, SEASON),
+    ...['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, ?, ?, 0, 'WANDERER', 'STAGE_I', '[1,1750,350,0]', ?, ?)`
+      ).bind(userId, mode, SEASON, stagedAt, stagedAt)
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_experience
+         (proposal_id, player1_rewards_json, player2_rewards_json,
+          processed_at, player_count, settlement_token)
+       VALUES (?, '[]', '[]', ?, 1, ?)`
+    ).bind(proposalId, stagedAt, settlementToken)
+  ])
+  return { proposalId, stagedAt }
+}
+
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DELETE FROM users').run()
   await env.AUTH_DB.prepare('DELETE FROM skypass_season_close_cycles').run()
@@ -271,6 +353,47 @@ describe('SkyPass season auto-claim', () => {
         `SELECT COUNT(*) AS count FROM player_skypass_auto_claims`
       ).first()
     ).toEqual({ count: 0 })
+  })
+
+  it('keeps a season close open until staged match XP publishes', async () => {
+    const userId = 'pending-match-player'
+    await setupPlayer(userId, false, 0)
+    await createTestSkypassPolicy(env.AUTH_DB, SEASON, [
+      { level: 1, tier: 1, itemType: 303, amount: 5, isInfinite: 0 },
+      { level: 100, tier: 1, itemType: 403, amount: 1, isInfinite: 1 }
+    ])
+    const pending = await stageUnpublishedExperience(userId)
+
+    expect(await runDueSkypassAutoClaims(env.AUTH_DB, DUE)).toEqual({
+      cyclesCreated: 1,
+      seasonsCompleted: 0,
+      playersProcessed: 0,
+      rewardsClaimed: 0,
+      failures: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT completed_at FROM skypass_season_close_cycles
+         WHERE season = ?`
+      )
+        .bind(SEASON)
+        .first('completed_at')
+    ).toBeNull()
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(pending.stagedAt, pending.stagedAt, pending.proposalId)
+      .run()
+    expect(await runDueSkypassAutoClaims(env.AUTH_DB, DUE)).toEqual({
+      cyclesCreated: 0,
+      seasonsCompleted: 1,
+      playersProcessed: 1,
+      rewardsClaimed: 1,
+      failures: 0
+    })
   })
 
   it('keeps concurrent scheduled delivery idempotent', async () => {

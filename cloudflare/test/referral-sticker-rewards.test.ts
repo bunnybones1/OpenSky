@@ -108,6 +108,108 @@ const setupRewards = async () => {
   ])
 }
 
+const stagePendingReferralLevel = async () => {
+  const proposalId = `referral-pending-xp-${crypto.randomUUID()}`
+  const settlementToken = crypto.randomUUID()
+  const beforeAt = NOW.toISOString()
+  const stagedAt = new Date(NOW.getTime() + 1_000).toISOString()
+  await env.AUTH_DB.batch([
+    env.AUTH_DB.prepare(
+      `UPDATE player_profiles
+       SET level = 1, xp = 170, next_level_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(beforeAt, firstFriendId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 1, basic_skypass_xp = 170,
+           basic_skypass_next_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(beforeAt, firstFriendId),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+          player1_principal, player2_principal, player1_user_id,
+          player2_user_id, match_payload_json, status, created_at, updated_at)
+       VALUES (?, ?, 'PRACTICE_PVP', 'PRACTICE_PVP', 'PRACTICE_PVP',
+               'referral-publication-test', ?, ?, ?, NULL, '{}', 'active',
+               ?, ?)`
+    ).bind(
+      proposalId,
+      `${proposalId}-replay`,
+      `identity:${firstFriendId}`,
+      `identity:bot:${proposalId}`,
+      firstFriendId,
+      stagedAt,
+      stagedAt
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_experience_players
+         (proposal_id, player_index, user_id, season, settlement_token,
+          experience_gain, before_level, before_xp, before_skypass_level,
+          before_skypass_xp, season_stats_existed_before,
+          season_initial_account_level_before,
+          season_achieved_account_level_before, profile_updated_at_before,
+          after_level, after_xp, ranked_constructed_before, inviter_user_id,
+          inviter_levels_before, inviter_sticker_points_before,
+          inviter_sticker_points_existed_before,
+          inviter_sticker_points_created_at_before,
+          inviter_sticker_points_updated_at_before, rewards_json, processed_at)
+       VALUES (?, 0, ?, ?, ?, 50, 1, 170, 1, 170, 0, -1, -1, ?,
+               2, 20, 'UNRANKED', ?, 20, 35, 1, ?, ?, '[]', ?)`
+    ).bind(
+      proposalId,
+      firstFriendId,
+      SEASON,
+      settlementToken,
+      beforeAt,
+      inviterId,
+      beforeAt,
+      beforeAt,
+      stagedAt
+    ),
+    env.AUTH_DB.prepare(
+      `UPDATE player_profiles
+       SET level = 2, xp = 20, next_level_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(stagedAt, firstFriendId),
+    env.AUTH_DB.prepare(
+      `UPDATE player_progression
+       SET basic_skypass_level = 2, basic_skypass_xp = 20,
+           basic_skypass_next_xp = 200, updated_at = ?
+       WHERE user_id = ?`
+    ).bind(stagedAt, firstFriendId),
+    env.AUTH_DB.prepare(
+      `INSERT INTO player_skypass_season_stats
+         (user_id, season, has_premium, created_at, updated_at,
+          initial_account_level, achieved_account_level)
+       VALUES (?, ?, 0, ?, ?, 0, 1)`
+    ).bind(firstFriendId, SEASON, stagedAt, stagedAt),
+    env.AUTH_DB.prepare(
+      `UPDATE player_friend_points SET levels = 21, updated_at = ?
+       WHERE invitee_user_id = ? AND inviter_user_id = ? AND season = ?`
+    ).bind(stagedAt, firstFriendId, inviterId, SEASON),
+    env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = 36, updated_at = ?
+       WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+    ).bind(stagedAt, inviterId),
+    ...['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, ?, ?, 0, 'WANDERER', 'STAGE_I', '[1,1750,350,0]', ?, ?)`
+      ).bind(firstFriendId, mode, SEASON, stagedAt, stagedAt)
+    ),
+    env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_experience
+         (proposal_id, player1_rewards_json, player2_rewards_json,
+          processed_at, player_count, settlement_token)
+       VALUES (?, '[]', '[]', ?, 1, ?)`
+    ).bind(proposalId, stagedAt, settlementToken)
+  ])
+  return { proposalId, stagedAt }
+}
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
@@ -136,9 +238,7 @@ beforeEach(async () => {
     )
   ])
   await env.AUTH_DB.batch([
-    env.AUTH_DB.prepare(
-      'DELETE FROM referral_sticker_reward_inventory_grants'
-    ),
+    env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_inventory_grants'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_batches'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_schedule_versions'),
@@ -335,9 +435,7 @@ describe('off-chain referral sticker rewards', () => {
         `UPDATE referral_sticker_reward_batch_schedule_receipts
          SET schedule_version = 100`
       ).run()
-    ).rejects.toThrow(
-      'referral sticker batch schedule receipts are immutable'
-    )
+    ).rejects.toThrow('referral sticker batch schedule receipts are immutable')
     await expect(
       env.AUTH_DB.prepare(
         `UPDATE content_stickers SET required_points = 21
@@ -454,6 +552,34 @@ describe('off-chain referral sticker rewards', () => {
     expect(await runReferralStickerRewards(env.AUTH_DB, DUE)).toMatchObject({
       prepared: 0,
       delivered: 0
+    })
+  })
+
+  it('waits for staged referral points to publish before preparing rewards', async () => {
+    await setupRewards()
+    const pending = await stagePendingReferralLevel()
+
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toEqual({
+      status: 'idle',
+      prepared: 0,
+      delivered: 0
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM referral_sticker_reward_batches`
+      ).first('count')
+    ).toBe(0)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(pending.stagedAt, pending.stagedAt, pending.proposalId)
+      .run()
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'processed',
+      prepared: 1
     })
   })
 

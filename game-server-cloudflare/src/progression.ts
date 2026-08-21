@@ -840,7 +840,15 @@ export const applyMatchExperience = async (
            state AS (
              SELECT profile.level AS before_level,
                     profile.xp AS before_xp,
+                    profile.updated_at AS profile_updated_at_before,
                     progression.basic_skypass_level AS before_skypass_level,
+                    progression.basic_skypass_xp AS before_skypass_xp,
+                    CASE WHEN season_stats.user_id IS NULL THEN 0 ELSE 1 END
+                      AS season_stats_existed_before,
+                    COALESCE(season_stats.initial_account_level, -1)
+                      AS season_initial_account_level_before,
+                    COALESCE(season_stats.achieved_account_level, -1)
+                      AS season_achieved_account_level_before,
                     input.prior_gain + CASE
                       WHEN input.suppressed_at_level IS NOT NULL
                        AND profile.level >= input.suppressed_at_level THEN 0
@@ -876,18 +884,24 @@ export const applyMatchExperience = async (
                         AND points.inviter_user_id = invite.inviter_user_id
                         AND points.season = ?
                     ), 0) AS inviter_levels_before,
-                    COALESCE((
-                      SELECT item.balance FROM player_items item
-                      WHERE item.user_id = invite.inviter_user_id
-                        AND item.item_type = 'SW_STICKER_POINTS'
-                        AND item.token_id = 0
-                    ), 0) AS inviter_sticker_points_before
+                    COALESCE(inviter_stickers.balance, 0)
+                      AS inviter_sticker_points_before,
+                    CASE WHEN inviter_stickers.id IS NULL THEN 0 ELSE 1 END
+                      AS inviter_sticker_points_existed_before,
+                    COALESCE(inviter_stickers.created_at, '')
+                      AS inviter_sticker_points_created_at_before,
+                    COALESCE(inviter_stickers.updated_at, '')
+                      AS inviter_sticker_points_updated_at_before
              FROM player_profiles profile
              JOIN player_progression progression
                ON progression.user_id = profile.user_id
              CROSS JOIN input
              LEFT JOIN player_invites invite
                ON invite.invitee_user_id = profile.user_id
+             LEFT JOIN player_items inviter_stickers
+               ON inviter_stickers.user_id = invite.inviter_user_id
+              AND inviter_stickers.item_type = 'SW_STICKER_POINTS'
+              AND inviter_stickers.token_id = 0
              LEFT JOIN player_skypass_season_stats season_stats
                ON season_stats.user_id = profile.user_id
               AND season_stats.season = ?
@@ -912,13 +926,29 @@ export const applyMatchExperience = async (
            INSERT INTO multiplayer_match_experience_players
              (proposal_id, player_index, user_id, season, settlement_token,
               experience_gain, before_level, before_xp, before_skypass_level,
+              before_skypass_xp, season_stats_existed_before,
+              season_initial_account_level_before,
+              season_achieved_account_level_before,
+              profile_updated_at_before,
               after_level, after_xp, ranked_constructed_before,
               inviter_user_id, inviter_levels_before,
-              inviter_sticker_points_before, rewards_json, processed_at)
+              inviter_sticker_points_before,
+              inviter_sticker_points_existed_before,
+              inviter_sticker_points_created_at_before,
+              inviter_sticker_points_updated_at_before,
+              rewards_json, processed_at)
            SELECT ?, ?, ?, ?, ?, experience_gain, before_level, before_xp,
-                  before_skypass_level, after_level, after_xp,
+                  before_skypass_level, before_skypass_xp,
+                  season_stats_existed_before,
+                  season_initial_account_level_before,
+                  season_achieved_account_level_before,
+                  profile_updated_at_before,
+                  after_level, after_xp,
                   ranked_constructed_before, inviter_user_id,
                   inviter_levels_before, inviter_sticker_points_before,
+                  inviter_sticker_points_existed_before,
+                  inviter_sticker_points_created_at_before,
+                  inviter_sticker_points_updated_at_before,
                   CASE
                     WHEN ((before_level - 1) * 200 + before_xp) < 200
                      AND ((after_level - 1) * 200 + after_xp) >= 200

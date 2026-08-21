@@ -753,6 +753,274 @@ export const warmUpPublicationErrors = (
   return errors
 }
 
+export const experiencePublicationErrors = (
+  sourceMatches,
+  sourceAwarder,
+  sourceUpdater,
+  sourceLeveller,
+  gameMatch,
+  progression,
+  migration,
+  experiencePublication,
+  playerRpc,
+  playerState,
+  social,
+  competitive,
+  botMatch,
+  skypassAutoClaim,
+  referralStickerRewards,
+  matchRepository,
+  playerRpcTest,
+  gameServerTest,
+  matchServiceTest,
+  skypassAutoClaimTest,
+  referralStickerRewardsTest
+) => {
+  const errors = []
+  const sourceEndMatch = bodyBetween(
+    sourceMatches,
+    'func (s *Server) endMatch(',
+    'func updateWarmUpCounter('
+  )
+  requireOrdered(errors, 'Source match XP transaction', sourceEndMatch, [
+    'repo.TxContext(ctx, func(tx db.Session) error',
+    'AwardFromMatch(tx, match, winner, loser)',
+    'MatchXPUpdater.UpdateFromMatch(tx, match',
+    'tx.Save(match)',
+    'tx.Save(winner)',
+    'tx.Save(loser)'
+  ])
+  requireOrdered(errors, 'Source match XP award', sourceAwarder, [
+    'SkypassSeasonStats(sess).FindOrCreate(',
+    'BeforeMatchExp: player.account.Experience'
+  ])
+  requireOrdered(errors, 'Source match XP update', sourceUpdater, [
+    'data.DB.Items(sess).GainXP(',
+    'u.leveller.LevelUp(sess, account)'
+  ])
+  requireOrdered(errors, 'Source match level-up side effects', sourceLeveller, [
+    'data.DB.SkypassSeasonStats(sess).UpdateProgress(',
+    'data.DB.LevelsPerSeason(sess).SetLevels(',
+    'data.DB.Items(sess).GainStickerPoints(',
+    'l.promoter.PromoteUnranked(',
+    'data.DB.Accounts(sess).UpdateLevel('
+  ])
+
+  const workerCompletion = bodyBetween(
+    gameMatch,
+    'private async recordCompletionWithRetry(',
+    'private async archiveAndEnqueueAnalyticsWithRetry('
+  )
+  requireOrdered(
+    errors,
+    'Worker staged match XP publication',
+    workerCompletion,
+    ['applyMatchExperience(', 'publishMatchCompletion(']
+  )
+
+  const compactProgression = progression.replace(/\s+/g, ' ')
+  for (const token of [
+    'profile.updated_at AS profile_updated_at_before',
+    'progression.basic_skypass_xp AS before_skypass_xp',
+    'AS season_stats_existed_before',
+    'AS season_initial_account_level_before',
+    'AS season_achieved_account_level_before',
+    'AS inviter_sticker_points_existed_before',
+    'AS inviter_sticker_points_created_at_before',
+    'AS inviter_sticker_points_updated_at_before',
+    'INSERT INTO multiplayer_match_experience_players',
+    'INSERT INTO multiplayer_match_experience'
+  ]) {
+    if (!compactProgression.includes(token)) {
+      errors.push(`match XP receipt staging is missing: ${token}`)
+    }
+  }
+
+  const compactMigration = migration.replace(/\s+/g, ' ')
+  for (const token of [
+    'ADD COLUMN before_skypass_xp',
+    'ADD COLUMN season_stats_existed_before',
+    'ADD COLUMN season_initial_account_level_before',
+    'ADD COLUMN season_achieved_account_level_before',
+    'ADD COLUMN profile_updated_at_before',
+    'ADD COLUMN inviter_sticker_points_existed_before',
+    'multiplayer_match_experience_player_publication_state_guard',
+    'multiplayer_match_experience_publication_complete_guard',
+    "match.status = 'active'",
+    'profile.level = NEW.before_level',
+    'profile.xp = NEW.before_xp',
+    'progression.basic_skypass_xp = NEW.before_skypass_xp',
+    'NEW.inviter_user_id IS NOT',
+    "RAISE(ABORT, 'match experience publication state is invalid')",
+    "RAISE(ABORT, 'match experience publication completion is invalid')"
+  ]) {
+    if (!compactMigration.includes(token)) {
+      errors.push(`match XP publication migration is missing: ${token}`)
+    }
+  }
+
+  const compactProjection = experiencePublication.replace(/\s+/g, ' ')
+  for (const token of [
+    'FROM multiplayer_match_experience_players pending_experience',
+    'JOIN multiplayer_matches pending_match',
+    "pending_match.status <> 'ended'",
+    '${receipt}.user_id = CASE ${receipt}.player_index',
+    '${receipt}.before_skypass_xp BETWEEN 0 AND 199',
+    '${receipt}.profile_updated_at_before <>',
+    'ORDER BY pending_experience.rowid ASC',
+    'publishedAccountLevelSQL',
+    'publishedAccountXpSQL',
+    'publishedProfileUpdatedAtSQL',
+    'publishedSkypassXpSQL',
+    'publishedSeasonInitialLevelSQL',
+    'publishedSeasonAchievedLevelSQL',
+    'publishedReferralLevelsSQL',
+    'publishedReferralStickerPointsSQL',
+    'noUnpublishedMatchExperienceSQL',
+    'noUnpublishedReferralPointsSQL',
+    'noUnpublishedReferralLevelsSQL',
+    'throw new Error(INVALID_EXPERIENCE_PROJECTION)'
+  ]) {
+    if (!compactProjection.includes(token)) {
+      errors.push(`match XP publication projection is missing: ${token}`)
+    }
+  }
+  if (
+    compactProjection.match(/ORDER BY pending_experience\.rowid ASC/g)
+      ?.length !== 5
+  ) {
+    errors.push(
+      'match XP publication projections do not preserve D1 receipt insertion order'
+    )
+  }
+
+  const surfaces = [
+    ['identity account', playerRpc, 'publishedProfileUpdatedAtSQL('],
+    ['identity SkyPass', playerRpc, 'publishedSeasonInitialLevelSQL('],
+    ['identity inventory', playerRpc, 'publishedReferralStickerPointsSQL('],
+    ['player state', playerState, 'publishedSkypassXpSQL('],
+    ['social referral', social, 'publishedReferralLevelsSQL('],
+    ['competitive account', competitive, 'publishedAccountXpSQL('],
+    ['tutorial reward', botMatch, 'publishedSeasonAchievedLevelSQL('],
+    ['SkyPass close', skypassAutoClaim, 'noUnpublishedMatchExperienceSQL('],
+    [
+      'referral schedule',
+      referralStickerRewards,
+      'noUnpublishedReferralPointsSQL('
+    ],
+    [
+      'referral season carry',
+      referralStickerRewards,
+      'noUnpublishedReferralLevelsSQL('
+    ],
+    ['authoritative match account', matchRepository, 'publishedAccountXpSQL('],
+    [
+      'authoritative match SkyPass',
+      matchRepository,
+      'publishedSeasonAchievedLevelSQL('
+    ]
+  ]
+  for (const [label, source, token] of surfaces) {
+    if (!source.includes(token)) {
+      errors.push(`${label} does not enforce match XP publication`)
+    }
+  }
+  for (const [label, source] of [
+    ['identity API', playerRpc],
+    ['player state', playerState],
+    ['social API', social],
+    ['competitive API', competitive],
+    ['tutorial API', botMatch],
+    ['match service', matchRepository]
+  ]) {
+    if (!source.includes('sourceVisible')) {
+      errors.push(`${label} does not fail closed on invalid match XP receipts`)
+    }
+  }
+  for (const token of [
+    'FROM multiplayer_match_experience_players experience',
+    "match.status <> 'ended'",
+    'if (unpublishedExperience) return true'
+  ]) {
+    if (!skypassAutoClaim.includes(token)) {
+      errors.push(`SkyPass close publication barrier is missing: ${token}`)
+    }
+  }
+  if (
+    skypassAutoClaim.match(/noUnpublishedMatchExperienceSQL\(/g)?.length !== 2
+  ) {
+    errors.push(
+      'SkyPass auto-claim selection and completion are not both publication-gated'
+    )
+  }
+
+  for (const token of [
+    "it('publishes match XP, SkyPass, and referral progress with the terminal match'",
+    'INSERT INTO multiplayer_match_experience_players',
+    'INSERT INTO multiplayer_match_experience',
+    'profileUpdatedAt: beforeAt',
+    'referralLevels: 2',
+    'stickerPoints: 10',
+    "rpc('ClaimSkypassRewards'",
+    "SET status = 'ended'",
+    'profileUpdatedAt: stagedAt',
+    'referralLevels: 3',
+    'stickerPoints: 11'
+  ]) {
+    if (!playerRpcTest.includes(token)) {
+      errors.push(
+        `match XP player-facing Workers regression is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    "it('rejects a new match XP receipt without exact publication state'",
+    "rejects.toThrow('match experience publication state is invalid')",
+    'before_skypass_xp',
+    'season_stats_existed_before',
+    'inviter_sticker_points_existed_before'
+  ]) {
+    if (!gameServerTest.includes(token)) {
+      errors.push(`match XP game-server regression is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "it('projects unpublished match experience into authoritative match accounts'",
+    'account: { level: 4, experience: 180, seasonLevel: 2 }',
+    "SET status = 'ended'",
+    'account: { level: 5, experience: 30, seasonLevel: 3 }'
+  ]) {
+    if (!matchServiceTest.includes(token)) {
+      errors.push(`match XP match-service regression is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "it('keeps a season close open until staged match XP publishes'",
+    'seasonsCompleted: 0',
+    'playersProcessed: 0',
+    "SET status = 'ended'",
+    'seasonsCompleted: 1',
+    'playersProcessed: 1'
+  ]) {
+    if (!skypassAutoClaimTest.includes(token)) {
+      errors.push(`match XP SkyPass-close regression is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    "it('waits for staged referral points to publish before preparing rewards'",
+    "status: 'idle'",
+    'prepared: 0',
+    "SET status = 'ended'",
+    "status: 'processed'",
+    'prepared: 1'
+  ]) {
+    if (!referralStickerRewardsTest.includes(token)) {
+      errors.push(`match XP referral-schedule regression is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
@@ -773,7 +1041,18 @@ const main = async () => {
     social,
     competitive,
     matchRepository,
-    matchServiceTest
+    matchServiceTest,
+    sourceAwarder,
+    sourceUpdater,
+    sourceLeveller,
+    experienceMigration,
+    experiencePublication,
+    botMatch,
+    skypassAutoClaim,
+    referralStickerRewards,
+    gameServerTest,
+    skypassAutoClaimTest,
+    referralStickerRewardsTest
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
     readFile(
@@ -835,6 +1114,57 @@ const main = async () => {
         'worker.test.ts'
       ),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'api', 'lib', 'levels', 'xp', 'awarder.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'api', 'lib', 'levels', 'xp', 'updater.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'api', 'lib', 'levels', 'xp', 'leveller.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0117_match_experience_publication_state.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'experience-publication.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'bot-match.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'skypass-auto-claim.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'referral-sticker-rewards.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'test-cloudflare',
+        'game-match.test.ts'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'skypass-auto-claim.test.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'referral-sticker-rewards.test.ts'),
+      'utf8'
     )
   ])
   const errors = [
@@ -867,6 +1197,29 @@ const main = async () => {
       matchRepository,
       playerRpcTest,
       matchServiceTest
+    ),
+    ...experiencePublicationErrors(
+      sourceMatches,
+      sourceAwarder,
+      sourceUpdater,
+      sourceLeveller,
+      gameMatch,
+      progression,
+      experienceMigration,
+      experiencePublication,
+      playerRpc,
+      playerState,
+      social,
+      competitive,
+      botMatch,
+      skypassAutoClaim,
+      referralStickerRewards,
+      matchRepository,
+      playerRpcTest,
+      gameServerTest,
+      matchServiceTest,
+      skypassAutoClaimTest,
+      referralStickerRewardsTest
     )
   ]
   if (errors.length > 0) {
@@ -874,7 +1227,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match completion preserves transactional, quest, and Warm Up publication safety'
+      'Cloudflare match completion preserves transactional, quest, Warm Up, and XP publication safety'
     )
   }
 }

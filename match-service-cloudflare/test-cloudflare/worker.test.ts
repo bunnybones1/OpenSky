@@ -641,7 +641,9 @@ describe('Cloud Weasel accepted-match service', () => {
             now
           )
           .run()
-      ).rejects.toThrow('match participant class does not match allocation path')
+      ).rejects.toThrow(
+        'match participant class does not match allocation path'
+      )
     } finally {
       await env.AUTH_DB.prepare(
         `UPDATE registered_matchmaker_bots SET enabled = 1
@@ -735,8 +737,9 @@ describe('Cloud Weasel accepted-match service', () => {
       .run()
     const replacement = await selectBot()
     expect(replacement.status).toBe(200)
-    expect((await replacement.json<{ bot: { userId: string } }>()).bot.userId)
-      .toBe('system:bot:0008')
+    expect(
+      (await replacement.json<{ bot: { userId: string } }>()).bot.userId
+    ).toBe('system:bot:0008')
   })
 
   it('uses an unlocked starter class but an empty deck for registered discovery bots', async () => {
@@ -811,9 +814,11 @@ describe('Cloud Weasel accepted-match service', () => {
       .bind(USER_ID)
       .run()
     const selectionResponse = await selectBot()
-    const selection = (await selectionResponse.json<{
-      bot: Record<string, unknown>
-    }>()).bot
+    const selection = (
+      await selectionResponse.json<{
+        bot: Record<string, unknown>
+      }>()
+    ).bot
     const accepted = dispatch()
     accepted.participants[0].player.mode = GameMode.RANKED_CONSTRUCTED
     accepted.participants[0].request!.mode = GameMode.RANKED_CONSTRUCTED
@@ -1798,6 +1803,123 @@ describe('Cloud Weasel accepted-match service', () => {
       'PLAYER'
     )
     expect(published.account.warmUps).toBe(2)
+  })
+
+  it('projects unpublished match experience into authoritative match accounts', async () => {
+    const beforeAt = '2026-08-21T15:52:00.000Z'
+    const stagedAt = '2026-08-21T15:52:01.000Z'
+    const proposalId = `pending-experience-account-${crypto.randomUUID()}`
+    const settlementToken = crypto.randomUUID()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles
+         SET level = 4, xp = 180, next_level_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(beforeAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 4, basic_skypass_xp = 180,
+             basic_skypass_next_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(beforeAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_skypass_season_stats
+           (user_id, season, has_premium, created_at, updated_at,
+            initial_account_level, achieved_account_level)
+         VALUES (?, 126, 0, ?, ?, 1, 3)`
+      ).bind(USER_ID, beforeAt, beforeAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'PRACTICE_PVP', 'PRACTICE_PVP', 'PRACTICE_PVP',
+                 'experience-publication-test', ?, ?, ?, NULL, '{}', 'active',
+                 ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        PRINCIPAL,
+        BOT_PLACEHOLDER,
+        USER_ID,
+        stagedAt,
+        stagedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_experience_players
+           (proposal_id, player_index, user_id, season, settlement_token,
+            experience_gain, before_level, before_xp, before_skypass_level,
+            before_skypass_xp, season_stats_existed_before,
+            season_initial_account_level_before,
+            season_achieved_account_level_before,
+            profile_updated_at_before, after_level, after_xp,
+            ranked_constructed_before, inviter_user_id,
+            inviter_levels_before, inviter_sticker_points_before,
+            inviter_sticker_points_existed_before,
+            inviter_sticker_points_created_at_before,
+            inviter_sticker_points_updated_at_before, rewards_json,
+            processed_at)
+         VALUES (?, 0, ?, 126, ?, 50, 4, 180, 4, 180, 1, 1, 3, ?,
+                 5, 30, 'EXPERT', NULL, 0, 0, 0, '', '', '[]', ?)`
+      ).bind(proposalId, USER_ID, settlementToken, beforeAt, stagedAt),
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles
+         SET level = 5, xp = 30, next_level_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(stagedAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 5, basic_skypass_xp = 30,
+             basic_skypass_next_xp = 200, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(stagedAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `UPDATE player_skypass_season_stats
+         SET achieved_account_level = 4, updated_at = ?
+         WHERE user_id = ? AND season = 126`
+      ).bind(stagedAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_experience
+           (proposal_id, player1_rewards_json, player2_rewards_json,
+            processed_at, player_count, settlement_token)
+         VALUES (?, '[]', '[]', ?, 1, ?)`
+      ).bind(proposalId, stagedAt, settlementToken)
+    ])
+
+    const repository = new MatchRepository(env.AUTH_DB)
+    const pending = await repository.humanAccount(
+      USER_ID,
+      PRINCIPAL,
+      ['str'],
+      126,
+      GameMode.PRACTICE_BOT,
+      'PLAYER'
+    )
+    expect(pending).toMatchObject({
+      level: 4,
+      account: { level: 4, experience: 180, seasonLevel: 2 }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(stagedAt, stagedAt, proposalId)
+      .run()
+    const published = await repository.humanAccount(
+      USER_ID,
+      PRINCIPAL,
+      ['str'],
+      126,
+      GameMode.PRACTICE_BOT,
+      'PLAYER'
+    )
+    expect(published).toMatchObject({
+      level: 5,
+      account: { level: 5, experience: 30, seasonLevel: 3 }
+    })
   })
 
   it('rejects proposal reuse with a different accepted dispatch', async () => {

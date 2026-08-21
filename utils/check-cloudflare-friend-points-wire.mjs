@@ -297,12 +297,17 @@ export const friendPointsWireErrors = (
   const compactSocial = compact(socialSource)
   for (const token of [
     "account.account_status IN ( 'ACTIVE', 'VIP', 'SUSPENDED', 'FLAGGED', 'TO_DELETE' )",
-    'COALESCE( season_points.points_carried + season_points.levels, 0 ) DESC, game.id ASC',
+    'ORDER BY points DESC, game.id ASC',
     'LIMIT 5',
     "item_type = 'SW_STICKER_POINTS' AND token_id = 0",
     'MAX(required_points)',
-    'WHERE invitee_user_id = ? AND inviter_user_id = ?',
-    'game.id AS account_id, account.name AS account_name, account.locale, profile.level, account.region, account.tag_art_id',
+    'WHERE points.invitee_user_id = ? AND points.inviter_user_id = ?',
+    'game.id AS account_id, account.name AS account_name, account.locale,',
+    "publishedAccountLevelSQL( 'invite.invitee_user_id', 'profile.level' )",
+    'AS level, account.region, account.tag_art_id',
+    'sourceVisibleAccountLevel(row.level)',
+    'sourceVisibleNonNegative(row.levels)',
+    'sourceVisibleNonNegative(row.points)',
     'account.created_at',
     'account.updated_at',
     'account.warm_ups'
@@ -310,6 +315,14 @@ export const friendPointsWireErrors = (
     if (!compactSocial.includes(token)) {
       errors.push(`main Worker friend-points behavior is missing: ${token}`)
     }
+  }
+  const referralProjectionCallCount = [
+    ...socialSource.matchAll(/publishedReferralLevelsSQL\(/g)
+  ].length
+  if (referralProjectionCallCount !== 3) {
+    errors.push(
+      `main Worker friend-points referral projections changed: ${referralProjectionCallCount}`
+    )
   }
 
   if (!apiSource.includes("from './friend-points-wire'")) {

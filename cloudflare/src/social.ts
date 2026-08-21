@@ -3,6 +3,13 @@ import type {
   SourceFriendPointsInput,
   SourceGiftedInviterAccountInput
 } from './friend-points-wire'
+import {
+  publishedAccountLevelSQL,
+  publishedReferralLevelsSQL,
+  publishedReferralStickerPointsSQL,
+  sourceVisibleAccountLevel,
+  sourceVisibleNonNegative
+} from './experience-publication'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
 import { publishedWarmUpsSQL, sourceVisibleWarmUps } from './warmup-publication'
@@ -94,20 +101,33 @@ export class SocialRepository {
     const [rows, total] = await Promise.all([
       this.database
         .prepare(
-          `SELECT invite.invitee_user_id,
+          `WITH current_season(season) AS (VALUES (?))
+           SELECT invite.invitee_user_id,
                   game.id AS account_id,
                   account.name AS account_name,
                   account.locale,
-                  profile.level,
+                  ${publishedAccountLevelSQL(
+                    'invite.invitee_user_id',
+                    'profile.level'
+                  )} AS level,
                   account.region,
                   account.tag_art_id,
-                  COALESCE(season_points.levels, 0) AS levels,
-                  COALESCE(
-                    season_points.points_carried + season_points.levels,
-                    0
-                  ) AS points,
+                  ${publishedReferralLevelsSQL(
+                    'invite.invitee_user_id',
+                    'invite.inviter_user_id',
+                    'current_season.season',
+                    'COALESCE(season_points.levels, 0)'
+                  )} AS levels,
+                  COALESCE(season_points.points_carried, 0) +
+                    ${publishedReferralLevelsSQL(
+                      'invite.invitee_user_id',
+                      'invite.inviter_user_id',
+                      'current_season.season',
+                      'COALESCE(season_points.levels, 0)'
+                    )} AS points,
                   COALESCE(season_points.points_spent, 0) AS points_spent
            FROM player_invites invite
+           CROSS JOIN current_season
            JOIN game_accounts game
              ON game.user_id = invite.invitee_user_id
            JOIN player_account_settings account
@@ -120,50 +140,60 @@ export class SocialRepository {
            LEFT JOIN player_friend_points season_points
              ON season_points.invitee_user_id = invite.invitee_user_id
             AND season_points.inviter_user_id = invite.inviter_user_id
-            AND season_points.season = ?
+            AND season_points.season = current_season.season
            WHERE invite.inviter_user_id = ?
-           ORDER BY COALESCE(
-             season_points.points_carried + season_points.levels,
-             0
-           ) DESC, game.id ASC
+           ORDER BY points DESC, game.id ASC
            LIMIT 5`
         )
         .bind(season, userId)
         .all<FriendPointRow>(),
       this.database
         .prepare(
-          `SELECT
-             COALESCE((
-               SELECT SUM(balance) FROM player_items
-               WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
-                 AND token_id = 0
-             ), 0) +
+          `WITH target(user_id, season) AS (VALUES (?, ?))
+           SELECT
+             ${publishedReferralStickerPointsSQL(
+               'target.user_id',
+               `COALESCE((
+                 SELECT SUM(balance) FROM player_items
+                 WHERE user_id = target.user_id
+                   AND item_type = 'SW_STICKER_POINTS' AND token_id = 0
+               ), 0)`
+             )} +
              COALESCE((
                SELECT MAX(required_points)
                FROM referral_sticker_reward_awards
-               WHERE user_id = ? AND season = ?
-             ), 0) AS total`
+               WHERE user_id = target.user_id AND season = target.season
+             ), 0) AS total
+           FROM target`
         )
-        .bind(userId, userId, season)
+        .bind(userId, season)
         .first<{ total: number }>()
     ])
 
-    const friends: SourceFriendPointsInput[] = rows.results.map(row => ({
-      account: {
-        id: row.account_id,
-        address: identityReferenceFor(row.invitee_user_id),
-        name: row.account_name,
-        locale: row.locale,
-        level: row.level,
-        ...(row.region ? { region: row.region } : {}),
-        ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {})
-      },
-      season,
-      levels: row.levels,
-      points: row.points,
-      pointsSpent: row.points_spent
-    }))
-    return { total: total?.total ?? 0, friends }
+    const friends: SourceFriendPointsInput[] = rows.results.map(row => {
+      const levels = sourceVisibleNonNegative(row.levels)
+      const points = sourceVisibleNonNegative(row.points)
+      const pointsSpent = sourceVisibleNonNegative(row.points_spent)
+      return {
+        account: {
+          id: row.account_id,
+          address: identityReferenceFor(row.invitee_user_id),
+          name: row.account_name,
+          locale: row.locale,
+          level: sourceVisibleAccountLevel(row.level),
+          ...(row.region ? { region: row.region } : {}),
+          ...(row.tag_art_id ? { tagArtID: row.tag_art_id } : {})
+        },
+        season,
+        levels,
+        points,
+        pointsSpent
+      }
+    })
+    return {
+      total: sourceVisibleNonNegative(total?.total ?? 0),
+      friends
+    }
   }
 
   async getPointsGifted(userId: string): Promise<{
@@ -181,9 +211,16 @@ export class SocialRepository {
 
     const total = await this.database
       .prepare(
-        `SELECT COALESCE(SUM(levels), 0) AS total
-         FROM player_friend_points
-         WHERE invitee_user_id = ? AND inviter_user_id = ?`
+        `SELECT COALESCE(SUM(
+                  ${publishedReferralLevelsSQL(
+                    'points.invitee_user_id',
+                    'points.inviter_user_id',
+                    'points.season',
+                    'points.levels'
+                  )}
+                ), 0) AS total
+         FROM player_friend_points points
+         WHERE points.invitee_user_id = ? AND points.inviter_user_id = ?`
       )
       .bind(userId, invite.inviter_user_id)
       .first<{ total: number }>()
@@ -199,7 +236,10 @@ export class SocialRepository {
                   'users.id',
                   'account.warm_ups'
                 )} AS warm_ups,
-                profile.level,
+                ${publishedAccountLevelSQL(
+                  'users.id',
+                  'profile.level'
+                )} AS level,
                 account.region,
                 account.tag_art_id
          FROM users
@@ -211,7 +251,7 @@ export class SocialRepository {
       .bind(invite.inviter_user_id)
       .first<GiftedInviterRow>()
     return {
-      total: total?.total ?? 0,
+      total: sourceVisibleNonNegative(total?.total ?? 0),
       inviter: inviter
         ? {
             id: inviter.account_id,
@@ -221,7 +261,7 @@ export class SocialRepository {
             createdAt: inviter.created_at,
             updatedAt: inviter.updated_at,
             warmUps: sourceVisibleWarmUps(inviter.warm_ups),
-            level: inviter.level,
+            level: sourceVisibleAccountLevel(inviter.level),
             ...(inviter.region ? { region: inviter.region } : {}),
             ...(inviter.tag_art_id ? { tagArtID: inviter.tag_art_id } : {})
           }

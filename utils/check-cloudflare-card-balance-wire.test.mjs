@@ -150,8 +150,8 @@ test('rejects source drift, sparse nulls, leaks, and projection bypasses', async
     {
       ...value,
       playerRPC: value.playerRPC.replace(
-        'WHERE user_id = ? AND balance > 0\n         ORDER BY token_id ASC, item_type ASC',
-        "WHERE user_id = ? AND balance > 0\n           AND item_type IN ('SW_BASE_CARDS')\n         ORDER BY token_id ASC, item_type ASC"
+        'WHERE item.user_id = ? AND item.balance > 0\n         ORDER BY item.token_id ASC, item.item_type ASC',
+        "WHERE item.user_id = ? AND item.balance > 0\n           AND item.item_type IN ('SW_BASE_CARDS')\n         ORDER BY item.token_id ASC, item.item_type ASC"
       )
     }
   ]

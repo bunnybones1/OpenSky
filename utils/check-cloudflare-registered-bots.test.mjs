@@ -41,7 +41,10 @@ const fixtures = async () => {
       'api/data/schema/migrations/30000000000314_bot_players.sql',
       'utf8'
     ),
-    readFile('cloudflare/migrations/0116_registered_matchmaker_bots.sql', 'utf8'),
+    readFile(
+      'cloudflare/migrations/0116_registered_matchmaker_bots.sql',
+      'utf8'
+    ),
     readFile('match-service-cloudflare/src/registered-bot.ts', 'utf8'),
     readFile('matchmaker-ts/src/runtime.ts', 'utf8'),
     readFile('matchmaker-ts/src/matcher.ts', 'utf8'),
@@ -51,7 +54,10 @@ const fixtures = async () => {
     readFile('match-service-cloudflare/test-cloudflare/worker.test.ts', 'utf8'),
     readFile('matchmaker-ts/test-cloudflare/runtime.test.ts', 'utf8'),
     readFile('cloudflare/test/replays.test.ts', 'utf8'),
-    readFile('game-server-cloudflare/test-cloudflare/game-match.test.ts', 'utf8'),
+    readFile(
+      'game-server-cloudflare/test-cloudflare/game-match.test.ts',
+      'utf8'
+    ),
     readFile('matchmaker-ts/wrangler.jsonc', 'utf8'),
     readFile('match-service-cloudflare/wrangler.jsonc', 'utf8'),
     readFile('package.json', 'utf8').then(JSON.parse),
@@ -217,10 +223,7 @@ test('rejects weakened source, D1, runtime, tests, flags, and release wiring', a
     },
     {
       ...value,
-      protocol: value.protocol.replace(
-        '!policy.enableRankedBots',
-        'false'
-      )
+      protocol: value.protocol.replace('!policy.enableRankedBots', 'false')
     },
     {
       ...value,
@@ -234,6 +237,13 @@ test('rejects weakened source, D1, runtime, tests, flags, and release wiring', a
       worker: value.worker.replace(
         'explicitlyEnabled(env.ENABLE_RANKED_BOTS)',
         'enabled(env.ENABLE_RANKED_BOTS)'
+      )
+    },
+    {
+      ...value,
+      competitive: value.competitive.replace(
+        'userId && !registeredBot',
+        'userId'
       )
     },
     {
@@ -317,8 +327,11 @@ test('rejects weakened source, D1, runtime, tests, flags, and release wiring', a
         }
       }
     },
-    ...['build:cloudflare', 'deploy:cloudflare:matchmaker',
-      'deploy:cloudflare:match-service'].map(script => ({
+    ...[
+      'build:cloudflare',
+      'deploy:cloudflare:matchmaker',
+      'deploy:cloudflare:match-service'
+    ].map(script => ({
       ...value,
       rootPackage: {
         ...value.rootPackage,

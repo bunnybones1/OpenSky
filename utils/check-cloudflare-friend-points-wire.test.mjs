@@ -84,11 +84,7 @@ test('rejects struct, query, zero-value, route, and gate drift', async () => {
       'invitedBy: null,',
       'invitedBy: account.invitedBy ?? null,'
     ),
-    mutate(
-      'cloudflare/src/social.ts',
-      'AND token_id = 0',
-      'AND token_id = 9'
-    ),
+    mutate('cloudflare/src/social.ts', 'AND token_id = 0', 'AND token_id = 9'),
     mutate(
       'cloudflare/src/social.ts',
       "'ACTIVE', 'VIP', 'SUSPENDED', 'FLAGGED', 'TO_DELETE'",
@@ -96,8 +92,13 @@ test('rejects struct, query, zero-value, route, and gate drift', async () => {
     ),
     mutate(
       'cloudflare/src/social.ts',
-      ') DESC, game.id ASC',
-      ') DESC, invite.invitee_user_id ASC'
+      'ORDER BY points DESC, game.id ASC',
+      'ORDER BY points DESC, invite.invitee_user_id ASC'
+    ),
+    mutate(
+      'cloudflare/src/social.ts',
+      'publishedReferralLevelsSQL(',
+      'rawReferralLevelsSQL('
     ),
     mutate(
       'cloudflare/src/api.ts',

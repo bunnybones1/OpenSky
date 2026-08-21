@@ -255,7 +255,12 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'registered_matchmaker_bots',
     'registered_matchmaker_bots_identity_no_update',
     'registered_matchmaker_bots_no_delete',
-    'multiplayer_matches_user_kind_insert_guard'
+    'multiplayer_matches_user_kind_insert_guard',
+    'before_skypass_xp',
+    'season_stats_existed_before',
+    'profile_updated_at_before',
+    'multiplayer_match_experience_player_publication_state_guard',
+    'multiplayer_match_experience_publication_complete_guard'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -316,7 +321,9 @@ test('accepts only one successful complete read-only schema row', () => {
     authoritative_decks_present: 1,
     registered_bots_present: 1,
     registered_bot_guards_present: 2,
-    registered_bot_allocation_guard_present: 1
+    registered_bot_allocation_guard_present: 1,
+    experience_publication_columns_present: 8,
+    experience_publication_guards_present: 2
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -345,8 +352,18 @@ test('accepts only one successful complete read-only schema row', () => {
       { results: [{ ...complete, registered_bots_present: 0 }], success: true }
     ]),
     JSON.stringify([
-      { results: [complete, complete], success: true }
-    ])
+      {
+        results: [{ ...complete, experience_publication_columns_present: 7 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, experience_publication_guards_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([{ results: [complete, complete], success: true }])
   ]) {
     assert.throws(
       () => productionSchemaRow(output),
