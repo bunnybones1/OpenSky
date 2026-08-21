@@ -1042,6 +1042,9 @@ describe('weekly leaderboard reward worker', () => {
     ).toBe(125)
   })
 
+  // This intentionally creates and settles more players than one cron batch.
+  // Shared CI Worker-pool scheduling can exceed Vitest's five-second default
+  // even though the exact 20-plus-5 receipt assertions still run unchanged.
   it('bounds each cron batch and resumes remaining players from receipts', async () => {
     for (let index = 0; index < 25; index++) {
       await setupPlayer(
@@ -1071,7 +1074,7 @@ describe('weekly leaderboard reward worker', () => {
               AND item_type = 'SW_CONQUEST_TICKET') AS tickets`
       ).first()
     ).toEqual({ awards: 25, notifications: 25, tickets: 50 })
-  })
+  }, 15_000)
 
   it('dead-letters a repeatedly failing cycle after five attempts', async () => {
     await setupPlayer('reward-dead-letter', 2_000, NOW.toISOString())
