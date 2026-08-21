@@ -199,6 +199,9 @@ It should not be the lifecycle manager for unrelated subsystems.
 
 ## Gate taxonomy
 
+The complete current build-gate classification and conversion order are in
+[`CLOUDFLARE_GATE_EFFECT_AUDIT.md`](./CLOUDFLARE_GATE_EFFECT_AUDIT.md).
+
 Every existing or new gate must declare one category:
 
 1. **Behavior contract**: black-box protocol, game-rule, UI, reward, timing, or
