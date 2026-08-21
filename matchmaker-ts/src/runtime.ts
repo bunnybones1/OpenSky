@@ -32,6 +32,17 @@ import {
 } from './admission'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
+  findRunnerForMode,
+  makeRunnerForMode,
+  matchRunnerIncludesMode,
+  matchRunnerIntervalMs,
+  nextMatchRunnerDeadline,
+  readMatchCadence,
+  SOURCE_MATCH_RUNNERS,
+  type MatchCadence,
+  type MatchRunnerSpec
+} from './match-cadence'
+import {
   BOT_PLAYER_ADDRESS,
   createBotForPlayer,
   createBotPlayer,
@@ -57,6 +68,7 @@ import {
 const TICKET_PREFIX = 'ticket:'
 const PROPOSAL_PREFIX = 'proposal:'
 const PENDING_PREFIX = 'pending:'
+const MATCH_RUNNER_PREFIX = 'match-runner:'
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
 export const TRUSTED_DISPLAY_NAME_HEADER = 'x-cloud-weasel-display-name'
@@ -72,7 +84,12 @@ export interface MatchmakerEnv {
   MATCH_ACCEPTANCE_PENALTY_MS?: string
   MATCH_REFUSAL_WINDOW_MS?: string
   MATCH_REFUSAL_PENALTY_SECONDS?: string
-  MATCH_TICK_MS?: string
+  MATCH_INTERVAL_PRACTICE_BOT_MS?: string
+  MATCH_INTERVAL_PRACTICE_PVP_MS?: string
+  MATCH_INTERVAL_CONQUEST_CONSTRUCTED_MS?: string
+  MATCH_INTERVAL_CHALLENGE_CONSTRUCTED_MS?: string
+  MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS?: string
+  MATCH_INTERVAL_MAKE_MATCH_MS?: string
   MIN_RANK_TO_PLAY_CONQUEST?: string
   RELAX_MATCHING_INTERVAL_MS?: string
   RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS?: string
@@ -146,6 +163,10 @@ interface StoredPendingProposal {
   expiresAtMs: number
 }
 
+interface StoredMatchRunner {
+  nextAtMs: number
+}
+
 interface PendingProposalReference {
   proposalId: string
   // References from the previously deployed runtime stored only the proposal
@@ -157,7 +178,7 @@ interface PendingProposalReference {
 interface RuntimeConfig {
   authenticationTimeoutMs: number
   acceptanceTimeoutMs: number
-  tickMs: number
+  cadence: MatchCadence
   minRankToPlayConquest: PlayerRank
   relaxIntervals: RelaxMatchingRuleIntervals
   dispatchMaxAttempts: number
@@ -301,7 +322,7 @@ const readConfig = (env: MatchmakerEnv): RuntimeConfig => {
       30_000,
       120_000
     ),
-    tickMs: parsePositiveInteger(env.MATCH_TICK_MS, 2_000, 30_000),
+    cadence: readMatchCadence(env),
     minRankToPlayConquest: readMinimumConquestRank(
       env.MIN_RANK_TO_PLAY_CONQUEST
     ),
@@ -336,6 +357,8 @@ const deserializePlayer = (player: StoredPlayer): MatchmakerPlayer => ({
 const ticketKey = (principal: string) => `${TICKET_PREFIX}${principal}`
 const proposalKey = (proposalId: string) => `${PROPOSAL_PREFIX}${proposalId}`
 const pendingKey = (principal: string) => `${PENDING_PREFIX}${principal}`
+const matchRunnerKey = (runner: MatchRunnerSpec) =>
+  `${MATCH_RUNNER_PREFIX}${runner.id}`
 
 const participantFromTicket = (ticket: StoredTicket): StoredParticipant => ({
   player: ticket.player,
@@ -526,7 +549,8 @@ export class MatchmakerPool implements DurableObject {
     this.expireUnauthenticatedSockets(now)
     this.expireIdleSockets(now)
     await this.processProposalTimers(now)
-    await this.attemptMatches(now)
+    await this.syncMatchRunnerStates(now)
+    await this.processDueMatchRunners(now)
     await this.rescheduleAlarm(now)
   }
 
@@ -722,9 +746,8 @@ export class MatchmakerPool implements DurableObject {
     this.notifyDuplicateSubscribers(webSocket, attachment.principal)
     attachment.subscribed = true
     webSocket.serializeAttachment(attachment)
-    await this.state.storage.put(ticketKey(attachment.principal), ticket)
+    await this.putTicketAndArmFindRunner(ticket, Date.now())
     console.log('matchmaker ticket accepted', command.mode)
-    await this.attemptMatches(Date.now())
     await this.rescheduleAlarm(Date.now())
   }
 
@@ -940,9 +963,22 @@ export class MatchmakerPool implements DurableObject {
       proposal.participants as [StoredParticipant, StoredParticipant]
     )
     proposal.status = 'ACCEPTED'
-    proposal.nextDispatchAtMs = Date.now()
-    await this.state.storage.put(proposalKey(proposal.id), proposal)
-    await this.dispatchProposal(proposal)
+    proposal.nextDispatchAtMs = undefined
+    if (
+      proposal.participants.some(participant =>
+        [GameMode.PRACTICE_BOT, GameMode.WARM_UP].includes(
+          participant.player.mode
+        )
+      )
+    ) {
+      // Rolling-upgrade compatibility for proposals created by the previous
+      // Worker. The source BotMatchProcessor allocates on the find tick and
+      // never enters a MakeMatch queue, so finish this legacy state directly.
+      await this.state.storage.put(proposalKey(proposal.id), proposal)
+      await this.dispatchProposal(proposal)
+      return
+    }
+    await this.putProposalAndArmMakeRunner(proposal, Date.now())
   }
 
   private async declineMatch(principal: string) {
@@ -976,7 +1012,8 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
-  private async attemptMatches(now: number) {
+  private async attemptFindRunner(runner: MatchRunnerSpec, now: number) {
+    if (runner.phase !== 'find') return
     const enabledModes = await this.currentEnabledGameModes(now)
     if (!enabledModes) return
     await this.drainDisabledMatchmaking(enabledModes)
@@ -987,6 +1024,7 @@ export class MatchmakerPool implements DurableObject {
     const tickets: StoredTicket[] = []
     const orphanedTicketKeys: string[] = []
     for (const [key, ticket] of storedTickets) {
+      if (!matchRunnerIncludesMode(runner, ticket.player.mode)) continue
       if (this.hasSubscribedSocket(ticket.player.address)) {
         tickets.push(ticket)
       } else {
@@ -1007,36 +1045,193 @@ export class MatchmakerPool implements DurableObject {
       tickets.map(ticket => [ticket.player.address, ticket])
     )
 
-    for (const ticket of tickets.filter(
-      current =>
-        current.player.mode === GameMode.PRACTICE_BOT ||
-        current.player.mode === GameMode.WARM_UP
-    )) {
-      if (!(await this.state.storage.get(ticketKey(ticket.player.address))))
-        continue
-      const human = deserializePlayer(ticket.player)
-      await this.createProposal(
-        [human, createBotForPlayer(human)],
-        byAddress,
-        now
-      )
+    if (runner.id === 'find-practice-bot') {
+      for (const ticket of tickets) {
+        if (!(await this.state.storage.get(ticketKey(ticket.player.address))))
+          continue
+        const human = deserializePlayer(ticket.player)
+        await this.createBotMatch(
+          human,
+          createBotForPlayer(human),
+          byAddress,
+          now
+        )
+      }
+      return
     }
 
-    const groups: GameMode[][] = [
-      [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED],
-      [GameMode.RANKED_DISCOVERY],
-      [GameMode.CONQUEST_CONSTRUCTED],
-      [GameMode.CONQUEST_DISCOVERY],
-      [GameMode.CHALLENGE_CONSTRUCTED],
-      [GameMode.CHALLENGE_DISCOVERY]
-    ]
-    for (const modes of groups) {
+    for (const modes of runner.groups) {
       const candidates = [...byAddress.values()]
         .filter(ticket => modes.includes(ticket.player.mode))
         .filter(ticket => storedTickets.has(ticketKey(ticket.player.address)))
         .map(ticket => deserializePlayer(ticket.player))
-      await this.matchGroup(candidates, byAddress, now, modes)
+      await this.matchGroup(candidates, byAddress, now, [...modes])
     }
+  }
+
+  private async attemptMakeRunner(runner: MatchRunnerSpec) {
+    if (runner.phase !== 'make') return
+    const proposals = await this.state.storage.list<StoredProposal>({
+      prefix: PROPOSAL_PREFIX
+    })
+    for (const proposal of proposals.values()) {
+      if (
+        proposal.status !== 'ACCEPTED' ||
+        proposal.nextDispatchAtMs !== undefined ||
+        !proposal.participants.some(participant =>
+          matchRunnerIncludesMode(runner, participant.player.mode)
+        )
+      ) {
+        continue
+      }
+      await this.dispatchProposal(proposal)
+    }
+  }
+
+  private async putTicketAndArmFindRunner(ticket: StoredTicket, now: number) {
+    const runner = findRunnerForMode(ticket.player.mode)
+    await this.state.storage.transaction(async transaction => {
+      await transaction.put(ticketKey(ticket.player.address), ticket)
+      if (!runner) return
+      const key = matchRunnerKey(runner)
+      const currentRunner = await transaction.get<StoredMatchRunner>(key)
+      const nextAtMs =
+        currentRunner?.nextAtMs ??
+        now + matchRunnerIntervalMs(runner, this.config.cadence)
+      if (!currentRunner) await transaction.put(key, { nextAtMs })
+      const currentAlarm = await transaction.getAlarm()
+      if (currentAlarm === null || nextAtMs < currentAlarm) {
+        await transaction.setAlarm(nextAtMs)
+      }
+    })
+  }
+
+  private async putProposalAndArmMakeRunner(
+    proposal: StoredProposal,
+    now: number
+  ) {
+    const runner = proposal.participants
+      .map(participant => makeRunnerForMode(participant.player.mode))
+      .find(
+        (candidate): candidate is MatchRunnerSpec => candidate !== undefined
+      )
+    await this.state.storage.transaction(async transaction => {
+      await transaction.put(proposalKey(proposal.id), proposal)
+      if (!runner) return
+      const key = matchRunnerKey(runner)
+      const currentRunner = await transaction.get<StoredMatchRunner>(key)
+      const nextAtMs =
+        currentRunner?.nextAtMs ??
+        now + matchRunnerIntervalMs(runner, this.config.cadence)
+      if (!currentRunner) await transaction.put(key, { nextAtMs })
+      const currentAlarm = await transaction.getAlarm()
+      if (currentAlarm === null || nextAtMs < currentAlarm) {
+        await transaction.setAlarm(nextAtMs)
+      }
+    })
+  }
+
+  private async syncMatchRunnerStates(now: number) {
+    const [tickets, proposals, storedRunners] = await Promise.all([
+      this.state.storage.list<StoredTicket>({ prefix: TICKET_PREFIX }),
+      this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX }),
+      this.state.storage.list<StoredMatchRunner>({
+        prefix: MATCH_RUNNER_PREFIX
+      })
+    ])
+    const activeRunnerIds = new Set<string>()
+    for (const ticket of tickets.values()) {
+      const runner = findRunnerForMode(ticket.player.mode)
+      if (runner) activeRunnerIds.add(runner.id)
+    }
+    for (const proposal of proposals.values()) {
+      if (
+        proposal.status !== 'ACCEPTED' ||
+        proposal.nextDispatchAtMs !== undefined
+      ) {
+        continue
+      }
+      for (const participant of proposal.participants) {
+        const runner = makeRunnerForMode(participant.player.mode)
+        if (runner) {
+          activeRunnerIds.add(runner.id)
+          break
+        }
+      }
+    }
+
+    const writes: Record<string, StoredMatchRunner> = {}
+    const deletes: string[] = []
+    for (const runner of SOURCE_MATCH_RUNNERS) {
+      const key = matchRunnerKey(runner)
+      if (!activeRunnerIds.has(runner.id)) {
+        if (storedRunners.has(key)) deletes.push(key)
+        continue
+      }
+      if (!storedRunners.has(key)) {
+        writes[key] = {
+          nextAtMs: now + matchRunnerIntervalMs(runner, this.config.cadence)
+        }
+      }
+    }
+    if (Object.keys(writes).length > 0) await this.state.storage.put(writes)
+    if (deletes.length > 0) await this.state.storage.delete(deletes)
+  }
+
+  private async processDueMatchRunners(now: number) {
+    const storedRunners = await this.state.storage.list<StoredMatchRunner>({
+      prefix: MATCH_RUNNER_PREFIX
+    })
+    for (const runner of SOURCE_MATCH_RUNNERS) {
+      const key = matchRunnerKey(runner)
+      const stored = storedRunners.get(key)
+      if (!stored || stored.nextAtMs > now) continue
+      if (runner.phase === 'find') {
+        await this.attemptFindRunner(runner, now)
+      } else {
+        await this.attemptMakeRunner(runner)
+      }
+      await this.advanceOrDeleteMatchRunner(runner, stored.nextAtMs, now)
+    }
+  }
+
+  private async advanceOrDeleteMatchRunner(
+    runner: MatchRunnerSpec,
+    previousDeadline: number,
+    now: number
+  ) {
+    let hasWork = false
+    if (runner.phase === 'find') {
+      const tickets = await this.state.storage.list<StoredTicket>({
+        prefix: TICKET_PREFIX
+      })
+      hasWork = [...tickets.values()].some(ticket =>
+        matchRunnerIncludesMode(runner, ticket.player.mode)
+      )
+    } else {
+      const proposals = await this.state.storage.list<StoredProposal>({
+        prefix: PROPOSAL_PREFIX
+      })
+      hasWork = [...proposals.values()].some(
+        proposal =>
+          proposal.status === 'ACCEPTED' &&
+          proposal.nextDispatchAtMs === undefined &&
+          proposal.participants.some(participant =>
+            matchRunnerIncludesMode(runner, participant.player.mode)
+          )
+      )
+    }
+    if (!hasWork) {
+      await this.state.storage.delete(matchRunnerKey(runner))
+      return
+    }
+    await this.state.storage.put(matchRunnerKey(runner), {
+      nextAtMs: nextMatchRunnerDeadline(
+        previousDeadline,
+        matchRunnerIntervalMs(runner, this.config.cadence),
+        now
+      )
+    } satisfies StoredMatchRunner)
   }
 
   private async matchGroup(
@@ -1163,6 +1358,38 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
+  private async createBotMatch(
+    human: MatchmakerPlayer,
+    bot: MatchmakerPlayer,
+    byAddress: Map<string, StoredTicket>,
+    now: number
+  ) {
+    const ticket = byAddress.get(human.address)
+    if (!ticket || !(await this.state.storage.get(ticketKey(human.address)))) {
+      return
+    }
+    const id = crypto.randomUUID()
+    const participants = await orderParticipantsForGame(id, [
+      participantFromTicket(ticket),
+      participantFromBot(bot)
+    ])
+    const proposal: StoredProposal = {
+      id,
+      status: 'ACCEPTED',
+      participants,
+      accepted: [human.address, bot.address],
+      createdAtMs: now,
+      expiresAtMs: now + this.config.acceptanceTimeoutMs,
+      dispatchAttempts: 0
+    }
+    await this.state.storage.transaction(async transaction => {
+      await transaction.put(proposalKey(id), proposal)
+      await transaction.delete(ticketKey(human.address))
+    })
+    console.log('matchmaker bot match ready', id, human.mode)
+    await this.dispatchProposal(proposal)
+  }
+
   private async processProposalTimers(now: number) {
     const stored = await this.state.storage.list<StoredProposal>({
       prefix: PROPOSAL_PREFIX
@@ -1189,8 +1416,9 @@ export class MatchmakerPool implements DurableObject {
         await this.expireProposal(proposal)
       } else if (
         proposal.status !== 'FOUND' &&
-        (proposal.nextDispatchAtMs === undefined ||
-          proposal.nextDispatchAtMs <= now)
+        (proposal.nextDispatchAtMs === undefined
+          ? proposal.status !== 'ACCEPTED'
+          : proposal.nextDispatchAtMs <= now)
       ) {
         await this.dispatchProposal(proposal)
       }
@@ -1235,8 +1463,6 @@ export class MatchmakerPool implements DurableObject {
     if (proposal.status === 'ACCEPTED') {
       const enabledModes = await this.currentEnabledGameModes(Date.now())
       if (!enabledModes) {
-        proposal.nextDispatchAtMs = Date.now() + this.config.tickMs
-        await this.state.storage.put(proposalKey(proposal.id), proposal)
         return
       }
       if (this.proposalUsesDisabledMode(proposal, enabledModes)) {
@@ -1499,9 +1725,12 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async rescheduleAlarm(now: number) {
-    const [tickets, proposals] = await Promise.all([
-      this.state.storage.list<StoredTicket>({ prefix: TICKET_PREFIX }),
-      this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX })
+    await this.syncMatchRunnerStates(now)
+    const [proposals, runners] = await Promise.all([
+      this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX }),
+      this.state.storage.list<StoredMatchRunner>({
+        prefix: MATCH_RUNNER_PREFIX
+      })
     ])
     const candidates: number[] = []
     for (const socket of this.state.getWebSockets()) {
@@ -1532,24 +1761,15 @@ export class MatchmakerPool implements DurableObject {
         if (proposal.botAcceptAtMs !== undefined)
           candidates.push(proposal.botAcceptAtMs)
       } else if (this.env.MATCH_SERVICE !== undefined) {
-        candidates.push(proposal.nextDispatchAtMs ?? now + 1)
+        if (proposal.nextDispatchAtMs !== undefined) {
+          candidates.push(proposal.nextDispatchAtMs)
+        } else if (proposal.status !== 'ACCEPTED') {
+          candidates.push(now + 1)
+        }
       }
     }
-    if (
-      tickets.size >= 2 ||
-      (tickets.size >= 1 && this.config.enableRankedBots)
-    ) {
-      candidates.push(now + this.config.tickMs)
-    } else if (tickets.size >= 1) {
-      candidates.push(
-        this.gameModeStatusCache
-          ? Math.max(
-              now + 1,
-              this.gameModeStatusCache.checkedAtMs +
-                this.config.gameModeStatusCacheTtlMs
-            )
-          : now + this.config.tickMs
-      )
+    for (const runner of runners.values()) {
+      candidates.push(Math.max(now + 1, runner.nextAtMs))
     }
 
     const next = candidates

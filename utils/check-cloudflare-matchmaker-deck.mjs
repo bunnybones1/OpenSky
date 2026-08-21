@@ -199,7 +199,7 @@ export const matchmakerDeckErrors = value => {
     'if (profile.activeMatch)',
     'this.pendingProposalReference(',
     'this.penalties.getPenaltyMs(',
-    'this.state.storage.put(ticketKey(attachment.principal), ticket)'
+    'this.putTicketAndArmFindRunner(ticket, Date.now())'
   ])
   const workerProfile = bodyBetween(
     value.workerRuntime,

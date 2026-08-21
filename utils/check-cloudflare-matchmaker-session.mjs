@@ -547,7 +547,8 @@ export const matchmakerSessionErrors = (
     'this.expireUnauthenticatedSockets(now)',
     'this.expireIdleSockets(now)',
     'await this.processProposalTimers(now)',
-    'await this.attemptMatches(now)',
+    'await this.syncMatchRunnerStates(now)',
+    'await this.processDueMatchRunners(now)',
     'await this.rescheduleAlarm(now)'
   ])
 
@@ -651,7 +652,7 @@ export const matchmakerSessionErrors = (
     'this.notifyDuplicateSubscribers(webSocket, attachment.principal)',
     'attachment.subscribed = true',
     'webSocket.serializeAttachment(attachment)',
-    'this.state.storage.put(ticketKey(attachment.principal), ticket)'
+    'this.putTicketAndArmFindRunner(ticket, Date.now())'
   ])
   for (const [label, wrangler] of [
     ['production', workerWrangler],
@@ -770,7 +771,7 @@ export const matchmakerSessionErrors = (
   const workerDecline = bodyBetween(
     worker,
     'private async declineMatch(',
-    'private async attemptMatches('
+    'private async attemptFindRunner('
   )
   requireOrdered(errors, 'Worker source decline lifecycle', workerDecline, [
     'await this.state.storage.delete(ticketKey(principal))',
@@ -794,8 +795,8 @@ export const matchmakerSessionErrors = (
 
   const workerAttemptMatches = bodyBetween(
     worker,
-    'private async attemptMatches(',
-    'private async matchGroup('
+    'private async attemptFindRunner(',
+    'private async attemptMakeRunner('
   )
   requireOrdered(errors, 'Worker orphaned queue repair', workerAttemptMatches, [
     'this.drainDisabledMatchmaking(enabledModes)',

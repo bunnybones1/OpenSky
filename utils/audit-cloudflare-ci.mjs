@@ -65,6 +65,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the matchmaker session source gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:matchmaker-cadence')) {
+    errors.push(
+      'Cloudflare build must include the matchmaker cadence source gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:matchmaker-relaxation')) {
     errors.push(
       'Cloudflare build must include the matchmaker relaxation source gate'
