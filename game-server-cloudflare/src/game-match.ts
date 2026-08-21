@@ -35,20 +35,19 @@ import {
 import { applyConquestPoints } from './conquest-points'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
 import { publishMatchCompletion } from './completion-publication'
-import {
-  DECK_RANK_UPDATE_RETRY_DELAY_MS,
-  type DeckRankJobReceipt,
-  type RankedSettlementReceipt
+import type {
+  DeckRankJobReceipt,
+  RankedSettlementReceipt
 } from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
   applyWarmUpProgress,
-  GRANDWEAVER_RETRY_DELAY_MS,
   type GrandweaverJobReceipt,
   warmUpProgressPlayer
 } from './progression'
+import { POST_MATCH_RETRY_INITIAL_DELAY_MS } from './post-match-retry'
 import {
   AcceptedClientMessage,
   CreateMatchRequest,
@@ -1813,10 +1812,10 @@ export class GameMatch implements DurableObject {
       this.finishMatchSockets()
       const taskDeadlines = [
         metadata.deckRankUpdatePending
-          ? now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+          ? now + POST_MATCH_RETRY_INITIAL_DELAY_MS
           : undefined,
         metadata.grandweaverRecalculationPending
-          ? now + GRANDWEAVER_RETRY_DELAY_MS
+          ? now + POST_MATCH_RETRY_INITIAL_DELAY_MS
           : undefined
       ].filter((deadline): deadline is number => deadline !== undefined)
       if (taskDeadlines.length > 0) {
@@ -1835,9 +1834,9 @@ export class GameMatch implements DurableObject {
   }
 
   private async retryPostCompletionJobs(metadata: MatchMetadata, now: number) {
-    // The Go DeckRankUpdateRunner and PromoteGrandmastersRunner are separate
-    // work groups. A failed or delayed task must not prevent the other task
-    // from making progress merely because Durable Objects expose one alarm.
+    // These responsibilities mutate separate shared projections. A failed or
+    // delayed task must not prevent the other from making progress merely
+    // because one match Durable Object owns their recovery alarm.
     const deadlines: number[] = []
     if (metadata.deckRankUpdatePending) {
       const deadline = await this.retryDeckRankUpdateWithRetry(metadata, now)
@@ -1860,7 +1859,7 @@ export class GameMatch implements DurableObject {
     await this.state.storage.setAlarm(
       deadlines.length > 0
         ? Math.min(...deadlines)
-        : now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+        : now + POST_MATCH_RETRY_INITIAL_DELAY_MS
     )
   }
 
@@ -1888,7 +1887,7 @@ export class GameMatch implements DurableObject {
         throw new Error(`deck-rank task returned ${response.status}`)
       }
       const job = await response.json<DeckRankJobReceipt>()
-      if (!['pending', 'applied', 'failed'].includes(job.state)) {
+      if (!['pending', 'applied'].includes(job.state)) {
         throw new Error('deck-rank task result is invalid')
       }
       metadata.deckRankUpdatePending = job.state === 'pending'
@@ -1899,14 +1898,14 @@ export class GameMatch implements DurableObject {
           : Number.NaN
         return Number.isFinite(nextAttemptAt) && nextAttemptAt > now
           ? nextAttemptAt
-          : now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+          : now + POST_MATCH_RETRY_INITIAL_DELAY_MS
       }
       return undefined
     } catch (error) {
-      // This source worker is post-commit. Its task can retry or become FAILED,
-      // but must never reopen the ledger or suppress terminal client delivery.
+      // This responsibility is post-commit and remains recoverable. It must
+      // never reopen the ledger or suppress terminal client delivery.
       console.error('deck rank update retry failed', metadata.proposalId, error)
-      return now + DECK_RANK_UPDATE_RETRY_DELAY_MS
+      return now + POST_MATCH_RETRY_INITIAL_DELAY_MS
     }
   }
 
@@ -1915,8 +1914,8 @@ export class GameMatch implements DurableObject {
     now: number
   ): Promise<number | undefined> {
     try {
-      // A separately named coordinator preserves the source work group's
-      // global single-task lock without serializing it behind deck-rank work.
+      // A separately named coordinator preserves the required global ordering
+      // without serializing it behind the distinct deck-rank projection.
       const response = await this.env.DECK_RANK_COORDINATOR.getByName(
         'grandweaver'
       ).fetch(
@@ -1939,7 +1938,7 @@ export class GameMatch implements DurableObject {
         throw new Error(`Grandweaver task returned ${response.status}`)
       }
       const job = await response.json<GrandweaverJobReceipt>()
-      if (!['pending', 'applied', 'failed'].includes(job.state)) {
+      if (!['pending', 'applied'].includes(job.state)) {
         throw new Error('Grandweaver task result is invalid')
       }
       metadata.grandweaverRecalculationPending = job.state === 'pending'
@@ -1950,7 +1949,7 @@ export class GameMatch implements DurableObject {
           : Number.NaN
         return Number.isFinite(nextAttemptAt) && nextAttemptAt > now
           ? nextAttemptAt
-          : now + GRANDWEAVER_RETRY_DELAY_MS
+          : now + POST_MATCH_RETRY_INITIAL_DELAY_MS
       }
       return undefined
     } catch (error) {
@@ -1959,7 +1958,7 @@ export class GameMatch implements DurableObject {
         metadata.proposalId,
         error
       )
-      return now + GRANDWEAVER_RETRY_DELAY_MS
+      return now + POST_MATCH_RETRY_INITIAL_DELAY_MS
     }
   }
 

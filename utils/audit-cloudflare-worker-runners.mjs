@@ -40,15 +40,12 @@ export const EXPECTED_RUNNERS = {
   },
   DeckRankUpdateRunner: {
     disposition: 'ported',
-    evidenceFile: 'game-server-cloudflare/src/deck-ranks.ts',
+    evidenceFile:
+      'game-server-cloudflare/test-cloudflare/deck-ranks.test.ts',
     evidence: [
-      'stageDeckRankJob',
-      'runDeckRankJob',
-      'multiplayer_match_deck_rank_jobs',
-      'DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000',
-      'DECK_RANK_UPDATE_MAX_ATTEMPTS = 5',
-      'waiting for terminal match publication',
-      'multiplayer_match_deck_ranks_applied'
+      'serializes concurrent completions through the coordinator',
+      'rolls back every aggregate write when a D1 batch statement fails',
+      'remains recoverable after six failures, applies attempt seven once, and rejects tampering'
     ]
   },
   FixStarterDecksRunner: {
@@ -112,14 +109,13 @@ export const EXPECTED_RUNNERS = {
   },
   PromoteGrandmastersRunner: {
     disposition: 'ported',
-    evidenceFile: 'game-server-cloudflare/src/progression.ts',
+    evidenceFile:
+      'game-server-cloudflare/test-cloudflare/game-match.test.ts',
     evidence: [
-      'runPublishedGrandweaverJob',
-      'multiplayer_grandweaver_jobs',
-      'GRANDWEAVER_RETRY_DELAY_MS = 15_000',
-      'GRANDWEAVER_MAX_ATTEMPTS = 5',
-      'grandweaverStatements',
-      'failExhaustedGrandweaverJob'
+      'keeps the asynchronous Grandweaver job recoverable',
+      'for (let attempt = 1; attempt <= 6; attempt += 1)',
+      'attemptCount: 7,',
+      'Terminal rewards and match_ended were already delivered'
     ]
   },
   PushNotificationsRunner: {

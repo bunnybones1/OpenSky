@@ -272,8 +272,11 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'attempt_count',
     'last_attempt_at',
     'next_attempt_at',
-    '15 * NEW.attempt_count',
-    "NEW.status = 'FAILED'",
+    "status IN ('PENDING', 'APPLIED')",
+    'attempt_count >= 0',
+    'NEW.attempt_count = OLD.attempt_count + 1',
+    'NEW.next_attempt_at > NEW.last_attempt_at',
+    "instr(sql, \"'FAILED'\") = 0",
     "NEW.status = 'APPLIED'",
     'multiplayer_match_deck_rank_jobs',
     'multiplayer_match_deck_rank_job_guard',
@@ -282,7 +285,6 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'multiplayer_match_deck_rank_receipt_apply_job',
     'multiplayer_match_experience',
     "ledger.status = 'ended'",
-    'OLD.attempt_count < 5',
     '$.match.matchSettings.season'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))

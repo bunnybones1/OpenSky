@@ -1,7 +1,7 @@
--- The Go PromoteGrandmastersRunner is a post-commit task with its own
--- 15-second linear retry delay, five-attempt bound, and terminal failure
--- state. Rebuild the pre-production 0118 job table so Durable Object alarms
--- can preserve that task lifecycle without delaying terminal match clients.
+-- Rebuild the pre-production 0118 responsibility table with durable attempt
+-- observation and a recovery cursor. Match alarms may retry indefinitely;
+-- D1 protects identity and atomic application rather than copying the Go
+-- worker's delay, attempt limit or terminal failure state.
 DROP TRIGGER multiplayer_grandweaver_job_guard;
 DROP TRIGGER multiplayer_grandweaver_job_update_guard;
 DROP TRIGGER multiplayer_grandweaver_job_no_delete;
@@ -15,10 +15,8 @@ CREATE TABLE multiplayer_grandweaver_jobs (
     game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')
   ),
   season INTEGER NOT NULL CHECK (season > 0),
-  status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED')),
-  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (
-    attempt_count BETWEEN 0 AND 5
-  ),
+  status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   created_at TEXT NOT NULL CHECK (created_at <> ''),
   last_attempt_at TEXT,
   next_attempt_at TEXT,
@@ -31,7 +29,7 @@ CREATE TABLE multiplayer_grandweaver_jobs (
         (attempt_count = 0 AND last_attempt_at IS NULL
           AND next_attempt_at IS NULL)
         OR
-        (attempt_count BETWEEN 1 AND 5
+        (attempt_count >= 1
           AND last_attempt_at IS NOT NULL AND last_attempt_at <> ''
           AND next_attempt_at IS NOT NULL AND next_attempt_at <> '')
       )
@@ -39,18 +37,10 @@ CREATE TABLE multiplayer_grandweaver_jobs (
     OR
     (
       status = 'APPLIED'
-      AND attempt_count BETWEEN 1 AND 5
+      AND attempt_count >= 1
       AND last_attempt_at IS NOT NULL AND last_attempt_at <> ''
       AND next_attempt_at IS NULL
       AND applied_at IS NOT NULL AND applied_at <> ''
-    )
-    OR
-    (
-      status = 'FAILED'
-      AND attempt_count = 5
-      AND last_attempt_at IS NOT NULL AND last_attempt_at <> ''
-      AND next_attempt_at IS NULL
-      AND applied_at IS NULL
     )
   ),
   FOREIGN KEY (proposal_id) REFERENCES multiplayer_matches(proposal_id)
@@ -109,8 +99,8 @@ BEGIN
 END;
 
 -- Starting an attempt is committed before the rank batch, so eviction cannot
--- lose the retry deadline. Application remains part of the same D1 batch as
--- the global rank mutation, and exhaustion is a distinct terminal transition.
+-- lose the recovery cursor. Application remains part of the same D1 batch as
+-- the global rank mutation, and a failed attempt remains recoverable.
 CREATE TRIGGER multiplayer_grandweaver_job_update_guard
 BEFORE UPDATE ON multiplayer_grandweaver_jobs
 WHEN NEW.proposal_id IS NOT OLD.proposal_id
@@ -125,18 +115,11 @@ WHEN NEW.proposal_id IS NOT OLD.proposal_id
     (
       OLD.status = 'PENDING'
       AND NEW.status = 'PENDING'
-      AND OLD.attempt_count < 5
       AND NEW.attempt_count = OLD.attempt_count + 1
       AND NEW.last_attempt_at IS NOT NULL
       AND NEW.last_attempt_at <> ''
       AND NEW.next_attempt_at IS NOT NULL
       AND NEW.next_attempt_at > NEW.last_attempt_at
-      AND julianday(NEW.last_attempt_at) IS NOT NULL
-      AND julianday(NEW.next_attempt_at) IS NOT NULL
-      AND ABS(
-        (julianday(NEW.next_attempt_at) - julianday(NEW.last_attempt_at))
-          * 86400.0 - (15 * NEW.attempt_count)
-      ) < 0.001
       AND NEW.applied_at IS NULL
       AND (OLD.next_attempt_at IS NULL
         OR OLD.next_attempt_at <= NEW.last_attempt_at)
@@ -144,19 +127,9 @@ WHEN NEW.proposal_id IS NOT OLD.proposal_id
     OR
     (
       OLD.status = 'PENDING'
-      AND NEW.status = 'FAILED'
-      AND OLD.attempt_count = 5
-      AND NEW.attempt_count = OLD.attempt_count
-      AND NEW.last_attempt_at IS OLD.last_attempt_at
-      AND NEW.next_attempt_at IS NULL
-      AND NEW.applied_at IS NULL
-    )
-    OR
-    (
-      OLD.status = 'PENDING'
       AND NEW.status = 'APPLIED'
       AND NEW.attempt_count = OLD.attempt_count
-      AND NEW.attempt_count BETWEEN 1 AND 5
+      AND NEW.attempt_count >= 1
       AND NEW.last_attempt_at IS OLD.last_attempt_at
       AND NEW.next_attempt_at IS NULL
       AND NEW.applied_at = OLD.last_attempt_at

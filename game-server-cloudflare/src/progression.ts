@@ -41,6 +41,7 @@ import {
   type RankingOutcome
 } from './ranking'
 import { sourceRewardListWire, sourceRewardWire } from './reward-wire'
+import { postMatchNextAttemptAt } from './post-match-retry'
 
 interface MatchPlayersRow {
   player1_user_id: string | null
@@ -1685,7 +1686,7 @@ interface GrandweaverJobRow {
   proposal_id: string
   game_mode: GameMode
   season: number
-  status: 'PENDING' | 'APPLIED' | 'FAILED'
+  status: 'PENDING' | 'APPLIED'
   attempt_count: number
   created_at: string
   last_attempt_at: string | null
@@ -1694,16 +1695,13 @@ interface GrandweaverJobRow {
 }
 
 export interface GrandweaverJobReceipt {
-  state: 'not_required' | 'pending' | 'applied' | 'failed'
+  state: 'not_required' | 'pending' | 'applied'
   attemptCount: number
   createdAt?: string
   lastAttemptAt?: string
   nextAttemptAt?: string
   appliedAt?: string
 }
-
-export const GRANDWEAVER_RETRY_DELAY_MS = 15_000
-export const GRANDWEAVER_MAX_ATTEMPTS = 5
 
 const canonicalTimestamp = (value: string) => {
   const parsed = Date.parse(value)
@@ -1728,12 +1726,7 @@ const grandweaverJobReceipt = (
 ): GrandweaverJobReceipt =>
   job
     ? {
-        state:
-          job.status === 'APPLIED'
-            ? 'applied'
-            : job.status === 'FAILED'
-              ? 'failed'
-              : 'pending',
+        state: job.status === 'APPLIED' ? 'applied' : 'pending',
         attemptCount: job.attempt_count,
         createdAt: job.created_at,
         ...(job.last_attempt_at ? { lastAttemptAt: job.last_attempt_at } : {}),
@@ -1753,27 +1746,10 @@ export const publishedGrandweaverJob = async (
 ): Promise<GrandweaverJobReceipt> =>
   grandweaverJobReceipt(await readGrandweaverJob(database, proposalId))
 
-const failExhaustedGrandweaverJob = async (
-  database: D1Database,
-  proposalId: string
-) => {
-  const failed = await database
-    .prepare(
-      `UPDATE multiplayer_grandweaver_jobs
-       SET status = 'FAILED', next_attempt_at = NULL
-       WHERE proposal_id = ? AND status = 'PENDING' AND attempt_count = ?`
-    )
-    .bind(proposalId, GRANDWEAVER_MAX_ATTEMPTS)
-    .run()
-  if ((failed.meta.changes ?? 0) !== 1) {
-    throw new Error('Grandweaver job exhaustion was not persisted')
-  }
-}
-
 /**
- * Runs one source PromoteGrandmastersRunner attempt after terminal
+ * Runs one recoverable Grandweaver responsibility attempt after terminal
  * publication. Attempt state is committed before the atomic rank batch so an
- * eviction cannot lose its linear retry deadline.
+ * eviction cannot lose its next recovery cursor.
  */
 export const runPublishedGrandweaverJob = async (
   database: D1Database,
@@ -1797,15 +1773,8 @@ export const runPublishedGrandweaverJob = async (
   ) {
     return grandweaverJobReceipt(job)
   }
-  if (job.attempt_count >= GRANDWEAVER_MAX_ATTEMPTS) {
-    await failExhaustedGrandweaverJob(database, proposalId)
-    return grandweaverJobReceipt(await readGrandweaverJob(database, proposalId))
-  }
-
   const attemptCount = job.attempt_count + 1
-  const nextAttemptAt = new Date(
-    Date.parse(attemptedAt) + GRANDWEAVER_RETRY_DELAY_MS * attemptCount
-  ).toISOString()
+  const nextAttemptAt = postMatchNextAttemptAt(attemptedAt, attemptCount)
   const started = await database
     .prepare(
       `UPDATE multiplayer_grandweaver_jobs
@@ -1859,11 +1828,6 @@ export const runPublishedGrandweaverJob = async (
 
   job = await readGrandweaverJob(database, proposalId)
   if (!job) throw new Error('Grandweaver job disappeared')
-  if (job.status === 'PENDING' && attemptCount >= GRANDWEAVER_MAX_ATTEMPTS) {
-    await failExhaustedGrandweaverJob(database, proposalId)
-    job = await readGrandweaverJob(database, proposalId)
-    if (!job) throw new Error('Grandweaver job disappeared')
-  }
   return grandweaverJobReceipt(job)
 }
 

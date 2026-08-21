@@ -27,6 +27,7 @@ import {
   type MatchStatsReceipt
 } from './progression'
 import { applyConquestScores } from './conquest-score'
+import { postMatchNextAttemptAt } from './post-match-retry'
 
 const LIBRARY_REVISION = cardLibrary.sourceSha256
 const activeCardIds = new Set(cardLibrary.cards.map(card => card.id))
@@ -59,7 +60,7 @@ interface DeckRankJobRow {
   proposal_id: string
   library_revision: string
   season: number
-  status: 'PENDING' | 'APPLIED' | 'FAILED'
+  status: 'PENDING' | 'APPLIED'
   attempt_count: number
   created_at: string
   last_attempt_at: string | null
@@ -117,16 +118,13 @@ export interface RankedSettlementReceipt {
 }
 
 export interface DeckRankJobReceipt {
-  state: 'not_applicable' | 'pending' | 'applied' | 'failed'
+  state: 'not_applicable' | 'pending' | 'applied'
   attemptCount: number
   createdAt?: string
   lastAttemptAt?: string
   nextAttemptAt?: string
   appliedAt?: string
 }
-
-export const DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000
-export const DECK_RANK_UPDATE_MAX_ATTEMPTS = 5
 
 export class DeckRankJobPendingError extends Error {}
 
@@ -284,12 +282,7 @@ const readDeckRankJob = (
     .first<DeckRankJobRow>()
 
 const jobReceipt = (job: DeckRankJobRow): DeckRankJobReceipt => ({
-  state:
-    job.status === 'APPLIED'
-      ? 'applied'
-      : job.status === 'FAILED'
-        ? 'failed'
-        : 'pending',
+  state: job.status === 'APPLIED' ? 'applied' : 'pending',
   attemptCount: job.attempt_count,
   createdAt: job.created_at,
   ...(job.last_attempt_at ? { lastAttemptAt: job.last_attempt_at } : {}),
@@ -581,25 +574,12 @@ const terminalMatch = (
     .bind(proposalId)
     .first<TerminalMatchRow>()
 
-const failExhaustedDeckRankJob = async (
-  database: D1Database,
-  proposalId: string
-) => {
-  await database
-    .prepare(
-      `UPDATE multiplayer_match_deck_rank_jobs
-       SET status = 'FAILED', next_attempt_at = NULL
-       WHERE proposal_id = ? AND status = 'PENDING' AND attempt_count = ?`
-    )
-    .bind(proposalId, DECK_RANK_UPDATE_MAX_ATTEMPTS)
-    .run()
-}
-
 /**
- * Runs one source DeckRankUpdateRunner attempt. Winner and status are derived
- * from the committed ledger rather than accepted from the caller. Starting an
- * attempt stores its linear retry deadline first, so a Durable Object eviction
- * cannot strand the responsibility between mutation and rescheduling.
+ * Runs one recoverable deck-rank responsibility attempt. Winner and status are
+ * derived from the committed ledger rather than accepted from the caller.
+ * Starting an attempt stores its next recovery cursor first, so a Durable
+ * Object eviction cannot strand the responsibility between mutation and
+ * rescheduling.
  */
 export const runDeckRankJob = async (
   database: D1Database,
@@ -623,17 +603,8 @@ export const runDeckRankJob = async (
   ) {
     return jobReceipt(job)
   }
-  if (job.attempt_count >= DECK_RANK_UPDATE_MAX_ATTEMPTS) {
-    await failExhaustedDeckRankJob(database, proposalId)
-    job = await readDeckRankJob(database, proposalId)
-    if (!job) throw new Error('deck rank job disappeared')
-    return jobReceipt(job)
-  }
-
   const attemptCount = job.attempt_count + 1
-  const nextAttemptAt = new Date(
-    Date.parse(attemptedAt) + DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount
-  ).toISOString()
+  const nextAttemptAt = postMatchNextAttemptAt(attemptedAt, attemptCount)
   const started = await database
     .prepare(
       `UPDATE multiplayer_match_deck_rank_jobs
@@ -683,9 +654,6 @@ export const runDeckRankJob = async (
     )
   } catch (error) {
     console.error('deck rank update task failed', proposalId, error)
-    if (attemptCount >= DECK_RANK_UPDATE_MAX_ATTEMPTS) {
-      await failExhaustedDeckRankJob(database, proposalId)
-    }
   }
 
   job = await readDeckRankJob(database, proposalId)
@@ -730,8 +698,8 @@ export class DeckRankCoordinator implements DurableObject {
           )
         }
         // Both account ratings depend on their immediately preceding Glicko
-        // state. The same global coordinator later serializes deck-task
-        // attempts, matching each source runner's single work-group lock.
+        // state. This coordinator serializes that shared-state effect without
+        // reproducing the source worker topology.
         let stats: MatchStatsReceipt
         try {
           stats = await applyMatchStats(

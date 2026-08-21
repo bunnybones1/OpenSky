@@ -5,7 +5,7 @@ import {
   runInDurableObject,
   SELF
 } from 'cloudflare:test'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GameMode,
   MatchStatus,
@@ -405,6 +405,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   for (const socket of sockets.splice(0)) {
     try {
       socket.close(1000, 'test complete')
@@ -1294,7 +1295,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toBe(1)
   })
 
-  it('projects source Master positions and runs the asynchronous Grandweaver job with bounded retries', async () => {
+  it('projects source Master positions and keeps the asynchronous Grandweaver job recoverable', async () => {
     await insertExperiencePlayers()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     const earlier = '2026-08-13T20:00:00.000Z'
@@ -1517,13 +1518,16 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       state: 'pending',
       attemptCount: 1,
       lastAttemptAt: processedAt,
-      nextAttemptAt: '2026-08-13T22:00:15.000Z'
+      nextAttemptAt: expect.any(String)
     })
+    expect(Date.parse(firstAttempt.nextAttemptAt!)).toBeGreaterThan(
+      Date.parse(processedAt)
+    )
     expect(
       await runPublishedGrandweaverJob(
         env.AUTH_DB,
         proposalId,
-        '2026-08-13T22:00:14.999Z'
+        new Date(Date.parse(firstAttempt.nextAttemptAt!) - 1).toISOString()
       )
     ).toEqual(firstAttempt)
     expect(
@@ -1654,25 +1658,26 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     let failedJob = await publishedGrandweaverJob(env.AUTH_DB, failedProposalId)
     let attemptedAt = failedProcessedAt
     try {
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
+      for (let attempt = 1; attempt <= 6; attempt += 1) {
         failedJob = await runPublishedGrandweaverJob(
           env.AUTH_DB,
           failedProposalId,
           attemptedAt
         )
         expect(failedJob.attemptCount).toBe(attempt)
-        if (attempt < 5) {
-          expect(failedJob.state).toBe('pending')
-          expect(failedJob.nextAttemptAt).toBeTruthy()
-          attemptedAt = failedJob.nextAttemptAt!
-        } else {
-          expect(failedJob).toMatchObject({
-            state: 'failed',
-            attemptCount: 5,
-            lastAttemptAt: attemptedAt
-          })
-          expect(failedJob.nextAttemptAt).toBeUndefined()
-        }
+        expect(failedJob.state).toBe('pending')
+        expect(failedJob.nextAttemptAt).toBeTruthy()
+        expect(Date.parse(failedJob.nextAttemptAt!)).toBeGreaterThan(
+          Date.parse(attemptedAt)
+        )
+        expect(
+          await runPublishedGrandweaverJob(
+            env.AUTH_DB,
+            failedProposalId,
+            new Date(Date.parse(failedJob.nextAttemptAt!) - 1).toISOString()
+          )
+        ).toEqual(failedJob)
+        attemptedAt = failedJob.nextAttemptAt!
       }
     } finally {
       await env.AUTH_DB.prepare(
@@ -1688,13 +1693,23 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         ).all()
       ).results
     ).toEqual(ranksBeforeFailedTask)
+    const recoveredJob = await runPublishedGrandweaverJob(
+      env.AUTH_DB,
+      failedProposalId,
+      failedJob.nextAttemptAt!
+    )
+    expect(recoveredJob).toMatchObject({
+      state: 'applied',
+      attemptCount: 7,
+      appliedAt: failedJob.nextAttemptAt
+    })
     expect(
       await runPublishedGrandweaverJob(
         env.AUTH_DB,
         failedProposalId,
         '2026-08-15T00:00:00.000Z'
       )
-    ).toEqual(failedJob)
+    ).toEqual(recoveredJob)
   })
 
   it('preserves the source unpositioned after-rank reward on draws', async () => {
@@ -4072,9 +4087,57 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toEqual({ status: 'PENDING', attempt_count: 0 })
 
     // Terminal rewards and match_ended were already delivered and the player
-    // socket was already closed above. Only a later alarm may execute both
-    // independent source tasks against the committed match.
-    expect(await runDurableObjectAlarm(stub())).toBe(true)
+    // socket was already closed above. Only a later alarm may execute either
+    // independent responsibility against the committed match.
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_post_match_deck_rank_update
+       BEFORE UPDATE ON player_deck_ranks
+       BEGIN SELECT RAISE(ABORT, 'injected deck-rank recovery failure'); END`
+    ).run()
+    const recoveryStub = stub()
+    expect(await runDurableObjectAlarm(recoveryStub)).toBe(true)
+    const pendingDeckRankJob = await env.AUTH_DB.prepare(
+      `SELECT status, attempt_count, next_attempt_at
+       FROM multiplayer_match_deck_rank_jobs WHERE proposal_id = ?`
+    )
+      .bind(proposalId)
+      .first<{
+        status: string
+        attempt_count: number
+        next_attempt_at: string
+      }>()
+    expect(pendingDeckRankJob).toMatchObject({
+      status: 'PENDING',
+      attempt_count: 1,
+      next_attempt_at: expect.any(String)
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_grandweaver_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'APPLIED', attempt_count: 1 })
+    await runInDurableObject(
+      recoveryStub as DurableObjectStub,
+      async (_instance, state) => {
+        expect(
+          await state.storage.get<{
+            deckRankUpdatePending?: boolean
+            grandweaverRecalculationPending?: boolean
+          }>('match:metadata')
+        ).toMatchObject({
+          deckRankUpdatePending: true,
+          grandweaverRecalculationPending: false
+        })
+      }
+    )
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_post_match_deck_rank_update'
+    ).run()
+    // An early alarm neither consumes another attempt nor mutates aggregates.
+    expect(await runDurableObjectAlarm(recoveryStub)).toBe(true)
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count FROM multiplayer_match_deck_rank_jobs
@@ -4082,7 +4145,28 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       )
         .bind(proposalId)
         .first()
-    ).toEqual({ status: 'APPLIED', attempt_count: 1 })
+    ).toEqual({ status: 'PENDING', attempt_count: 1 })
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse(pendingDeckRankJob!.next_attempt_at) + 1)
+    await runInDurableObject(
+      recoveryStub as DurableObjectStub,
+      async (_instance, state) => {
+        expect(await state.storage.getAlarm()).toEqual(expect.any(Number))
+      }
+    )
+    await evictDurableObject(recoveryStub)
+    // The test helper runs scheduled alarms immediately; the coordinator's
+    // persisted next-attempt cursor, rather than wall-clock sleep, decides
+    // whether this invocation may consume an attempt after object eviction.
+    expect(await runDurableObjectAlarm(recoveryStub)).toBe(true)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_match_deck_rank_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'APPLIED', attempt_count: 2 })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count
@@ -4410,7 +4494,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       `SELECT progress FROM player_quests WHERE rowid = 7002`
     ).first<{ progress: number }>()
     expect(afterRetry?.progress).toBe(1)
-  })
+  }, 15_000)
 
   it('restores a hibernated practice bot and applies one validated action per alarm', async () => {
     const botProposalId = 'proposal-bot-test-1'

@@ -604,8 +604,8 @@ describe('source ranked-constructed deck aggregates', () => {
     expect((await ranks()).results).toHaveLength(2)
   })
 
-  it('fails closed after the source five attempts and rejects job or receipt tampering', async () => {
-    const proposalId = 'deck-rank-max-attempts'
+  it('remains recoverable after six failures, applies attempt seven once, and rejects tampering', async () => {
+    const proposalId = 'deck-rank-recovery'
     await setup(proposalId)
     await prepareDeckRankJob(proposalId, 0, MatchStatus.COMPLETED)
 
@@ -647,38 +647,51 @@ describe('source ranked-constructed deck aggregates', () => {
        BEGIN SELECT RAISE(ABORT, 'reject deck rank update'); END`
     ).run()
     let attemptedAt = ATTEMPTED_AT
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
+    let pending: Awaited<ReturnType<typeof runDeckRankJob>> | undefined
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
       const result = await runDeckRankJob(
         env.AUTH_DB,
         proposalId,
         attemptedAt
       )
       expect(result).toMatchObject({
-        state: attempt === 5 ? 'failed' : 'pending',
+        state: 'pending',
         attemptCount: attempt
       })
-      if (attempt < 5) {
-        expect(result.nextAttemptAt).toEqual(expect.any(String))
-        attemptedAt = result.nextAttemptAt!
-      } else {
-        expect(result.nextAttemptAt).toBeUndefined()
-      }
+      expect(result.nextAttemptAt).toEqual(expect.any(String))
+      expect(Date.parse(result.nextAttemptAt!)).toBeGreaterThan(
+        Date.parse(attemptedAt)
+      )
+      const early = new Date(Date.parse(result.nextAttemptAt!) - 1).toISOString()
+      expect(await runDeckRankJob(env.AUTH_DB, proposalId, early)).toEqual(
+        result
+      )
+      pending = result
+      attemptedAt = result.nextAttemptAt!
     }
+    await env.AUTH_DB.prepare('DROP TRIGGER reject_deck_rank_update').run()
     expect(
       await runDeckRankJob(
         env.AUTH_DB,
         proposalId,
-        '2026-08-13T13:00:00.000Z'
+        pending!.nextAttemptAt!
       )
-    ).toMatchObject({ state: 'failed', attemptCount: 5 })
-    expect((await ranks()).results).toHaveLength(0)
+    ).toMatchObject({ state: 'applied', attemptCount: 7 })
+    expect((await ranks()).results).toHaveLength(2)
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT 1 FROM multiplayer_match_deck_ranks_applied
+        `SELECT COUNT(*) AS count FROM multiplayer_match_deck_ranks_applied
          WHERE proposal_id = ?`
       )
         .bind(proposalId)
-        .first()
-    ).toBeNull()
+        .first('count')
+    ).toBe(1)
+    expect(
+      await runDeckRankJob(
+        env.AUTH_DB,
+        proposalId,
+        '2026-08-15T00:00:00.000Z'
+      )
+    ).toMatchObject({ state: 'applied', attemptCount: 7 })
   })
 })

@@ -1082,13 +1082,7 @@ export const rankPublicationErrors = value => {
     ]
   )
   for (const token of [
-    'PromoteGrandmastersRetryDelay = 15',
-    'PromoteGrandmastersMaxRetries = 5',
-    'func (r *PromoteGrandmastersRunner) MaxBatchSize() int',
-    'return 1',
-    'time.NewTicker(30 * time.Second)',
     'grandmastersUpdater.Update(sess, payload.GameMode, payload.Season)',
-    'UpdateFailedTasks([]*data.Task{task}, PromoteGrandmastersRetryDelay, PromoteGrandmastersMaxRetries)',
     'task.Status = proto.TaskStatus_COMPLETED'
   ]) {
     if (!sourceGrandweaverTask.includes(token)) {
@@ -1122,14 +1116,8 @@ export const rankPublicationErrors = value => {
     }
   }
   for (const token of [
-    'DeckRankUpdateRetryDelay = 5',
-    'DeckRankUpdateMaxRetries = 5',
-    'func (r *DeckRankUpdateRunner) MaxBatchSize() int',
-    'return 5',
-    'time.NewTicker(time.Minute)',
     'FindByID(taskPayload.MatchID)',
     'r.deckRankUpdater.UpdateFromMatch(sess, match, taskPayload.Season)',
-    'UpdateFailedTasks([]*data.Task{task}, DeckRankUpdateRetryDelay, DeckRankUpdateMaxRetries)',
     'UpdateCompletedTasks([]*data.Task{task})'
   ]) {
     if (!sourceDeckRankTask.includes(token)) {
@@ -1166,8 +1154,8 @@ export const rankPublicationErrors = value => {
   const compactDeckRankMigration = deckRankMigration.replace(/\s+/g, ' ')
   for (const token of [
     'CREATE TABLE multiplayer_match_deck_rank_jobs',
-    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
-    'attempt_count BETWEEN 0 AND 5',
+    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED'))",
+    'attempt_count >= 0',
     'multiplayer_match_deck_rank_job_guard',
     "ledger.status = 'active'",
     "'$.match.matchSettings.season'",
@@ -1175,7 +1163,8 @@ export const rankPublicationErrors = value => {
     'multiplayer_match_stats_applied',
     'multiplayer_match_experience',
     'multiplayer_match_deck_rank_job_update_guard',
-    'OLD.attempt_count < 5',
+    'NEW.attempt_count = OLD.attempt_count + 1',
+    'NEW.next_attempt_at > NEW.last_attempt_at',
     "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
     'multiplayer_match_deck_rank_receipt_guard',
     "ledger.status = 'ended'",
@@ -1194,19 +1183,17 @@ export const rankPublicationErrors = value => {
   )
   for (const token of [
     'ALTER TABLE multiplayer_grandweaver_jobs RENAME TO multiplayer_grandweaver_jobs_legacy',
-    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
-    'attempt_count BETWEEN 0 AND 5',
+    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED'))",
+    'attempt_count >= 0',
     'last_attempt_at TEXT',
     'next_attempt_at TEXT',
     'multiplayer_grandweaver_jobs_due_idx',
     'multiplayer_grandweaver_job_guard',
     'NEW.attempt_count <> 0',
     'multiplayer_grandweaver_job_update_guard',
-    'OLD.attempt_count < 5',
-    '15 * NEW.attempt_count',
+    'NEW.attempt_count = OLD.attempt_count + 1',
+    'NEW.next_attempt_at > NEW.last_attempt_at',
     "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
-    "NEW.status = 'FAILED'",
-    'OLD.attempt_count = 5',
     "NEW.status = 'APPLIED'",
     "pending_match.status <> 'ended'",
     'multiplayer_grandweaver_job_no_delete'
@@ -1215,8 +1202,13 @@ export const rankPublicationErrors = value => {
       errors.push(`Grandweaver task migration is missing: ${token}`)
     }
   }
-  if (!/OLD\.attempt_count\s*<\s*5\b/.test(grandweaverTaskMigration)) {
-    errors.push('Grandweaver task migration is missing: exact five attempts')
+  for (const [label, source] of [
+    ['deck-rank task migration', deckRankMigration],
+    ['Grandweaver task migration', grandweaverTaskMigration]
+  ]) {
+    if (source.includes("'FAILED'") || source.includes('attempt_count < 5')) {
+      errors.push(`${label} retains a terminal source retry policy`)
+    }
   }
 
   const compactProgression = progression.replace(/\s+/g, ' ')
@@ -1235,16 +1227,19 @@ export const rankPublicationErrors = value => {
     'export const runPublishedGrandweaverJob',
     "ledgerStatus !== 'ended'",
     'job.attempt_count + 1',
-    'GRANDWEAVER_RETRY_DELAY_MS * attemptCount',
+    'postMatchNextAttemptAt(attemptedAt, attemptCount)',
     'job.attempt_count = ? AND job.last_attempt_at = ?',
-    'failExhaustedGrandweaverJob('
+    "state: job.status === 'APPLIED' ? 'applied' : 'pending'"
   ]) {
     if (!compactProgression.includes(token)) {
       errors.push(`rank receipt coordinator is missing: ${token}`)
     }
   }
-  if (!/GRANDWEAVER_MAX_ATTEMPTS\s*=\s*5\b/.test(progression)) {
-    errors.push('asynchronous Grandweaver task is missing: exact five attempts')
+  if (
+    progression.includes('GRANDWEAVER_MAX_ATTEMPTS') ||
+    progression.includes("status = 'FAILED'")
+  ) {
+    errors.push('asynchronous Grandweaver responsibility can become terminal')
   }
   for (const token of [
     'grandweaverJob: GrandweaverJobReceipt',
@@ -1260,23 +1255,25 @@ export const rankPublicationErrors = value => {
     }
   }
   for (const token of [
-    'DECK_RANK_UPDATE_RETRY_DELAY_MS = 5_000',
     'stageDeckRankJob',
     'INSERT OR IGNORE INTO multiplayer_match_deck_rank_jobs',
     'runDeckRankJob',
     "ledger.status !== 'ended'",
     "throw new DeckRankJobPendingError('waiting for terminal match publication')",
     'job.attempt_count + 1',
-    'DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount',
+    'postMatchNextAttemptAt(attemptedAt, attemptCount)',
     'await applyDeckRanks(',
-    'failExhaustedDeckRankJob('
+    "state: job.status === 'APPLIED' ? 'applied' : 'pending'"
   ]) {
     if (!deckRanks.includes(token)) {
       errors.push(`asynchronous deck-rank task is missing: ${token}`)
     }
   }
-  if (!/DECK_RANK_UPDATE_MAX_ATTEMPTS\s*=\s*5\b/.test(deckRanks)) {
-    errors.push('asynchronous deck-rank task is missing: exact five attempts')
+  if (
+    deckRanks.includes('DECK_RANK_UPDATE_MAX_ATTEMPTS') ||
+    deckRanks.includes("status = 'FAILED'")
+  ) {
+    errors.push('asynchronous deck-rank responsibility can become terminal')
   }
   for (const token of [
     'deckRankJob: boolean',
@@ -1352,7 +1349,7 @@ export const rankPublicationErrors = value => {
       'metadata.completionRecorded = true',
       "type: 'rewards'",
       'this.finishMatchSockets()',
-      'DECK_RANK_UPDATE_RETRY_DELAY_MS'
+      'POST_MATCH_RETRY_INITIAL_DELAY_MS'
     ]
   )
   const synchronousCompletion = bodyBetween(
@@ -1381,7 +1378,7 @@ export const rankPublicationErrors = value => {
     }
   }
   for (const token of [
-    'GRANDWEAVER_RETRY_DELAY_MS',
+    'POST_MATCH_RETRY_INITIAL_DELAY_MS',
     'private async retryPostCompletionJobs(',
     'retryGrandweaverRecalculationWithRetry(',
     "'grandweaver'",
@@ -1389,7 +1386,7 @@ export const rankPublicationErrors = value => {
     "metadata.grandweaverRecalculationPending = job.state === 'pending'",
     'job.nextAttemptAt',
     'metadata.grandweaverRecalculationPending',
-    'return now + GRANDWEAVER_RETRY_DELAY_MS'
+    'return now + POST_MATCH_RETRY_INITIAL_DELAY_MS'
   ]) {
     if (!gameMatch.includes(token)) {
       errors.push(`asynchronous Grandweaver retry is missing: ${token}`)
@@ -1459,8 +1456,10 @@ export const rankPublicationErrors = value => {
     "error: 'waiting_for_match_publication'",
     "SET status = 'ended'",
     'expect(retry.status).toBe(200)',
-    "it('fails closed after the source five attempts and rejects job or receipt tampering'",
-    "state: attempt === 5 ? 'failed' : 'pending'",
+    "it('remains recoverable after six failures, applies attempt seven once, and rejects tampering'",
+    'for (let attempt = 1; attempt <= 6; attempt += 1)',
+    "state: 'pending'",
+    "state: 'applied', attemptCount: 7",
     "toThrow('deck rank receipt is invalid')"
   ]) {
     if (!compactDeckRanksTest.includes(token)) {
@@ -1495,14 +1494,33 @@ export const rankPublicationErrors = value => {
     [
       'post-terminal deck-rank task',
       gameServerTest,
-      'Only a later alarm may execute both'
+      'Only a later alarm may execute either'
+    ],
+    [
+      'post-match independent progress',
+      gameServerTest,
+      'reject_post_match_deck_rank_update'
+    ],
+    [
+      'post-match eviction recovery',
+      gameServerTest,
+      'An early alarm neither consumes another attempt nor mutates aggregates.'
     ],
     [
       'asynchronous Grandweaver job',
       gameServerTest,
-      'runs the asynchronous Grandweaver job with bounded retries'
+      'keeps the asynchronous Grandweaver job recoverable'
     ],
-    ['Grandweaver terminal failure', gameServerTest, "state: 'failed',"],
+    [
+      'Grandweaver recovery beyond source retry policy',
+      gameServerTest,
+      'for (let attempt = 1; attempt <= 6; attempt += 1)'
+    ],
+    [
+      'Grandweaver attempt-seven recovery',
+      gameServerTest,
+      'attemptCount: 7,'
+    ],
     [
       'Grandweaver terminal-client ordering',
       gameServerTest,

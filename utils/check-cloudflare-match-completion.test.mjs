@@ -948,8 +948,8 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       sourceGrandweaverTask: value.sourceGrandweaverTask.replace(
-        'PromoteGrandmastersMaxRetries = 5',
-        'PromoteGrandmastersMaxRetries = 0'
+        'grandmastersUpdater.Update(sess, payload.GameMode, payload.Season)',
+        'grandmastersUpdater.Skip(sess, payload.GameMode, payload.Season)'
       )
     },
     {
@@ -962,8 +962,8 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       sourceDeckRankTask: value.sourceDeckRankTask.replace(
-        'DeckRankUpdateMaxRetries = 5',
-        'DeckRankUpdateMaxRetries = 0'
+        'r.deckRankUpdater.UpdateFromMatch(sess, match, taskPayload.Season)',
+        'r.deckRankUpdater.SkipFromMatch(sess, match, taskPayload.Season)'
       )
     },
     {
@@ -983,15 +983,15 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       grandweaverTaskMigration: value.grandweaverTaskMigration.replace(
-        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
-        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED'))"
+        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED'))",
+        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))"
       )
     },
     {
       ...value,
       grandweaverTaskMigration: value.grandweaverTaskMigration.replace(
-        'OLD.attempt_count < 5',
-        'OLD.attempt_count < 50'
+        'NEW.attempt_count = OLD.attempt_count + 1',
+        'NEW.attempt_count = OLD.attempt_count + 2'
       )
     },
     {
@@ -1039,8 +1039,8 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       deckRanks: value.deckRanks.replace(
-        'DECK_RANK_UPDATE_MAX_ATTEMPTS = 5',
-        'DECK_RANK_UPDATE_MAX_ATTEMPTS = 50'
+        'postMatchNextAttemptAt(attemptedAt, attemptCount)',
+        'sourceLinearRetryAt(attemptedAt, attemptCount)'
       )
     },
     {
@@ -1067,8 +1067,22 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       deckRanksTest: value.deckRanksTest.replace(
-        'fails closed after the source five attempts and rejects job or receipt tampering',
+        'remains recoverable after six failures, applies attempt seven once, and rejects tampering',
         'retries deck ranks'
+      )
+    },
+    {
+      ...value,
+      gameServerTest: value.gameServerTest.replaceAll(
+        'reject_post_match_deck_rank_update',
+        'skip_post_match_deck_rank_failure'
+      )
+    },
+    {
+      ...value,
+      gameServerTest: value.gameServerTest.replace(
+        'An early alarm neither consumes another attempt nor mutates aggregates.',
+        'An early alarm may consume work.'
       )
     },
     {
@@ -1081,8 +1095,8 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     {
       ...value,
       progression: value.progression.replace(
-        'GRANDWEAVER_MAX_ATTEMPTS = 5',
-        'GRANDWEAVER_MAX_ATTEMPTS = 50'
+        'postMatchNextAttemptAt(attemptedAt, attemptCount)',
+        'sourceLinearRetryAt(attemptedAt, attemptCount)'
       )
     },
     {

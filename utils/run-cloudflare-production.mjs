@@ -87,15 +87,28 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM sqlite_schema
     WHERE type = 'trigger'
       AND name = 'multiplayer_grandweaver_job_update_guard'
-      AND instr(sql, 'OLD.attempt_count < 5') > 0
-      AND instr(sql, '15 * NEW.attempt_count') > 0
-      AND instr(sql, "NEW.status = 'FAILED'") > 0
+      AND instr(sql, 'NEW.attempt_count = OLD.attempt_count + 1') > 0
+      AND instr(sql, 'NEW.next_attempt_at > NEW.last_attempt_at') > 0
       AND instr(sql, "NEW.status = 'APPLIED'") > 0
-      AND instr(sql, "ledger.status = 'ended'") > 0)
+      AND instr(sql, "'FAILED'") = 0
+      AND instr(sql, "ledger.status = 'ended'") > 0
+      AND EXISTS (
+        SELECT 1 FROM sqlite_schema task_table
+        WHERE task_table.type = 'table'
+          AND task_table.name = 'multiplayer_grandweaver_jobs'
+          AND instr(
+            task_table.sql, "status IN ('PENDING', 'APPLIED')"
+          ) > 0
+          AND instr(task_table.sql, 'attempt_count >= 0') > 0
+          AND instr(task_table.sql, "'FAILED'") = 0
+      ))
     AS grandweaver_task_contract_guard_present,
   (SELECT COUNT(*) FROM sqlite_schema
     WHERE type = 'table'
-      AND name = 'multiplayer_match_deck_rank_jobs')
+      AND name = 'multiplayer_match_deck_rank_jobs'
+      AND instr(sql, "status IN ('PENDING', 'APPLIED')") > 0
+      AND instr(sql, 'attempt_count >= 0') > 0
+      AND instr(sql, "'FAILED'") = 0)
     AS deck_rank_job_table_present,
   (SELECT COUNT(*) FROM sqlite_schema
     WHERE type = 'trigger' AND name IN (
@@ -114,7 +127,9 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
         AND instr(sql, 'multiplayer_match_experience') > 0)
       OR
       (name = 'multiplayer_match_deck_rank_job_update_guard'
-        AND instr(sql, 'OLD.attempt_count < 5') > 0
+        AND instr(sql, 'NEW.attempt_count = OLD.attempt_count + 1') > 0
+        AND instr(sql, 'NEW.next_attempt_at > NEW.last_attempt_at') > 0
+        AND instr(sql, "'FAILED'") = 0
         AND instr(sql, "ledger.status = 'ended'") > 0)
       OR
       (name = 'multiplayer_match_deck_rank_receipt_guard'
