@@ -868,6 +868,9 @@ importers:
       '@opensky/shared':
         specifier: workspace:*
         version: link:../lib/shared
+      '@skyweaver/state-metadata':
+        specifier: workspace:*
+        version: link:../state/js-bindings/packages/metadata
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 0.21.0

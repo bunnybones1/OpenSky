@@ -25,7 +25,8 @@ import { CaptchaGuard, readCaptchaConfig } from './captcha'
 import {
   normalizePrivateSeedForIdentity,
   prismsFromPrivateSeed,
-  validateGameModeDataConsistency
+  validateGameModeDataConsistency,
+  validateOwnedDeckForAdmission
 } from './admission'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
@@ -160,6 +161,7 @@ interface RuntimeConfig {
 }
 
 interface MatchmakingProfile {
+  gameModeEnabled: boolean
   score: number
   rank: PlayerRank
   lostLastMatch: boolean
@@ -524,6 +526,35 @@ export class MatchmakerPool implements DurableObject {
       command.mode,
       command.versionHash
     )
+    const prisms = prismsFromPrivateSeed(command.privateSeed)
+    if (
+      command.mode === GameMode.CONQUEST_CONSTRUCTED ||
+      command.mode === GameMode.CONQUEST_DISCOVERY
+    ) {
+      if (!profile.conquest) {
+        throw new ProtocolError('INVALID_ACCOUNT', 'conquest info is missing')
+      }
+      if (profile.conquest.mode !== command.mode) {
+        throw new ProtocolError(
+          'INVALID_ACCOUNT',
+          'active conquest does not match the game mode'
+        )
+      }
+      if (profile.conquest.deckClass !== prismsToDeckClass(prisms)) {
+        throw new ProtocolError(
+          'CONQUEST_DECK_CLASS_MISMATCH',
+          'deck class does not match the active conquest'
+        )
+      }
+    }
+
+    command = validateOwnedDeckForAdmission(
+      command,
+      profile.cards.map(([card]) => card)
+    )
+    if (!profile.gameModeEnabled) {
+      throw new ProtocolError('GAME_MODE_DISABLED', 'GAME_MODE_DISABLED')
+    }
     if (profile.activeMatch) {
       this.safeSend(webSocket, {
         type: 'match_made',
@@ -574,28 +605,6 @@ export class MatchmakerPool implements DurableObject {
         durationSeconds: Math.floor(penaltyMs / 1_000)
       })
       return
-    }
-
-    const prisms = prismsFromPrivateSeed(command.privateSeed)
-    if (
-      command.mode === GameMode.CONQUEST_CONSTRUCTED ||
-      command.mode === GameMode.CONQUEST_DISCOVERY
-    ) {
-      if (!profile.conquest) {
-        throw new ProtocolError('INVALID_ACCOUNT', 'conquest info is missing')
-      }
-      if (profile.conquest.mode !== command.mode) {
-        throw new ProtocolError(
-          'INVALID_ACCOUNT',
-          'active conquest does not match the game mode'
-        )
-      }
-      if (profile.conquest.deckClass !== prismsToDeckClass(prisms)) {
-        throw new ProtocolError(
-          'CONQUEST_DECK_CLASS_MISMATCH',
-          'deck class does not match the active conquest'
-        )
-      }
     }
 
     const player = createPlayer({
@@ -688,9 +697,6 @@ export class MatchmakerPool implements DurableObject {
     if (!isRecord(body) || typeof body.gameModeEnabled !== 'boolean') {
       throw new ProtocolError('SERVER_ERROR', 'invalid matchmaking profile')
     }
-    if (!body.gameModeEnabled) {
-      throw new ProtocolError('GAME_MODE_DISABLED', 'GAME_MODE_DISABLED')
-    }
     const profile = body.profile
     if (
       !isRecord(profile) ||
@@ -781,6 +787,7 @@ export class MatchmakerPool implements DurableObject {
     }
 
     return {
+      gameModeEnabled: body.gameModeEnabled,
       score: profile.score as number,
       rank: profile.rank as PlayerRank,
       lostLastMatch: profile.lostLastMatch,

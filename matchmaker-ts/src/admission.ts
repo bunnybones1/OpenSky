@@ -1,4 +1,5 @@
 import { CardClass, DeckClass, GameMode } from '@opensky/proto'
+import { BaseCard, CardLibrary } from '@skyweaver/state-metadata'
 
 import { prismsToDeckClass } from './model'
 import { FindMatchCommand, ProtocolError } from './protocol'
@@ -31,9 +32,7 @@ const principalBytes = (principal: string) => {
   return bytes
 }
 
-export const prismsFromPrivateSeed = (
-  privateSeed: Record<string, unknown>
-) => {
+export const prismsFromPrivateSeed = (privateSeed: Record<string, unknown>) => {
   const values = Array.isArray(privateSeed.prisms) ? privateSeed.prisms : []
   return values
     .map(value => (typeof value === 'string' ? prismMap[value] : undefined))
@@ -113,9 +112,7 @@ const isRandomPrivateSeed = (privateSeed: Record<string, unknown>) => {
 
 // Source oracle: frontend/findmatch/validators/game_mode_data_consistency.go.
 // Preserve both the accepted combinations and the source error ordering.
-export const validateGameModeDataConsistency = (
-  command: FindMatchCommand
-) => {
+export const validateGameModeDataConsistency = (command: FindMatchCommand) => {
   const randomDeck = isRandomPrivateSeed(command.privateSeed)
   switch (command.mode) {
     case GameMode.RANKED_DISCOVERY:
@@ -137,5 +134,50 @@ export const validateGameModeDataConsistency = (
         throw new ProtocolError('DECK_IS_NOT_RANDOM', 'DECK_IS_NOT_RANDOM')
       }
       return
+  }
+}
+
+const invalidDeck = () => new ProtocolError('SERVER_ERROR', 'invalid deck')
+
+// Source oracle: player_factory.go removes unowned cards before deck.go calls
+// CheckDeck. The API then rejects duplicates/oversize through ownership/count
+// checks and rejects decks spanning more than two card prisms. Return the
+// filtered command so durable tickets and dispatch carry the same deck the Go
+// player factory placed in PrivateSeed, not the browser's unowned claims.
+export const validateOwnedDeckForAdmission = (
+  command: FindMatchCommand,
+  ownedCardIds: Iterable<number>
+): FindMatchCommand => {
+  const rawCards = command.privateSeed.cards
+  if (
+    !Array.isArray(rawCards) ||
+    rawCards.some(card => typeof card !== 'string')
+  ) {
+    throw invalidPrivateSeed()
+  }
+
+  const owned = new Set([...ownedCardIds].map(card => String(card)))
+  const cards = rawCards.filter(
+    (card): card is string =>
+      typeof card === 'string' &&
+      owned.has(card) &&
+      CardLibrary.has(card as BaseCard)
+  )
+  cards.sort((left, right) => Number(left) - Number(right))
+  if (cards.length > 30 || new Set(cards).size !== cards.length) {
+    throw invalidDeck()
+  }
+
+  const cardPrisms = new Set(
+    cards.map(card => CardLibrary.get(card as BaseCard)!.prism)
+  )
+  if (cardPrisms.size > 2) throw invalidDeck()
+
+  return {
+    ...command,
+    privateSeed: {
+      ...command.privateSeed,
+      cards
+    }
   }
 }

@@ -412,7 +412,17 @@ describe('Cloudflare matchmaker Worker', () => {
 
   it('hydrates authoritative rank, score, cards and recent opponents before queueing', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
-    player.send(JSON.stringify(findCommand()))
+    player.send(
+      JSON.stringify(
+        findCommand(
+          GameMode.RANKED_CONSTRUCTED,
+          '',
+          'release-1',
+          ['str'],
+          ['6', '999']
+        )
+      )
+    )
 
     await expect
       .poll(async () => {
@@ -449,8 +459,29 @@ describe('Cloudflare matchmaker Worker', () => {
           (ticket as { request?: { privateSeed?: { player?: unknown } } })
             ?.request?.privateSeed?.player
         ).toEqual(Array(20).fill(0x11))
+        expect(
+          (ticket as { request?: { privateSeed?: { cards?: unknown } } })
+            ?.request?.privateSeed?.cards
+        ).toEqual(['6'])
       }
     )
+  })
+
+  it('rejects an invalid deck before returning an active match', async () => {
+    const [player] = track(await connect(PRINCIPAL_3, '192.0.2.3'))
+    const error = nextMessage(player)
+    const closed = nextClose(player)
+    player.send(
+      JSON.stringify(
+        findCommand(GameMode.PRACTICE_BOT, '', 'release-1', ['str'], ['6', '6'])
+      )
+    )
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ queuedPlayers: 0 })
   })
 
   it('silently rejects a missing client IP before captcha and profile hydration', async () => {

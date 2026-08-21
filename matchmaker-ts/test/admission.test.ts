@@ -1,9 +1,11 @@
 import { GameMode } from '@opensky/proto'
+import { CardLibrary } from '@skyweaver/state-metadata'
 import { describe, expect, it } from 'vitest'
 
 import {
   normalizePrivateSeedForIdentity,
-  validateGameModeDataConsistency
+  validateGameModeDataConsistency,
+  validateOwnedDeckForAdmission
 } from '../src/admission'
 import { FindMatchCommand, ProtocolError } from '../src/protocol'
 
@@ -31,17 +33,17 @@ const reason = (run: () => void) => {
 }
 
 describe('source game-mode data consistency', () => {
-  it.each([
-    GameMode.RANKED_DISCOVERY,
-    GameMode.CONQUEST_DISCOVERY
-  ])('requires a random deck for %s', mode => {
-    expect(() =>
-      validateGameModeDataConsistency(command(mode, []))
-    ).not.toThrow()
-    expect(
-      reason(() => validateGameModeDataConsistency(command(mode, ['6'])))
-    ).toBe('DECK_IS_NOT_RANDOM')
-  })
+  it.each([GameMode.RANKED_DISCOVERY, GameMode.CONQUEST_DISCOVERY])(
+    'requires a random deck for %s',
+    mode => {
+      expect(() =>
+        validateGameModeDataConsistency(command(mode, []))
+      ).not.toThrow()
+      expect(
+        reason(() => validateGameModeDataConsistency(command(mode, ['6'])))
+      ).toBe('DECK_IS_NOT_RANDOM')
+    }
+  )
 
   it('requires a session for constructed challenges', () => {
     expect(
@@ -82,9 +84,7 @@ describe('source game-mode data consistency', () => {
 
   it('leaves other game modes unchanged', () => {
     expect(() =>
-      validateGameModeDataConsistency(
-        command(GameMode.PRACTICE_PVP, ['6'])
-      )
+      validateGameModeDataConsistency(command(GameMode.PRACTICE_PVP, ['6']))
     ).not.toThrow()
   })
 })
@@ -137,5 +137,45 @@ describe('identity-native private seed normalization', () => {
         )
       )
     ).toBe('INVALID_PRIVATE_SEED')
+  })
+})
+
+describe('source owned-deck admission', () => {
+  it('filters unknown and unowned claims before persisting the private seed', () => {
+    const input = command(GameMode.RANKED_CONSTRUCTED, ['6', '999', '1'])
+    const admitted = validateOwnedDeckForAdmission(input, [1, 6])
+
+    expect(admitted.privateSeed.cards).toEqual(['1', '6'])
+    expect(input.privateSeed.cards).toEqual(['6', '999', '1'])
+  })
+
+  it.each([
+    ['duplicate cards', ['6', '6'], [6]],
+    ['more than two card prisms', ['6', '1', '7'], [1, 6, 7]]
+  ])('rejects %s after ownership filtering', (_name, cards, owned) => {
+    expect(
+      reason(() =>
+        validateOwnedDeckForAdmission(
+          command(GameMode.RANKED_CONSTRUCTED, cards),
+          owned
+        )
+      )
+    ).toBe('SERVER_ERROR')
+  })
+
+  it('rejects more than thirty owned cards', () => {
+    const cards = [...CardLibrary]
+      .filter(([, metadata]) => metadata.prism === 'str')
+      .slice(0, 31)
+      .map(([card]) => card)
+    expect(cards).toHaveLength(31)
+    expect(
+      reason(() =>
+        validateOwnedDeckForAdmission(
+          command(GameMode.RANKED_CONSTRUCTED, cards),
+          cards.map(Number)
+        )
+      )
+    ).toBe('SERVER_ERROR')
   })
 })

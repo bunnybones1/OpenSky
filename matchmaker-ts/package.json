@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@opensky/proto": "workspace:*",
-    "@opensky/shared": "workspace:*"
+    "@opensky/shared": "workspace:*",
+    "@skyweaver/state-metadata": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.21.0",
