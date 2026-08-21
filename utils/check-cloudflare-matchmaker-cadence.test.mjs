@@ -7,7 +7,6 @@ import { matchmakerCadenceErrors } from './check-cloudflare-matchmaker-cadence.m
 const fixtures = async () => {
   const [
     sourceApp,
-    sourceRunner,
     sourceConfig,
     sourceBotProcessor,
     workerCadence,
@@ -21,7 +20,6 @@ const fixtures = async () => {
     ciAuditTest
   ] = await Promise.all([
     readFile('matchmaker/app.go', 'utf8'),
-    readFile('matchmaker/lib/director/runner.go', 'utf8'),
     readFile('matchmaker/config/config.go', 'utf8'),
     readFile(
       'matchmaker/lib/director/matchhandlers/bot_match_processor.go',
@@ -39,7 +37,6 @@ const fixtures = async () => {
   ])
   return {
     sourceApp,
-    sourceRunner,
     sourceConfig,
     sourceBotProcessor,
     workerCadence,
@@ -54,7 +51,7 @@ const fixtures = async () => {
   }
 }
 
-test('pins every source director cadence through durable Worker alarms', async () => {
+test('pins player-visible cadence effects through durable Worker deadlines', async () => {
   assert.deepEqual(matchmakerCadenceErrors(await fixtures()), [])
 })
 
@@ -71,15 +68,8 @@ test('rejects source, Worker, runtime, regression, deploy, and CI drift', async 
     {
       ...value,
       sourceApp: value.sourceApp.replace(
-        'director.NewRunner(',
-        'director.RemovedRunner('
-      )
-    },
-    {
-      ...value,
-      sourceRunner: value.sourceRunner.replace(
-        'ticker := time.NewTicker(r.interval)',
-        'ticker := time.NewTicker(time.Second)'
+        'cfg.MatchMaker.MatchInterval.Challenge.Discovery',
+        'cfg.MatchMaker.MatchInterval.Conquest.Discovery'
       )
     },
     {
@@ -98,7 +88,10 @@ test('rejects source, Worker, runtime, regression, deploy, and CI drift', async 
     },
     {
       ...value,
-      workerCadence: value.workerCadence.replace('5_000', '2_000')
+      workerCadence: value.workerCadence.replace(
+        'env.MATCH_INTERVAL_PRACTICE_BOT_MS,\n    5_000',
+        'env.MATCH_INTERVAL_PRACTICE_BOT_MS,\n    2_000'
+      )
     },
     {
       ...value,
@@ -116,29 +109,22 @@ test('rejects source, Worker, runtime, regression, deploy, and CI drift', async 
     },
     {
       ...value,
-      workerCadence: value.workerCadence.replace(
-        'Math.floor((now - previousDeadline) / intervalMs) + 1',
-        'Math.floor((now - previousDeadline) / intervalMs)'
-      )
-    },
-    {
-      ...value,
       workerRuntime: value.workerRuntime.replace(
-        'await this.putTicketAndArmFindRunner(ticket, Date.now())',
+        'await this.putTicketAndArmFindWindow(ticket, Date.now())',
         'await this.state.storage.put(ticketKey(attachment.principal), ticket)'
       )
     },
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
-        'await this.processDueMatchRunners(now)',
+        'await this.processDueMatchFindWindows(now)',
         'await this.attemptMatches(now)'
       )
     },
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
-        'matchRunnerIncludesMode(runner, ticket.player.mode)',
+        'matchFindWindowIncludesMode(window, ticket.player.mode)',
         'ticket.player.mode !== GameMode.UNKNOWN'
       )
     },
@@ -152,35 +138,35 @@ test('rejects source, Worker, runtime, regression, deploy, and CI drift', async 
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
-        'await this.putProposalAndArmMakeRunner(proposal, Date.now())',
+        'proposal.nextDispatchAtMs = Date.now() + this.config.cadence.makeMatchMs',
         'await this.dispatchProposal(proposal)'
       )
     },
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
-        'nextMatchRunnerDeadline(',
+        'nextMatchFindWindowDeadline(',
         'Date.now() + ('
       )
     },
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
-        'candidates.push(Math.max(now + 1, runner.nextAtMs))',
+        'candidates.push(Math.max(now + 1, window.nextAtMs))',
         'candidates.push(now + 1)'
       )
     },
     {
       ...value,
       workerUnitTest: value.workerUnitTest.replace(
-        'expect(findRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()',
-        'expect(findRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeDefined()'
+        'expect(findWindowForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()',
+        'expect(findWindowForMode(GameMode.CONQUEST_DISCOVERY)).toBeDefined()'
       )
     },
     {
       ...value,
       workerRuntimeTest: value.workerRuntimeTest.replace(
-        "it('waits for the independent source MakeMatch runner after acceptance'",
+        "it('keeps accepted players pending until the durable allocation deadline'",
         "it('dispatches immediately after acceptance'"
       )
     },

@@ -2,16 +2,15 @@ import { GameMode } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
 import {
-  findRunnerForMode,
-  makeRunnerForMode,
-  matchRunnerIntervalMs,
-  nextMatchRunnerDeadline,
-  readMatchCadence,
-  SOURCE_MATCH_RUNNERS
+  findWindowForMode,
+  MATCH_FIND_WINDOWS,
+  matchFindWindowIntervalMs,
+  nextMatchFindWindowDeadline,
+  readMatchCadence
 } from '../src'
 
-describe('source matchmaker cadence', () => {
-  it('preserves every independent source interval and fallback', () => {
+describe('matchmaker effect cadence', () => {
+  it('preserves every player-visible interval boundary and fallback', () => {
     const configured = readMatchCadence({
       MATCH_INTERVAL_PRACTICE_BOT_MS: '1100',
       MATCH_INTERVAL_PRACTICE_PVP_MS: '1200',
@@ -49,83 +48,62 @@ describe('source matchmaker cadence', () => {
     })
   })
 
-  it('maps the exact nine source runners without inventing Conquest Discovery', () => {
+  it('maps the five compatible find windows without inventing Conquest Discovery', () => {
     expect(
-      SOURCE_MATCH_RUNNERS.map(runner => ({
-        id: runner.id,
-        phase: runner.phase,
-        groups: runner.groups
+      MATCH_FIND_WINDOWS.map(window => ({
+        id: window.id,
+        groups: window.groups,
+        directBot: window.directBot
       }))
     ).toEqual([
       {
         id: 'find-practice-bot',
-        phase: 'find',
-        groups: [[GameMode.PRACTICE_BOT], [GameMode.WARM_UP]]
+        groups: [[GameMode.PRACTICE_BOT], [GameMode.WARM_UP]],
+        directBot: true
       },
       {
         id: 'find-practice-pvp',
-        phase: 'find',
         groups: [
           [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED],
           [GameMode.RANKED_DISCOVERY]
-        ]
+        ],
+        directBot: false
       },
       {
         id: 'find-conquest-constructed',
-        phase: 'find',
-        groups: [[GameMode.CONQUEST_CONSTRUCTED]]
+        groups: [[GameMode.CONQUEST_CONSTRUCTED]],
+        directBot: false
       },
       {
         id: 'find-challenge-constructed',
-        phase: 'find',
-        groups: [[GameMode.CHALLENGE_CONSTRUCTED]]
+        groups: [[GameMode.CHALLENGE_CONSTRUCTED]],
+        directBot: false
       },
       {
         id: 'find-challenge-discovery',
-        phase: 'find',
-        groups: [[GameMode.CHALLENGE_DISCOVERY]]
-      },
-      {
-        id: 'make-practice-pvp',
-        phase: 'make',
-        groups: [
-          [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED],
-          [GameMode.RANKED_DISCOVERY]
-        ]
-      },
-      {
-        id: 'make-conquest-constructed',
-        phase: 'make',
-        groups: [[GameMode.CONQUEST_CONSTRUCTED]]
-      },
-      {
-        id: 'make-challenge-constructed',
-        phase: 'make',
-        groups: [[GameMode.CHALLENGE_CONSTRUCTED]]
-      },
-      {
-        id: 'make-challenge-discovery',
-        phase: 'make',
-        groups: [[GameMode.CHALLENGE_DISCOVERY]]
+        groups: [[GameMode.CHALLENGE_DISCOVERY]],
+        directBot: false
       }
     ])
-    expect(findRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()
-    expect(makeRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()
+    expect(findWindowForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()
   })
 
-  it('uses runner-specific intervals and advances a delayed ticker by phase', () => {
+  it('uses group-specific boundaries and advances a delayed window beyond now', () => {
     const cadence = readMatchCadence({})
     expect(
-      matchRunnerIntervalMs(findRunnerForMode(GameMode.PRACTICE_BOT)!, cadence)
+      matchFindWindowIntervalMs(
+        findWindowForMode(GameMode.PRACTICE_BOT)!,
+        cadence
+      )
     ).toBe(5_000)
     expect(
-      matchRunnerIntervalMs(
-        findRunnerForMode(GameMode.CHALLENGE_DISCOVERY)!,
+      matchFindWindowIntervalMs(
+        findWindowForMode(GameMode.CHALLENGE_DISCOVERY)!,
         cadence
       )
     ).toBe(2_000)
-    expect(nextMatchRunnerDeadline(10_000, 2_000, 10_000)).toBe(12_000)
-    expect(nextMatchRunnerDeadline(10_000, 2_000, 14_500)).toBe(16_000)
-    expect(nextMatchRunnerDeadline(20_000, 2_000, 14_500)).toBe(20_000)
+    expect(nextMatchFindWindowDeadline(10_000, 2_000, 10_000)).toBe(12_000)
+    expect(nextMatchFindWindowDeadline(10_000, 2_000, 14_500)).toBe(16_000)
+    expect(nextMatchFindWindowDeadline(20_000, 2_000, 14_500)).toBe(20_000)
   })
 })

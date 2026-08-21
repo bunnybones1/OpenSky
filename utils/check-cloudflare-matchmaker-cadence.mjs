@@ -26,7 +26,15 @@ const requireOrdered = (errors, label, source, tokens) => {
   }
 }
 
-const count = (source, token) => source.split(token).length - 1
+const requireAll = (errors, label, source, tokens) => {
+  for (const token of tokens) {
+    if (!source.includes(token)) errors.push(`${label} is missing: ${token}`)
+  }
+}
+
+const requirePattern = (errors, label, source, pattern) => {
+  if (!pattern.test(source)) errors.push(`${label} is missing or malformed`)
+}
 
 const requireScript = (errors, rootPackage, script, tokens) => {
   const source = rootPackage?.scripts?.[script] ?? ''
@@ -44,12 +52,6 @@ export const matchmakerCadenceErrors = value => {
     'directorHandler := director.NewHandler(',
     'jwtAuth := jwtauth.New('
   )
-  if (count(sourceDirector, 'director.NewRunner(') !== 9) {
-    errors.push('Source director must retain exactly nine match runners')
-  }
-  if (count(sourceDirector, 'cfg.MatchMaker.MatchInterval.MakeMatch') !== 4) {
-    errors.push('Source director must retain four MakeMatch runners')
-  }
   if (
     sourceDirector.includes(
       'cfg.MatchMaker.MatchInterval.Conquest.Discovery'
@@ -58,7 +60,7 @@ export const matchmakerCadenceErrors = value => {
   ) {
     errors.push('Source director unexpectedly starts Conquest Discovery')
   }
-  requireOrdered(errors, 'Source director cadence', sourceDirector, [
+  requireAll(errors, 'Source match eligibility provenance', sourceDirector, [
     'cfg.MatchMaker.MatchInterval.Practice.Bot',
     'matchhandlers.NewBotMatchProcessor(',
     'proto.GameMode_PRACTICE_BOT',
@@ -74,41 +76,24 @@ export const matchmakerCadenceErrors = value => {
     'proto.GameMode_CHALLENGE_CONSTRUCTED',
     'cfg.MatchMaker.MatchInterval.Challenge.Discovery',
     'proto.GameMode_CHALLENGE_DISCOVERY',
-    'cfg.MatchMaker.MatchInterval.MakeMatch',
     'matchhandlers.NewPVPMakeMatchProcessor(',
-    'proto.GameMode_PRACTICE_PVP',
-    'proto.GameMode_RANKED_CONSTRUCTED',
-    'proto.GameMode_RANKED_DISCOVERY',
-    'cfg.MatchMaker.MatchInterval.MakeMatch',
-    'proto.GameMode_CONQUEST_CONSTRUCTED',
-    'cfg.MatchMaker.MatchInterval.MakeMatch',
-    'proto.GameMode_CHALLENGE_CONSTRUCTED',
-    'cfg.MatchMaker.MatchInterval.MakeMatch',
-    'proto.GameMode_CHALLENGE_DISCOVERY'
+    'cfg.MatchMaker.MatchInterval.MakeMatch'
   ])
 
-  const sourceRun = bodyBetween(
-    value.sourceRunner,
-    'func (r *runner) Run(ctx context.Context) error {',
-    '//go:generate'
+  requireAll(
+    errors,
+    'Source player-visible cadence defaults',
+    value.sourceConfig,
+    [
+      'cfg.MatchMaker.MatchInterval.DefaultSeconds = 2',
+      'cfg.MatchMaker.MatchInterval.MakeMatchSeconds = 2',
+      'cfg.MatchMaker.MatchInterval.Practice.BotSeconds = 5',
+      'cfg.MatchMaker.MatchInterval.Practice.PVPSeconds = 5',
+      'cfg.MatchMaker.MatchInterval.Conquest.ConstructedSeconds = cfg.MatchMaker.MatchInterval.DefaultSeconds',
+      'cfg.MatchMaker.MatchInterval.Challenge.DiscoverySeconds = 2',
+      'cfg.MatchMaker.MatchInterval.Challenge.ConstructedSeconds = 2'
+    ]
   )
-  requireOrdered(errors, 'Source ticker lifecycle', sourceRun, [
-    'ticker := time.NewTicker(r.interval)',
-    'defer ticker.Stop()',
-    'for {',
-    'case <-ticker.C:',
-    'r.matchHandler.HandleMatches(ctx)'
-  ])
-
-  requireOrdered(errors, 'Source cadence defaults', value.sourceConfig, [
-    'cfg.MatchMaker.MatchInterval.DefaultSeconds = 2',
-    'cfg.MatchMaker.MatchInterval.MakeMatchSeconds = 2',
-    'cfg.MatchMaker.MatchInterval.Practice.BotSeconds = 5',
-    'cfg.MatchMaker.MatchInterval.Practice.PVPSeconds = 5',
-    'cfg.MatchMaker.MatchInterval.Conquest.ConstructedSeconds = cfg.MatchMaker.MatchInterval.DefaultSeconds',
-    'cfg.MatchMaker.MatchInterval.Challenge.DiscoverySeconds = 2',
-    'cfg.MatchMaker.MatchInterval.Challenge.ConstructedSeconds = 2'
-  ])
 
   const sourceBotProcess = bodyBetween(
     value.sourceBotProcessor,
@@ -123,41 +108,17 @@ export const matchmakerCadenceErrors = value => {
     'h.matchmakerBackendService.MatchMade(ctx, matchProcessedData)'
   ])
 
-  requireOrdered(errors, 'Worker cadence configuration', value.workerCadence, [
+  requireAll(errors, 'Worker cadence configuration', value.workerCadence, [
     'MATCH_INTERVAL_PRACTICE_BOT_MS?: string',
     'MATCH_INTERVAL_PRACTICE_PVP_MS?: string',
     'MATCH_INTERVAL_CONQUEST_CONSTRUCTED_MS?: string',
     'MATCH_INTERVAL_CHALLENGE_CONSTRUCTED_MS?: string',
     'MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS?: string',
     'MATCH_INTERVAL_MAKE_MATCH_MS?: string',
-    'practiceBotMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_PRACTICE_BOT_MS',
-    '5_000',
-    'practicePvpMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_PRACTICE_PVP_MS',
-    '5_000',
-    'conquestConstructedMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_CONQUEST_CONSTRUCTED_MS',
-    '2_000',
-    'challengeConstructedMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_CHALLENGE_CONSTRUCTED_MS',
-    '2_000',
-    'challengeDiscoveryMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS',
-    '2_000',
-    'makeMatchMs: parsePositiveInteger(',
-    'env.MATCH_INTERVAL_MAKE_MATCH_MS',
-    '2_000'
-  ])
-  if (count(value.workerCadence, "id: '") !== 9) {
-    errors.push('Worker cadence must declare exactly nine source runners')
-  }
-  if (value.workerCadence.includes('GameMode.CONQUEST_DISCOVERY')) {
-    errors.push('Worker cadence unexpectedly invents Conquest Discovery')
-  }
-  requireOrdered(errors, 'Worker source runner map', value.workerCadence, [
+    'export const MATCH_FIND_WINDOWS',
     "id: 'find-practice-bot'",
     'groups: [[GameMode.PRACTICE_BOT], [GameMode.WARM_UP]]',
+    'directBot: true',
     "id: 'find-practice-pvp'",
     '[GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED]',
     '[GameMode.RANKED_DISCOVERY]',
@@ -167,29 +128,48 @@ export const matchmakerCadenceErrors = value => {
     'groups: [[GameMode.CHALLENGE_CONSTRUCTED]]',
     "id: 'find-challenge-discovery'",
     'groups: [[GameMode.CHALLENGE_DISCOVERY]]',
-    "id: 'make-practice-pvp'",
-    "id: 'make-conquest-constructed'",
-    "id: 'make-challenge-constructed'",
-    "id: 'make-challenge-discovery'",
-    'Math.floor((now - previousDeadline) / intervalMs) + 1'
+    'export const findWindowForMode',
+    'export const nextMatchFindWindowDeadline'
   ])
-
-  if (
-    value.workerRuntime.includes('MATCH_TICK_MS') ||
-    value.workerRuntime.includes('tickMs') ||
-    value.workerRuntime.includes('attemptMatches(')
-  ) {
-    errors.push('Worker runtime retains the eager shared match tick')
+  for (const [property, binding, fallback] of [
+    ['practiceBotMs', 'MATCH_INTERVAL_PRACTICE_BOT_MS', '5_000'],
+    ['practicePvpMs', 'MATCH_INTERVAL_PRACTICE_PVP_MS', '5_000'],
+    [
+      'conquestConstructedMs',
+      'MATCH_INTERVAL_CONQUEST_CONSTRUCTED_MS',
+      '2_000'
+    ],
+    [
+      'challengeConstructedMs',
+      'MATCH_INTERVAL_CHALLENGE_CONSTRUCTED_MS',
+      '2_000'
+    ],
+    ['challengeDiscoveryMs', 'MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS', '2_000'],
+    ['makeMatchMs', 'MATCH_INTERVAL_MAKE_MATCH_MS', '2_000']
+  ]) {
+    requirePattern(
+      errors,
+      `Worker ${property} boundary`,
+      value.workerCadence,
+      new RegExp(
+        `${property}:\\s*parsePositiveInteger\\(\\s*env\\.${binding},\\s*${fallback},`
+      )
+    )
   }
+  if (value.workerCadence.includes('GameMode.CONQUEST_DISCOVERY')) {
+    errors.push('Worker find windows unexpectedly invent Conquest Discovery')
+  }
+
   const alarm = bodyBetween(
     value.workerRuntime,
     'async alarm() {',
     'private attachmentFromRequest('
   )
-  requireOrdered(errors, 'Worker alarm runner order', alarm, [
+  requireAll(errors, 'Worker coalesced alarm effects', alarm, [
     'await this.processProposalTimers(now)',
-    'await this.syncMatchRunnerStates(now)',
-    'await this.processDueMatchRunners(now)',
+    'await this.repairAcceptedDispatchDeadlines(now)',
+    'await this.syncMatchFindWindows(now)',
+    'await this.processDueMatchFindWindows(now)',
     'await this.rescheduleAlarm(now)'
   ])
   const admission = bodyBetween(
@@ -197,41 +177,39 @@ export const matchmakerCadenceErrors = value => {
     'private async findMatch(',
     'private async loadPlayerProfile('
   )
-  requireOrdered(errors, 'Worker queued runner admission', admission, [
+  requireOrdered(errors, 'Worker durable find-window admission', admission, [
     'attachment.subscribed = true',
-    'await this.putTicketAndArmFindRunner(ticket, Date.now())',
+    'await this.putTicketAndArmFindWindow(ticket, Date.now())',
     'await this.rescheduleAlarm(Date.now())'
   ])
-  const findRunner = bodyBetween(
+  const findWindow = bodyBetween(
     value.workerRuntime,
-    'private async attemptFindRunner(',
-    'private async attemptMakeRunner('
+    'private async attemptMatchFindWindow(',
+    'private async putTicketAndArmFindWindow('
   )
-  if (findRunner.includes('GameMode.CONQUEST_DISCOVERY')) {
-    errors.push('Worker find runner still scans Conquest Discovery')
+  if (findWindow.includes('GameMode.CONQUEST_DISCOVERY')) {
+    errors.push('Worker find window still scans Conquest Discovery')
   }
-  requireOrdered(errors, 'Worker scoped find runner', findRunner, [
-    "if (runner.phase !== 'find') return",
-    'matchRunnerIncludesMode(runner, ticket.player.mode)',
-    "if (runner.id === 'find-practice-bot')",
+  requireOrdered(errors, 'Worker scoped find window', findWindow, [
+    'matchFindWindowIncludesMode(window, ticket.player.mode)',
+    'if (window.directBot)',
     'await this.createBotMatch(',
-    'for (const modes of runner.groups)',
+    'for (const modes of window.groups)',
     'await this.matchGroup(candidates, byAddress, now, [...modes])'
   ])
-  requireOrdered(errors, 'Worker durable runner state', value.workerRuntime, [
-    'private async putTicketAndArmFindRunner(',
+  requireAll(errors, 'Worker durable deadline recovery', value.workerRuntime, [
+    'private async putTicketAndArmFindWindow(',
     'this.state.storage.transaction(async transaction =>',
-    'now + matchRunnerIntervalMs(runner, this.config.cadence)',
-    'private async putProposalAndArmMakeRunner(',
-    'private async syncMatchRunnerStates(now: number)',
-    'private async processDueMatchRunners(now: number)',
-    'await this.attemptFindRunner(runner, now)',
-    'await this.attemptMakeRunner(runner)',
-    'private async advanceOrDeleteMatchRunner(',
-    'nextMatchRunnerDeadline(',
+    'now + matchFindWindowIntervalMs(window, this.config.cadence)',
+    'private async repairAcceptedDispatchDeadlines(now: number)',
+    'private async syncMatchFindWindows(now: number)',
+    'private async processDueMatchFindWindows(now: number)',
+    'await this.attemptMatchFindWindow(window, now)',
+    'private async advanceOrDeleteMatchFindWindow(',
+    'nextMatchFindWindowDeadline(',
     'private async rescheduleAlarm(now: number)',
-    'this.state.storage.list<StoredMatchRunner>({',
-    'candidates.push(Math.max(now + 1, runner.nextAtMs))'
+    'this.state.storage.list<StoredMatchFindWindow>({',
+    'candidates.push(Math.max(now + 1, window.nextAtMs))'
   ])
   const accepted = bodyBetween(
     value.workerRuntime,
@@ -243,7 +221,8 @@ export const matchmakerCadenceErrors = value => {
     'proposal.nextDispatchAtMs = undefined',
     'GameMode.PRACTICE_BOT, GameMode.WARM_UP',
     'await this.dispatchProposal(proposal)',
-    'await this.putProposalAndArmMakeRunner(proposal, Date.now())'
+    'proposal.nextDispatchAtMs = Date.now() + this.config.cadence.makeMatchMs',
+    'await this.persistProposalWithAlarm(proposal)'
   ])
   const directBot = bodyBetween(
     value.workerRuntime,
@@ -259,28 +238,29 @@ export const matchmakerCadenceErrors = value => {
     'await this.dispatchProposal(proposal)'
   ])
 
-  requireOrdered(
+  requireAll(errors, 'Worker unit cadence effects', value.workerUnitTest, [
+    "it('preserves every player-visible interval boundary and fallback'",
+    "it('maps the five compatible find windows without inventing Conquest Discovery'",
+    'expect(findWindowForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()',
+    "it('uses group-specific boundaries and advances a delayed window beyond now'"
+  ])
+  requireAll(
     errors,
-    'Worker unit cadence regression',
-    value.workerUnitTest,
-    [
-      "it('preserves every independent source interval and fallback'",
-      "it('maps the exact nine source runners without inventing Conquest Discovery'",
-      'expect(findRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()',
-      'expect(makeRunnerForMode(GameMode.CONQUEST_DISCOVERY)).toBeUndefined()',
-      "it('uses runner-specific intervals and advances a delayed ticker by phase'"
-    ]
-  )
-  requireOrdered(
-    errors,
-    'Worker runtime cadence regressions',
+    'Worker runtime cadence effects',
     value.workerRuntimeTest,
     [
-      "it('waits for the source find runner and ignores an unrelated alarm'",
-      "it('keeps source find-runner deadlines independent by mode group'",
-      "it('does not invent a Conquest Discovery director runner'",
-      "it('waits for the independent source MakeMatch runner after acceptance'",
-      "it('allocates Practice Bot directly on its source find tick'"
+      "it('does not match on an early alarm and matches once its find window is due'",
+      'await evictDurableObject(pool())',
+      "it('lets a later compatible ticket share the already armed find window'",
+      'nextAtMs: firstDeadline',
+      "it('keeps incompatible find-window deadlines independent'",
+      "it('advances a delayed find window once and ignores a duplicate early alarm'",
+      "it('does not invent a matchable Conquest Discovery window'",
+      "it('keeps accepted players pending until the durable allocation deadline'",
+      'nextDispatchAtMs: expect.any(Number)',
+      "it('recovers a persisted all-accepted proposal without legacy maker state'",
+      "await state.storage.get('match-runner:make-practice-pvp')",
+      "it('allocates Practice Bot directly from its due find window'"
     ]
   )
 
@@ -296,9 +276,6 @@ export const matchmakerCadenceErrors = value => {
       '"MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS": "2000"',
       '"MATCH_INTERVAL_MAKE_MATCH_MS": "2000"'
     ])
-    if (config.includes('MATCH_TICK_MS')) {
-      errors.push(`${label} retains MATCH_TICK_MS`)
-    }
   }
 
   requireScript(
@@ -337,7 +314,6 @@ const load = async root => {
   const read = relative => readFile(path.join(root, relative), 'utf8')
   const [
     sourceApp,
-    sourceRunner,
     sourceConfig,
     sourceBotProcessor,
     workerCadence,
@@ -351,7 +327,6 @@ const load = async root => {
     ciAuditTest
   ] = await Promise.all([
     read('matchmaker/app.go'),
-    read('matchmaker/lib/director/runner.go'),
     read('matchmaker/config/config.go'),
     read('matchmaker/lib/director/matchhandlers/bot_match_processor.go'),
     read('matchmaker-ts/src/match-cadence.ts'),
@@ -366,7 +341,6 @@ const load = async root => {
   ])
   return {
     sourceApp,
-    sourceRunner,
     sourceConfig,
     sourceBotProcessor,
     workerCadence,
@@ -389,7 +363,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker preserves source independent find, make, and direct-bot cadence'
+      'Cloudflare matchmaker preserves effect-level find windows, allocation deadlines, and direct-bot timing'
     )
   }
 }

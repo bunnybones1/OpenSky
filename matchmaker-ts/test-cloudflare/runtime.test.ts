@@ -20,11 +20,7 @@ import {
   TRUSTED_USER_ID_HEADER
 } from '../src/runtime'
 import { orderParticipantsForGame } from '../src/player-order'
-import {
-  findRunnerForMode,
-  makeRunnerForMode,
-  type MatchRunnerSpec
-} from '../src/match-cadence'
+import { findWindowForMode, type MatchFindWindow } from '../src/match-cadence'
 
 const PRINCIPAL_1 = '0x1111111111111111111111111111111111111111'
 const PRINCIPAL_2 = '0x2222222222222222222222222222222222222222'
@@ -200,19 +196,19 @@ const findCommand = (
   playerSessionID: crypto.randomUUID()
 })
 
-const forceMatchRunner = async (
-  runner: MatchRunnerSpec,
+const forceMatchFindWindow = async (
+  window: MatchFindWindow,
   stub: DurableObjectStub<MatchmakerPool> = pool()
 ) => {
   await expect
     .poll(() =>
       runInDurableObject(stub, async (_instance, state) =>
-        state.storage.get<{ nextAtMs: number }>(`match-runner:${runner.id}`)
+        state.storage.get<{ nextAtMs: number }>(`match-runner:${window.id}`)
       )
     )
     .toEqual({ nextAtMs: expect.any(Number) })
   await runInDurableObject(stub, async (_instance, state) => {
-    await state.storage.put(`match-runner:${runner.id}`, {
+    await state.storage.put(`match-runner:${window.id}`, {
       nextAtMs: Date.now() - 1
     })
     await state.storage.setAlarm(Date.now() + 60_000)
@@ -224,18 +220,57 @@ const forceFindMatchCycle = (
   mode: GameMode,
   stub: DurableObjectStub<MatchmakerPool> = pool()
 ) => {
-  const runner = findRunnerForMode(mode)
-  expect(runner).toBeDefined()
-  return forceMatchRunner(runner!, stub)
+  const window = findWindowForMode(mode)
+  expect(window).toBeDefined()
+  return forceMatchFindWindow(window!, stub)
 }
 
-const forceMakeMatchCycle = (
+const forceMakeMatchCycle = async (
   mode: GameMode,
   stub: DurableObjectStub<MatchmakerPool> = pool()
 ) => {
-  const runner = makeRunnerForMode(mode)
-  expect(runner).toBeDefined()
-  return forceMatchRunner(runner!, stub)
+  type Proposal = {
+    status: string
+    nextDispatchAtMs?: number
+    participants: Array<{ player: { mode: GameMode } }>
+  }
+  await expect
+    .poll(() =>
+      runInDurableObject(stub, async (_instance, state) => {
+        const proposals = await state.storage.list<Proposal>({
+          prefix: 'proposal:'
+        })
+        return [...proposals.values()].some(
+          proposal =>
+            proposal.status === 'ACCEPTED' &&
+            proposal.nextDispatchAtMs !== undefined &&
+            proposal.participants.some(
+              participant => participant.player.mode === mode
+            )
+        )
+      })
+    )
+    .toBe(true)
+  await runInDurableObject(stub, async (_instance, state) => {
+    const proposals = await state.storage.list<Proposal>({
+      prefix: 'proposal:'
+    })
+    const writes: Record<string, Proposal> = {}
+    for (const [key, proposal] of proposals) {
+      if (
+        proposal.status === 'ACCEPTED' &&
+        proposal.participants.some(
+          participant => participant.player.mode === mode
+        )
+      ) {
+        writes[key] = { ...proposal, nextDispatchAtMs: Date.now() - 1 }
+      }
+    }
+    expect(Object.keys(writes).length).toBeGreaterThan(0)
+    await state.storage.put(writes)
+    await state.storage.setAlarm(Date.now() + 60_000)
+  })
+  expect(await runDurableObjectAlarm(stub)).toBe(true)
 }
 
 const pairPlayers = async (
@@ -392,7 +427,7 @@ describe('Cloudflare matchmaker Worker', () => {
       .toBe(1)
   })
 
-  it('waits for the source find runner and ignores an unrelated alarm', async () => {
+  it('does not match on an early alarm and matches once its find window is due', async () => {
     const [first, second] = track(
       await connect(PRINCIPAL_1, '192.0.2.1'),
       await connect(PRINCIPAL_2, '192.0.2.2')
@@ -425,6 +460,7 @@ describe('Cloudflare matchmaker Worker', () => {
     )
     const firstStayedSilent = expectNoMessage(first)
     const secondStayedSilent = expectNoMessage(second)
+    await evictDurableObject(pool())
     expect(await runDurableObjectAlarm(pool())).toBe(true)
     await Promise.all([firstStayedSilent, secondStayedSilent])
 
@@ -435,7 +471,46 @@ describe('Cloudflare matchmaker Worker', () => {
     expect(await secondFound).toMatchObject({ type: 'match_found' })
   })
 
-  it('keeps source find-runner deadlines independent by mode group', async () => {
+  it('lets a later compatible ticket share the already armed find window', async () => {
+    const stub = isolatedPool(`shared-find-window-${crypto.randomUUID()}`)
+    const first = await connectDirectlyToPool(stub, PRINCIPAL_1, '192.0.2.1')
+    track(first)
+    first.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(() =>
+        runInDurableObject(stub, async (_instance, state) =>
+          state.storage.get(`ticket:${PRINCIPAL_1}`)
+        )
+      )
+      .toBeDefined()
+    const firstDeadline = await runInDurableObject(
+      stub,
+      async (_instance, state) =>
+        (await state.storage.get<{ nextAtMs: number }>(
+          'match-runner:find-practice-pvp'
+        ))!.nextAtMs
+    )
+
+    const second = await connectDirectlyToPool(stub, PRINCIPAL_2, '192.0.2.2')
+    track(first, second)
+    second.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(() =>
+        runInDurableObject(stub, async (_instance, state) =>
+          state.storage.get(`ticket:${PRINCIPAL_2}`)
+        )
+      )
+      .toBeDefined()
+    expect(
+      await runInDurableObject(stub, async (_instance, state) =>
+        state.storage.get<{ nextAtMs: number }>(
+          'match-runner:find-practice-pvp'
+        )
+      )
+    ).toEqual({ nextAtMs: firstDeadline })
+  })
+
+  it('keeps incompatible find-window deadlines independent', async () => {
     const [ranked, challenge] = track(
       await connect(PRINCIPAL_1, '192.0.2.1'),
       await connect(PRINCIPAL_2, '192.0.2.2')
@@ -480,6 +555,41 @@ describe('Cloudflare matchmaker Worker', () => {
         expect((await state.storage.list({ prefix: 'proposal:' })).size).toBe(0)
       }
     )
+  })
+
+  it('advances a delayed find window once and ignores a duplicate early alarm', async () => {
+    const stub = isolatedPool(`delayed-find-window-${crypto.randomUUID()}`)
+    const player = await connectDirectlyToPool(stub, PRINCIPAL_1, '192.0.2.1')
+    track(player)
+    player.send(
+      JSON.stringify(
+        findCommand(GameMode.CHALLENGE_CONSTRUCTED, 'CLOUD-WEASEL-CHALLENGE')
+      )
+    )
+    await expect
+      .poll(() =>
+        runInDurableObject(stub, async (_instance, state) =>
+          state.storage.get(`ticket:${PRINCIPAL_1}`)
+        )
+      )
+      .toBeDefined()
+
+    await forceFindMatchCycle(GameMode.CHALLENGE_CONSTRUCTED, stub)
+    const advanced = await runInDurableObject(stub, async (_instance, state) =>
+      state.storage.get<{ nextAtMs: number }>(
+        'match-runner:find-challenge-constructed'
+      )
+    )
+    expect(advanced!.nextAtMs).toBeGreaterThan(Date.now())
+    await runInDurableObject(stub, async (_instance, state) => {
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+    expect(await runDurableObjectAlarm(stub)).toBe(true)
+    expect(
+      await runInDurableObject(stub, async (_instance, state) =>
+        state.storage.get('match-runner:find-challenge-constructed')
+      )
+    ).toEqual(advanced)
   })
 
   it('replaces the catch-all with the selected registered bot before proposing', async () => {
@@ -539,7 +649,7 @@ describe('Cloudflare matchmaker Worker', () => {
     })
   })
 
-  it('does not invent a Conquest Discovery director runner', async () => {
+  it('does not invent a matchable Conquest Discovery window', async () => {
     const [player] = track(await connect(PRINCIPAL_7, '192.0.2.7'))
     player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))
     await expect
@@ -582,7 +692,7 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
-  it('waits for the independent source MakeMatch runner after acceptance', async () => {
+  it('keeps accepted players pending until the durable allocation deadline', async () => {
     const { first, second } = await pairPlayers()
     track(first, second)
     const firstSawFirst = nextMessage(first)
@@ -602,21 +712,24 @@ describe('Cloudflare matchmaker Worker', () => {
             await state.storage.list<{
               status: string
               dispatchAttempts: number
+              nextDispatchAtMs?: number
             }>({ prefix: 'proposal:' })
           ).values()
         ][0]
         expect(proposal).toMatchObject({
           status: 'ACCEPTED',
-          dispatchAttempts: 0
+          dispatchAttempts: 0,
+          nextDispatchAtMs: expect.any(Number)
         })
         expect(
           await state.storage.get('match-runner:make-practice-pvp')
-        ).toEqual({ nextAtMs: expect.any(Number) })
+        ).toBeUndefined()
         await state.storage.setAlarm(Date.now() + 60_000)
       }
     )
     const firstStayedSilent = expectNoMessage(first)
     const secondStayedSilent = expectNoMessage(second)
+    await evictDurableObject(pool())
     expect(await runDurableObjectAlarm(pool())).toBe(true)
     await Promise.all([firstStayedSilent, secondStayedSilent])
 
@@ -1292,7 +1405,7 @@ describe('Cloudflare matchmaker Worker', () => {
     }
   })
 
-  it('recovers a persisted all-accepted proposal through the alarm', async () => {
+  it('recovers a persisted all-accepted proposal without legacy maker state', async () => {
     const { first, second } = await pairPlayers(
       GameMode.RANKED_CONSTRUCTED,
       'release-1',
@@ -1311,6 +1424,9 @@ describe('Cloudflare matchmaker Worker', () => {
           ...proposal,
           accepted: [PRINCIPAL_8, PRINCIPAL_2]
         })
+        await state.storage.put('match-runner:make-practice-pvp', {
+          nextAtMs: Date.now() - 1
+        })
         await state.storage.setAlarm(Date.now() + 60_000)
         return key.slice('proposal:'.length)
       }
@@ -1323,6 +1439,11 @@ describe('Cloudflare matchmaker Worker', () => {
     const firstDispatch = collectMessages(first, 2)
     const secondDispatch = collectMessages(second, 2)
     expect(await runDurableObjectAlarm(pool())).toBe(true)
+    await runInDurableObject(pool(), async (_instance, state) => {
+      expect(
+        await state.storage.get('match-runner:make-practice-pvp')
+      ).toBeUndefined()
+    })
     await forceMakeMatchCycle(GameMode.RANKED_CONSTRUCTED)
     for (const messages of [await firstDispatch, await secondDispatch]) {
       expect(messages).toEqual([
@@ -2470,7 +2591,7 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
-  it('allocates Practice Bot directly on its source find tick', async () => {
+  it('allocates Practice Bot directly from its due find window', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     // Preserve the literal heartbeat used by the original WebSocket client.
     // If it generates an error response, the silence assertion receives it.

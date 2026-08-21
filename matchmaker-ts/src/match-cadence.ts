@@ -18,22 +18,18 @@ export interface MatchCadence {
   makeMatchMs: number
 }
 
-export type MatchRunnerId =
+export type MatchFindWindowId =
   | 'find-practice-bot'
   | 'find-practice-pvp'
   | 'find-conquest-constructed'
   | 'find-challenge-constructed'
   | 'find-challenge-discovery'
-  | 'make-practice-pvp'
-  | 'make-conquest-constructed'
-  | 'make-challenge-constructed'
-  | 'make-challenge-discovery'
 
-export interface MatchRunnerSpec {
-  id: MatchRunnerId
-  phase: 'find' | 'make'
+export interface MatchFindWindow {
+  id: MatchFindWindowId
   interval: keyof MatchCadence
   groups: readonly (readonly GameMode[])[]
+  directBot: boolean
 }
 
 const parsePositiveInteger = (
@@ -80,93 +76,60 @@ export const readMatchCadence = (env: MatchCadenceEnv): MatchCadence => ({
   )
 })
 
-// These are the nine independent director.NewRunner instances constructed by
-// matchmaker/app.go. Conquest Discovery has a config field in the Go service,
-// but the source app does not start either a find or make runner for it.
-export const SOURCE_MATCH_RUNNERS: readonly MatchRunnerSpec[] = [
+// These five windows preserve candidate compatibility and the maximum delay
+// before the source would next consider the group. They are product policy,
+// not one-to-one replicas of the director goroutines. Accepted proposals own
+// their allocation deadline directly instead of creating four maker loops.
+export const MATCH_FIND_WINDOWS: readonly MatchFindWindow[] = [
   {
     id: 'find-practice-bot',
-    phase: 'find',
     interval: 'practiceBotMs',
-    groups: [[GameMode.PRACTICE_BOT], [GameMode.WARM_UP]]
+    groups: [[GameMode.PRACTICE_BOT], [GameMode.WARM_UP]],
+    directBot: true
   },
   {
     id: 'find-practice-pvp',
-    phase: 'find',
     interval: 'practicePvpMs',
     groups: [
       [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED],
       [GameMode.RANKED_DISCOVERY]
-    ]
+    ],
+    directBot: false
   },
   {
     id: 'find-conquest-constructed',
-    phase: 'find',
     interval: 'conquestConstructedMs',
-    groups: [[GameMode.CONQUEST_CONSTRUCTED]]
+    groups: [[GameMode.CONQUEST_CONSTRUCTED]],
+    directBot: false
   },
   {
     id: 'find-challenge-constructed',
-    phase: 'find',
     interval: 'challengeConstructedMs',
-    groups: [[GameMode.CHALLENGE_CONSTRUCTED]]
+    groups: [[GameMode.CHALLENGE_CONSTRUCTED]],
+    directBot: false
   },
   {
     id: 'find-challenge-discovery',
-    phase: 'find',
     interval: 'challengeDiscoveryMs',
-    groups: [[GameMode.CHALLENGE_DISCOVERY]]
-  },
-  {
-    id: 'make-practice-pvp',
-    phase: 'make',
-    interval: 'makeMatchMs',
-    groups: [
-      [GameMode.PRACTICE_PVP, GameMode.RANKED_CONSTRUCTED],
-      [GameMode.RANKED_DISCOVERY]
-    ]
-  },
-  {
-    id: 'make-conquest-constructed',
-    phase: 'make',
-    interval: 'makeMatchMs',
-    groups: [[GameMode.CONQUEST_CONSTRUCTED]]
-  },
-  {
-    id: 'make-challenge-constructed',
-    phase: 'make',
-    interval: 'makeMatchMs',
-    groups: [[GameMode.CHALLENGE_CONSTRUCTED]]
-  },
-  {
-    id: 'make-challenge-discovery',
-    phase: 'make',
-    interval: 'makeMatchMs',
-    groups: [[GameMode.CHALLENGE_DISCOVERY]]
+    groups: [[GameMode.CHALLENGE_DISCOVERY]],
+    directBot: false
   }
 ]
 
-export const matchRunnerIncludesMode = (
-  runner: MatchRunnerSpec,
+export const matchFindWindowIncludesMode = (
+  window: MatchFindWindow,
   mode: GameMode
-) => runner.groups.some(group => group.includes(mode))
+) => window.groups.some(group => group.includes(mode))
 
-export const findRunnerForMode = (mode: GameMode) =>
-  SOURCE_MATCH_RUNNERS.find(
-    runner => runner.phase === 'find' && matchRunnerIncludesMode(runner, mode)
-  )
+export const findWindowForMode = (mode: GameMode) =>
+  MATCH_FIND_WINDOWS.find(window => matchFindWindowIncludesMode(window, mode))
 
-export const makeRunnerForMode = (mode: GameMode) =>
-  SOURCE_MATCH_RUNNERS.find(
-    runner => runner.phase === 'make' && matchRunnerIncludesMode(runner, mode)
-  )
-
-export const matchRunnerIntervalMs = (
-  runner: MatchRunnerSpec,
+export const matchFindWindowIntervalMs = (
+  window: MatchFindWindow,
   cadence: MatchCadence
-) => cadence[runner.interval]
+) => cadence[window.interval]
 
-export const nextMatchRunnerDeadline = (
+export const nextMatchFindWindowDeadline = (
   previousDeadline: number,
   intervalMs: number,
   now: number

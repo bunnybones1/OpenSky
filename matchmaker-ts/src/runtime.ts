@@ -32,15 +32,14 @@ import {
 } from './admission'
 import { MatchProposal, processCombinations, combinePlayers } from './matcher'
 import {
-  findRunnerForMode,
-  makeRunnerForMode,
-  matchRunnerIncludesMode,
-  matchRunnerIntervalMs,
-  nextMatchRunnerDeadline,
+  findWindowForMode,
+  MATCH_FIND_WINDOWS,
+  matchFindWindowIncludesMode,
+  matchFindWindowIntervalMs,
+  nextMatchFindWindowDeadline,
   readMatchCadence,
-  SOURCE_MATCH_RUNNERS,
   type MatchCadence,
-  type MatchRunnerSpec
+  type MatchFindWindow
 } from './match-cadence'
 import {
   createBotForPlayer,
@@ -69,7 +68,10 @@ import {
 const TICKET_PREFIX = 'ticket:'
 const PROPOSAL_PREFIX = 'proposal:'
 const PENDING_PREFIX = 'pending:'
-const MATCH_RUNNER_PREFIX = 'match-runner:'
+// Retain the existing storage prefix across the rolling conversion. Only the
+// five find-window keys remain live; obsolete maker-runner keys are removed by
+// window repair.
+const MATCH_FIND_WINDOW_PREFIX = 'match-runner:'
 export const TRUSTED_PRINCIPAL_HEADER = 'x-cloud-weasel-principal'
 export const TRUSTED_USER_ID_HEADER = 'x-cloud-weasel-user-id'
 export const TRUSTED_DISPLAY_NAME_HEADER = 'x-cloud-weasel-display-name'
@@ -164,7 +166,7 @@ interface StoredPendingProposal {
   expiresAtMs: number
 }
 
-interface StoredMatchRunner {
+interface StoredMatchFindWindow {
   nextAtMs: number
 }
 
@@ -359,8 +361,8 @@ const deserializePlayer = (player: StoredPlayer): MatchmakerPlayer => ({
 const ticketKey = (principal: string) => `${TICKET_PREFIX}${principal}`
 const proposalKey = (proposalId: string) => `${PROPOSAL_PREFIX}${proposalId}`
 const pendingKey = (principal: string) => `${PENDING_PREFIX}${principal}`
-const matchRunnerKey = (runner: MatchRunnerSpec) =>
-  `${MATCH_RUNNER_PREFIX}${runner.id}`
+const matchFindWindowKey = (window: MatchFindWindow) =>
+  `${MATCH_FIND_WINDOW_PREFIX}${window.id}`
 
 const participantFromTicket = (ticket: StoredTicket): StoredParticipant => ({
   player: ticket.player,
@@ -548,8 +550,9 @@ export class MatchmakerPool implements DurableObject {
     this.expireUnauthenticatedSockets(now)
     this.expireIdleSockets(now)
     await this.processProposalTimers(now)
-    await this.syncMatchRunnerStates(now)
-    await this.processDueMatchRunners(now)
+    await this.repairAcceptedDispatchDeadlines(now)
+    await this.syncMatchFindWindows(now)
+    await this.processDueMatchFindWindows(now)
     await this.rescheduleAlarm(now)
   }
 
@@ -745,7 +748,7 @@ export class MatchmakerPool implements DurableObject {
     this.notifyDuplicateSubscribers(webSocket, attachment.principal)
     attachment.subscribed = true
     webSocket.serializeAttachment(attachment)
-    await this.putTicketAndArmFindRunner(ticket, Date.now())
+    await this.putTicketAndArmFindWindow(ticket, Date.now())
     console.log('matchmaker ticket accepted', command.mode)
     await this.rescheduleAlarm(Date.now())
   }
@@ -1052,7 +1055,8 @@ export class MatchmakerPool implements DurableObject {
       await this.dispatchProposal(proposal)
       return
     }
-    await this.putProposalAndArmMakeRunner(proposal, Date.now())
+    proposal.nextDispatchAtMs = Date.now() + this.config.cadence.makeMatchMs
+    await this.persistProposalWithAlarm(proposal)
   }
 
   private async declineMatch(principal: string) {
@@ -1086,8 +1090,7 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
-  private async attemptFindRunner(runner: MatchRunnerSpec, now: number) {
-    if (runner.phase !== 'find') return
+  private async attemptMatchFindWindow(window: MatchFindWindow, now: number) {
     const enabledModes = await this.currentEnabledGameModes(now)
     if (!enabledModes) return
     await this.drainDisabledMatchmaking(enabledModes)
@@ -1098,7 +1101,7 @@ export class MatchmakerPool implements DurableObject {
     const tickets: StoredTicket[] = []
     const orphanedTicketKeys: string[] = []
     for (const [key, ticket] of storedTickets) {
-      if (!matchRunnerIncludesMode(runner, ticket.player.mode)) continue
+      if (!matchFindWindowIncludesMode(window, ticket.player.mode)) continue
       if (this.hasSubscribedSocket(ticket.player.address)) {
         tickets.push(ticket)
       } else {
@@ -1119,7 +1122,7 @@ export class MatchmakerPool implements DurableObject {
       tickets.map(ticket => [ticket.player.address, ticket])
     )
 
-    if (runner.id === 'find-practice-bot') {
+    if (window.directBot) {
       for (const ticket of tickets) {
         if (!(await this.state.storage.get(ticketKey(ticket.player.address))))
           continue
@@ -1134,7 +1137,7 @@ export class MatchmakerPool implements DurableObject {
       return
     }
 
-    for (const modes of runner.groups) {
+    for (const modes of window.groups) {
       const candidates = [...byAddress.values()]
         .filter(ticket => modes.includes(ticket.player.mode))
         .filter(ticket => storedTickets.has(ticketKey(ticket.player.address)))
@@ -1143,169 +1146,118 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
-  private async attemptMakeRunner(runner: MatchRunnerSpec) {
-    if (runner.phase !== 'make') return
+  private async putTicketAndArmFindWindow(ticket: StoredTicket, now: number) {
+    const window = findWindowForMode(ticket.player.mode)
+    await this.state.storage.transaction(async transaction => {
+      await transaction.put(ticketKey(ticket.player.address), ticket)
+      if (!window) return
+      const key = matchFindWindowKey(window)
+      const currentWindow = await transaction.get<StoredMatchFindWindow>(key)
+      const nextAtMs =
+        currentWindow?.nextAtMs ??
+        now + matchFindWindowIntervalMs(window, this.config.cadence)
+      if (!currentWindow) await transaction.put(key, { nextAtMs })
+      const currentAlarm = await transaction.getAlarm()
+      if (currentAlarm === null || nextAtMs < currentAlarm) {
+        await transaction.setAlarm(nextAtMs)
+      }
+    })
+  }
+
+  private async repairAcceptedDispatchDeadlines(now: number) {
     const proposals = await this.state.storage.list<StoredProposal>({
       prefix: PROPOSAL_PREFIX
     })
+    const writes: Record<string, StoredProposal> = {}
     for (const proposal of proposals.values()) {
       if (
-        proposal.status !== 'ACCEPTED' ||
-        proposal.nextDispatchAtMs !== undefined ||
+        proposal.status === 'ACCEPTED' &&
+        proposal.nextDispatchAtMs === undefined &&
         !proposal.participants.some(participant =>
-          matchRunnerIncludesMode(runner, participant.player.mode)
+          [GameMode.PRACTICE_BOT, GameMode.WARM_UP].includes(
+            participant.player.mode
+          )
         )
       ) {
-        continue
+        proposal.nextDispatchAtMs = now + this.config.cadence.makeMatchMs
+        writes[proposalKey(proposal.id)] = proposal
       }
-      await this.dispatchProposal(proposal)
     }
+    if (Object.keys(writes).length > 0) await this.state.storage.put(writes)
   }
 
-  private async putTicketAndArmFindRunner(ticket: StoredTicket, now: number) {
-    const runner = findRunnerForMode(ticket.player.mode)
-    await this.state.storage.transaction(async transaction => {
-      await transaction.put(ticketKey(ticket.player.address), ticket)
-      if (!runner) return
-      const key = matchRunnerKey(runner)
-      const currentRunner = await transaction.get<StoredMatchRunner>(key)
-      const nextAtMs =
-        currentRunner?.nextAtMs ??
-        now + matchRunnerIntervalMs(runner, this.config.cadence)
-      if (!currentRunner) await transaction.put(key, { nextAtMs })
-      const currentAlarm = await transaction.getAlarm()
-      if (currentAlarm === null || nextAtMs < currentAlarm) {
-        await transaction.setAlarm(nextAtMs)
-      }
-    })
-  }
-
-  private async putProposalAndArmMakeRunner(
-    proposal: StoredProposal,
-    now: number
-  ) {
-    const runner = proposal.participants
-      .map(participant => makeRunnerForMode(participant.player.mode))
-      .find(
-        (candidate): candidate is MatchRunnerSpec => candidate !== undefined
-      )
-    await this.state.storage.transaction(async transaction => {
-      await transaction.put(proposalKey(proposal.id), proposal)
-      if (!runner) return
-      const key = matchRunnerKey(runner)
-      const currentRunner = await transaction.get<StoredMatchRunner>(key)
-      const nextAtMs =
-        currentRunner?.nextAtMs ??
-        now + matchRunnerIntervalMs(runner, this.config.cadence)
-      if (!currentRunner) await transaction.put(key, { nextAtMs })
-      const currentAlarm = await transaction.getAlarm()
-      if (currentAlarm === null || nextAtMs < currentAlarm) {
-        await transaction.setAlarm(nextAtMs)
-      }
-    })
-  }
-
-  private async syncMatchRunnerStates(now: number) {
-    const [tickets, proposals, storedRunners] = await Promise.all([
+  private async syncMatchFindWindows(now: number) {
+    const [tickets, storedWindows] = await Promise.all([
       this.state.storage.list<StoredTicket>({ prefix: TICKET_PREFIX }),
-      this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX }),
-      this.state.storage.list<StoredMatchRunner>({
-        prefix: MATCH_RUNNER_PREFIX
+      this.state.storage.list<StoredMatchFindWindow>({
+        prefix: MATCH_FIND_WINDOW_PREFIX
       })
     ])
-    const activeRunnerIds = new Set<string>()
+    const activeWindowIds = new Set<string>()
     for (const ticket of tickets.values()) {
-      const runner = findRunnerForMode(ticket.player.mode)
-      if (runner) activeRunnerIds.add(runner.id)
-    }
-    for (const proposal of proposals.values()) {
-      if (
-        proposal.status !== 'ACCEPTED' ||
-        proposal.nextDispatchAtMs !== undefined
-      ) {
-        continue
-      }
-      for (const participant of proposal.participants) {
-        const runner = makeRunnerForMode(participant.player.mode)
-        if (runner) {
-          activeRunnerIds.add(runner.id)
-          break
-        }
-      }
+      const window = findWindowForMode(ticket.player.mode)
+      if (window) activeWindowIds.add(window.id)
     }
 
-    const writes: Record<string, StoredMatchRunner> = {}
+    const writes: Record<string, StoredMatchFindWindow> = {}
     const deletes: string[] = []
-    for (const runner of SOURCE_MATCH_RUNNERS) {
-      const key = matchRunnerKey(runner)
-      if (!activeRunnerIds.has(runner.id)) {
-        if (storedRunners.has(key)) deletes.push(key)
+    const currentKeys = new Set<string>()
+    for (const window of MATCH_FIND_WINDOWS) {
+      const key = matchFindWindowKey(window)
+      currentKeys.add(key)
+      if (!activeWindowIds.has(window.id)) {
+        if (storedWindows.has(key)) deletes.push(key)
         continue
       }
-      if (!storedRunners.has(key)) {
+      if (!storedWindows.has(key)) {
         writes[key] = {
-          nextAtMs: now + matchRunnerIntervalMs(runner, this.config.cadence)
+          nextAtMs: now + matchFindWindowIntervalMs(window, this.config.cadence)
         }
       }
+    }
+    // Remove the four obsolete maker-runner records left by a rolling upgrade.
+    for (const key of storedWindows.keys()) {
+      if (!currentKeys.has(key)) deletes.push(key)
     }
     if (Object.keys(writes).length > 0) await this.state.storage.put(writes)
     if (deletes.length > 0) await this.state.storage.delete(deletes)
   }
 
-  private async processDueMatchRunners(now: number) {
-    const storedRunners = await this.state.storage.list<StoredMatchRunner>({
-      prefix: MATCH_RUNNER_PREFIX
+  private async processDueMatchFindWindows(now: number) {
+    const storedWindows = await this.state.storage.list<StoredMatchFindWindow>({
+      prefix: MATCH_FIND_WINDOW_PREFIX
     })
-    for (const runner of SOURCE_MATCH_RUNNERS) {
-      const key = matchRunnerKey(runner)
-      const stored = storedRunners.get(key)
+    for (const window of MATCH_FIND_WINDOWS) {
+      const key = matchFindWindowKey(window)
+      const stored = storedWindows.get(key)
       if (!stored || stored.nextAtMs > now) continue
-      if (runner.phase === 'find') {
-        await this.attemptFindRunner(runner, now)
-      } else {
-        await this.attemptMakeRunner(runner)
-      }
-      await this.advanceOrDeleteMatchRunner(runner, stored.nextAtMs, now)
+      await this.attemptMatchFindWindow(window, now)
+      await this.advanceOrDeleteMatchFindWindow(window, stored.nextAtMs, now)
     }
   }
 
-  private async advanceOrDeleteMatchRunner(
-    runner: MatchRunnerSpec,
+  private async advanceOrDeleteMatchFindWindow(
+    window: MatchFindWindow,
     previousDeadline: number,
     now: number
   ) {
-    let hasWork = false
-    if (runner.phase === 'find') {
-      const tickets = await this.state.storage.list<StoredTicket>({
-        prefix: TICKET_PREFIX
-      })
-      hasWork = [...tickets.values()].some(ticket =>
-        matchRunnerIncludesMode(runner, ticket.player.mode)
-      )
-    } else {
-      const proposals = await this.state.storage.list<StoredProposal>({
-        prefix: PROPOSAL_PREFIX
-      })
-      hasWork = [...proposals.values()].some(
-        proposal =>
-          proposal.status === 'ACCEPTED' &&
-          proposal.nextDispatchAtMs === undefined &&
-          proposal.participants.some(participant =>
-            matchRunnerIncludesMode(runner, participant.player.mode)
-          )
-      )
-    }
+    const tickets = await this.state.storage.list<StoredTicket>({
+      prefix: TICKET_PREFIX
+    })
+    const hasWork = [...tickets.values()].some(ticket =>
+      matchFindWindowIncludesMode(window, ticket.player.mode)
+    )
     if (!hasWork) {
-      await this.state.storage.delete(matchRunnerKey(runner))
+      await this.state.storage.delete(matchFindWindowKey(window))
       return
     }
-    await this.state.storage.put(matchRunnerKey(runner), {
-      nextAtMs: nextMatchRunnerDeadline(
+    await this.state.storage.put(matchFindWindowKey(window), {
+      nextAtMs: nextMatchFindWindowDeadline(
         previousDeadline,
-        matchRunnerIntervalMs(runner, this.config.cadence),
+        matchFindWindowIntervalMs(window, this.config.cadence),
         now
       )
-    } satisfies StoredMatchRunner)
+    } satisfies StoredMatchFindWindow)
   }
 
   private async matchGroup(
@@ -1813,11 +1765,12 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async rescheduleAlarm(now: number) {
-    await this.syncMatchRunnerStates(now)
-    const [proposals, runners] = await Promise.all([
+    await this.repairAcceptedDispatchDeadlines(now)
+    await this.syncMatchFindWindows(now)
+    const [proposals, windows] = await Promise.all([
       this.state.storage.list<StoredProposal>({ prefix: PROPOSAL_PREFIX }),
-      this.state.storage.list<StoredMatchRunner>({
-        prefix: MATCH_RUNNER_PREFIX
+      this.state.storage.list<StoredMatchFindWindow>({
+        prefix: MATCH_FIND_WINDOW_PREFIX
       })
     ])
     const candidates: number[] = []
@@ -1856,8 +1809,8 @@ export class MatchmakerPool implements DurableObject {
         }
       }
     }
-    for (const runner of runners.values()) {
-      candidates.push(Math.max(now + 1, runner.nextAtMs))
+    for (const window of windows.values()) {
+      candidates.push(Math.max(now + 1, window.nextAtMs))
     }
 
     const next = candidates

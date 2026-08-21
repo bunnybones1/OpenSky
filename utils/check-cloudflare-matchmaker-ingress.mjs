@@ -416,7 +416,7 @@ export const matchmakerIngressErrors = ({
   const workerDeclined = bodyBetween(
     workerRuntime,
     'private async declineMatch(',
-    'private async attemptFindRunner('
+    'private async attemptMatchFindWindow('
   )
   requireOrdered(errors, 'Worker declined-match publication', workerDeclined, [
     'this.broadcastProposal(proposal, {',
