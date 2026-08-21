@@ -322,7 +322,9 @@ export const conquestWireErrors = (
     'export const LEGACY_CONQUEST_POINTS_REQUIRED = 30',
     'INSERT OR IGNORE INTO player_conquest_points',
     'VALUES (?, ?, 0, 0, ?)',
-    'SELECT current_points, total_points FROM player_conquest_points'
+    'WITH unpublished AS (',
+    'FROM player_conquest_points points',
+    'WHERE points.user_id = ? AND points.event_id = ?'
   ]) {
     if (!compact.includes(token)) {
       errors.push(`Worker ConquestPoints repository is missing: ${token}`)

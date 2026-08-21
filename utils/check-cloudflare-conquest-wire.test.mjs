@@ -174,6 +174,13 @@ test('rejects source drift, sparse nulls, and bypassed boundaries', async () => 
     },
     {
       ...value,
+      conquest: value.conquest.replace(
+        'FROM player_conquest_points points',
+        'FROM player_conquest_points_legacy points'
+      )
+    },
+    {
+      ...value,
       api: value.api.replace(
         'const hero = sourceConquestHeroArgument(body)',
         'const hero = (body as { hero?: string }).hero'
