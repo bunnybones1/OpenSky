@@ -11,6 +11,8 @@ const fixtures = async () => {
     sourceWebsocketHandler,
     sourceWebsocketHandlerTest,
     sourceMessages,
+    sourceMessageSender,
+    sourceBackendService,
     sourceBrowserClient,
     workerProtocol,
     workerRuntime,
@@ -23,6 +25,11 @@ const fixtures = async () => {
     readFile('matchmaker/lib/frontend/websocket_handler.go', 'utf8'),
     readFile('matchmaker/lib/frontend/websocket_handler_test.go', 'utf8'),
     readFile('matchmaker/lib/messages/messages.go', 'utf8'),
+    readFile('matchmaker/lib/frontend/message_sender.go', 'utf8'),
+    readFile(
+      'matchmaker/lib/matchmaker/custommatchmaker/backend_service.go',
+      'utf8'
+    ),
     readFile('webapp/src/clients/MatchMakerClient/MatchMakerClient.ts', 'utf8'),
     readFile('matchmaker-ts/src/protocol.ts', 'utf8'),
     readFile('matchmaker-ts/src/runtime.ts', 'utf8'),
@@ -36,6 +43,8 @@ const fixtures = async () => {
     sourceWebsocketHandler,
     sourceWebsocketHandlerTest,
     sourceMessages,
+    sourceMessageSender,
+    sourceBackendService,
     sourceBrowserClient,
     workerProtocol,
     workerRuntime,
@@ -52,6 +61,20 @@ test('pins the source and Worker matchmaker ingress lifecycle', async () => {
 test('rejects weakened source, Worker, browser, test, and release requirements', async () => {
   const value = await fixtures()
   const mutations = [
+    {
+      ...value,
+      sourceMessageSender: value.sourceMessageSender.replace(
+        '[]string{ev.PlayerID.String(), ev.OpponentID.String()}',
+        '[]string{ev.OpponentID.String(), ev.PlayerID.String()}'
+      )
+    },
+    {
+      ...value,
+      sourceBackendService: value.sourceBackendService.replace(
+        'PlayerID:   p.Address()',
+        'PlayerID:   opponent.Address()'
+      )
+    },
     {
       ...value,
       sourceClientConnection: value.sourceClientConnection.replace(
@@ -160,6 +183,13 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
     {
       ...value,
       workerRuntime: value.workerRuntime.replace(
+        'playerIDs: [participant.player.address, opponent.player.address]',
+        'playerIDs: proposal.participants.map(current => current.player.address)'
+      )
+    },
+    {
+      ...value,
+      workerRuntime: value.workerRuntime.replace(
         "this.safeSend(webSocket, errorMessage('SERVER_ERROR'))\n    webSocket.close()",
         "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))\n    webSocket.close()"
       )
@@ -197,6 +227,13 @@ test('rejects weakened source, Worker, browser, test, and release requirements',
       workerRuntimeTest: value.workerRuntimeTest.replace(
         "message: 'RANK_TOO_LOW'",
         "message: 'ranked play is not unlocked'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'playerIDs: [principals[1], principals[0]]',
+        'playerIDs: principals'
       )
     },
     {

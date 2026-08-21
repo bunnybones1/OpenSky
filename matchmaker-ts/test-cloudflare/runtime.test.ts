@@ -271,7 +271,11 @@ const pairPlayers = async (
     mode,
     playerIDs: principals
   })
-  expect(await secondFound).toMatchObject({ type: 'match_found' })
+  expect(await secondFound).toMatchObject({
+    type: 'match_found',
+    mode,
+    playerIDs: [principals[1], principals[0]]
+  })
   return { first, second }
 }
 

@@ -32,6 +32,8 @@ export const matchmakerIngressErrors = ({
   sourceWebsocketHandler,
   sourceWebsocketHandlerTest,
   sourceMessages,
+  sourceMessageSender,
+  sourceBackendService,
   sourceBrowserClient,
   workerProtocol,
   workerRuntime,
@@ -129,6 +131,41 @@ export const matchmakerIngressErrors = ({
     'Message: reason',
     'Level:   "server"'
   ])
+  const sourceMatchFoundSender = bodyBetween(
+    sourceMessageSender,
+    'func (s *messageSender) SendMatchFoundMessage(',
+    'func (s *messageSender) SendAcceptedMatchMessage('
+  )
+  requireOrdered(
+    errors,
+    'Source recipient-first match-found wire',
+    sourceMatchFoundSender,
+    [
+      'messages.NewMatchFoundMessage(',
+      'ev.Mode,',
+      'ev.TTL,',
+      '[]string{ev.PlayerID.String(), ev.OpponentID.String()}'
+    ]
+  )
+  const sourceMatchFoundPublication = bodyBetween(
+    sourceBackendService,
+    'func (s *BackendService) MatchFound(',
+    'func (s *BackendService) MatchMade('
+  )
+  requireOrdered(
+    errors,
+    'Source per-recipient match-found publication',
+    sourceMatchFoundPublication,
+    [
+      'for _, p := range matchProposal.Players {',
+      'opponent, err := matchProposal.Opponent(p)',
+      'matchFoundMessage := events.EventFoundMessage{',
+      'PlayerID:   p.Address()',
+      'OpponentID: opponent.Address()',
+      'Mode:       p.Mode',
+      's.notifier.Message(ctx, matchFoundMessage, p)'
+    ]
+  )
 
   const browserError = bodyBetween(
     sourceBrowserClient,
@@ -208,6 +245,27 @@ export const matchmakerIngressErrors = ({
       break
     }
   }
+  const workerMatchFound = bodyBetween(
+    workerRuntime,
+    'private async createProposal(',
+    'private async createBotMatch('
+  )
+  requireOrdered(
+    errors,
+    'Worker recipient-first match-found publication',
+    workerMatchFound,
+    [
+      'const participant = proposal.participants.find(',
+      'current => current.player.address === principal',
+      'const opponent = proposal.participants.find(',
+      'current => current.player.address !== principal',
+      'if (!participant || !opponent) continue',
+      'this.sendToPrincipal(principal, {',
+      "type: 'match_found'",
+      'mode: participant.player.mode',
+      'playerIDs: [participant.player.address, opponent.player.address]'
+    ]
+  )
   const workerFailure = bodyBetween(
     workerRuntime,
     'private failMalformedClientMessage(',
@@ -272,6 +330,22 @@ export const matchmakerIngressErrors = ({
     serviceRejectionTest,
     ["reason: 'RANK_TOO_LOW'", "message: 'RANK_TOO_LOW'", "level: 'server'"]
   )
+  const pairPlayersTest = bodyBetween(
+    workerRuntimeTest,
+    'const pairPlayers = async (',
+    '\nafterEach(async () =>'
+  )
+  requireOrdered(
+    errors,
+    'Worker recipient-first match-found regression',
+    pairPlayersTest,
+    [
+      'expect(await firstFound).toMatchObject({',
+      'playerIDs: principals',
+      'expect(await secondFound).toMatchObject({',
+      'playerIDs: [principals[1], principals[0]]'
+    ]
+  )
 
   const scripts = rootPackage?.scripts ?? {}
   if (
@@ -300,6 +374,8 @@ const main = async () => {
     sourceWebsocketHandler,
     sourceWebsocketHandlerTest,
     sourceMessages,
+    sourceMessageSender,
+    sourceBackendService,
     sourceBrowserClient,
     workerProtocol,
     workerRuntime,
@@ -325,6 +401,17 @@ const main = async () => {
     ),
     readFile(path.join(root, 'matchmaker/lib/messages/messages.go'), 'utf8'),
     readFile(
+      path.join(root, 'matchmaker/lib/frontend/message_sender.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/matchmaker/custommatchmaker/backend_service.go'
+      ),
+      'utf8'
+    ),
+    readFile(
       path.join(
         root,
         'webapp/src/clients/MatchMakerClient/MatchMakerClient.ts'
@@ -346,6 +433,8 @@ const main = async () => {
     sourceWebsocketHandler,
     sourceWebsocketHandlerTest,
     sourceMessages,
+    sourceMessageSender,
+    sourceBackendService,
     sourceBrowserClient,
     workerProtocol,
     workerRuntime,
@@ -358,7 +447,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker ingress preserves the source payload, exact error alias, and close contract'
+      'Cloudflare matchmaker ingress preserves the source payload, recipient-first match-found wire, exact error alias, and close contract'
     )
   }
 }

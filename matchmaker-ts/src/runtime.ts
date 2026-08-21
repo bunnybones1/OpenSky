@@ -1422,12 +1422,15 @@ export class MatchmakerPool implements DurableObject {
       const participant = proposal.participants.find(
         current => current.player.address === principal
       )
-      if (!participant) continue
+      const opponent = proposal.participants.find(
+        current => current.player.address !== principal
+      )
+      if (!participant || !opponent) continue
       this.sendToPrincipal(principal, {
         type: 'match_found',
         mode: participant.player.mode,
         timeoutMs: this.config.acceptanceTimeoutMs,
-        playerIDs: proposal.participants.map(current => current.player.address)
+        playerIDs: [participant.player.address, opponent.player.address]
       })
     }
   }
