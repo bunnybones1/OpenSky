@@ -2944,17 +2944,45 @@ production builds, and 594-file artifact validation. The assembled entries are
 deployment, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source asynchronous deck-rank publication — 2026-08-21
+
+Milestone `36498a51` restores the Go API's separate
+`DeckRankUpdateRunner`: terminal settlement now stages an immutable
+ranked-constructed task but leaves deck aggregates untouched while rewards and
+`match_ended` are delivered and player sockets close. A later Durable Object
+alarm derives the committed winner/result, season, library revision, and both
+WASM-filled authoritative decks before applying the source Glicko transitions
+under the global deck-rank coordinator.
+
+Migration `0119` persists the duplicate-safe task with `PENDING`, `APPLIED`,
+and `FAILED` states, the source five-second linear retry delay, and five-attempt
+bound. Seven guards reject pre-publication attempts, task or receipt mutation,
+wrong releases/decks, and non-atomic completion. The shared Durable Object
+alarm advances deck-rank and PromoteGrandmasters responsibilities
+independently, preserving the source's separate work groups without allowing
+either task to reopen the match or delay terminal clients.
+
+The production schema preflight now requires `0119`, its task table, all seven
+guards, and three exact contract checks. The complete local release contract
+passed for this milestone: 528 main-Worker tests across 85 files, 40
+game-server unit and 135 Workers tests, 48 match-service tests, 63 matchmaker
+unit and 67 Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain/mutation gate and typecheck, both production builds, and
+594-file artifact validation. The exact `36498a51` entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains. The
-next local completion audit should apply the same terminal publication barrier
-to ranked-constructed deck aggregates and every deck-leaderboard consumer.
+next local completion audit should verify exact retry and terminal-failure
+semantics for the separately queued PromoteGrandmasters task.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, and `0118` at the documented quiescent boundary, deploy
-the exact tested Workers with both bot flags still false, and only consider a
-bounded ranked/PvP-bot soak after ordinary multiplayer and analytics paths are
-healthy.
+then `0116`, `0117`, `0118`, and `0119` at the documented quiescent boundary,
+deploy the exact tested Workers with both bot flags still false, and only
+consider a bounded ranked/PvP-bot soak after ordinary multiplayer and
+analytics paths are healthy.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,

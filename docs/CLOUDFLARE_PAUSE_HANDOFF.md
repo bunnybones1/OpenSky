@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `c22d9263`
-  (`Preserve source ranked-stat publication`)
-- Latest tested runtime commit: `c22d9263`
-  (`Preserve source ranked-stat publication`)
+- Last code/test checkpoint: `36498a51`
+  (`Preserve source asynchronous deck-rank publication`)
+- Latest tested runtime commit: `36498a51`
+  (`Preserve source asynchronous deck-rank publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,19 +23,21 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `c22d9263` are committed and
+- The runtime changes from `38386294` through `36498a51` are committed and
   tested but are **not deployed**. The complete exact-commit build at
-  `c22d9263` produced web entry `/assets/index-fd3d9163.js` and game entry
+  `36498a51` produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus
-  `0118_match_account_stat_publication.sql`, are committed but have **not**
-  been applied to production. No Worker from `90ebe652` or later may be
+  `0118_match_account_stat_publication.sql`, plus
+  `0119_match_deck_rank_jobs.sql`, are committed but have **not** been applied
+  to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
-  may be deployed until all four exist. Apply them in order while match
-  allocation is quiescent as described below.
+  may be deployed until `0118` exists. No Worker from `36498a51` or later may
+  be deployed until all five exist. Apply them in order while match allocation
+  is quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -107,6 +109,43 @@ assembled entries are `/assets/index-fd3d9163.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
 deployment, provisioning, activation, live match, or production mutation was
 performed. Exact-head PR CI is still required after this handoff is pushed.
+
+## Asynchronous deck-rank publication milestone
+
+Commit `36498a51` restores the source API's distinct
+`DeckRankUpdateRunner` boundary instead of mutating deck aggregates inside
+terminal match publication:
+
+- migration `0119` stages one immutable, duplicate-safe ranked-constructed
+  task before publication and permits attempts only after the terminal ledger
+  is visible;
+- deck aggregates and their receipt remain absent when rewards and
+  `match_ended` are sent and both player sockets are closed;
+- a later Durable Object alarm derives the winner, result, authoritative
+  filled decks, season, and library revision from committed state, then applies
+  the exact source Glicko transitions under the global deck-rank coordinator;
+- failed attempts retain the source five-second linear delay and five-attempt
+  terminal bound, with durable `PENDING`, `APPLIED`, and `FAILED` states;
+- the deck-rank and PromoteGrandmasters responsibilities advance independently
+  on the shared Durable Object alarm, matching the source's separate worker
+  groups; neither can reopen the match or suppress terminal client delivery;
+- the completion mutation gate derives the Go enqueue/runner contracts and
+  rejects synchronous application, missing retries, weakened terminal-ledger
+  guards, serialized task runners, or absent terminal-client regressions; and
+- every production deploy command now requires migration `0119`, its job
+  table, all seven guards, and the pinned terminal/publication invariants.
+
+The complete local release contract passed for this milestone: 528
+main-Worker tests across 85 files, 40 game-server unit and 135 Workers tests,
+48 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain/mutation gate
+and typecheck, both production builds, and 594-file artifact validation. The
+exact `36498a51` artifact was then reassembled as
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
+deployment, provisioning, activation, live match, or production mutation was
+performed. Exact-head PR CI is still required after the refreshed handoff is
+pushed.
 
 ## Leaderboard reward-visibility milestone
 
@@ -276,8 +315,9 @@ checkpoint and its refreshed handoff passed exact-head run
 `1863eb45` in 11m02s. The later Warm Up and multiplayer XP publication
 checkpoints and their handoffs passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32504527209> at
-`aaf12adb`. The newer `c22d9263` ranked-stat publication checkpoint and this
-handoff require a later green exact-head CI run before any production mutation.
+`aaf12adb`. The newer `c22d9263` ranked-stat publication and `36498a51`
+asynchronous deck-rank checkpoints, plus this handoff, require a later green
+exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -2210,12 +2250,13 @@ production gate after any later commit.
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
 4. Complete the quiescent migration `0115` transition, then apply `0116`,
-   `0117`, and `0118` in order while allocations remain stopped, and then
-   deploy/verify the exact tested game server without analytics producer
+   `0117`, `0118`, and `0119` in order while allocations remain stopped, and
+   then deploy/verify the exact tested game server without analytics producer
    bindings, as described under Production rollout. The analytics consumer
    requires `0115`, every Worker from `90ebe652` assumes `0116`, every Worker
    from `5636d901` assumes `0117`, and every Worker from `c22d9263` assumes
-   `0118`. No current deploy command may run against an older database.
+   `0118`; every Worker from `36498a51` assumes `0119`. No current deploy
+   command may run against an older database.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 6. Create a separate private client-feedback bucket and add the reviewed
@@ -2255,13 +2296,14 @@ production migration state. Migrations
 `0115_authoritative_match_decks.sql`,
 `0116_registered_matchmaker_bots.sql`, and
 `0117_match_experience_publication_state.sql`, plus
-`0118_match_account_stat_publication.sql` are not: apply `0115` first at its
-quiescent game-server boundary, then `0116`, `0117`, and `0118` before
-deploying the current Workers. Keep both ranked-bot flags false throughout
-that baseline rollout. Every checked-in deploy command now performs the
-read-only schema preflight advanced by `c22d9263` and refuses to spawn Wrangler
-unless the prior invariants plus the `0118` Discovery snapshot column, three
-tables, and 12 guards are present.
+`0118_match_account_stat_publication.sql` and
+`0119_match_deck_rank_jobs.sql` are not: apply `0115` first at its quiescent
+game-server boundary, then `0116`, `0117`, `0118`, and `0119` before deploying
+the current Workers. Keep both ranked-bot flags false throughout that baseline
+rollout. Every checked-in deploy command now performs the read-only schema
+preflight advanced by `36498a51` and refuses to spawn Wrangler unless the prior
+invariants plus the `0119` deck-rank job table, all seven guards, and the
+terminal/publication contract checks are present.
 
 ## Other outstanding work
 
@@ -2269,7 +2311,7 @@ tables, and 12 guards are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `c22d9263` from its
+- Deploy and verify the tested runtime changes through `36498a51` from its
   exact green release-gate head. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
@@ -2279,8 +2321,9 @@ tables, and 12 guards are present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`,
-  `0117`, and `0118`; deploy the exact tested game-server runtime immediately,
-  verify protocol health, and only then restore the previously enabled modes.
+  `0117`, `0118`, and `0119`; deploy the exact tested game-server runtime
+  immediately, verify protocol health, and only then restore the previously
+  enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
 - Provision and verify the private analytics consumer in the safe order above;
@@ -2338,20 +2381,20 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116`, `0117`, and `0118`, deployment, and activation remain
-  paused;
+  but migrations `0116`, `0117`, `0118`, and `0119`, deployment, and
+  activation remain paused;
 - every production deploy command now fails closed until the remote D1 proves
-  the `0115`, `0116`, `0117`, and `0118` invariants; the migration command
-  remains the only preflight-exempt operation;
+  the `0115`, `0116`, `0117`, `0118`, and `0119` invariants; the migration
+  command remains the only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;
 - Conquest was implemented but intentionally gated, not an unported service.
 
-The next local source-faithfulness slice is terminal publication of ranked
-constructed deck aggregates. After that, the main remaining work is controlled
-production provisioning, activation, and evidence—not a broad rewrite of the
-original application.
+The next local source-faithfulness slice is exact retry/failure-state parity for
+the separately queued PromoteGrandmasters task. After that audit, the main
+remaining work is controlled production provisioning, activation, and
+evidence—not a broad rewrite of the original application.
 
 ## Resume checklist
 
