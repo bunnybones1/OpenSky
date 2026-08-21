@@ -110,6 +110,16 @@ notifier subscriber count is zero. The Durable Object performs the same repair:
 it deletes orphaned tickets before building its candidate map, rather than only
 filtering them and leaving persistent queue/status/alarm state behind. No
 proposal, notification, or penalty is produced for that repair.
+The source IP-address validator is also preserved in its original admission
+order: release version first, then the IP check, then the remaining identity,
+captcha, and player validators. When `ALLOW_SAME_IP_MATCH=false`, a missing
+trusted client IP is a silent validation miss. The Worker does not hydrate the
+profile, create a ticket, or establish the player channel, and its normal
+authentication deadline remains authoritative. The checked-in Go compose
+sample sets its corresponding switch to `true`; Cloud Weasel deliberately pins
+the stricter `false` setting in both Worker configurations, so the port preserves
+the source branch while documenting that configuration choice rather than
+claiming the sample exercised it.
 
 ## Deployment gates
 

@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `469484ab`
-  (`Preserve source orphaned queue cleanup`)
-- Latest tested runtime commit: `469484ab`
-  (`Preserve source orphaned queue cleanup`)
+- Last code/test checkpoint: `9621ee09`
+  (`Preserve source empty IP admission`)
+- Latest tested runtime commit: `9621ee09`
+  (`Preserve source empty IP admission`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `469484ab` are committed and
+- The runtime changes from `38386294` through `9621ee09` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -131,8 +131,11 @@ expired-accept checkpoint and its handoff at exact pushed head `85e1e453`. Run
 accepted-decline checkpoint and its handoff at exact pushed head `c29d7e19`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32438805522> passed the
 independent-pending-lifetime checkpoint and its handoff at exact pushed head
-`b3e061a4`. The newer `469484ab` orphaned-queue checkpoint and this refreshed
-handoff must receive exact-head CI before any production mutation.
+`b3e061a4`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32439602947> passed the
+orphaned-queue checkpoint and its handoff at exact pushed head `d10cd71b`. The
+newer `9621ee09` empty-IP checkpoint and this refreshed handoff must receive
+exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -807,6 +810,41 @@ artifact validation. The assembled web and game entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker empty-IP admission milestone
+
+Commit `9621ee09` restores the original matchmaker's conditional IP-address
+validator in the same validator order:
+
+- Go validates the client release first, then the resolved IP, before auth,
+  captcha, profile work, duplicate notification, channel creation, or queueing;
+- if same-IP matching is disabled and the player IP is empty, the validator
+  returns `false, nil`, so the request receives no application message and the
+  socket remains subject to the normal authentication deadline;
+- Cloudflare production and test deliberately pin `ALLOW_SAME_IP_MATCH=false`,
+  while the checked-in Go compose sample sets the corresponding switch to
+  `true`; this milestone preserves the source branch under Cloud Weasel's
+  explicitly stricter configuration rather than hiding that difference; and
+- the same-origin gateway remains the only authority for the trusted
+  `CF-Connecting-IP` projection used by the matchmaker service binding.
+
+The Workers regression uses a player fixture with an active match, which would
+return two reconnect messages if profile hydration occurred. With an empty IP,
+it instead proves silence, zero tickets/proposals, one unsubscribed socket, and
+no profile-derived reconnect. The mutation-tested
+`check:cloudflare:matchmaker-session` gate derives the Go validator, its order
+and silent return, both Worker settings, runtime placement, direct regression,
+and release wiring.
+
+The exact complete local release contract passed at committed runtime head
+`9621ee09` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 59
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -911,7 +949,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `469484ab`. Keep
+- Deploy and verify the tested runtime changes through `9621ee09`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,

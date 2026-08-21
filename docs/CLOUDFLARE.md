@@ -2101,6 +2101,38 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker empty-IP admission parity — 2026-08-20
+
+Milestone `9621ee09` restores the conditional source IP-address validator. Go
+runs its release validator first and then checks the player's resolved IP. If
+same-IP matching is disabled and that address is empty, validation returns
+`false, nil`: the request is silently ignored before authentication, captcha,
+profile hydration, duplicate notification, channel creation, or queueing.
+
+Cloudflare production and test configurations deliberately set
+`ALLOW_SAME_IP_MATCH=false`, while the checked-in Go compose sample sets its
+equivalent option to `true`. This milestone does not erase that explicit
+configuration difference; it makes the Worker's stricter selected mode obey
+the exact source branch. The same-origin gateway remains the sole authority for
+the trusted `CF-Connecting-IP` projection.
+
+The Worker now performs the empty-IP check immediately after release validation
+and leaves the socket unsubscribed for the existing authentication deadline.
+The Workers regression uses a fixture with an active match: it proves that an
+empty-IP request stays silent, creates no ticket or proposal, and never reaches
+profile hydration that would otherwise return the active match. The
+mutation-tested session gate derives validator order, the silent source return,
+both Worker settings, runtime placement, and the direct regression from source.
+
+The exact complete local contract passed at `9621ee09`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 59 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
