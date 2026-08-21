@@ -2560,6 +2560,40 @@ typecheck, both production builds, and 594-file artifact validation. The
 assembled entries remain `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source spectator admission lifecycle parity — 2026-08-21
+
+Milestone `087d0b86` restores the original first-message-selected spectator
+path without treating the gateway's initial role as the game's permanent
+role. An authenticated match participant can now use a separate connection to
+spectate the opponent. Self-spectating retains the source server-level
+`you can\t spectate yourself` response and empty close, while a target outside
+the current match retains `match ended or cannot be found.`.
+
+A successful `spectate_server` bootstrap reclassifies the socket as a
+spectator. Player-private rewards route only to joined player sockets even
+when the same principal also has a spectator connection, and a joined
+spectator's mute request remains source-silent and nonterminal. The source cap
+admits 50 joined spectators and gives the 51st the exact user-level
+`too many spectators` response. An independent 64-socket pending-plus-joined
+gateway bound prevents pre-admission and duplicate-principal socket exhaustion
+without changing the source's joined cap.
+
+Joined-spectator gameplay and loading frames remain deliberately fail-closed.
+The Go forwarding paths can spoof player state or reach an uncaught worker
+error, so reproducing those paths would weaken the Cloudflare trust boundary
+rather than preserve valid source behavior. Mutation-tested game-ingress and
+match-completion gates pin the source cap, exact wire messages,
+first-message-selected role, silent mute behavior, player-private routing, and
+the separate pending-socket safety bound.
+
+The complete local release contract passed for `087d0b86`: 512 main-Worker
+tests, 36 game-server unit and 128 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

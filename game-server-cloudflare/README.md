@@ -32,6 +32,12 @@ wire messages. It is a separate service from `matchmaker-ts`.
   stickers retain the original message/level and empty close, while a
   same-socket player replacement receives the source displacement message,
   rejoins, and remains open;
+- source-compatible first-message spectator admission: a match participant may
+  use a separate connection to spectate the opponent, self/unavailable/full
+  errors retain their exact source wire, joined-spectator mute stays silent,
+  and player-private rewards never leak to a same-principal spectator. The
+  source 50-spectator cap is protected by an independent 64-socket pending
+  gateway safety bound;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible

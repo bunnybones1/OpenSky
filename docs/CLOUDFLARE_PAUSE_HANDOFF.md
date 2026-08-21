@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `5ecbb79f`
-  (`Preserve source explicit game errors`)
-- Latest tested runtime commit: `5ecbb79f`
-  (`Preserve source explicit game errors`)
+- Last code/test checkpoint: `087d0b86`
+  (`Preserve source spectator admission lifecycle`)
+- Latest tested runtime commit: `087d0b86`
+  (`Preserve source spectator admission lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `5ecbb79f` are committed and
+- The runtime changes from `38386294` through `087d0b86` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -162,8 +162,10 @@ decode-lifecycle checkpoint and its handoff at exact pushed head `294d6608` in
 11m25s. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32463523815> passed the
 pre-join-lifecycle checkpoint and its handoff at exact pushed head `a4de29fb`.
-The newer `5ecbb79f` explicit-error checkpoint and this refreshed handoff must
-receive exact-head CI before any production mutation.
+Run <https://github.com/bunnybones1/OpenSky/actions/runs/32465936953> passed the
+explicit-error checkpoint and its refreshed handoff at exact pushed head
+`594e78ca`. The newer `087d0b86` spectator-admission checkpoint and its
+refreshed handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1314,6 +1316,43 @@ unit and 67 Workers tests, 30 browser-game tests, nine analytics tests, every
 source/off-chain gate and typecheck, both production builds, and 594-file
 artifact validation. The assembled entries remain
 `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source spectator admission lifecycle milestone
+
+Commit `087d0b86` restores the source's first-message-selected spectator path
+without making the WebSocket gateway role the game's permanent role:
+
+- an authenticated match participant may use a separate connection to
+  spectate the opponent, while self-spectating retains the source server-level
+  `you can\t spectate yourself` response and empty close;
+- a successful `spectate_server` bootstrap reclassifies the socket as a
+  spectator, and player-private rewards continue only to joined player
+  sockets even when a same-principal spectator is attached;
+- joined-spectator mute remains source-silent and nonterminal, and unavailable
+  targets preserve `match ended or cannot be found.` plus an empty close;
+- the source cap permits 50 joined spectators and gives the 51st the exact
+  user-level `too many spectators` response; and
+- a separate 64-socket pending-plus-joined gateway safety bound prevents
+  unauthenticated pending sockets and duplicate principals from exhausting a
+  Durable Object before source admission runs.
+
+Joined-spectator gameplay and loading frames remain deliberately fail-closed:
+the Go forwarding paths can spoof player state or reach an uncaught worker
+error, so reproducing them would weaken the reviewed Cloudflare trust boundary
+rather than faithfully preserve valid player behavior. The mutation-tested
+game-ingress and match-completion gates pin the source admission cap, exact
+wire messages, first-message role selection, silent mute behavior, private
+player routing, and the independent pending-socket safety cap.
+
+The exact complete local release contract passed with exit code zero for
+`087d0b86`: 512 main-Worker tests, 36 game-server unit and 128 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
