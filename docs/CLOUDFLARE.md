@@ -2290,10 +2290,11 @@ consistent with one eligible canonical source deck.
 The mutation-tested `check:cloudflare:bot-deck` gate covers the source matcher
 scope, unregistered factory, curated deck specifications, canonical Go and
 TypeScript deck bytes, random selection, both runtime consumers, regression
-tests, match-service deployment path, and non-deploying CI audit. The source's
-separate registered-account and unlocked-deck selection for optional ranked
-and Practice PvP bots remains a later parity slice. Both production Workers
-retain `ENABLE_RANKED_BOTS=false` in the meantime.
+tests, match-service deployment path, and non-deploying CI audit. That
+milestone intentionally excluded the source's separate registered-account and
+unlocked-deck selection for optional ranked and Practice PvP bots; milestone
+`90ebe652` later completes it. Both production Workers still retain
+`ENABLE_RANKED_BOTS=false`.
 
 The match-service Workers suite passed 36 tests, and the targeted Go bot
 constructor passed twenty randomized runs. The exact complete local contract

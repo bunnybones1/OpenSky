@@ -1021,8 +1021,8 @@ unregistered Practice Bot and Warm Up opponents:
   private seed and account prism instead of constructing every opponent from
   the Strength starter deck; and
 - the source's separate registered-account/deck path for optional ranked/PvP
-  bots is not claimed by this milestone. Both production Workers retain
-  `ENABLE_RANKED_BOTS=false` until that path is ported and verified separately.
+  bots was not claimed by this milestone; commit `90ebe652` later completes
+  it. Both production Workers still retain `ENABLE_RANKED_BOTS=false`.
 
 Direct regressions pin every eligibility boundary and reject an invalid random
 selector. A D1/Workers allocation raises a Practice player's level to 21 and
