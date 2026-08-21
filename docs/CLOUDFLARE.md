@@ -2860,6 +2860,30 @@ builds, and 594-file artifact validation. The assembled entries are
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source matchmaker completion-wire safety — 2026-08-21
+
+Safety milestone `86a95e03` adds direct, source-derived protection for the
+remaining player-facing matchmaker completion notifications without changing
+runtime behavior. The matchmaker-ingress gate now derives the accepted,
+declined, match-made, match-ready, and timed-out constructors plus sender order
+from Go and binds them to the existing TypeScript publication paths and
+original browser handlers.
+
+The contract requires each accepting or declining principal on both sockets,
+`match_made` before `match_ready_to_start`, the authoritative server address,
+the recipient's requested mode, timeout notification before penalty/deletion,
+and the original waiting, opponent-declined, timed-out, and game-navigation UI
+transitions. Forty-two mutation cases reject weakened source, browser, Worker,
+regression, or release evidence.
+
+The complete local release contract passed at `86a95e03`: 514 main-Worker
+tests, 37 game-server unit and 130 Workers tests, 45 match-service tests, 63
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

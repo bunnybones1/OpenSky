@@ -11,8 +11,8 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `9ee8d521`
-  (`Preserve source match found ordering`)
+- Last code/test checkpoint: `86a95e03`
+  (`Pin source matchmaker completion wires`)
 - Latest tested runtime commit: `9ee8d521`
   (`Preserve source match found ordering`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
@@ -182,8 +182,9 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
-The newer `9ee8d521` recipient-first match-found checkpoint and this refreshed
-handoff require a later green exact-head CI run before any production mutation.
+The newer `86a95e03` matchmaker completion-wire safety checkpoint and this
+refreshed handoff require a later green exact-head CI run before any production
+mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1682,6 +1683,33 @@ implementation and regression, and rejects source, runtime, or test drift.
 
 The exact complete local release contract passed with exit code zero at
 `9ee8d521`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source matchmaker completion-wire safety milestone
+
+Safety commit `86a95e03` closes the remaining direct-evidence gap for the
+player-facing matchmaker completion lifecycle without changing runtime
+behavior. The matchmaker-ingress gate now derives the exact accepted,
+declined, match-made, match-ready, and timed-out constructors and sender order
+from Go, then binds them to the TypeScript Durable Object and preserved browser
+handlers.
+
+The gate requires the accepting or declining principal on both subscriber
+wires, `match_made` before `match_ready_to_start`, the authoritative server
+address, each recipient's requested mode, and timeout notification before
+penalty/deletion. It also preserves the original browser transitions for self
+acceptance, self versus opponent decline, accepted versus unaccepted timeout,
+and game navigation. Forty-two mutation cases reject weakened source,
+browser, Worker, regression, or release evidence.
+
+The exact complete local release contract passed with exit code zero at
+`86a95e03`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
 45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The

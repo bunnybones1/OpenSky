@@ -92,6 +92,10 @@
   Match-found participants are also recipient-relative like the Go event
   publisher and sender: every subscriber receives `[self, opponent]`, so the
   second socket does not inherit the proposal's first-player ordering.
+  Safety checkpoint `86a95e03` additionally derives every accepted, declined,
+  match-made, match-ready, and timed-out player wire plus its original browser
+  reaction from source. The mutation-tested gate requires principal identity,
+  completion order, per-recipient mode, and timeout-before-cleanup behavior.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game
