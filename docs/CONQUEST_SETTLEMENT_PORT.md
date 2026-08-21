@@ -1350,3 +1350,30 @@ tests, 30 browser-game tests, nine analytics tests, all typechecks and
 source/off-chain gates, both builds, and 594-file artifact validation. No
 deployment, migration, provisioning, activation, live match, or production
 mutation was performed. Production Conquest remains disabled.
+
+## Source matchmaker expired-accept proof
+
+Follow-up milestone `3099956c` restores the source ownership split for a late
+accept. `FrontendService.AcceptMatch` uses a strict negative timeout boundary;
+a timed-out or referenced missing proposal publishes `timed_out` only to the
+accepting player's channel before returning `ErrInvalidOperation`. The outer
+WebSocket handler then sends the already-pinned generic `SERVER_ERROR` and
+closes without a close payload.
+
+The command itself does not delete the proposal or apply penalties. The Worker
+now leaves those proposal-wide effects to its Durable Object alarm, and fatal
+socket cleanup does not turn an already-expired pending match into a decline.
+The alarm later notifies the proposal as a whole, deletes it, and applies the
+source timeout penalty only to non-accepting, non-Challenge players.
+
+Workers regressions cover both an expired stored proposal and a missing
+proposal behind a pending player reference. The mutation-tested session gate
+derives the player-scoped command notification, shared timeout runner,
+pending-match TTL authority, cleanup boundary, direct tests, and release wiring
+from source. The exact complete local contract passed at `3099956c`: 510
+main-Worker tests, 34 game-server unit and 117 Workers tests, 33 match-service
+tests, 49 matchmaker unit and 51 Workers tests, 30 browser-game tests, nine
+analytics tests, all typechecks and source/off-chain gates, both builds, and
+594-file artifact validation. No deployment, migration, provisioning,
+activation, live match, or production mutation was performed. Production
+Conquest remains disabled.

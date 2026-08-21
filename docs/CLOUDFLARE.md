@@ -1961,6 +1961,40 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker expired-accept parity — 2026-08-20
+
+Milestone `3099956c` restores the source boundary between a late accept command
+and proposal-wide expiration. `FrontendService.AcceptMatch` treats a proposal
+as timed out only after its remaining duration becomes negative. A timed-out or
+referenced missing proposal sends `timed_out` only through the accepting
+player's channel, then returns `ErrInvalidOperation`; the WebSocket outer
+handler subsequently emits its generic `SERVER_ERROR` and empty close.
+
+The accept command does not delete the proposal or apply timeout penalties.
+Those shared effects remain owned by the source accept-timeout runner. The
+Worker now preserves the proposal across the command, and its fatal socket
+cleanup does not reinterpret an already-expired pending match as a decline.
+The Durable Object alarm later notifies the proposal as a whole, deletes it,
+and applies the existing source penalties only to non-accepting,
+non-Challenge players.
+
+Workers regressions cover an expired stored proposal and a referenced missing
+proposal. They pin player-only pre-error notification, exact message order,
+generic fatal close, opponent silence before the alarm, proposal and penalty
+preservation, deferred global expiry, final penalties, and pending-reference
+behavior. The mutation-tested session gate derives the accept command, timeout
+runner, pending TTL authority, Worker cleanup, direct tests, and release wiring
+from source.
+
+The exact complete local contract passed at `3099956c`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 51 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and
