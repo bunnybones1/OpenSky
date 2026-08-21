@@ -223,6 +223,59 @@ describe('same-origin multiplayer gateway', () => {
     expect(await afterCompletion.json()).toEqual({ type: 'no_match_found' })
   })
 
+  it('preserves source initializing match info for the client retry loop', async () => {
+    const principal = await deriveGamePrincipal(USER_ID)
+    const opponent = '0x3333333333333333333333333333333333333333'
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, created_at, updated_at)
+       VALUES ('initializing-proposal', 'initializing-replay', 'PRACTICE_PVP',
+               'initializing-release', ?, ?, ?, NULL, '', NULL, 'creating',
+               ?, ?)`
+    )
+      .bind(principal, opponent, USER_ID, now, now)
+      .run()
+
+    const headers = await authenticatedHeaders()
+    delete (headers as { Upgrade?: string }).Upgrade
+    const response = await gateway(
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
+      headers
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      type: 'in_progress_match_info',
+      matchInfo: {
+        id: expect.any(Number),
+        replayID: 'initializing-replay',
+        mode: 'PRACTICE_PVP',
+        playerIDs: [principal, opponent],
+        version: 'initializing-release',
+        initialized: false
+      },
+      serverInfo: {
+        status: 'online',
+        name: 'cloud-weasel-game-server',
+        hostname: 'opensky.example',
+        internalHostname: '',
+        port: 443,
+        ws: 'wss://opensky.example/api/game/matches/initializing-proposal',
+        http: 'https://opensky.example/api/game/matches/initializing-proposal',
+        internalHttp: '',
+        load: {
+          inProgressMatches: 1,
+          maxCapacity: 1,
+          completedMatches: 0
+        },
+        releaseVersion: 'initializing-release'
+      },
+      disconnectTimeout: 180
+    })
+  })
+
   it('returns the requesting participant mode for a mixed ranked match', async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const opponentId = '33333333-3333-4333-8333-333333333333'

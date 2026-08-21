@@ -30,9 +30,11 @@ interface MatchInfoRow {
   player1_mode: GameMode | null
   player2_mode: GameMode | null
   player1_principal: string
+  player2_principal: string
   version: string
   match_payload_json: string
-  server_address: string
+  server_address: string | null
+  status: 'creating' | 'active'
 }
 
 interface RecentMatchRow {
@@ -94,15 +96,16 @@ const trustedRequest = (
   return new Request(request, { headers })
 }
 
-const activeMatchFor = (env: Env, principal: string) =>
+const currentMatchFor = (env: Env, principal: string) =>
   env.AUTH_DB.prepare(
     `SELECT id, proposal_id, replay_id, mode, player1_mode, player2_mode,
-            version, match_payload_json, server_address, player1_principal
+            version, match_payload_json, server_address, status,
+            player1_principal, player2_principal
      FROM multiplayer_matches
-     WHERE status = 'active'
-       AND server_address IS NOT NULL
+     WHERE (status = 'creating'
+         OR (status = 'active' AND server_address IS NOT NULL))
        AND (player1_principal = ? OR player2_principal = ?)
-     ORDER BY updated_at DESC
+     ORDER BY id DESC
      LIMIT 1`
   )
     .bind(principal, principal)
@@ -191,11 +194,12 @@ const recentMatchInfo = async (env: Env, principal: string) => {
 }
 
 const matchInfo = async (
+  request: Request,
   env: Env,
   principal: string,
   requesterPrincipal?: string
 ) => {
-  const row = await activeMatchFor(env, principal)
+  const row = await currentMatchFor(env, principal)
   if (!row) {
     // Recent payloads contain the player's private final store and rewards.
     // Active-match lookup remains available to authenticated spectators, but
@@ -206,20 +210,39 @@ const matchInfo = async (
   }
 
   try {
-    const payload = JSON.parse(row.match_payload_json) as {
-      match?: {
-        player1?: { account?: { address?: unknown } }
-        player2?: { account?: { address?: unknown } }
-      }
-    }
-    const playerIDs = [
-      payload.match?.player1?.account?.address,
-      payload.match?.player2?.account?.address
+    const initialized = row.status === 'active'
+    let playerIDs = [
+      row.player1_principal.toLowerCase(),
+      row.player2_principal.toLowerCase()
     ]
-    if (playerIDs.some(address => typeof address !== 'string')) {
-      throw new Error('match payload is missing player addresses')
+    if (initialized) {
+      const payload = JSON.parse(row.match_payload_json) as {
+        match?: {
+          player1?: { account?: { address?: unknown } }
+          player2?: { account?: { address?: unknown } }
+        }
+      }
+      const payloadPlayerIDs = [
+        payload.match?.player1?.account?.address,
+        payload.match?.player2?.account?.address
+      ]
+      if (payloadPlayerIDs.some(address => typeof address !== 'string')) {
+        throw new Error('match payload is missing player addresses')
+      }
+      playerIDs = payloadPlayerIDs as string[]
     }
-    const websocket = new URL(row.server_address)
+
+    let serverAddress = row.server_address
+    if (!serverAddress) {
+      const pendingAddress = new URL(
+        `/api/game/matches/${encodeURIComponent(row.proposal_id)}`,
+        request.url
+      )
+      pendingAddress.protocol =
+        pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'
+      serverAddress = pendingAddress.href
+    }
+    const websocket = new URL(serverAddress)
     // The immutable client release negotiated by the matcher is authoritative
     // for reconnects. A deployment-wide override can point an older active
     // match at assets built for a different state/protocol version.
@@ -241,7 +264,7 @@ const matchInfo = async (
               : modes[1],
           playerIDs,
           version: releaseVersion,
-          initialized: true
+          initialized
         },
         serverInfo: {
           status: 'online',
@@ -251,8 +274,8 @@ const matchInfo = async (
           port:
             Number(websocket.port) ||
             (websocket.protocol === 'wss:' ? 443 : 80),
-          ws: row.server_address,
-          http: row.server_address
+          ws: serverAddress,
+          http: serverAddress
             .replace(/^wss:/, 'https:')
             .replace(/^ws:/, 'http:'),
           internalHttp: '',
@@ -326,7 +349,7 @@ export const handleMultiplayerGateway = async (
       url.pathname.slice(MATCH_INFO_PREFIX.length)
     )
     return principal
-      ? matchInfo(env, principal, authenticated?.principal)
+      ? matchInfo(request, env, principal, authenticated?.principal)
       : json({ type: 'no_match_found' }, 200)
   }
   if (
