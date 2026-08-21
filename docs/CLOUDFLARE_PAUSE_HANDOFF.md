@@ -74,6 +74,11 @@ bounded exponential backoff with no terminal attempt limit, independent
 progress, and Durable Object eviction recovery. Six injected failures remain
 recoverable and attempt seven applies exactly once.
 
+The Conquest V2 Workflow/Queue boundary is now selected in
+[`CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md`](./CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md).
+It is a local design only: no Workflow, Queue, DLQ, migration, schedule, or
+production resource has been provisioned or activated.
+
 ## Multiplayer XP publication milestone
 
 Commit `5636d901` preserves the source match transaction's visibility boundary

@@ -269,6 +269,12 @@ re-drive authority." A Workflow/Queue spike must prove that contract under
 duplicate scheduling, step retry, queue retry, dead letter, and schedule
 mutation before this gate chooses target implementation evidence.
 
+The target boundary is selected in
+[`CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md`](./CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md):
+one Workflow per accepted cycle, one Queue responsibility per immutable player
+entry, and D1 as the business authority. Implementation and replacement gate
+evidence remain outstanding.
+
 ## Gate conversion rule
 
 For every implementation lock, use this sequence:
