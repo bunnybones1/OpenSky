@@ -63,7 +63,10 @@ import {
   MatchQuestRuntimeState,
   normalizePrivateSeed
 } from './state-runtime'
-import { sourceRewardListWire } from './reward-wire'
+import {
+  sourceMatchEndRewardListWire,
+  sourceRewardListWire
+} from './reward-wire'
 
 const METADATA_KEY = 'match:metadata'
 const SNAPSHOT_KEY = 'match:snapshot'
@@ -1663,20 +1666,18 @@ export class GameMatch implements DurableObject {
         stats.rewards
       )
       const rewards: [Reward[], Reward[]] = [
-        sourceRewardListWire([
-          ...progression.rewards[0],
-          ...conquestPoints.rewards[0],
-          ...conquestCards[0],
-          ...stats.rewards[0],
-          ...experience.rewards[0]
-        ] as Reward[]),
-        sourceRewardListWire([
-          ...progression.rewards[1],
-          ...conquestPoints.rewards[1],
-          ...conquestCards[1],
-          ...stats.rewards[1],
-          ...experience.rewards[1]
-        ] as Reward[])
+        sourceMatchEndRewardListWire({
+          rankAndStats: stats.rewards[0],
+          matchExperience: experience.rewards[0],
+          conquestCards: conquestCards[0],
+          conquestPoints: conquestPoints.rewards[0]
+        }),
+        sourceMatchEndRewardListWire({
+          rankAndStats: stats.rewards[1],
+          matchExperience: experience.rewards[1],
+          conquestCards: conquestCards[1],
+          conquestPoints: conquestPoints.rewards[1]
+        })
       ]
       if (status === MatchStatus.ABANDONED && winner !== undefined) {
         const loser = winner === 0 ? 1 : 0

@@ -6,7 +6,12 @@ import {
   SELF
 } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GameMode, MatchStatus } from '@opensky/proto'
+import {
+  GameMode,
+  MatchStatus,
+  RewardExpReason,
+  RewardType
+} from '@opensky/proto'
 import { WEBSOCKET_FORCED_CLOSE_CODE } from '@opensky/shared/constants'
 import { gameStateParse } from '@opensky/shared/gameStateSerializer'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
@@ -239,6 +244,37 @@ const insertExperiencePlayers = async () => {
             basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
          VALUES (?, 1, ?, 200, 0, ?, ?)`
       ).bind(userId, index === 0 ? 170 : 0, now, now)
+    )
+    for (const heroId of [1, 2, 3]) {
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_HERO', ?, 1, 0, 'test', ?, ?)`
+        ).bind(userId, heroId, now, now)
+      )
+    }
+  }
+  await env.AUTH_DB.batch(statements)
+}
+
+const insertExperienceStateForExistingPlayers = async () => {
+  const now = new Date().toISOString()
+  const statements: D1PreparedStatement[] = []
+  for (const userId of [USER_ID_1, USER_ID_2]) {
+    statements.push(
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_profiles
+           (user_id, level, xp, next_level_xp, created_at, updated_at)
+         VALUES (?, 1, 0, 200, ?, ?)`
+      ).bind(userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_progression
+           (user_id, basic_skypass_level, basic_skypass_xp,
+            basic_skypass_next_xp, tutorial_completed, created_at, updated_at)
+         VALUES (?, 1, 0, 200, 0, ?, ?)`
+      ).bind(userId, now, now)
     )
     for (const heroId of [1, 2, 3]) {
       statements.push(
@@ -3145,6 +3181,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
 
   it('uses durable alarms to advance commit-reveal state', async () => {
     await insertQuestPlayers()
+    await insertExperienceStateForExistingPlayers()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
@@ -3289,7 +3326,20 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       'rewards',
       'match_ended'
     ])
-    expect(completed[0]).toMatchObject({ type: 'rewards' })
+    expect(completed[0]).toMatchObject({
+      type: 'rewards',
+      data: [
+        { type: RewardType.RANK },
+        {
+          type: RewardType.EXP,
+          exp: { reason: RewardExpReason.MatchPlayed }
+        },
+        {
+          type: RewardType.EXP,
+          exp: { reason: RewardExpReason.Victory }
+        }
+      ]
+    })
     await expect(completedClose).resolves.toMatchObject({
       code: WEBSOCKET_FORCED_CLOSE_CODE,
       reason: ''
@@ -3343,7 +3393,19 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       player2Moves: 0,
       rewards: [
         [expect.objectContaining({ type: 'RANK' })],
-        [expect.objectContaining({ type: 'RANK' })]
+        [
+          expect.objectContaining({ type: RewardType.RANK }),
+          expect.objectContaining({
+            type: RewardType.EXP,
+            exp: expect.objectContaining({
+              reason: RewardExpReason.MatchPlayed
+            })
+          }),
+          expect.objectContaining({
+            type: RewardType.EXP,
+            exp: expect.objectContaining({ reason: RewardExpReason.Victory })
+          })
+        ]
       ]
     })
     for (const reward of storedResult.rewards.flat()) {
@@ -3363,8 +3425,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         ].sort()
       )
       expect(reward).toMatchObject({
-        rank: expect.any(Object),
-        exp: null,
+        rank:
+          reward.type === RewardType.RANK ? expect.any(Object) : null,
+        exp: reward.type === RewardType.EXP ? expect.any(Object) : null,
         card: null,
         hero: null,
         heroSkin: null,

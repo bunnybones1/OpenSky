@@ -8,7 +8,11 @@ import {
 } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
-import { sourceRewardListWire, sourceRewardWire } from '../src/reward-wire'
+import {
+  sourceMatchEndRewardListWire,
+  sourceRewardListWire,
+  sourceRewardWire
+} from '../src/reward-wire'
 
 const inactiveVariants = {
   card: null,
@@ -116,5 +120,48 @@ describe('source match reward wire', () => {
         stickerPoints: null
       }
     ])
+  })
+
+  it('preserves the source terminal producer order around Conquest rewards', () => {
+    const reward = (accountID: number, type: RewardType) =>
+      ({ accountID, type }) as Reward
+
+    expect(
+      sourceMatchEndRewardListWire({
+        rankAndStats: [reward(1, RewardType.EXP), reward(2, RewardType.RANK)],
+        matchExperience: [
+          reward(3, RewardType.EXP),
+          reward(4, RewardType.EXP),
+          reward(7, RewardType.RANK)
+        ],
+        conquestCards: [reward(5, RewardType.CARD)],
+        conquestPoints: [reward(6, RewardType.CONQUEST_POINTS)]
+      }).map(value => value.accountID)
+    ).toEqual([1, 2, 3, 4, 5, 6, 7])
+  })
+
+  it('fails closed when a producer receipt crosses its source phase', () => {
+    const reward = (type: RewardType) => ({ accountID: 1, type }) as Reward
+    const valid = {
+      rankAndStats: [reward(RewardType.RANK)],
+      matchExperience: [reward(RewardType.EXP)],
+      conquestCards: [reward(RewardType.CARD)],
+      conquestPoints: [reward(RewardType.CONQUEST_POINTS)]
+    }
+
+    for (const mutation of [
+      { ...valid, rankAndStats: [reward(RewardType.CARD)] },
+      {
+        ...valid,
+        matchExperience: [reward(RewardType.RANK), reward(RewardType.EXP)]
+      },
+      { ...valid, matchExperience: [reward(RewardType.CARD)] },
+      { ...valid, conquestCards: [reward(RewardType.CONQUEST_POINTS)] },
+      { ...valid, conquestPoints: [reward(RewardType.CARD)] }
+    ]) {
+      expect(() => sourceMatchEndRewardListWire(mutation)).toThrow(
+        /invalid phase/
+      )
+    }
   })
 })

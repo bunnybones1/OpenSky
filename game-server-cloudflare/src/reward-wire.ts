@@ -1,4 +1,11 @@
-import type { Reward } from '@opensky/proto'
+import { RewardType, type Reward } from '@opensky/proto'
+
+export interface SourceMatchEndRewardPhases {
+  rankAndStats: Reward[]
+  matchExperience: Reward[]
+  conquestCards: Reward[]
+  conquestPoints: Reward[]
+}
 
 /**
  * Recreates the JSON shape produced by encoding/json for proto.Reward.
@@ -56,3 +63,55 @@ export const sourceRewardWire = (reward: Reward): Reward =>
 
 export const sourceRewardListWire = (rewards: Reward[]): Reward[] =>
   rewards.map(sourceRewardWire)
+
+/**
+ * Reassembles the per-player reward list in the same producer order as the Go
+ * InternalMatchEnd path. applyMatchExperience persists the MatchXPAwarder EXP
+ * rewards and the later MatchXPUpdater promotion reward in one receipt, so the
+ * phase boundary has to be recovered before Conquest rewards are inserted.
+ */
+export const sourceMatchEndRewardListWire = ({
+  rankAndStats,
+  matchExperience,
+  conquestCards,
+  conquestPoints
+}: SourceMatchEndRewardPhases): Reward[] => {
+  if (
+    rankAndStats.some(
+      reward =>
+        reward.type !== RewardType.EXP && reward.type !== RewardType.RANK
+    )
+  ) {
+    throw new Error('match rank/stat reward receipt has an invalid phase')
+  }
+
+  const promotionIndex = matchExperience.findIndex(
+    reward => reward.type === RewardType.RANK
+  )
+  const matchExperienceEnd =
+    promotionIndex < 0 ? matchExperience.length : promotionIndex
+  const matchExperienceRewards = matchExperience.slice(0, matchExperienceEnd)
+  const levelUpRewards = matchExperience.slice(matchExperienceEnd)
+  if (
+    matchExperienceRewards.some(reward => reward.type !== RewardType.EXP) ||
+    levelUpRewards.some(reward => reward.type !== RewardType.RANK)
+  ) {
+    throw new Error('match experience reward receipt has an invalid phase')
+  }
+  if (conquestCards.some(reward => reward.type !== RewardType.CARD)) {
+    throw new Error('Conquest card reward receipt has an invalid phase')
+  }
+  if (
+    conquestPoints.some(reward => reward.type !== RewardType.CONQUEST_POINTS)
+  ) {
+    throw new Error('Conquest point reward receipt has an invalid phase')
+  }
+
+  return sourceRewardListWire([
+    ...rankAndStats,
+    ...matchExperienceRewards,
+    ...conquestCards,
+    ...conquestPoints,
+    ...levelUpRewards
+  ])
+}
