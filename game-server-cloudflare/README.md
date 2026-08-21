@@ -38,6 +38,11 @@ wire messages. It is a separate service from `matchmaker-ts`.
   and player-private rewards never leak to a same-principal spectator. The
   source 50-spectator cap is protected by an independent 64-socket pending
   gateway safety bound;
+- source-compatible first-message player admission errors: anonymous sockets
+  receive `invalid authentication`, while an authenticated nonparticipant
+  receives `match ended or cannot be found.`; both are server-level empty-close
+  responses instead of an invented gateway-role state error, and legacy
+  `authToken` fields remain untrusted;
 - source bot decisions on durable alarms;
 - source quest evaluation with hibernation-safe runtime snapshots; and
 - idempotent quest progression, competitive counters, source-compatible

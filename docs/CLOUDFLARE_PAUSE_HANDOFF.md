@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `087d0b86`
-  (`Preserve source spectator admission lifecycle`)
-- Latest tested runtime commit: `087d0b86`
-  (`Preserve source spectator admission lifecycle`)
+- Last code/test checkpoint: `ae801409`
+  (`Preserve source join admission errors`)
+- Latest tested runtime commit: `ae801409`
+  (`Preserve source join admission errors`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `087d0b86` are committed and
+- The runtime changes from `38386294` through `ae801409` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -164,8 +164,11 @@ decode-lifecycle checkpoint and its handoff at exact pushed head `294d6608` in
 pre-join-lifecycle checkpoint and its handoff at exact pushed head `a4de29fb`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32465936953> passed the
 explicit-error checkpoint and its refreshed handoff at exact pushed head
-`594e78ca`. The newer `087d0b86` spectator-admission checkpoint and its
-refreshed handoff must receive exact-head CI before any production mutation.
+`594e78ca`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32468152805> passed the
+spectator-admission checkpoint and its refreshed handoff at exact pushed head
+`ade7c5b7`. The newer `ae801409` join-admission checkpoint and its refreshed
+handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1349,6 +1352,38 @@ player routing, and the independent pending-socket safety cap.
 
 The exact complete local release contract passed with exit code zero for
 `087d0b86`: 512 main-Worker tests, 36 game-server unit and 128 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source join-admission error milestone
+
+Commit `ae801409` removes the remaining gateway-role error invented for a
+pre-join `join_server` message while keeping Google identity authoritative:
+
+- every unjoined socket may select `join_server` as its first game message, as
+  the source `MatchManager` does, instead of being rejected from the gateway's
+  provisional player/spectator classification;
+- an anonymous public-spectator connection receives the exact source
+  server-level `invalid authentication` response and empty close;
+- an authenticated identity that is not a participant in this Durable Object
+  receives the source server-level `match ended or cannot be found.` response
+  and empty close instead of a state-level “spectator cannot join” error; and
+- an authenticated participant's normal join, reconnect, loading, and session
+  replacement paths remain unchanged. Legacy `authToken` fields remain
+  untrusted; the same-origin Google session gateway supplies the identity.
+
+The mutation-tested game-ingress gate now parses the source join handler,
+requires both exact error paths and first-message admission, and rejects a
+return to gateway-role-selected bootstrap or invented state errors. Direct
+Workers tests cover both messages, `server` levels, and empty close frames.
+
+The exact complete local release contract passed with exit code zero for
+`ae801409`: 512 main-Worker tests, 36 game-server unit and 129 Workers tests,
 45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The

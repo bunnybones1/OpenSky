@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `087d0b86` is tested but not
+- Paused branch checkpoint: runtime commit `ae801409` is tested but not
   deployed. Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
   them in that order at the documented quiescent boundary before deploying
@@ -40,6 +40,12 @@
   64-socket pending-plus-joined gateway safety bound. Joined-spectator gameplay
   and loading remain fail-closed because the source forwarding paths can spoof
   player state or reach an uncaught worker error.
+  Pre-join `join_server` is likewise selected by the first message. The Google
+  gateway remains authoritative: anonymous sockets receive the source
+  server-level `invalid authentication` wire and authenticated nonparticipants
+  receive `match ended or cannot be found.`, both with an empty close. This
+  restores the observable source errors without trusting legacy `authToken`
+  fields or changing participant join/reconnect behavior.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game

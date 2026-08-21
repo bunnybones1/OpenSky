@@ -2594,6 +2594,33 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source join-admission error parity — 2026-08-21
+
+Milestone `ae801409` removes the remaining gateway-role error invented for a
+pre-join `join_server` message. Every unjoined socket can now select
+`join_server` as its first game message, matching the source `MatchManager`
+rather than treating the gateway's provisional player/spectator role as the
+game protocol decision.
+
+The same-origin Google gateway remains the authentication authority. An
+anonymous public-spectator connection receives the exact source server-level
+`invalid authentication` response and empty close. An authenticated identity
+that does not participate in the addressed Durable Object receives the source
+server-level `match ended or cannot be found.` response and empty close instead
+of the invented state-level “spectator cannot join” error. Normal participant
+join, reconnect, loading, and session replacement remain unchanged, and no
+legacy `authToken` field becomes trusted.
+
+The mutation-tested game-ingress gate parses the source join handler, requires
+both exact wires and first-message admission, and rejects gateway-role-selected
+bootstrap or state-error substitutions. The complete local release contract
+passed for `ae801409`: 512 main-Worker tests, 36 game-server unit and 129
+Workers tests, 45 match-service tests, 62 matchmaker unit and 67 Workers tests,
+30 browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
