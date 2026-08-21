@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `64686dae`
-  (`Preserve source match reward ordering`)
-- Latest tested runtime commit: `64686dae`
-  (`Preserve source match reward ordering`)
+- Last code/test checkpoint: `a4f7d9b9`
+  (`Preserve source configurable match chat`)
+- Latest tested runtime commit: `a4f7d9b9`
+  (`Preserve source configurable match chat`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,10 +23,11 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `64686dae` are committed and
+- The runtime changes from `38386294` through `a4f7d9b9` are committed and
   tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
-  `/game/cloudflare/assets/index-ccb53c4b.js`.
+  `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
+  `a4f7d9b9` retained both entries.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -184,8 +185,11 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32481031436> passed the
 matchmaker completion-wire safety checkpoint and its refreshed handoff at exact
-pushed head `367e3880` in 13m54s. The newer `64686dae` reward-order checkpoint
-and this refreshed handoff require a later green exact-head CI run before any
+pushed head `367e3880` in 13m54s. The `64686dae` reward-order checkpoint and
+its handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32484167880> at
+`2d6dd16b` in 13m43s. The newer `a4f7d9b9` configurable-chat checkpoint and
+this refreshed handoff require a later green exact-head CI run before any
 production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1756,6 +1760,43 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source configurable match-chat milestone
+
+Commit `a4f7d9b9` restores the source distinction between player chat and
+sticker/basic-emote handling. The original game server makes chat a deployment
+setting, defaults that setting off, relays enabled player chat without applying
+the four-second/forty-second emote limiter, silently ignores spectator chat,
+and still publishes player messages to the opponent and joined spectators.
+The Worker previously had no setting, always accepted player chat, and consumed
+the same limiter used by stickers and basic emotes.
+
+The Cloudflare game server now accepts only the explicit `CHAT_ENABLED=true`
+value and otherwise fails closed. The reviewed production target commits
+`false`; the Workers test target alone commits `true`. Enabled player chat is
+sender-sanitized, relayed to the opponent and spectators, and appended to the
+replay without mutating the player's emote timestamps. Spectator chat remains
+silent, while the next basic emote succeeds and an immediate second emote is
+still throttled. The parser also removes the invented 500-character product
+limit while retaining the reviewed bounded frame ingress.
+
+The expanded mutation-tested game-ingress gate derives the chat-before-sticker
+and chat-before-throttle order from `MatchManager`, recipient selection from
+`MatchHandler`, spectator publication from `MatchProxy`, the source disabled
+default, the strict Worker setting, both Wrangler targets, the sanitized relay,
+the parser, and the real Durable Object regression. Mutations reject an
+always-on setting, config bypass, spectator-relay loss, non-source chat-length
+policy, throttle drift, or weakened regression evidence.
+
+The exact complete local release contract passed with exit code zero at
+`a4f7d9b9`: 514 main-Worker tests, 40 game-server unit and 131 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1867,7 +1908,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `64686dae`. Keep
+- Deploy and verify the tested runtime changes through `a4f7d9b9`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
