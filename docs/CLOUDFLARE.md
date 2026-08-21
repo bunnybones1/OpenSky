@@ -1896,6 +1896,41 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker read-timeout parity — 2026-08-20
+
+Milestone `6683a1fc` restores the Go matchmaker's final established-channel
+lifetime. `client_connection.go` sets a hard-coded 120-second read deadline
+before every Gorilla WebSocket read, `message_receiver.go` treats expiration as
+an error-free client close, and the preserved browser sends literal `PING`
+every three seconds. The Worker now records each accepted socket's last-read
+time in its hibernating attachment and refreshes it for every received payload
+before command decoding.
+
+Established socket deadlines participate in the same earliest Durable Object
+alarm as authentication, proposal, dispatch, and matching timers. A subscribed
+socket that receives nothing for the full source window closes with no
+application error, code, or reason; normal close cleanup removes the last queue
+ticket. The independent ten-second pre-channel authentication deadline remains
+unchanged. Attachments from the previously deployed runtime receive one bounded
+window when first restored, and missing, malformed, or future timestamps cannot
+defer expiration indefinitely.
+
+Workers regressions survive Durable Object eviction and pin silent close plus
+queue/socket cleanup, browser `PING` refresh, and the rolling-upgrade attachment
+path. The mutation-tested session gate now derives the 120-second timeout,
+read-before-decode order, error-free close, browser heartbeat, Worker alarm and
+timestamp behavior, direct regressions, and release wiring from the original Go
+and TypeScript sources.
+
+The exact complete local contract passed at `6683a1fc`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 47 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

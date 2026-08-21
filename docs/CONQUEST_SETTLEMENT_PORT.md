@@ -1293,3 +1293,33 @@ browser-game tests, nine analytics tests, all typechecks and source/off-chain
 gates, both builds, and 594-file artifact validation. No deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed. Production Conquest remains disabled.
+
+## Source matchmaker read-timeout proof
+
+Follow-up milestone `6683a1fc` completes the established-channel lifetime
+around the source ingress and authentication contracts. The Go connection sets
+an exact 120-second deadline before every WebSocket read, the receiver treats a
+timeout as an error-free close, and the preserved browser transmits literal
+`PING` every three seconds. The Worker records an optional last-message time in
+the hibernating socket attachment and refreshes it before decoding every
+payload.
+
+Durable Object alarms now silently close only open established channels whose
+source read window has elapsed. Pending sockets retain the independent
+ten-second authentication timeout, while established deadlines share the
+earliest-alarm calculation with proposal and matching work. The empty close
+performs normal last-subscriber ticket cleanup. Previously deployed attachments
+receive one bounded window when restored, and malformed or future timestamp
+state cannot make a connection immortal.
+
+Workers regressions cover Durable Object eviction, exact empty-close and
+queue/socket cleanup, browser heartbeat refresh, and rolling attachment
+restoration. The mutation-tested session gate derives the timeout constant,
+deadline/read order, receiver close, browser interval, Worker attachment and
+alarm behavior, direct tests, and release wiring from source. The exact complete
+local contract passed at `6683a1fc`: 510 main-Worker tests, 34 game-server unit
+and 117 Workers tests, 33 match-service tests, 49 matchmaker unit and 47 Workers
+tests, 30 browser-game tests, nine analytics tests, all typechecks and
+source/off-chain gates, both builds, and 594-file artifact validation. No
+deployment, migration, provisioning, activation, live match, or production
+mutation was performed. Production Conquest remains disabled.
