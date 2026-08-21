@@ -34,6 +34,8 @@ export type AcceptedClientMessage = Extract<
 >
 
 export class GameProtocolError extends Error {}
+export class IgnoredGameMessageError extends GameProtocolError {}
+export class UnknownGameMessageError extends GameProtocolError {}
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -65,10 +67,16 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
   try {
     value = JSON.parse(frame)
   } catch {
-    throw new GameProtocolError('message is not valid JSON')
+    throw new IgnoredGameMessageError('message is not valid JSON')
+  }
+  if (value === null) {
+    // MatchManager catches the source null-property error and leaves the
+    // connection open, which is observable as the same silent ignore as a
+    // JSON decode failure.
+    throw new IgnoredGameMessageError('message is null')
   }
   if (!record(value) || typeof value.type !== 'string') {
-    throw new GameProtocolError('message type is required')
+    throw new UnknownGameMessageError('message type is required')
   }
   switch (value.type) {
     case 'join_server': {
@@ -164,7 +172,7 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
     case 'error':
       return value as unknown as AcceptedClientMessage
     default:
-      throw new GameProtocolError('unsupported message type')
+      throw new UnknownGameMessageError('unsupported message type')
   }
 }
 

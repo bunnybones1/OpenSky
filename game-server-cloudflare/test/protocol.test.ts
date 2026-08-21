@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   GameProtocolError,
+  IgnoredGameMessageError,
   MAX_GAME_MESSAGE_BYTES,
   parseClientMessage,
-  parseSourcePing
+  parseSourcePing,
+  UnknownGameMessageError
 } from '../src/protocol'
 
 const joinMessage = (loadingProgress: unknown = 0.5) => ({
@@ -104,9 +106,11 @@ describe('game WebSocket protocol validation', () => {
     expect(() => parseClientMessage(new ArrayBuffer(1))).toThrow(
       'message is not valid JSON'
     )
-    expect(() => parseClientMessage('{')).toThrow('message is not valid JSON')
+    expect(() => parseClientMessage('{')).toThrow(IgnoredGameMessageError)
+    expect(() => parseClientMessage('null')).toThrow(IgnoredGameMessageError)
+    expect(() => parseClientMessage('{}')).toThrow(UnknownGameMessageError)
     expect(() => parseClientMessage('{"type":"abandon_match"}')).toThrow(
-      'unsupported message type'
+      UnknownGameMessageError
     )
     expect(() => parseClientMessage('{"type":"spectate_server"}')).toThrow(
       'invalid spectate request'

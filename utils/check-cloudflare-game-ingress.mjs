@@ -28,6 +28,7 @@ const requireOrdered = (errors, label, source, tokens) => {
 
 export const gameIngressErrors = ({
   sourceServer,
+  sourceMatchManager,
   sourcePlayerContext,
   sourceBrowserSocket,
   workerProtocol,
@@ -51,8 +52,29 @@ export const gameIngressErrors = ({
     'playerContext.ping(split[1])',
     'message = JSON.parse(strData)',
     "logger.error('WS ERROR PARSING MESSAGE'",
+    'return',
     'this.matchManager.handleMessage(message, playerContext)'
   ])
+
+  const sourceHandleMessage = bodyBetween(
+    sourceMatchManager,
+    'handleMessage = (',
+    '\n\n  disconnect ='
+  )
+  requireOrdered(
+    errors,
+    'Source game unknown-message lifecycle',
+    sourceHandleMessage,
+    [
+      'try {',
+      'switch (msg.type) {',
+      'default:',
+      "logger.error('GAMESERVER: UNKNOWN MESSAGE'",
+      'context.connection.close()',
+      '} catch (error) {',
+      "logger.critical('UNEXPECTED ERROR'"
+    ]
+  )
 
   if (!sourcePlayerContext.includes('const KEEPALIVE_INTERVAL = 5000')) {
     errors.push('Source game keepalive interval is no longer five seconds')
@@ -127,6 +149,35 @@ export const gameIngressErrors = ({
     '{ handled: true, id: fields[1] }'
   ])
 
+  for (const declaration of [
+    'export class IgnoredGameMessageError extends GameProtocolError',
+    'export class UnknownGameMessageError extends GameProtocolError'
+  ]) {
+    if (!workerProtocol.includes(declaration)) {
+      errors.push(
+        `Worker game decode classification is missing: ${declaration}`
+      )
+    }
+  }
+  const workerParser = bodyBetween(
+    workerProtocol,
+    'export const parseClientMessage = (',
+    'export const stateError = ('
+  )
+  requireOrdered(
+    errors,
+    'Worker source-compatible decode lifecycle',
+    workerParser,
+    [
+      "throw new IgnoredGameMessageError('message is not valid JSON')",
+      'if (value === null) {',
+      "throw new IgnoredGameMessageError('message is null')",
+      "throw new UnknownGameMessageError('message type is required')",
+      'default:',
+      "throw new UnknownGameMessageError('unsupported message type')"
+    ]
+  )
+
   const workerMessage = bodyBetween(
     workerMatch,
     'async webSocketMessage(',
@@ -139,6 +190,13 @@ export const gameIngressErrors = ({
     'if (ping.id !== undefined) {',
     'this.safeSend(socket, `PONG:${ping.id}`)',
     'const message = parseClientMessage(frame)'
+  ])
+  requireOrdered(errors, 'Worker game decode failure routing', workerMessage, [
+    'if (error instanceof IgnoredGameMessageError) return',
+    'if (error instanceof UnknownGameMessageError) {',
+    'socket.close()',
+    'return',
+    'this.safeSend(socket, stateError(error))'
   ])
   for (const token of [
     'Cloudflare owns protocol ping/pong and disconnect detection',
@@ -158,7 +216,9 @@ export const gameIngressErrors = ({
       [
         "it('preserves the source PING prefix and first colon-delimited ID'",
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
-        'new ArrayBuffer(MAX_GAME_MESSAGE_BYTES + 1)'
+        'new ArrayBuffer(MAX_GAME_MESSAGE_BYTES + 1)',
+        "parseClientMessage('null')).toThrow(IgnoredGameMessageError)",
+        "parseClientMessage('{}')).toThrow(UnknownGameMessageError)"
       ]
     ],
     [
@@ -169,7 +229,14 @@ export const gameIngressErrors = ({
         "first.send('PINGlegacy:roundtrip:ignored')",
         "expect(await pong).toBe('PONG:roundtrip')",
         'await evictDurableObject(stub())',
-        'as ArrayBuffer'
+        'as ArrayBuffer',
+        "it('silently ignores malformed frames and empty-closes unknown messages'",
+        "malformed.send('{')",
+        'malformed.send(new Uint8Array([0]).buffer as ArrayBuffer)',
+        "malformed.send('null')",
+        "unknown.send(JSON.stringify({ type: 'unknown_source_message' }))",
+        "code: 1005, reason: ''",
+        'expect(unexpectedMessages).toEqual([])'
       ]
     ]
   ]) {
@@ -205,6 +272,7 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     sourceServer,
+    sourceMatchManager,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
@@ -214,6 +282,7 @@ const main = async () => {
     rootPackage
   ] = await Promise.all([
     readFile(path.join(root, 'server/src/Server.ts'), 'utf8'),
+    readFile(path.join(root, 'server/src/core/MatchManager.ts'), 'utf8'),
     readFile(path.join(root, 'server/src/PlayerContext.ts'), 'utf8'),
     readFile(path.join(root, 'game/src/state/net/WebSocketClient.ts'), 'utf8'),
     readFile(path.join(root, 'game-server-cloudflare/src/protocol.ts'), 'utf8'),
@@ -236,6 +305,7 @@ const main = async () => {
   ])
   const errors = gameIngressErrors({
     sourceServer,
+    sourceMatchManager,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
@@ -249,7 +319,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare game ingress preserves source text/binary frames and application PING behavior'
+      'Cloudflare game ingress preserves source text/binary frames, PING, and decode-error behavior'
     )
   }
 }

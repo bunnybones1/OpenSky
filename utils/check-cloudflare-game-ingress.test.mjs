@@ -7,6 +7,7 @@ import { gameIngressErrors } from './check-cloudflare-game-ingress.mjs'
 const fixtures = async () => {
   const [
     sourceServer,
+    sourceMatchManager,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
@@ -16,6 +17,7 @@ const fixtures = async () => {
     rootPackage
   ] = await Promise.all([
     readFile('server/src/Server.ts', 'utf8'),
+    readFile('server/src/core/MatchManager.ts', 'utf8'),
     readFile('server/src/PlayerContext.ts', 'utf8'),
     readFile('game/src/state/net/WebSocketClient.ts', 'utf8'),
     readFile('game-server-cloudflare/src/protocol.ts', 'utf8'),
@@ -29,6 +31,7 @@ const fixtures = async () => {
   ])
   return {
     sourceServer,
+    sourceMatchManager,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
@@ -58,6 +61,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       sourceServer: value.sourceServer.replace(
         "if (strData.startsWith('PING')) {",
         "if (strData === 'PING') {"
+      )
+    },
+    {
+      ...value,
+      sourceServer: value.sourceServer.replace(
+        "logger.error('WS ERROR PARSING MESSAGE', error, { wsData: { data } })\n      return",
+        "logger.error('WS ERROR PARSING MESSAGE', error, { wsData: { data } })\n      throw error"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: value.sourceMatchManager.replace(
+        "logger.error('GAMESERVER: UNKNOWN MESSAGE', { msg })\n          context.connection.close()",
+        "logger.error('GAMESERVER: UNKNOWN MESSAGE', { msg })"
       )
     },
     {
@@ -104,6 +121,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerProtocol: value.workerProtocol.replace(
+        "throw new IgnoredGameMessageError('message is not valid JSON')",
+        "throw new GameProtocolError('message is not valid JSON')"
+      )
+    },
+    {
+      ...value,
+      workerProtocol: value.workerProtocol.replace(
+        "throw new UnknownGameMessageError('unsupported message type')",
+        "throw new GameProtocolError('unsupported message type')"
+      )
+    },
+    {
+      ...value,
       workerMatch: value.workerMatch.replace(
         'this.safeSend(socket, `PONG:${ping.id}`)',
         "this.safeSend(socket, 'PONG')"
@@ -118,6 +149,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: value.workerMatch.replace(
+        'if (error instanceof IgnoredGameMessageError) return',
+        'if (error instanceof IgnoredGameMessageError) throw error'
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        'if (error instanceof UnknownGameMessageError) {\n          socket.close()',
+        'if (error instanceof UnknownGameMessageError) {\n          socket.close(1008, error.message)'
+      )
+    },
+    {
+      ...value,
       workerProtocolTest: value.workerProtocolTest.replace(
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
         "it('rejects binary game messages'"
@@ -128,6 +173,13 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       workerRuntimeTest: value.workerRuntimeTest.replace(
         "expect(await pong).toBe('PONG:roundtrip')",
         "expect(await pong).toBe('PONG')"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'expect(unexpectedMessages).toEqual([])',
+        "expect(unexpectedMessages).toEqual(['error'])"
       )
     },
     {

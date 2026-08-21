@@ -1623,6 +1623,33 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
   })
 
+  it('silently ignores malformed frames and empty-closes unknown messages', async () => {
+    await initializeMatch()
+    const malformed = await connect(PRINCIPAL_1)
+
+    const continued = collectMessages(malformed, 1)
+    malformed.send('{')
+    malformed.send(new Uint8Array([0]).buffer as ArrayBuffer)
+    malformed.send('null')
+    malformed.send(JSON.stringify({ type: 'timesync', clientTime: 5678 }))
+    expect(await continued).toEqual([
+      expect.objectContaining({ type: 'timesync', clientTime: 5678 })
+    ])
+    expect(malformed.readyState).toBe(WebSocket.OPEN)
+
+    const unknown = await connect(PRINCIPAL_2)
+    const unexpectedMessages: unknown[] = []
+    unknown.addEventListener('message', event => {
+      unexpectedMessages.push(event.data)
+    })
+    const closed = new Promise<CloseEvent>(resolve =>
+      unknown.addEventListener('close', resolve, { once: true })
+    )
+    unknown.send(JSON.stringify({ type: 'unknown_source_message' }))
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
+    expect(unexpectedMessages).toEqual([])
+  })
+
   it('creates a WASM match idempotently and rejects conflicting reuse', async () => {
     const response = await createMatch()
     expect(response.status).toBe(200)

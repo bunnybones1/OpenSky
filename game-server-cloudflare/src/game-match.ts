@@ -46,13 +46,15 @@ import {
   CreateMatchRequest,
   decodeClientFrame,
   GameProtocolError,
+  IgnoredGameMessageError,
   INTERNAL_AUTH_HEADER,
   parseClientMessage,
   parseSourcePing,
   stateError,
   TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
-  TRUSTED_USER_ID_HEADER
+  TRUSTED_USER_ID_HEADER,
+  UnknownGameMessageError
 } from './protocol'
 import {
   AuthoritativeMatchRuntime,
@@ -493,6 +495,16 @@ export class GameMatch implements DurableObject {
         }
         await this.handleMessage(socket, attachment, message)
       } catch (error) {
+        // The source outer server logs malformed JSON and returns. A parsed
+        // null reaches MatchManager, where its property error is also caught
+        // without changing the connection.
+        if (error instanceof IgnoredGameMessageError) return
+        // Missing and unknown message types reach MatchManager's default case,
+        // which closes with no error payload, code, or reason.
+        if (error instanceof UnknownGameMessageError) {
+          socket.close()
+          return
+        }
         this.safeSend(socket, stateError(error))
         if (error instanceof GameProtocolError)
           socket.close(1008, error.message)
