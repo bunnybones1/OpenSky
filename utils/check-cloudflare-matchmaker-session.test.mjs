@@ -647,8 +647,8 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
-        "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))",
-        'this.safeSend(webSocket, errorMessage(error.reason, error.message))'
+        "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))\n        return",
+        'this.safeSend(webSocket, errorMessage(error.reason, error.message))\n        return'
       )
     },
     {
