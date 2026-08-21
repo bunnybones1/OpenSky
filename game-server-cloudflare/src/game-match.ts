@@ -19,6 +19,7 @@ import {
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { WEBSOCKET_FORCED_CLOSE_CODE } from '@opensky/shared/constants'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
+import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 import { Player, PrivateSeed, Rarity } from '@skyweaver/state-metadata'
 
 import { addressBytesToHex, bytesToHex } from './encoding'
@@ -33,12 +34,10 @@ import {
   type RealDeckStrings
 } from './authoritative-decks'
 import { applyConquestPoints } from './conquest-points'
+import { publishConquestGoldDeliveriesForMatch } from './conquest-gold-delivery'
 import { settleConquestRewardsForMatch } from './conquest-settlement'
 import { publishMatchCompletion } from './completion-publication'
-import type {
-  DeckRankJobReceipt,
-  RankedSettlementReceipt
-} from './deck-ranks'
+import type { DeckRankJobReceipt, RankedSettlementReceipt } from './deck-ranks'
 import {
   applyConquestProgress,
   applyMatchExperience,
@@ -89,6 +88,7 @@ export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
   DECK_RANK_COORDINATOR: DurableObjectNamespace
   AUTH_DB: D1Database
+  CONQUEST_GOLD_DELIVERY_QUEUE: Queue<ConquestGoldDeliveryQueueMessage>
   GAME_ANALYTICS_QUEUE?: Queue<ReplayAnalyticsMessage>
   GAME_ANALYTICS?: R2Bucket
   INTERNAL_AUTH_SECRET: string
@@ -1794,6 +1794,20 @@ export class GameMatch implements DurableObject {
             isLeavePenaltyMode(gameModes[loser])
         }
       })
+      this.state.waitUntil(
+        publishConquestGoldDeliveriesForMatch(
+          this.env.AUTH_DB,
+          this.env.CONQUEST_GOLD_DELIVERY_QUEUE,
+          metadata.proposalId,
+          new Date()
+        ).catch(error => {
+          console.error(
+            'Conquest Gold delayed Queue publication failed',
+            metadata.proposalId,
+            error
+          )
+        })
+      )
       metadata.deckRankUpdatePending = deckRankJob.state === 'pending'
       metadata.grandweaverRecalculationPending =
         grandweaverJob.state === 'pending'

@@ -16,6 +16,8 @@ import {
   REVIEWED_AUTH_DB_ID,
   REVIEWED_CLIENT_FEEDBACK_BUCKET,
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
+  REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE,
+  REVIEWED_CONQUEST_GOLD_QUEUE,
   REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE,
   REVIEWED_CONQUEST_V2_QUEUE,
   REVIEWED_CONQUEST_V2_WORKFLOW,
@@ -38,6 +40,18 @@ const configFor = target => ({
             database_id: REVIEWED_AUTH_DB_ID
           }
         ]
+      }
+    : {}),
+  ...(target.requiresConquestGoldProducer
+    ? {
+        queues: {
+          producers: [
+            {
+              binding: 'CONQUEST_GOLD_DELIVERY_QUEUE',
+              queue: REVIEWED_CONQUEST_GOLD_QUEUE
+            }
+          ]
+        }
       }
     : {}),
   ...(target.requiresAnalyticsConsumer
@@ -81,6 +95,10 @@ const configFor = target => ({
         queues: {
           producers: [
             {
+              queue: REVIEWED_CONQUEST_GOLD_QUEUE,
+              binding: 'CONQUEST_GOLD_DELIVERY_QUEUE'
+            },
+            {
               queue: REVIEWED_CONQUEST_V2_QUEUE,
               binding: 'CONQUEST_V2_REWARD_QUEUE'
             },
@@ -90,6 +108,10 @@ const configFor = target => ({
             }
           ],
           consumers: [
+            {
+              queue: REVIEWED_CONQUEST_GOLD_QUEUE,
+              dead_letter_queue: REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE
+            },
             {
               queue: REVIEWED_CONQUEST_V2_QUEUE,
               dead_letter_queue: REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE
@@ -239,6 +261,7 @@ test('requires the optional game-server analytics bindings to move together', ()
     ],
     queues: {
       producers: [
+        ...baseline.queues.producers,
         {
           binding: 'GAME_ANALYTICS_QUEUE',
           queue: REVIEWED_ANALYTICS_QUEUE
@@ -248,8 +271,19 @@ test('requires the optional game-server analytics bindings to move together', ()
   }
   assert.deepEqual(productionTargetErrors(targetPath, enabled), [])
   for (const changed of [
+    { ...baseline, queues: { producers: [] } },
     { ...baseline, r2_buckets: enabled.r2_buckets },
-    { ...baseline, queues: enabled.queues },
+    {
+      ...baseline,
+      queues: {
+        producers: [
+          {
+            binding: 'GAME_ANALYTICS_QUEUE',
+            queue: REVIEWED_ANALYTICS_QUEUE
+          }
+        ]
+      }
+    },
     {
       ...baseline,
       r2_buckets: [
@@ -260,6 +294,7 @@ test('requires the optional game-server analytics bindings to move together', ()
       ...enabled,
       queues: {
         producers: [
+          ...baseline.queues.producers,
           {
             binding: 'GAME_ANALYTICS_QUEUE',
             queue: 'lookalike-analytics'
@@ -464,7 +499,11 @@ test('accepts only one successful complete read-only schema row', () => {
     conquest_v2_workflow_contract_guards_present: 3,
     leaderboard_workflow_tables_present: 2,
     leaderboard_workflow_guards_present: 6,
-    leaderboard_workflow_contract_guards_present: 3
+    leaderboard_workflow_contract_guards_present: 3,
+    conquest_gold_queue_tables_present: 1,
+    conquest_gold_queue_guards_present: 4,
+    conquest_gold_queue_contract_guards_present: 2,
+    conquest_gold_readiness_effect_view_present: 1
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -594,6 +633,34 @@ test('accepts only one successful complete read-only schema row', () => {
       {
         results: [
           { ...complete, leaderboard_workflow_contract_guards_present: 2 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_gold_queue_tables_present: 0 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_gold_queue_guards_present: 3 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, conquest_gold_queue_contract_guards_present: 1 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, conquest_gold_readiness_effect_view_present: 0 }
         ],
         success: true
       }

@@ -1,5 +1,5 @@
 import { settlePendingConquest } from '../../../game-server-cloudflare/src/conquest-settlement'
-import { deliverDueConquestGold } from '../../src/conquest-delivery'
+import { applyConquestGoldDeliveryQueueMessage } from '../../src/conquest-delivery'
 import { ConquestReadinessOperationsRepository } from '../../src/conquest-readiness-operations'
 import { approvedConquestPoolStatements } from './conquest-pool'
 
@@ -67,7 +67,9 @@ export const provisionVerifiedConquestDrill = async (
           createdAt
         ),
       database
-        .prepare(`INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`)
+        .prepare(
+          `INSERT INTO game_accounts (user_id, created_at) VALUES (?, ?)`
+        )
         .bind(match.opponentUserId, createdAt)
     ]),
     ...approvedConquestPoolStatements(database, {
@@ -157,12 +159,16 @@ export const provisionVerifiedConquestDrill = async (
   if (!conquest) throw new Error('Conquest readiness drill was not created')
 
   await settlePendingConquest(database, conquest.id, settledAt, () => 0)
-  const delivery = await deliverDueConquestGold(database, new Date(deliveredAt))
-  if (
-    delivery.delivered !== 1 ||
-    delivery.failed !== 0 ||
-    delivery.remaining !== 0
-  ) {
+  const delivery = await applyConquestGoldDeliveryQueueMessage(
+    database,
+    {
+      kind: 'CONQUEST_GOLD',
+      version: 1,
+      conquestId: conquest.id
+    },
+    new Date(deliveredAt)
+  )
+  if (delivery !== 'applied') {
     throw new Error('Conquest readiness drill Gold was not delivered')
   }
 

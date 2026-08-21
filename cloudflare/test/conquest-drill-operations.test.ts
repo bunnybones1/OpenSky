@@ -7,7 +7,7 @@ import {
   ConquestDrillRepository,
   conquestDrillProposalId
 } from '../src/conquest-drill'
-import { deliverDueConquestGold } from '../src/conquest-delivery'
+import { applyConquestGoldDeliveryQueueMessage } from '../src/conquest-delivery'
 import { ConquestReadinessOperationsRepository } from '../src/conquest-readiness-operations'
 import type { Env } from '../src/env'
 import {
@@ -753,11 +753,20 @@ describe('dormant Conquest readiness drill operations', () => {
     }
 
     const deliveredAt = new Date(base + 25 * 60 * 60 * 1_000)
-    expect(await deliverDueConquestGold(env.AUTH_DB, deliveredAt)).toEqual({
-      delivered: 1,
-      failed: 0,
-      remaining: 0
-    })
+    const delivery = await env.AUTH_DB.prepare(
+      'SELECT conquest_id FROM player_conquest_gold_deliveries'
+    ).first<{ conquest_id: number }>()
+    expect(
+      await applyConquestGoldDeliveryQueueMessage(
+        env.AUTH_DB,
+        {
+          kind: 'CONQUEST_GOLD',
+          version: 1,
+          conquestId: delivery!.conquest_id
+        },
+        deliveredAt
+      )
+    ).toBe('applied')
     expect(
       await repository.run(
         async () => {

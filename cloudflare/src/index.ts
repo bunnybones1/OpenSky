@@ -1,7 +1,10 @@
 import { handleApiRequest } from './api'
 import { AccountDeletionRepository } from './account-deletion'
 import { applyAssetCachePolicy } from './asset-cache'
-import { deliverDueConquestGold } from './conquest-delivery'
+import {
+  dispatchDueConquestGoldDeliveries,
+  handleConquestGoldDeliveryQueue
+} from './conquest-delivery'
 import { runConquestReadinessDrills } from './conquest-drill'
 import {
   CONQUEST_V2_REWARD_QUEUE_NAME,
@@ -26,6 +29,10 @@ import { runReferralStickerRewards } from './referral-sticker-rewards'
 import { handleReplayRequest } from './replays'
 import { runDueSkypassAutoClaims } from './skypass-auto-claim'
 import { WalletLinksRepository } from './wallet-links'
+import {
+  CONQUEST_GOLD_DELIVERY_QUEUE_NAME,
+  type ConquestGoldDeliveryQueueMessage
+} from '@opensky/shared/conquest-gold-delivery'
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -60,7 +67,7 @@ export default {
   async scheduled(_controller, env, ctx): Promise<void> {
     ctx.waitUntil(
       Promise.all([
-        deliverDueConquestGold(env.AUTH_DB),
+        dispatchDueConquestGoldDeliveries(env),
         runConquestReadinessDrills(env),
         dispatchDueConquestV2Rewards(env),
         dispatchDueLeaderboardRewards(env),
@@ -77,10 +84,19 @@ export default {
   },
   async queue(
     batch: MessageBatch<
-      ConquestV2RewardQueueMessage | LeaderboardRewardQueueMessage
+      | ConquestGoldDeliveryQueueMessage
+      | ConquestV2RewardQueueMessage
+      | LeaderboardRewardQueueMessage
     >,
     env
   ): Promise<void> {
+    if (batch.queue === CONQUEST_GOLD_DELIVERY_QUEUE_NAME) {
+      await handleConquestGoldDeliveryQueue(
+        batch as MessageBatch<ConquestGoldDeliveryQueueMessage>,
+        env.AUTH_DB
+      )
+      return
+    }
     if (batch.queue === CONQUEST_V2_REWARD_QUEUE_NAME) {
       await handleConquestV2RewardQueue(
         batch as MessageBatch<ConquestV2RewardQueueMessage>,
@@ -99,7 +115,9 @@ export default {
   }
 } satisfies ExportedHandler<
   Env,
-  ConquestV2RewardQueueMessage | LeaderboardRewardQueueMessage
+  | ConquestGoldDeliveryQueueMessage
+  | ConquestV2RewardQueueMessage
+  | LeaderboardRewardQueueMessage
 >
 
 export { ConquestV2RewardWorkflow, LeaderboardRewardWorkflow }

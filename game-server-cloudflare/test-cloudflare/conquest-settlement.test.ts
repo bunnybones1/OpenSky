@@ -6,8 +6,10 @@ import {
   RewardType
 } from '@opensky/proto'
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
+import { publishConquestGoldDeliveriesForMatch } from '../src/conquest-gold-delivery'
 import {
   conquestRewardBundle,
   settleConquestRewardsForMatch,
@@ -575,6 +577,112 @@ describe('source Conquest reward settlement', () => {
     expect((await inventory()).results).toMatchObject([
       { item_type: ItemType.SW_SILVER_CARDS, token_id: 6, balance: 1 }
     ])
+  })
+
+  it('publishes only the D1 responsibility with the remaining exact delay', async () => {
+    const conquest = await setup(3)
+    await setupOpponent()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, status, created_at, updated_at)
+       VALUES ('gold-queue-match', 'gold-queue-replay',
+               'CONQUEST_CONSTRUCTED', 'test',
+               '0x1111111111111111111111111111111111111111',
+               '0x2222222222222222222222222222222222222222', ?, ?, '{}',
+               'ended', ?, ?)`
+    )
+      .bind(USER_ID, USER_ID_2, SETTLED_AT, SETTLED_AT)
+      .run()
+    const match = await env.AUTH_DB.prepare(
+      `SELECT id FROM multiplayer_matches
+       WHERE proposal_id = 'gold-queue-match'`
+    ).first<{ id: number }>()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_conquests
+       SET match_progress = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify({
+          10_001: ConquestMatchResult.WIN,
+          10_002: ConquestMatchResult.WIN,
+          [match!.id]: ConquestMatchResult.WIN
+        }),
+        conquest!.id
+      )
+      .run()
+    await settleConquestRewardsForMatch(
+      env.AUTH_DB,
+      'gold-queue-match',
+      SETTLED_AT,
+      sequenceDraw(0, 0)
+    )
+
+    const sent: Array<{
+      body: ConquestGoldDeliveryQueueMessage
+      options?: QueueSendOptions
+    }> = []
+    const queue = {
+      send: async (
+        body: ConquestGoldDeliveryQueueMessage,
+        options?: QueueSendOptions
+      ) => {
+        sent.push({ body, options })
+        return {
+          metadata: { metrics: { backlogCount: sent.length, backlogBytes: 0 } }
+        }
+      }
+    } as unknown as Queue<ConquestGoldDeliveryQueueMessage>
+    expect(
+      await publishConquestGoldDeliveriesForMatch(
+        env.AUTH_DB,
+        queue,
+        'gold-queue-match',
+        new Date(SETTLED_AT)
+      )
+    ).toEqual({ published: 1 })
+    expect(sent).toEqual([
+      {
+        body: {
+          kind: 'CONQUEST_GOLD',
+          version: 1,
+          conquestId: conquest!.id
+        },
+        options: { contentType: 'json', delaySeconds: 86_400 }
+      }
+    ])
+    expect(Object.keys(sent[0].body).sort()).toEqual([
+      'conquestId',
+      'kind',
+      'version'
+    ])
+
+    const unavailable = {
+      send: async () => {
+        throw new Error('injected Queue outage')
+      }
+    } as unknown as Queue<ConquestGoldDeliveryQueueMessage>
+    await expect(
+      publishConquestGoldDeliveriesForMatch(
+        env.AUTH_DB,
+        unavailable,
+        'gold-queue-match',
+        new Date(SETTLED_AT)
+      )
+    ).rejects.toThrow('delayed Queue publication failed')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, application_status, attempt_count
+         FROM player_conquest_gold_deliveries WHERE conquest_id = ?`
+      )
+        .bind(conquest!.id)
+        .first()
+    ).toEqual({
+      status: 'PENDING',
+      application_status: 'READY',
+      attempt_count: 0
+    })
   })
 
   it('does not require a pool for a nonterminal Conquest match', async () => {

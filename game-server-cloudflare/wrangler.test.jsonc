@@ -25,6 +25,10 @@
   "queues": {
     "producers": [
       {
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
+        "queue": "cloud-weasel-conquest-gold-delivery-test"
+      },
+      {
         "binding": "GAME_ANALYTICS_QUEUE",
         "queue": "cloud-weasel-game-analytics-test"
       }

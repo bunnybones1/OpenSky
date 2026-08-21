@@ -10,6 +10,10 @@ export const REVIEWED_ANALYTICS_QUEUE = 'cloud-weasel-game-analytics'
 export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
+export const REVIEWED_CONQUEST_GOLD_QUEUE =
+  'cloud-weasel-conquest-gold-delivery'
+export const REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE =
+  'cloud-weasel-conquest-gold-delivery-dlq'
 export const REVIEWED_CONQUEST_V2_WORKFLOW = 'cloud-weasel-conquest-v2-rewards'
 export const REVIEWED_CONQUEST_V2_QUEUE =
   'cloud-weasel-conquest-v2-reward-delivery'
@@ -21,7 +25,7 @@ export const REVIEWED_LEADERBOARD_QUEUE =
 export const REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE =
   'cloud-weasel-leaderboard-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0122_leaderboard_reward_workflow_handoffs.sql'
+  '0123_conquest_gold_queue_delivery.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -198,7 +202,40 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       (name = 'leaderboard_reward_delivery_failures_insert_guard'
         AND instr(sql, "cycle.status = 'DELIVERING'") > 0
         AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
-    )) AS leaderboard_workflow_contract_guards_present;`
+    )) AS leaderboard_workflow_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'player_conquest_gold_delivery_failures')
+    AS conquest_gold_queue_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'player_conquest_gold_delivery_failures_insert_guard',
+      'player_conquest_gold_delivery_failures_no_update',
+      'player_conquest_gold_delivery_failures_no_delete',
+      'player_conquest_gold_deliveries_update_guard'
+    )) AS conquest_gold_queue_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND (
+      (name = 'player_conquest_gold_delivery_failures_insert_guard'
+        AND instr(sql, "delivery.status = 'PENDING'") > 0
+        AND instr(sql, "delivery.application_status = 'READY'") > 0
+        AND instr(sql, 'delivery.deliver_at <= NEW.failed_at') > 0)
+      OR
+      (name = 'player_conquest_gold_deliveries_update_guard'
+        AND instr(sql, "NEW.application_status = 'APPLIED'") > 0
+        AND instr(sql, 'player_conquest_gold_delivery_inventory_grants') > 0
+        AND instr(sql, "event.event_type = 'DELAYED_REWARD_MINTED'") > 0
+        AND instr(sql, "'FAILED'") = 0)
+    )) AS conquest_gold_queue_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'view'
+      AND name = 'conquest_verified_drill_receipts'
+      AND instr(sql, 'delivery.attempt_count') = 0
+      AND instr(sql, 'unixepoch(delivery.deliver_at)') > 0
+      AND instr(sql, "delivery.application_status = 'APPLIED'") > 0
+      AND instr(sql, 'player_conquest_gold_delivery_inventory_grants') > 0
+      AND instr(sql, "event.event_type = 'DELAYED_REWARD_MINTED'") > 0)
+    AS conquest_gold_readiness_effect_view_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -215,6 +252,7 @@ export const REVIEWED_PRODUCTION_TARGETS = new Map([
     {
       name: 'cloud-weasel-game-server',
       requiresAuthDatabase: true,
+      requiresConquestGoldProducer: true,
       supportsAnalyticsProducer: true
     }
   ],
@@ -298,19 +336,31 @@ const optionalAnalyticsProducerErrors = config => {
   const allProducers = config?.queues?.producers ?? []
   const consumers = config?.queues?.consumers ?? []
   const buckets = r2Bindings(config, 'GAME_ANALYTICS')
-  const producers = queueProducers(config, 'GAME_ANALYTICS_QUEUE')
-  if (!allBuckets.length && !allProducers.length && !consumers.length) return []
+  const analyticsProducers = queueProducers(config, 'GAME_ANALYTICS_QUEUE')
+  const goldProducers = queueProducers(config, 'CONQUEST_GOLD_DELIVERY_QUEUE')
+  if (
+    goldProducers.length !== 1 ||
+    goldProducers[0]?.queue !== REVIEWED_CONQUEST_GOLD_QUEUE ||
+    consumers.length
+  ) {
+    return [
+      'game server must bind exactly one reviewed Conquest Gold Queue producer and no consumers'
+    ]
+  }
+  const extraProducers = allProducers.filter(
+    producer => producer.binding !== 'CONQUEST_GOLD_DELIVERY_QUEUE'
+  )
+  if (!allBuckets.length && !extraProducers.length) return []
   if (
     allBuckets.length !== 1 ||
     buckets.length !== 1 ||
     buckets[0]?.bucket_name !== REVIEWED_ANALYTICS_BUCKET ||
-    allProducers.length !== 1 ||
-    producers.length !== 1 ||
-    producers[0]?.queue !== REVIEWED_ANALYTICS_QUEUE ||
-    consumers.length
+    extraProducers.length !== 1 ||
+    analyticsProducers.length !== 1 ||
+    analyticsProducers[0]?.queue !== REVIEWED_ANALYTICS_QUEUE
   ) {
     return [
-      'game server analytics must be disabled completely or bind the reviewed R2 bucket and Queue producer together'
+      'game server analytics must be disabled completely or add only the reviewed R2 bucket and Queue producer'
     ]
   }
   return []
@@ -354,22 +404,30 @@ const rewardOrchestrationErrors = config => {
   const leaderboardConsumer = consumers.find(
     value => value.queue === REVIEWED_LEADERBOARD_QUEUE
   )
+  const goldProducer = producers.find(
+    value => value.binding === 'CONQUEST_GOLD_DELIVERY_QUEUE'
+  )
+  const goldConsumer = consumers.find(
+    value => value.queue === REVIEWED_CONQUEST_GOLD_QUEUE
+  )
   if (
     workflows.length !== 2 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
-    producers.length !== 2 ||
+    producers.length !== 3 ||
     producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
-    consumers.length !== 2 ||
+    consumers.length !== 3 ||
     consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE ||
     leaderboardWorkflow?.name !== REVIEWED_LEADERBOARD_WORKFLOW ||
     leaderboardWorkflow?.class_name !== 'LeaderboardRewardWorkflow' ||
     leaderboardProducer?.queue !== REVIEWED_LEADERBOARD_QUEUE ||
     leaderboardConsumer?.dead_letter_queue !==
-      REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE
+      REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE ||
+    goldProducer?.queue !== REVIEWED_CONQUEST_GOLD_QUEUE ||
+    goldConsumer?.dead_letter_queue !== REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE
   ) {
     return [
-      'main Worker must retain the reviewed Conquest V2 and leaderboard Workflow, Queue, and dead-letter topology'
+      'main Worker must retain the reviewed delayed Gold Queue plus Conquest V2 and leaderboard Workflow, Queue, and dead-letter topology'
     ]
   }
   return []
@@ -532,7 +590,11 @@ export const productionSchemaRow = output => {
     row?.conquest_v2_workflow_contract_guards_present !== 3 ||
     row?.leaderboard_workflow_tables_present !== 2 ||
     row?.leaderboard_workflow_guards_present !== 6 ||
-    row?.leaderboard_workflow_contract_guards_present !== 3
+    row?.leaderboard_workflow_contract_guards_present !== 3 ||
+    row?.conquest_gold_queue_tables_present !== 1 ||
+    row?.conquest_gold_queue_guards_present !== 4 ||
+    row?.conquest_gold_queue_contract_guards_present !== 2 ||
+    row?.conquest_gold_readiness_effect_view_present !== 1
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

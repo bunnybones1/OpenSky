@@ -11,7 +11,7 @@ import {
   ConquestDrillRepository
 } from '../../cloudflare/src/conquest-drill'
 import {
-  deliverDueConquestGold,
+  applyConquestGoldDeliveryQueueMessage,
   pendingConquestCards
 } from '../../cloudflare/src/conquest-delivery'
 import { approvedConquestPoolStatements } from '../../cloudflare/test/helpers/conquest-pool'
@@ -589,18 +589,29 @@ describe('Conquest readiness cross-service boundary', () => {
         mintAt: settlement!.deliver_at
       }
     ])
-    expect(
-      await deliverDueConquestGold(
+    await expect(
+      applyConquestGoldDeliveryQueueMessage(
         env.AUTH_DB,
+        {
+          kind: 'CONQUEST_GOLD',
+          version: 1,
+          conquestId: settlement!.conquest_id
+        },
         new Date(Date.parse(settlement!.deliver_at) - 1)
       )
-    ).toEqual({ delivered: 0, failed: 0, remaining: 0 })
+    ).rejects.toThrow('not due')
     const deliveredAt = new Date(settlement!.deliver_at)
-    expect(await deliverDueConquestGold(env.AUTH_DB, deliveredAt)).toEqual({
-      delivered: 1,
-      failed: 0,
-      remaining: 0
-    })
+    expect(
+      await applyConquestGoldDeliveryQueueMessage(
+        env.AUTH_DB,
+        {
+          kind: 'CONQUEST_GOLD',
+          version: 1,
+          conquestId: settlement!.conquest_id
+        },
+        deliveredAt
+      )
+    ).toBe('applied')
     expect(
       await pendingConquestCards(env.AUTH_DB, completedOperation.targetUserId)
     ).toEqual([])

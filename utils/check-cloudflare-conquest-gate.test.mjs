@@ -202,8 +202,10 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'pendingConquestCards(',
       'tokenIDs: [131_208]',
       'new Date(Date.parse(settlement!.deliver_at) - 1)',
-      'deliverDueConquestGold(env.AUTH_DB, deliveredAt)',
-      'delivered: 1',
+      'applyConquestGoldDeliveryQueueMessage(',
+      "kind: 'CONQUEST_GOLD'",
+      'conquestId: settlement!.conquest_id',
+      ").toBe('applied')",
       "event_type = 'DELAYED_REWARD_MINTED'",
       'gold_balance: 1',
       'verified_drill_receipts: 1',
@@ -400,8 +402,10 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
     'pendingConquestCards(',
     'tokenIDs: [131_208]',
     'new Date(Date.parse(settlement!.deliver_at) - 1)',
-    'deliverDueConquestGold(env.AUTH_DB, deliveredAt)',
-    'delivered: 1',
+    'applyConquestGoldDeliveryQueueMessage(',
+    "kind: 'CONQUEST_GOLD'",
+    'conquestId: settlement!.conquest_id',
+    ").toBe('applied')",
     "event_type = 'DELAYED_REWARD_MINTED'",
     'gold_balance: 1',
     'verified_drill_receipts: 1',
@@ -594,7 +598,9 @@ test('requires Workflow, Queue, D1, and recovery evidence for Conquest V2', asyn
     }).some(error => error.includes('entrypoint'))
   )
   const unsafeConfig = structuredClone(evidence.config)
-  delete unsafeConfig.queues.consumers[0].dead_letter_queue
+  delete unsafeConfig.queues.consumers.find(
+    consumer => consumer.queue === 'cloud-weasel-conquest-v2-reward-delivery'
+  ).dead_letter_queue
   assert.ok(
     conquestV2CloudflareOrchestrationErrors({
       ...evidence,

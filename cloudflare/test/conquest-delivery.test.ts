@@ -1,10 +1,13 @@
 import { env } from 'cloudflare:workers'
 import { FeedEventType, ItemType } from '@opensky/proto'
+import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import {
-  deliverDueConquestGold,
+  applyConquestGoldDeliveryQueueMessage,
+  dispatchDueConquestGoldDeliveries,
+  handleConquestGoldDeliveryQueue,
   pendingConquestCards
 } from '../src/conquest-delivery'
 import type { Env } from '../src/env'
@@ -74,8 +77,63 @@ const setupDelivery = async (
   return conquest!.id
 }
 
+const deliveryBody = (
+  conquestId: number
+): ConquestGoldDeliveryQueueMessage => ({
+  kind: 'CONQUEST_GOLD',
+  version: 1,
+  conquestId
+})
+
+const applyDelivery = (conquestId: number, now = new Date(DUE_AT)) =>
+  applyConquestGoldDeliveryQueueMessage(
+    env.AUTH_DB,
+    deliveryBody(conquestId),
+    now
+  )
+
+const queueMessage = (
+  body: ConquestGoldDeliveryQueueMessage,
+  id: string,
+  attempts: number
+) => {
+  const outcome: {
+    acked: boolean
+    retried: boolean
+    delaySeconds?: number
+  } = { acked: false, retried: false }
+  const message = {
+    id,
+    timestamp: new Date(DUE_AT),
+    body,
+    attempts,
+    ack: () => {
+      outcome.acked = true
+    },
+    retry: (options?: { delaySeconds?: number }) => {
+      outcome.retried = true
+      outcome.delaySeconds = options?.delaySeconds
+    }
+  } as Message<ConquestGoldDeliveryQueueMessage>
+  return { message, outcome }
+}
+
+const messageBatch = (messages: Message<ConquestGoldDeliveryQueueMessage>[]) =>
+  ({
+    messages,
+    queue: 'cloud-weasel-conquest-gold-delivery',
+    metadata: {
+      metrics: { backlogCount: messages.length, backlogBytes: 0 }
+    },
+    ackAll: () => undefined,
+    retryAll: () => undefined
+  }) as MessageBatch<ConquestGoldDeliveryQueueMessage>
+
 beforeEach(async () => {
   await env.AUTH_DB.prepare('DROP TRIGGER IF EXISTS reject_gold_delivery').run()
+  await env.AUTH_DB.prepare(
+    'DROP TRIGGER IF EXISTS reject_one_gold_queue_player'
+  ).run()
   await env.AUTH_DB.prepare(
     'DROP TRIGGER IF EXISTS reject_gold_receipt_completion'
   ).run()
@@ -106,7 +164,9 @@ describe('delayed Conquest Gold delivery', () => {
         mintAt: DUE_AT
       }
     ])
-    const response = await (await rpc('GetPendingCards')).json<{
+    const response = await (
+      await rpc('GetPendingCards')
+    ).json<{
       res: Array<{ cards: Array<Record<string, unknown>> }>
     }>()
     expect(response).toMatchObject({
@@ -202,9 +262,21 @@ describe('delayed Conquest Gold delivery', () => {
 
     // Read compatibility must not weaken the off-chain grant boundary. The
     // malformed Gold row remains retryable but grants no inventory.
-    expect(await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))).toEqual(
-      { delivered: 0, failed: 1, remaining: 1 }
+    const malformed = queueMessage(
+      deliveryBody(conquestId),
+      'malformed-projection',
+      1
     )
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([malformed.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(malformed.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: undefined
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count FROM player_conquest_gold_deliveries
@@ -212,7 +284,7 @@ describe('delayed Conquest Gold delivery', () => {
       )
         .bind(conquestId)
         .first()
-    ).toEqual({ status: 'PENDING', attempt_count: 1 })
+    ).toEqual({ status: 'PENDING', attempt_count: 0 })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM player_items
@@ -265,9 +337,7 @@ describe('delayed Conquest Gold delivery', () => {
     expect(await (await rpc('GetPendingCards')).json()).toMatchObject({
       res: [{ tokenIDs: [131_208], mintAt: DUE_AT }]
     })
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 0, failed: 0, remaining: 0 })
+    expect(await applyDelivery(conquestId)).toBe('disabled')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT COUNT(*) AS count FROM player_items
@@ -299,26 +369,25 @@ describe('delayed Conquest Gold delivery', () => {
         .bind(conquestId)
         .run()
     ).rejects.toThrow('Conquest Gold moderation state is invalid')
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    expect(await applyDelivery(conquestId)).toBe('applied')
   })
 
   it('delivers only when due and makes retries idempotent', async () => {
     const conquestId = await setupDelivery()
-    expect(
-      await deliverDueConquestGold(
-        env.AUTH_DB,
-        new Date('2026-08-13T11:59:59.999Z')
-      )
-    ).toEqual({ delivered: 0, failed: 0, remaining: 0 })
+    const early = queueMessage(deliveryBody(conquestId), 'early', 1)
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([early.message]),
+      env.AUTH_DB,
+      new Date('2026-08-13T11:59:59.999Z')
+    )
+    expect(early.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: 1
+    })
 
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 0, failed: 0, remaining: 0 })
+    expect(await applyDelivery(conquestId)).toBe('applied')
+    expect(await applyDelivery(conquestId)).toBe('duplicate')
 
     expect(
       await env.AUTH_DB.prepare(
@@ -397,13 +466,13 @@ describe('delayed Conquest Gold delivery', () => {
     expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toEqual([])
   })
 
-  it('allows only one concurrent cron run to claim and grant a delivery', async () => {
-    await setupDelivery()
+  it('allows only one concurrent Queue message to claim and grant a delivery', async () => {
+    const conquestId = await setupDelivery()
     const runs = await Promise.all([
-      deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT)),
-      deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+      applyDelivery(conquestId),
+      applyDelivery(conquestId)
     ])
-    expect(runs.reduce((sum, run) => sum + run.delivered, 0)).toBe(1)
+    expect(runs.sort()).toEqual(['applied', 'duplicate'])
     expect(
       await env.AUTH_DB.prepare(
         `SELECT balance FROM player_items
@@ -412,6 +481,86 @@ describe('delayed Conquest Gold delivery', () => {
         .bind(USER_ID)
         .first()
     ).toEqual({ balance: 1 })
+  })
+
+  it('rejects message authority and isolates one faulted player in a batch', async () => {
+    const faultConquestId = await setupDelivery()
+    const successUser = 'conquest-delivery-success'
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Gold Success', 'gold-success@example.com', ?, ?)`
+    )
+      .bind(successUser, CREATED_AT, CREATED_AT)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(successUser)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at)
+       VALUES ('delivery-conquest-success', ?, 'COMPLETED', 1,
+               'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+               '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
+    )
+      .bind(successUser, CREATED_AT, CREATED_AT)
+      .run()
+    const successConquest = await env.AUTH_DB.prepare(
+      `SELECT id FROM player_conquests
+       WHERE entry_key = 'delivery-conquest-success'`
+    ).first<{ id: number }>()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquest_gold_deliveries
+         (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+          status, attempt_count, created_at)
+       VALUES (?, ?, '[136]', '[131208]', ?, 'PENDING', 0, ?)`
+    )
+      .bind(successConquest!.id, successUser, DUE_AT, CREATED_AT)
+      .run()
+
+    await expect(
+      applyConquestGoldDeliveryQueueMessage(
+        env.AUTH_DB,
+        { ...deliveryBody(faultConquestId), cardId: 136 },
+        new Date(DUE_AT)
+      )
+    ).rejects.toThrow('Queue message is invalid')
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_one_gold_queue_player
+       BEFORE INSERT ON player_items
+       WHEN NEW.unlock_source LIKE 'conquest:%:gold'
+         AND NEW.user_id = 'conquest-delivery-player'
+       BEGIN SELECT RAISE(ABORT, 'injected one-player failure'); END`
+    ).run()
+
+    const fault = queueMessage(
+      deliveryBody(faultConquestId),
+      'isolated-fault',
+      1
+    )
+    const success = queueMessage(
+      deliveryBody(successConquest!.id),
+      'isolated-success',
+      1
+    )
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([fault.message, success.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(fault.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: undefined
+    })
+    expect(success.outcome).toEqual({ acked: true, retried: false })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT user_id, balance FROM player_items
+         WHERE item_type = 'SW_GOLD_CARDS' ORDER BY user_id`
+      ).all()
+    ).toMatchObject({
+      results: [{ user_id: successUser, balance: 1 }]
+    })
   })
 
   it('records the serialized Gold balance transition over existing inventory', async () => {
@@ -425,9 +574,7 @@ describe('delayed Conquest Gold delivery', () => {
       .bind(USER_ID, CREATED_AT, CREATED_AT)
       .run()
 
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    expect(await applyDelivery(conquestId)).toBe('applied')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT quantity, before_balance, after_balance
@@ -441,7 +588,7 @@ describe('delayed Conquest Gold delivery', () => {
 
   it('keeps applied delivery and grant receipts immutable', async () => {
     const conquestId = await setupDelivery()
-    await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
+    await applyDelivery(conquestId)
 
     await expect(
       env.AUTH_DB.prepare(
@@ -480,9 +627,17 @@ describe('delayed Conquest Gold delivery', () => {
        END`
     ).run()
 
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 0, failed: 1, remaining: 1 })
+    const failed = queueMessage(deliveryBody(conquestId), 'receipt-failure', 1)
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([failed.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(failed.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: undefined
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count, application_status, application_key
@@ -492,7 +647,7 @@ describe('delayed Conquest Gold delivery', () => {
         .first()
     ).toEqual({
       status: 'PENDING',
-      attempt_count: 1,
+      attempt_count: 0,
       application_status: 'READY',
       application_key: null
     })
@@ -511,9 +666,7 @@ describe('delayed Conquest Gold delivery', () => {
     await env.AUTH_DB.prepare(
       'DROP TRIGGER reject_gold_receipt_completion'
     ).run()
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 1, failed: 0, remaining: 0 })
+    expect(await applyDelivery(conquestId)).toBe('applied')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count, application_status
@@ -523,12 +676,12 @@ describe('delayed Conquest Gold delivery', () => {
         .first()
     ).toEqual({
       status: 'DELIVERED',
-      attempt_count: 2,
+      attempt_count: 1,
       application_status: 'APPLIED'
     })
   })
 
-  it('rolls back an injected grant failure and dead-letters after five tries', async () => {
+  it('keeps the entitlement visible through six failures and recovers on attempt seven', async () => {
     const conquestId = await setupDelivery()
     await env.AUTH_DB.prepare(
       `CREATE TRIGGER reject_gold_delivery
@@ -539,10 +692,22 @@ describe('delayed Conquest Gold delivery', () => {
        END`
     ).run()
 
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      const run = await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-      expect(run.delivered).toBe(0)
-      expect(run.failed).toBe(1)
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const failed = queueMessage(
+        deliveryBody(conquestId),
+        'persistent-failure',
+        attempt
+      )
+      await handleConquestGoldDeliveryQueue(
+        messageBatch([failed.message]),
+        env.AUTH_DB,
+        new Date(DUE_AT)
+      )
+      expect(failed.outcome).toEqual({
+        acked: false,
+        retried: true,
+        delaySeconds: undefined
+      })
       expect(
         await env.AUTH_DB.prepare(
           `SELECT status, attempt_count, delivery_key, delivered_at
@@ -551,8 +716,8 @@ describe('delayed Conquest Gold delivery', () => {
           .bind(conquestId)
           .first()
       ).toEqual({
-        status: attempt === 5 ? 'FAILED' : 'PENDING',
-        attempt_count: attempt,
+        status: 'PENDING',
+        attempt_count: 0,
         delivery_key: null,
         delivered_at: null
       })
@@ -566,14 +731,73 @@ describe('delayed Conquest Gold delivery', () => {
             WHERE event_type = 'DELAYED_REWARD_MINTED') AS events`
       ).first()
     ).toEqual({ items: 0, events: 0 })
-    expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toEqual([])
+    expect(await pendingConquestCards(env.AUTH_DB, USER_ID)).toMatchObject([
+      { tokenIDs: [131_208], mintAt: DUE_AT }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM player_conquest_gold_delivery_failures
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first('count')
+    ).toBe(6)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE player_conquest_gold_delivery_failures
+         SET error = 'rewritten' WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .run()
+    ).rejects.toThrow('delivery failures are immutable')
+
+    await env.AUTH_DB.prepare('DROP TRIGGER reject_gold_delivery').run()
+    const recovered = queueMessage(
+      deliveryBody(conquestId),
+      'persistent-failure',
+      7
+    )
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([recovered.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(recovered.outcome).toEqual({ acked: true, retried: false })
+    const duplicate = queueMessage(
+      deliveryBody(conquestId),
+      'persistent-failure',
+      8
+    )
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([duplicate.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(duplicate.outcome).toEqual({ acked: true, retried: false })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT balance FROM player_items
+         WHERE user_id = ? AND item_type = 'SW_GOLD_CARDS' AND token_id = 136`
+      )
+        .bind(USER_ID)
+        .first('balance')
+    ).toBe(1)
   })
 
   it('fails malformed persisted card mappings closed without granting', async () => {
     const conquestId = await setupDelivery([999_999])
-    expect(
-      await deliverDueConquestGold(env.AUTH_DB, new Date(DUE_AT))
-    ).toEqual({ delivered: 0, failed: 1, remaining: 1 })
+    const failed = queueMessage(deliveryBody(conquestId), 'malformed', 1)
+    await handleConquestGoldDeliveryQueue(
+      messageBatch([failed.message]),
+      env.AUTH_DB,
+      new Date(DUE_AT)
+    )
+    expect(failed.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: undefined
+    })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status, attempt_count, last_error
@@ -583,8 +807,80 @@ describe('delayed Conquest Gold delivery', () => {
         .first()
     ).toEqual({
       status: 'PENDING',
-      attempt_count: 1,
-      last_error: 'Conquest Gold delivery contains invalid cards'
+      attempt_count: 0,
+      last_error: null
     })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT error FROM player_conquest_gold_delivery_failures
+         WHERE conquest_id = ?`
+      )
+        .bind(conquestId)
+        .first('error')
+    ).toBe('Conquest Gold delivery contains invalid cards')
+  })
+
+  it('re-drives every due D1 responsibility across transport pages without claiming it', async () => {
+    await setupDelivery()
+    const statements: D1PreparedStatement[] = []
+    for (let index = 1; index < 101; index += 1) {
+      const entryKey = 'delivery-conquest-' + index
+      statements.push(
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_conquests
+             (entry_key, user_id, status, nonce, mode, hero, deck_class,
+              match_progress, created_at, ended_at)
+           VALUES (?, ?, 'COMPLETED', ?, 'CONQUEST_CONSTRUCTED', 'ADA',
+                   'STR', '{"1":"WIN","2":"WIN","3":"WIN"}', ?, ?)`
+        ).bind(entryKey, USER_ID, index + 1, CREATED_AT, CREATED_AT),
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_conquest_gold_deliveries
+             (conquest_id, user_id, card_ids_json, token_ids_json, deliver_at,
+              status, attempt_count, created_at)
+           SELECT id, ?, '[136]', '[131208]', ?, 'PENDING', 0, ?
+           FROM player_conquests WHERE entry_key = ?`
+        ).bind(USER_ID, DUE_AT, CREATED_AT, entryKey)
+      )
+    }
+    await env.AUTH_DB.batch(statements)
+
+    const pages: ConquestGoldDeliveryQueueMessage[][] = []
+    const queue = {
+      sendBatch: async (
+        messages: Iterable<{ body: ConquestGoldDeliveryQueueMessage }>
+      ) => {
+        pages.push([...messages].map(message => message.body))
+        return {
+          metadata: {
+            metrics: {
+              backlogCount: pages.flat().length,
+              backlogBytes: 0
+            }
+          }
+        }
+      }
+    } as unknown as Queue<ConquestGoldDeliveryQueueMessage>
+    const target = {
+      AUTH_DB: env.AUTH_DB,
+      CONQUEST_GOLD_DELIVERY_QUEUE: queue
+    }
+    expect(
+      await dispatchDueConquestGoldDeliveries(
+        target,
+        new Date('2026-08-13T11:59:59.999Z')
+      )
+    ).toEqual({ published: 0 })
+    expect(
+      await dispatchDueConquestGoldDeliveries(target, new Date(DUE_AT))
+    ).toEqual({ published: 101 })
+    expect(pages.map(page => page.length)).toEqual([100, 1])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS pending,
+                COALESCE(SUM(attempt_count), 0) AS attempts
+         FROM player_conquest_gold_deliveries
+         WHERE status = 'PENDING' AND application_status = 'READY'`
+      ).first()
+    ).toEqual({ pending: 101, attempts: 0 })
   })
 })

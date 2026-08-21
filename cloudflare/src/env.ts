@@ -6,6 +6,7 @@ import type {
   LeaderboardRewardQueueMessage,
   LeaderboardRewardWorkflowParams
 } from './leaderboard-reward-orchestration'
+import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 
 export interface Env {
   ASSETS: Fetcher
@@ -44,6 +45,7 @@ export interface Env {
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
   MATCH_SERVICE: Fetcher
+  CONQUEST_GOLD_DELIVERY_QUEUE: Queue<ConquestGoldDeliveryQueueMessage>
   CONQUEST_V2_REWARD_WORKFLOW?: Workflow<ConquestV2RewardWorkflowParams>
   CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>
   LEADERBOARD_REWARD_WORKFLOW?: Workflow<LeaderboardRewardWorkflowParams>

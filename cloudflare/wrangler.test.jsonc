@@ -19,6 +19,14 @@
       "bucket_name": "cloud-weasel-client-feedback-test"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
+        "queue": "cloud-weasel-conquest-gold-delivery-test"
+      }
+    ]
+  },
   "vars": {
     "SEQUENCE_API_HOST": "https://api.sequence.app",
     "ALLOWED_ORIGINS": "https://opensky.example"

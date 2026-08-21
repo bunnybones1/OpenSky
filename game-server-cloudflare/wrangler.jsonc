@@ -24,6 +24,14 @@
       "migrations_dir": "../cloudflare/migrations"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
+        "queue": "cloud-weasel-conquest-gold-delivery"
+      }
+    ]
+  },
   "migrations": [
     {
       "tag": "v1",

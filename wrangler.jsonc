@@ -54,6 +54,10 @@
   "queues": {
     "producers": [
       {
+        "queue": "cloud-weasel-conquest-gold-delivery",
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE"
+      },
+      {
         "queue": "cloud-weasel-conquest-v2-reward-delivery",
         "binding": "CONQUEST_V2_REWARD_QUEUE"
       },
@@ -63,6 +67,10 @@
       }
     ],
     "consumers": [
+      {
+        "queue": "cloud-weasel-conquest-gold-delivery",
+        "dead_letter_queue": "cloud-weasel-conquest-gold-delivery-dlq"
+      },
       {
         "queue": "cloud-weasel-conquest-v2-reward-delivery",
         "dead_letter_queue": "cloud-weasel-conquest-v2-reward-delivery-dlq"
