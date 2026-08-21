@@ -1861,6 +1861,41 @@ gates, both builds, and 594-file artifact validation. No deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source matchmaker ingress parity — 2026-08-20
+
+Milestone `21eb6204` restores the message boundary around the source
+matchmaker's subscriber lifecycle. The Go client applies
+`readMaxLength = 1024 * 32`, uses Gorilla `ReadMessage` without restricting the
+frame type, rewrites literal `PING`, and then JSON-decodes the payload. The
+Worker now enforces the same byte limit for text and binary messages, accepts
+valid binary JSON, and preserves the heartbeat compatibility path.
+
+Source read/decode errors and unknown message types escape `listenOnMessage`;
+the outer handler writes the exact generic `SERVER_ERROR` envelope and closes
+the client. The Worker now does the same for malformed JSON, missing or unknown
+envelope types, and unexpected non-protocol handler failures, using an empty
+close rather than a detailed validation error or invented close payload. The
+preserved browser retains its normal-close behavior for this error and reserves
+forced code `4004` for duplicate connections.
+
+Unit and Workers regressions cover the inclusive 32 KiB boundary, valid binary
+queue admission, exact error message/level, and empty close semantics.
+Authentication alarm tests now use dedicated Durable Object identities and the
+44-test Workers suite passed three consecutive stability runs. A new
+mutation-tested source gate pins the Go connection, receiver, handler, error
+wire, browser close, Worker parser, runtime failure path, direct regressions,
+and release wiring; it is mandatory in both the complete build and matchmaker
+deployment command.
+
+The exact complete local contract passed at `21eb6204`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 49
+matchmaker unit and 44 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

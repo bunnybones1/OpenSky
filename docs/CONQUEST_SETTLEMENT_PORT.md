@@ -1261,3 +1261,35 @@ analytics tests, all typechecks and source/off-chain gates, both builds, and
 594-file artifact validation. No deployment, migration, provisioning,
 activation, live match, or production mutation was performed. Production
 Conquest remains disabled.
+
+## Source matchmaker ingress proof
+
+Follow-up milestone `21eb6204` completes the fatal payload boundary around the
+source subscriber and authentication-timeout contracts. The Go client sets an
+exact 32 KiB Gorilla read limit, consumes payload bytes independently of frame
+type, rewrites literal `PING`, and JSON-decodes the result. The Worker now uses
+the same byte limit for strings and `ArrayBuffer` payloads and accepts valid
+binary JSON instead of imposing a text-only rule absent from the source.
+
+A decode failure, missing envelope type, or unknown message type returns from
+the source listener as an error. Its outer handler sends the exact generic
+`SERVER_ERROR` envelope and closes the connection. The Worker now preserves
+that error and empty-close behavior rather than leaking a detailed
+`INVALID_OPERATION`; unexpected non-protocol handler failures follow the same
+fatal path. The original browser's normal close for generic server errors and
+forced duplicate-connection close remain unchanged.
+
+Unit regressions pin binary decoding and the inclusive 32 KiB boundary.
+Workers regressions cover malformed JSON, missing and unknown types, exact
+error fields, empty close semantics, and binary queue admission. Dedicated
+Durable Object IDs isolate the forced authentication-alarm cases, and all 44
+Workers tests passed in three consecutive runs. The mutation-tested ingress
+gate derives the connection, receiver, handler, source test, error wire,
+browser, Worker, and release contracts and is mandatory in the complete and
+matchmaker deployment paths. The exact complete local contract passed at
+`21eb6204`: 510 main-Worker tests, 34 game-server unit and 117 Workers tests,
+33 match-service tests, 49 matchmaker unit and 44 Workers tests, 30
+browser-game tests, nine analytics tests, all typechecks and source/off-chain
+gates, both builds, and 594-file artifact validation. No deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed. Production Conquest remains disabled.

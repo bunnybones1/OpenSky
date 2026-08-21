@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `456c817b`
-  (`Preserve source matchmaker authentication timeout`)
-- Latest tested runtime commit: `456c817b`
-  (`Preserve source matchmaker authentication timeout`)
+- Last code/test checkpoint: `21eb6204`
+  (`Preserve source matchmaker ingress lifecycle`)
+- Latest tested runtime commit: `21eb6204`
+  (`Preserve source matchmaker ingress lifecycle`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `456c817b` are committed and
+- The runtime changes from `38386294` through `21eb6204` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -533,6 +533,48 @@ artifact validation. The assembled web and game entries remain
 No deployment, migration, provisioning, activation, live match, or production
 mutation was performed.
 
+## Source matchmaker ingress milestone
+
+Commit `21eb6204` restores the original matchmaker's payload and fatal decode
+boundary without exposing Worker validation details as a new protocol:
+
+- the Go client connection applies an exact 32 KiB read limit and decodes the
+  bytes returned by Gorilla independently of text or binary frame type. The
+  Worker now uses the same byte limit, accepts valid binary JSON, and retains
+  the source literal `PING` rewrite;
+- malformed JSON, a missing envelope type, and an unknown message type all
+  reach the Go handler's fatal message path. The Worker now sends the exact
+  `SERVER_ERROR` message and closes with no invented code or reason instead of
+  returning a detailed `INVALID_OPERATION` on an open socket;
+- unexpected non-protocol handler failures use the same generic error and
+  fatal close, while command-specific `ProtocolError` behavior remains a
+  separately reviewable handler contract; and
+- the preserved browser continues to use its normal close for generic server
+  errors and reserves forced close code `4004` for `DUPLICATE_CONNECTION`.
+
+Unit regressions pin valid binary JSON and the inclusive 32 KiB boundary.
+Workers regressions pin the exact error wire, empty close semantics, queue
+admission from a binary payload, and the existing authentication-alarm cases.
+The forced-alarm cases use dedicated Durable Object identities so Miniflare's
+test-only alarm cancellation state cannot leak between cases; the 44-test
+Workers suite passed three consecutive stability runs.
+
+The new mutation-tested `check:cloudflare:matchmaker-ingress` gate derives the
+limit, frame-agnostic decode, heartbeat rewrite, receiver failure, handler
+close, error wire, and browser response directly from the preserved Go and
+TypeScript sources. Both the complete build and guarded matchmaker deployment
+require it, and the CI audit fails if it disappears.
+
+The exact complete local release contract passed at committed runtime head
+`21eb6204` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 49 matchmaker unit tests, 44
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries remain
+`/assets/index-1eddfd33.js` and `/game/cloudflare/assets/index-ccb53c4b.js`.
+No deployment, migration, provisioning, activation, live match, or production
+mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -637,7 +679,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `456c817b`. Keep
+- Deploy and verify the tested runtime changes through `21eb6204`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
