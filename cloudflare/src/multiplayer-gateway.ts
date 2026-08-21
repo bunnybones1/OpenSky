@@ -206,6 +206,15 @@ const validRecentMatchInfo = (
 ): value is Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const info = value as Record<string, unknown>
+  const conquestInfo = info.conquestInfo
+  const hasValidConquestInfo =
+    conquestInfo === undefined ||
+    (Array.isArray(conquestInfo) &&
+      conquestInfo.length === 2 &&
+      conquestInfo.every(validStoredConquest))
+  const conquestMode =
+    info.gameMode === 'CONQUEST_CONSTRUCTED' ||
+    info.gameMode === 'CONQUEST_DISCOVERY'
   return (
     info.type === 'recent_match_info' &&
     typeof info.playerID === 'string' &&
@@ -217,8 +226,61 @@ const validRecentMatchInfo = (
     info.accounts.length === 2 &&
     typeof info.store === 'string' &&
     /^0x(?:[0-9a-f]{2})+$/i.test(info.store) &&
-    Array.isArray(info.rewards)
+    Array.isArray(info.rewards) &&
+    hasValidConquestInfo &&
+    (!conquestMode || conquestInfo !== undefined)
   )
+}
+
+const optionalSourceUint = (value: unknown) =>
+  value === undefined ||
+  (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+
+const optionalSourceString = (value: unknown) =>
+  value === undefined || typeof value === 'string'
+
+const optionalSourceNullableString = (value: unknown) =>
+  value === undefined || value === null || typeof value === 'string'
+
+const validStoredConquest = (value: unknown) =>
+  record(value) &&
+  optionalSourceUint(value.id) &&
+  optionalSourceString(value.status) &&
+  optionalSourceUint(value.nonce) &&
+  optionalSourceString(value.mode) &&
+  optionalSourceString(value.hero) &&
+  optionalSourceNullableString(value.deckClass) &&
+  (value.matchProgress === undefined ||
+    value.matchProgress === null ||
+    record(value.matchProgress)) &&
+  optionalSourceNullableString(value.createdAt) &&
+  optionalSourceNullableString(value.endedAt)
+
+const sourceConquest = (value: unknown) => {
+  const conquest = record(value) ? value : {}
+  return {
+    id: conquest.id ?? 0,
+    status: conquest.status ?? 'UNKNOWN',
+    nonce: conquest.nonce ?? 0,
+    mode: conquest.mode ?? 'UNKNOWN',
+    hero: conquest.hero ?? 'UNKNOWN',
+    deckClass: conquest.deckClass ?? null,
+    matchProgress: conquest.matchProgress ?? null,
+    createdAt: conquest.createdAt ?? null,
+    endedAt: conquest.endedAt ?? null
+  }
+}
+
+const publicRecentMatchInfo = (info: Record<string, unknown>) => {
+  const conquestInfo = Array.isArray(info.conquestInfo)
+    ? info.conquestInfo
+    : [undefined, undefined]
+  return {
+    ...info,
+    // Go decodes the game server's optional value into [2]proto.Conquest and
+    // re-serializes every field, including zero/null defaults.
+    conquestInfo: conquestInfo.map(sourceConquest)
+  }
 }
 
 const recentMatchInfo = async (env: Env, principal: string) => {
@@ -261,7 +323,7 @@ const recentMatchInfo = async (env: Env, principal: string) => {
     if (!validRecentMatchInfo(info, principal)) {
       throw new Error('game server returned invalid recent match info')
     }
-    return json(info, 200)
+    return json(publicRecentMatchInfo(info), 200)
   } catch (error) {
     console.error('recent match recovery failed', row.proposal_id, error)
     return json(

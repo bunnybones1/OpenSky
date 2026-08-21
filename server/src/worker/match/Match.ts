@@ -17,7 +17,7 @@ import { CardBackLibrary, HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import {
   AccountWithPrismsAndCosmeticsInfo,
   GameplayMessage,
-  RecentMatchInfo,
+  StoredRecentMatchInfo,
   RewardsMessage
 } from '@opensky/shared/game-server-message-types'
 import { isLeavePenaltyGame } from '@opensky/shared/gameModes'
@@ -615,7 +615,7 @@ export abstract class Match {
         const player = this.playerContexts[i]
         const playerIndex = i
 
-        const recentMatch: RecentMatchInfo = {
+        const recentMatch: StoredRecentMatchInfo = {
           type: 'recent_match_info',
           playerID: player.id!,
           matchID: this.id,

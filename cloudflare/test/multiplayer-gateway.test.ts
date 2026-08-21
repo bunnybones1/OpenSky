@@ -499,7 +499,7 @@ describe('same-origin multiplayer gateway', () => {
       )
       .run()
 
-    const expected = {
+    const stored = {
       type: 'recent_match_info',
       playerID: principal,
       gameMode: GameMode.PRACTICE_PVP,
@@ -509,6 +509,21 @@ describe('same-origin multiplayer gateway', () => {
       store: '0x0102',
       rewards: [{ type: 'XP', amount: 42 }]
     }
+    const emptyConquest = {
+      id: 0,
+      status: 'UNKNOWN',
+      nonce: 0,
+      mode: 'UNKNOWN',
+      hero: 'UNKNOWN',
+      deckClass: null,
+      matchProgress: null,
+      createdAt: null,
+      endedAt: null
+    }
+    const expected = {
+      ...stored,
+      conquestInfo: [emptyConquest, emptyConquest]
+    }
     let recoveryRequests = 0
     recentMatchResponse = request => {
       recoveryRequests += 1
@@ -516,7 +531,7 @@ describe('same-origin multiplayer gateway', () => {
       expect(request.headers.get('x-cloud-weasel-internal-auth')).toBe(
         'multiplayer-gateway-test-secret'
       )
-      return Response.json(expected)
+      return Response.json(stored)
     }
 
     const headers = await authenticatedHeaders()
@@ -536,6 +551,60 @@ describe('same-origin multiplayer gateway', () => {
     expect(await spectator.json()).toEqual({ type: 'no_match_found' })
     expect(recoveryRequests).toBe(1)
 
+    const conquestInfo = [
+      {
+        ...emptyConquest,
+        id: 11,
+        status: 'COMPLETED',
+        mode: GameMode.CONQUEST_CONSTRUCTED,
+        hero: 'ADA',
+        matchProgress: { 0: 'WIN' }
+      },
+      {
+        ...emptyConquest,
+        id: 12,
+        status: 'COMPLETED',
+        mode: GameMode.CONQUEST_CONSTRUCTED,
+        hero: 'FOX',
+        matchProgress: { 0: 'LOSS' }
+      }
+    ]
+    recentMatchResponse = () => {
+      recoveryRequests += 1
+      return Response.json({
+        ...stored,
+        gameMode: GameMode.CONQUEST_CONSTRUCTED,
+        conquestInfo
+      })
+    }
+    const conquestResponse = await gateway(
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
+      headers
+    )
+    expect(await conquestResponse.json()).toMatchObject({
+      gameMode: GameMode.CONQUEST_CONSTRUCTED,
+      conquestInfo
+    })
+
+    recentMatchResponse = () => {
+      recoveryRequests += 1
+      return Response.json({
+        ...stored,
+        gameMode: GameMode.CONQUEST_CONSTRUCTED
+      })
+    }
+    const invalidConquestResponse = await gateway(
+      `/api/matchmaker/matchinfo/identity:${USER_ID}`,
+      headers
+    )
+    expect(invalidConquestResponse.status).toBe(500)
+    expect(await invalidConquestResponse.json()).toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'Recent match is unavailable.'
+    })
+    expect(recoveryRequests).toBe(3)
+
     await env.AUTH_DB.prepare(
       `UPDATE multiplayer_matches
        SET ended_at = ?, updated_at = ?
@@ -551,7 +620,7 @@ describe('same-origin multiplayer gateway', () => {
       headers
     )
     expect(await expired.json()).toEqual({ type: 'no_match_found' })
-    expect(recoveryRequests).toBe(1)
+    expect(recoveryRequests).toBe(3)
   })
 
   it('suppresses no-load results and stale results after a newer match attempt', async () => {

@@ -37,12 +37,17 @@ export interface MatchSettings {
 
 export interface MatchInfo {
   id: number
-  replayID: string
   mode: GameMode
   playerIDs: string[]
-  serverLocationKey?: string
+  serverLocationKey: string
   version: string
   initialized: boolean
+}
+
+// The TypeScript game registry stores replayID beside the Go-visible fields.
+// Go's public MatchInfo struct deliberately drops it when serving /matchinfo.
+export interface RegistryMatchInfo extends MatchInfo {
+  replayID: string
 }
 
 export type PlayerMatchInfo =

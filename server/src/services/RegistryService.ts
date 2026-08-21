@@ -1,11 +1,11 @@
 import { GameMode } from '@opensky/proto'
 import {
-  RecentMatchInfo,
+  StoredRecentMatchInfo,
   ServerInfo
 } from '@opensky/shared/game-server-message-types'
 import {
-  MatchInfo,
-  MatchStartPlayerInfo
+  MatchStartPlayerInfo,
+  RegistryMatchInfo
 } from '@opensky/shared/matchmaker-message-types'
 import { isMainThread } from 'worker_threads'
 
@@ -153,7 +153,7 @@ export class GameServerRegistryService extends RegistryService {
 
     const expirySeconds = this._config.settings.abandonTimeout / 1000
 
-    const info: MatchInfo = {
+    const info: RegistryMatchInfo = {
       id: matchID,
       replayID: replayID,
       mode,
@@ -172,7 +172,9 @@ export class GameServerRegistryService extends RegistryService {
     })
   }
 
-  async getMatchInProgress(playerID: string): Promise<MatchInfo | null> {
+  async getMatchInProgress(
+    playerID: string
+  ): Promise<RegistryMatchInfo | null> {
     const res = await this._redis.get(matchInProgressKey(playerID))
 
     if (!res) {
@@ -186,12 +188,12 @@ export class GameServerRegistryService extends RegistryService {
       return null
     }
 
-    return value as MatchInfo
+    return value as RegistryMatchInfo
   }
 
   async getMatchInfo(
     playerID: string
-  ): Promise<MatchInfo | RecentMatchInfo | null> {
+  ): Promise<RegistryMatchInfo | StoredRecentMatchInfo | null> {
     const rewardWaitTime = this._config.settings.recordMatchEndTimeoutMs
     for (let i = 0; i < Math.ceil(rewardWaitTime / 1000); i++) {
       const pendingRewards = await this._redis.get(
@@ -213,7 +215,7 @@ export class GameServerRegistryService extends RegistryService {
         return null
       }
 
-      return value as MatchInfo
+      return value as RegistryMatchInfo
     }
     const recentMatchRes = await this._redis.get(recentMatchKey(playerID))
 
@@ -228,7 +230,7 @@ export class GameServerRegistryService extends RegistryService {
       return null
     }
 
-    return value as RecentMatchInfo
+    return value as StoredRecentMatchInfo
   }
 
   registerGameServer(callback?: () => void) {
@@ -338,7 +340,7 @@ export class MatchRegistryService extends RegistryService {
 
       logger.debug('MATCH HEALTH CHECK', { matchID, p1address, p2address })
 
-      const info: MatchInfo = {
+      const info: RegistryMatchInfo = {
         id: matchID,
         replayID: replayID,
         mode,
@@ -416,7 +418,7 @@ export class MatchRegistryService extends RegistryService {
       })
   }
 
-  saveRecentMatch(recentMatch: RecentMatchInfo) {
+  saveRecentMatch(recentMatch: StoredRecentMatchInfo) {
     return this._redis.setex(
       recentMatchKey(recentMatch.playerID),
       RECENT_MATCH_EXPIRY_SECONDS,

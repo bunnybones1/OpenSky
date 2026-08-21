@@ -4,7 +4,7 @@ import {
   EmoteMessage,
   GameServerMessage,
   JoinServerMessage,
-  type RecentMatchInfo,
+  type StoredRecentMatchInfo,
   SpectateServerMessage
 } from '@opensky/shared/game-server-message-types'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
@@ -863,7 +863,7 @@ export class GameMatch implements DurableObject {
     const runtime = await this.ensureRuntime()
     const participant =
       index === 0 ? metadata.match.player1 : metadata.match.player2
-    const info: RecentMatchInfo = {
+    const info: StoredRecentMatchInfo = {
       type: 'recent_match_info',
       playerID: principal,
       gameMode: participant.gameMode,

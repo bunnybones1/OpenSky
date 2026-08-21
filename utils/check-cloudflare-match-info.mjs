@@ -31,8 +31,11 @@ export const matchInfoErrors = ({
   sourceMatchTracker,
   sourceMessages,
   sourceGameServerInfo,
+  sourceProto,
   sourceBrowserWorker,
   sourceInProgressHook,
+  sharedGameMessages,
+  sharedMatchmakerMessages,
   gameWorker,
   gameRuntimeTest,
   workerGateway,
@@ -65,6 +68,142 @@ export const matchInfoErrors = ({
       'Source public MatchInfo JSON fields changed; registry-only fields must not leak'
     )
   }
+
+  const sourceRecentInfoWire = bodyBetween(
+    sourceMessages,
+    'type RecentMatchInfo struct {',
+    '\n}'
+  )
+  const sourceRecentInfoFields = [
+    ...sourceRecentInfoWire.matchAll(/`json:"([^",]+)(,omitempty)?"`/g)
+  ].map(match => [match[1], Boolean(match[2])])
+  const expectedRecentInfoFields = [
+    ['playerID', false],
+    ['gameMode', false],
+    ['matchID', false],
+    ['replayID', false],
+    ['accounts', false],
+    ['conquestInfo', false],
+    ['store', false],
+    ['rewards', false]
+  ]
+  if (
+    JSON.stringify(sourceRecentInfoFields) !==
+    JSON.stringify(expectedRecentInfoFields)
+  ) {
+    errors.push('Source public RecentMatchInfo JSON contract changed')
+  }
+  if (
+    !sourceRecentInfoWire.includes(
+      'ConquestInfo [2]proto.Conquest          `json:"conquestInfo"`'
+    )
+  ) {
+    errors.push('Source public conquestInfo is no longer a required pair')
+  }
+
+  const sourceConquestWire = bodyBetween(
+    sourceProto,
+    'type Conquest struct {',
+    '\n}'
+  )
+  const sourceConquestFields = [
+    ...sourceConquestWire.matchAll(/`json:"([^",]+)(?:,[^"]*)?"/g)
+  ]
+    .map(match => match[1])
+    .filter(field => field !== '-')
+  if (
+    JSON.stringify(sourceConquestFields) !==
+    JSON.stringify([
+      'id',
+      'status',
+      'nonce',
+      'mode',
+      'hero',
+      'deckClass',
+      'matchProgress',
+      'createdAt',
+      'endedAt'
+    ])
+  ) {
+    errors.push('Source public Conquest JSON fields changed')
+  }
+  for (const enumType of ['ConquestStatus', 'GameMode', 'Hero']) {
+    const enumWire = bodyBetween(
+      sourceProto,
+      `var ${enumType}_name = map[`,
+      '\n}'
+    )
+    if (!/0:\s+"UNKNOWN"/.test(enumWire)) {
+      errors.push(`Source ${enumType} zero enum is no longer UNKNOWN`)
+    }
+  }
+
+  const sharedPublicMatchInfo = bodyBetween(
+    sharedMatchmakerMessages,
+    'export interface MatchInfo {',
+    '\n}'
+  )
+  requireOrdered(
+    errors,
+    'Shared public MatchInfo type',
+    sharedPublicMatchInfo,
+    [
+      'id: number',
+      'mode: GameMode',
+      'playerIDs: string[]',
+      'serverLocationKey: string',
+      'version: string',
+      'initialized: boolean'
+    ]
+  )
+  if (
+    sharedPublicMatchInfo.includes('replayID:') ||
+    sharedPublicMatchInfo.includes('serverLocationKey?:')
+  ) {
+    errors.push('Shared public MatchInfo type retains registry-only fields')
+  }
+  requireOrdered(
+    errors,
+    'Shared registry MatchInfo type',
+    sharedMatchmakerMessages,
+    [
+      'export interface RegistryMatchInfo extends MatchInfo {',
+      'replayID: string'
+    ]
+  )
+
+  const sharedServerInfo = bodyBetween(
+    sharedGameMessages,
+    'export interface ServerInfo {',
+    '\n}'
+  )
+  for (const field of [
+    'hostname?: string',
+    'internalHostname?: string',
+    'port?: number',
+    'ws?: string',
+    'http?: string',
+    'internalHttp?: string',
+    'releaseVersion?: string',
+    'error?: string'
+  ]) {
+    if (!sharedServerInfo.includes(field)) {
+      errors.push(`Shared ServerInfo loses source optionality: ${field}`)
+    }
+  }
+  requireOrdered(
+    errors,
+    'Shared stored/public recent-match types',
+    sharedGameMessages,
+    [
+      'export interface StoredRecentMatchInfo {',
+      'conquestInfo?: [Conquest, Conquest]',
+      'export interface RecentMatchInfo extends Omit<',
+      'StoredRecentMatchInfo,',
+      "'conquestInfo'",
+      'conquestInfo: [Conquest, Conquest]'
+    ]
+  )
 
   const sourcePendingRegistration = bodyBetween(
     sourceRegistry,
@@ -107,7 +246,7 @@ export const matchInfoErrors = ({
     sourcePendingRegistration,
     [
       'const playerIDs = players.map(',
-      'const info: MatchInfo = {',
+      'const info: RegistryMatchInfo = {',
       'initialized: false',
       'playerIDs.forEach(p => {',
       'matchInProgressKey(p)',
@@ -188,7 +327,7 @@ export const matchInfoErrors = ({
     sourceReadyRegistration,
     [
       'const healthCheck = () => {',
-      'const info: MatchInfo = {',
+      'const info: RegistryMatchInfo = {',
       'initialized: true',
       'healthCheck()',
       'global.setInterval('
@@ -213,6 +352,12 @@ export const matchInfoErrors = ({
       'break',
       'ws.connectGameServer('
     ]
+  )
+  requireOrdered(
+    errors,
+    'Source recent-match conquest consumer',
+    sourceConnect,
+    ["case 'recent_match_info':", 'conquestInfo: info.conquestInfo']
   )
 
   const workerCurrentMatch = bodyBetween(
@@ -266,6 +411,44 @@ export const matchInfoErrors = ({
     }
   }
 
+  const workerRecentProjection = bodyBetween(
+    workerGateway,
+    'const validRecentMatchInfo = (',
+    '\nconst matchInfo = async ('
+  )
+  requireOrdered(
+    errors,
+    'Worker public recent-match conquest projection',
+    workerRecentProjection,
+    [
+      'const conquestInfo = info.conquestInfo',
+      'conquestInfo.length === 2',
+      'conquestInfo.every(validStoredConquest)',
+      "info.gameMode === 'CONQUEST_CONSTRUCTED'",
+      "info.gameMode === 'CONQUEST_DISCOVERY'",
+      '(!conquestMode || conquestInfo !== undefined)',
+      'const validStoredConquest = (value: unknown) =>',
+      'optionalSourceUint(value.id)',
+      'optionalSourceString(value.status)',
+      'optionalSourceNullableString(value.deckClass)',
+      'record(value.matchProgress)',
+      'const sourceConquest = (value: unknown) => {',
+      'id: conquest.id ?? 0',
+      "status: conquest.status ?? 'UNKNOWN'",
+      'nonce: conquest.nonce ?? 0',
+      "mode: conquest.mode ?? 'UNKNOWN'",
+      "hero: conquest.hero ?? 'UNKNOWN'",
+      'deckClass: conquest.deckClass ?? null',
+      'matchProgress: conquest.matchProgress ?? null',
+      'createdAt: conquest.createdAt ?? null',
+      'endedAt: conquest.endedAt ?? null',
+      'const publicRecentMatchInfo = (info: Record<string, unknown>) => {',
+      ': [undefined, undefined]',
+      'conquestInfo: conquestInfo.map(sourceConquest)',
+      'return json(publicRecentMatchInfo(info), 200)'
+    ]
+  )
+
   const workerDisconnectTimeout = bodyBetween(
     workerGateway,
     'const remainingMatchTimeoutSeconds = (',
@@ -299,6 +482,32 @@ export const matchInfoErrors = ({
     workerRuntimeTest,
     "it('preserves source initializing match info for the client retry loop'",
     "it('uses the source minimum remaining loading and disconnect TTL'"
+  )
+  const recentRuntimeTest = bodyBetween(
+    workerRuntimeTest,
+    "it('returns a participant recent match for 24 hours without leaking it to spectators'",
+    "it('suppresses no-load results and stale results after a newer match attempt'"
+  )
+  requireOrdered(
+    errors,
+    'Worker public recent-match runtime regression',
+    recentRuntimeTest,
+    [
+      'const stored = {',
+      'const emptyConquest = {',
+      "status: 'UNKNOWN'",
+      "mode: 'UNKNOWN'",
+      "hero: 'UNKNOWN'",
+      'conquestInfo: [emptyConquest, emptyConquest]',
+      'return Response.json(stored)',
+      'expect(await response.json()).toEqual(expected)',
+      'const conquestInfo = [',
+      'gameMode: GameMode.CONQUEST_CONSTRUCTED',
+      'expect(await conquestResponse.json()).toMatchObject({',
+      'conquestInfo',
+      'expect(invalidConquestResponse.status).toBe(500)',
+      "message: 'Recent match is unavailable.'"
+    ]
   )
   for (const [label, runtimeTest] of [
     ['ready', readyRuntimeTest],
@@ -374,8 +583,11 @@ const main = async () => {
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
+    sourceProto,
     sourceBrowserWorker,
     sourceInProgressHook,
+    sharedGameMessages,
+    sharedMatchmakerMessages,
     gameWorker,
     gameRuntimeTest,
     workerGateway,
@@ -395,6 +607,7 @@ const main = async () => {
       path.join(root, 'matchmaker/lib/gameservers/game_server_info.go'),
       'utf8'
     ),
+    readFile(path.join(root, 'api/proto/api.gen.go'), 'utf8'),
     readFile(
       path.join(root, 'game/src/state/worker/multiplayerWorkerState.ts'),
       'utf8'
@@ -404,6 +617,14 @@ const main = async () => {
         root,
         'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx'
       ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'lib/shared/src/game-server-message-types.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'lib/shared/src/matchmaker-message-types.ts'),
       'utf8'
     ),
     readFile(
@@ -429,8 +650,11 @@ const main = async () => {
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
+    sourceProto,
     sourceBrowserWorker,
     sourceInProgressHook,
+    sharedGameMessages,
+    sharedMatchmakerMessages,
     gameWorker,
     gameRuntimeTest,
     workerGateway,
@@ -442,7 +666,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match info preserves public match/server wires, initialization retry, and per-player timeout lifecycles'
+      'Cloudflare match info preserves public match/server/recent wires, initialization retry, and per-player timeout lifecycles'
     )
   }
 }

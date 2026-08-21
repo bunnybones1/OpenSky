@@ -10,8 +10,11 @@ const fixtures = async () => {
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
+    sourceProto,
     sourceBrowserWorker,
     sourceInProgressHook,
+    sharedGameMessages,
+    sharedMatchmakerMessages,
     gameWorker,
     gameRuntimeTest,
     workerGateway,
@@ -25,11 +28,14 @@ const fixtures = async () => {
     ),
     readFile('matchmaker/lib/messages/messages.go', 'utf8'),
     readFile('matchmaker/lib/gameservers/game_server_info.go', 'utf8'),
+    readFile('api/proto/api.gen.go', 'utf8'),
     readFile('game/src/state/worker/multiplayerWorkerState.ts', 'utf8'),
     readFile(
       'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx',
       'utf8'
     ),
+    readFile('lib/shared/src/game-server-message-types.ts', 'utf8'),
+    readFile('lib/shared/src/matchmaker-message-types.ts', 'utf8'),
     readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
     readFile(
       'game-server-cloudflare/test-cloudflare/game-match.test.ts',
@@ -44,8 +50,11 @@ const fixtures = async () => {
     sourceMatchTracker,
     sourceMessages,
     sourceGameServerInfo,
+    sourceProto,
     sourceBrowserWorker,
     sourceInProgressHook,
+    sharedGameMessages,
+    sharedMatchmakerMessages,
     gameWorker,
     gameRuntimeTest,
     workerGateway,
@@ -63,7 +72,7 @@ const replaceAfter = (source, marker, search, replacement) => {
   )}`
 }
 
-test('pins source match/server wires, initialization retry, and timeout lifecycles', async () => {
+test('pins source match/server/recent wires, initialization retry, and timeout lifecycles', async () => {
   assert.deepEqual(matchInfoErrors(await fixtures()), [])
 })
 
@@ -82,6 +91,50 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       sourceGameServerInfo: value.sourceGameServerInfo.replace(
         'InternalHostname string         `json:"internalHostname,omitempty"`',
         'InternalHostname string         `json:"internalHostname"`'
+      )
+    },
+    {
+      ...value,
+      sourceMessages: value.sourceMessages.replace(
+        'ConquestInfo [2]proto.Conquest          `json:"conquestInfo"`',
+        'ConquestInfo [2]proto.Conquest          `json:"conquestInfo,omitempty"`'
+      )
+    },
+    {
+      ...value,
+      sourceProto: value.sourceProto.replace(
+        'MatchProgress ConquestMatchResultMap `json:"matchProgress"',
+        'MatchProgress ConquestMatchResultMap `json:"progress"'
+      )
+    },
+    {
+      ...value,
+      sourceProto: replaceAfter(
+        value.sourceProto,
+        'var ConquestStatus_name = map[',
+        '0: "UNKNOWN"',
+        '0: "NONE"'
+      )
+    },
+    {
+      ...value,
+      sharedMatchmakerMessages: value.sharedMatchmakerMessages.replace(
+        'serverLocationKey: string',
+        'serverLocationKey?: string'
+      )
+    },
+    {
+      ...value,
+      sharedGameMessages: value.sharedGameMessages.replace(
+        'internalHttp?: string',
+        'internalHttp: string'
+      )
+    },
+    {
+      ...value,
+      sharedGameMessages: value.sharedGameMessages.replace(
+        'conquestInfo: [Conquest, Conquest]',
+        'conquestInfo?: [Conquest, Conquest]'
       )
     },
     {
@@ -153,6 +206,31 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       workerGateway: value.workerGateway.replace(
         "WHERE (status = 'creating'",
         "WHERE (status = 'active'"
+      )
+    },
+    {
+      ...value,
+      workerGateway: value.workerGateway.replace(
+        'conquestInfo: conquestInfo.map(sourceConquest)',
+        'conquestInfo'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('returns a participant recent match for 24 hours without leaking it to spectators'",
+        'conquestInfo: [emptyConquest, emptyConquest]',
+        'conquestInfo: []'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('returns a participant recent match for 24 hours without leaking it to spectators'",
+        'expect(invalidConquestResponse.status).toBe(500)',
+        'expect(invalidConquestResponse.status).toBe(200)'
       )
     },
     {
