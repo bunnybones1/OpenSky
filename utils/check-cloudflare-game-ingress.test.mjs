@@ -138,6 +138,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'const MAX_SPECTATORS = 50',
+        "message: 'too many spectators'",
+        "message: 'spectator capacity reached'"
+      )
+    },
+    {
+      ...value,
       sourcePlayerContext: value.sourcePlayerContext.replace(
         'const KEEPALIVE_GRACE_PERIOD = 2000',
         'const KEEPALIVE_GRACE_PERIOD = 4000'
@@ -287,6 +296,68 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: value.workerMatch.replace(
+        "message.type === 'spectate_server'",
+        "role === 'spectator' && message.type === 'spectate_server'"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "if (role !== 'player') return",
+        'this.requirePlayer(role)'
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "attachment.role = 'spectator'",
+        "attachment.role = 'player'"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        'const MAX_SPECTATOR_SOCKETS = 64',
+        'const MAX_SPECTATOR_SOCKETS = 50'
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'private async connectSocket(',
+        "role === 'spectator' &&",
+        "role === 'spectator' &&\n      previousSockets.length === 0 &&"
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'private sendToPrincipal(',
+        "(attachment.role ?? 'player') === 'player'",
+        'true'
+      )
+    },
+    {
+      ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'const targetIndex = [0, 1].find(',
+        "throw new SourceGameError('match ended or cannot be found.', 'server')",
+        "throw new GameProtocolError('spectated player is not in match')"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "throw new SourceGameError('too many spectators', 'user')",
+        "throw new GameProtocolError('too many spectators')"
+      )
+    },
+    {
+      ...value,
       workerProtocolTest: value.workerProtocolTest.replace(
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
         "it('rejects binary game messages'"
@@ -358,6 +429,51 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('preserves the source same-socket player replacement rejoin'",
         "message: 'You connected in another session, please play there.'",
         "message: 'connected elsewhere'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('lets a participant spectate the opponent without leaking player-only messages'",
+        'expect(mutedMessages).toEqual([])',
+        "expect(mutedMessages).toEqual([{ type: 'error' }])"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('lets a participant spectate the opponent without leaking player-only messages'",
+        'expect(leaked).toEqual([])',
+        "expect(leaked).toEqual([{ type: 'rewards' }])"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves the source joined-spectator limit error and empty close'",
+        "message: 'too many spectators'",
+        "message: 'spectator capacity reached'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('bounds pending spectator sockets above the source joined limit'",
+        'index < 64',
+        'index < 50'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        'const duplicateOverflow = await SELF.fetch(',
+        'expect(duplicateOverflow.status).toBe(429)',
+        'expect(duplicateOverflow.status).toBe(101)'
       )
     },
     {

@@ -293,6 +293,10 @@ const runtimeSettings = (env: GameServerEnv): RuntimeSettings => ({
 
 const normalizedAddress = (address: string) => address.toLowerCase()
 const MAX_SPECTATORS = 50
+// Keep pending WebSockets bounded without replacing the source's distinct
+// 50-member joined-spectator limit. This leaves room for a connection to
+// receive the original `too many spectators` wire after spectate_server.
+const MAX_SPECTATOR_SOCKETS = 64
 
 export const botDifficultyForParticipant = (
   proposalId: string,
@@ -490,7 +494,7 @@ export class GameMatch implements DurableObject {
           const bootstrapAllowed =
             message.type === 'timesync' ||
             (role === 'player' && message.type === 'join_server') ||
-            (role === 'spectator' && message.type === 'spectate_server')
+            message.type === 'spectate_server'
           if (!bootstrapAllowed) {
             throw new GameProtocolError(
               `${role === 'spectator' ? 'spectate_server' : 'join_server'} is required first`
@@ -935,11 +939,9 @@ export class GameMatch implements DurableObject {
     if (anonymousSpectator && role !== 'spectator') {
       return new Response('Not authorized for match', { status: 401 })
     }
-    const previousSockets = this.state.getWebSockets(principal)
     if (
       role === 'spectator' &&
-      previousSockets.length === 0 &&
-      this.spectatorSockets(undefined, true).length >= MAX_SPECTATORS
+      this.spectatorSockets(undefined, true).length >= MAX_SPECTATOR_SOCKETS
     ) {
       return new Response('Too many spectators', { status: 429 })
     }
@@ -982,8 +984,6 @@ export class GameMatch implements DurableObject {
         return
       }
       case 'spectate_server': {
-        if (role !== 'spectator')
-          throw new GameProtocolError('players cannot spectate their own match')
         if (attachment.joined)
           throw new SourceGameError('connected in another location', 'user')
         await this.spectate(socket, attachment, message)
@@ -1008,7 +1008,9 @@ export class GameMatch implements DurableObject {
         await this.emote(attachment, message)
         return
       case 'mute_opponent': {
-        this.requirePlayer(role)
+        // MatchManager.handlePlayerMuted silently ignores a spectator because
+        // their authenticated address is not in the match player order.
+        if (role !== 'player') return
         const players = await this.players()
         players[attachment.principal].opponentMuted = message.muted
         await this.state.storage.put(PLAYERS_KEY, players)
@@ -1143,7 +1145,7 @@ export class GameMatch implements DurableObject {
         requestedTarget === identityTargets[index]
     )
     if (targetIndex === undefined) {
-      throw new GameProtocolError('spectated player is not in match')
+      throw new SourceGameError('match ended or cannot be found.', 'server')
     }
     const targetUserId =
       targetIndex === 0 ? ledger.player1_user_id : ledger.player2_user_id
@@ -1153,6 +1155,16 @@ export class GameMatch implements DurableObject {
         attachment.userId.toLowerCase() === targetUserId.toLowerCase())
     ) {
       throw new SourceGameError('you can\t spectate yourself', 'server')
+    }
+
+    const joinedSpectators = this.spectatorSockets()
+    const replacingSpectator = joinedSpectators.some(existing => {
+      const existingAttachment =
+        existing.deserializeAttachment() as SocketAttachment | null
+      return existingAttachment?.principal === attachment.principal
+    })
+    if (!replacingSpectator && joinedSpectators.length >= MAX_SPECTATORS) {
+      throw new SourceGameError('too many spectators', 'user')
     }
 
     const codes = new Set(requestedCodes)
@@ -1175,6 +1187,9 @@ export class GameMatch implements DurableObject {
     }
 
     this.replaceSpectatorSession(socket, attachment.principal)
+    // The source chooses join versus spectate from the first message, not from
+    // whether the authenticated identity is also a match participant.
+    attachment.role = 'spectator'
     attachment.joined = true
     attachment.spectatedPrincipal = principalTargets[targetIndex]
     attachment.spectatedPlayer = targetIndex as Player
@@ -2261,7 +2276,9 @@ export class GameMatch implements DurableObject {
     for (const socket of this.state.getWebSockets(principal)) {
       const attachment =
         socket.deserializeAttachment() as SocketAttachment | null
-      if (attachment?.joined) this.safeSend(socket, message)
+      if (attachment?.joined && (attachment.role ?? 'player') === 'player') {
+        this.safeSend(socket, message)
+      }
     }
   }
 

@@ -192,6 +192,13 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     {
       ...value,
       gameMatch: value.gameMatch.replace(
+        "(attachment.role ?? 'player') === 'player'",
+        'true'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
         'previous.close()',
         "previous.close(4001, 'Duplicate connection')"
       )

@@ -349,6 +349,21 @@ export const matchCompletionErrors = (
   ) {
     errors.push('Worker spectator replacement invents a close code or reason')
   }
+  const workerPrincipalSend = bodyBetween(
+    gameMatch,
+    'private sendToPrincipal(',
+    'private spectatorSockets('
+  )
+  requireOrdered(
+    errors,
+    'Worker player-only completion routing',
+    workerPrincipalSend,
+    [
+      'attachment?.joined &&',
+      "(attachment.role ?? 'player') === 'player'",
+      'this.safeSend(socket, message)'
+    ]
+  )
 
   const gameplay = bodyBetween(
     gameMatch,

@@ -138,7 +138,11 @@ export const gameIngressErrors = ({
     'existing.context.send({',
     "level: 'user'",
     "message: 'connected in another location'",
-    'existing.context.connection.close()'
+    'existing.context.connection.close()',
+    'const MAX_SPECTATORS = 50',
+    "level: 'user'",
+    "message: 'too many spectators'",
+    'context.connection.close()'
   ])
   const sourceSendError = bodyBetween(
     sourceMatchManager,
@@ -328,23 +332,32 @@ export const gameIngressErrors = ({
       "message.type === 'mute_opponent' ||",
       "message.type === 'error'",
       'return',
-      'const bootstrapAllowed ='
+      'const bootstrapAllowed =',
+      "message.type === 'spectate_server'"
     ]
   )
   if (workerUnjoined.includes('attachment.detachedPlayerSession &&')) {
     errors.push('Worker no-game gameplay remains limited to detached players')
   }
+  if (
+    workerUnjoined.includes(
+      "role === 'spectator' && message.type === 'spectate_server'"
+    )
+  ) {
+    errors.push('Worker still chooses spectate bootstrap from gateway role')
+  }
   requireOrdered(errors, 'Worker explicit source errors', workerMatch, [
     "throw new SourceGameError('connected in another location', 'user')",
     "throw new SourceGameError('match ended or cannot be found.', 'server')",
-    "throw new SourceGameError('you can\\t spectate yourself', 'server')"
+    "throw new SourceGameError('you can\\t spectate yourself', 'server')",
+    "throw new SourceGameError('too many spectators', 'user')"
   ])
   const sourceUnavailableErrorCount = workerMatch.match(
     /throw new SourceGameError\('match ended or cannot be found\.', 'server'\)/g
   )?.length
-  if (sourceUnavailableErrorCount !== 2) {
+  if (sourceUnavailableErrorCount !== 3) {
     errors.push(
-      `Worker source unavailable-match errors changed: expected 2, found ${sourceUnavailableErrorCount ?? 0}`
+      `Worker source unavailable-match errors changed: expected 3, found ${sourceUnavailableErrorCount ?? 0}`
     )
   }
   const sourceStickerErrorCount = workerMatch.match(
@@ -355,6 +368,78 @@ export const gameIngressErrors = ({
       `Worker source unowned-sticker errors changed: expected 3, found ${sourceStickerErrorCount ?? 0}`
     )
   }
+  const workerHandleMessage = bodyBetween(
+    workerMatch,
+    'private async handleMessage(',
+    'private async join('
+  )
+  requireOrdered(
+    errors,
+    'Worker source message-selected spectator role',
+    workerHandleMessage,
+    [
+      "case 'spectate_server': {",
+      'if (attachment.joined)',
+      'await this.spectate(socket, attachment, message)',
+      "case 'mute_opponent': {",
+      "if (role !== 'player') return"
+    ]
+  )
+  if (
+    workerHandleMessage.includes(
+      "throw new GameProtocolError('players cannot spectate their own match')"
+    )
+  ) {
+    errors.push('Worker still rejects source participant spectator sessions')
+  }
+  const workerSpectate = bodyBetween(
+    workerMatch,
+    'private async spectate(',
+    'private async updateLoading('
+  )
+  requireOrdered(
+    errors,
+    'Worker bounded source spectator admission',
+    workerSpectate,
+    [
+      "throw new SourceGameError('match ended or cannot be found.', 'server')",
+      "throw new SourceGameError('you can\\t spectate yourself', 'server')",
+      'const joinedSpectators = this.spectatorSockets()',
+      'if (!replacingSpectator && joinedSpectators.length >= MAX_SPECTATORS) {',
+      "throw new SourceGameError('too many spectators', 'user')",
+      'this.replaceSpectatorSession(socket, attachment.principal)',
+      "attachment.role = 'spectator'",
+      'attachment.joined = true'
+    ]
+  )
+  requireOrdered(errors, 'Worker spectator socket safety bound', workerMatch, [
+    'const MAX_SPECTATORS = 50',
+    'const MAX_SPECTATOR_SOCKETS = 64',
+    'this.spectatorSockets(undefined, true).length >= MAX_SPECTATOR_SOCKETS'
+  ])
+  const workerConnectSocket = bodyBetween(
+    workerMatch,
+    'private async connectSocket(',
+    'private async handleMessage('
+  )
+  if (workerConnectSocket.includes('previousSockets')) {
+    errors.push('Worker pending spectator cap can be bypassed by a duplicate')
+  }
+  const workerPrincipalSend = bodyBetween(
+    workerMatch,
+    'private sendToPrincipal(',
+    'private spectatorSockets('
+  )
+  requireOrdered(
+    errors,
+    'Worker player-only principal routing',
+    workerPrincipalSend,
+    [
+      'attachment?.joined &&',
+      "(attachment.role ?? 'player') === 'player'",
+      'this.safeSend(socket, message)'
+    ]
+  )
   for (const token of [
     'Cloudflare owns protocol ping/pong and disconnect detection',
     'the preserved browser still closes',
@@ -415,7 +500,14 @@ export const gameIngressErrors = ({
         "it('preserves the source same-socket spectator replacement close'",
         "message: 'connected in another location'",
         "it('preserves the source same-socket player replacement rejoin'",
-        "message: 'You connected in another session, please play there.'"
+        "message: 'You connected in another session, please play there.'",
+        "it('lets a participant spectate the opponent without leaking player-only messages'",
+        "type: 'mute_opponent', muted: true",
+        'expect(mutedMessages).toEqual([])',
+        'expect(leaked).toEqual([])',
+        "it('preserves the source joined-spectator limit error and empty close'",
+        "message: 'too many spectators'",
+        "it('bounds pending spectator sockets above the source joined limit'"
       ]
     ]
   ]) {
@@ -491,6 +583,9 @@ export const gameIngressErrors = ({
       "message: 'invalid spectate player'",
       'code: 1005',
       "message: 'you can\\t spectate yourself'",
+      'code: 1005',
+      "spectate(wrongTarget, 'identity:not-a-match-participant')",
+      "message: 'match ended or cannot be found.'",
       'code: 1005'
     ]
   )
@@ -542,6 +637,46 @@ export const gameIngressErrors = ({
       "type: 'reconnect'",
       "type: 'timesync'",
       'expect(first.readyState).toBe(WebSocket.OPEN)'
+    ]
+  )
+  const workerParticipantSpectatorTest = bodyBetween(
+    workerRuntimeTest,
+    "it('lets a participant spectate the opponent without leaking player-only messages'",
+    "it('replaces only the prior joined spectator"
+  )
+  requireOrdered(
+    errors,
+    'Worker participant spectator runtime regression',
+    workerParticipantSpectatorTest,
+    [
+      'const viewer = await connectAs(PRINCIPAL_1, USER_ID_1)',
+      'spectate(viewer, `identity:${USER_ID_2}`)',
+      "type: 'mute_opponent', muted: true",
+      'expect(mutedMessages).toEqual([])',
+      "type: 'rewards', data: []",
+      'expect(leaked).toEqual([])',
+      "type: 'timesync', clientTime: 7654"
+    ]
+  )
+  const workerSpectatorLimitTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves the source joined-spectator limit error and empty close'",
+    "it('preserves the source client time-sync-before-join handshake'"
+  )
+  requireOrdered(
+    errors,
+    'Worker spectator admission runtime regressions',
+    workerSpectatorLimitTest,
+    [
+      'expect(serverSockets).toHaveLength(50)',
+      'attachment.joined = true',
+      "message: 'too many spectators'",
+      'code: 1005,',
+      "it('bounds pending spectator sockets above the source joined limit'",
+      'index < 64',
+      'expect(overflow.status).toBe(429)',
+      'const duplicateOverflow = await SELF.fetch(',
+      'expect(duplicateOverflow.status).toBe(429)'
     ]
   )
 

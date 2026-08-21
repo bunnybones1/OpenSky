@@ -2423,7 +2423,9 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       reason: ''
     })
 
-    const self = await connectAs(SPECTATOR_PRINCIPAL, USER_ID_1)
+    // A real participant is classified as a player at upgrade time. The
+    // source still chooses the spectate path from this first message.
+    const self = await connectAs(PRINCIPAL_1, USER_ID_1)
     const selfError = nextMessage(self)
     const selfClosed = new Promise<CloseEvent>(resolve =>
       self.addEventListener('close', resolve, { once: true })
@@ -2435,6 +2437,25 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       message: 'you can\t spectate yourself'
     })
     await expect(selfClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+
+    const wrongTarget = await connectAs(
+      PRIVATE_SPECTATOR_PRINCIPAL,
+      PRIVATE_SPECTATOR_USER_ID
+    )
+    const wrongTargetError = nextMessage(wrongTarget)
+    const wrongTargetClosed = new Promise<CloseEvent>(resolve =>
+      wrongTarget.addEventListener('close', resolve, { once: true })
+    )
+    spectate(wrongTarget, 'identity:not-a-match-participant')
+    await expect(wrongTargetError).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'match ended or cannot be found.'
+    })
+    await expect(wrongTargetClosed).resolves.toMatchObject({
       code: 1005,
       reason: ''
     })
@@ -2536,6 +2557,71 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       clientTime: 6543
     })
     expect(first.readyState).toBe(WebSocket.OPEN)
+  })
+
+  it('lets a participant spectate the opponent without leaking player-only messages', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const player = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const playerJoined = collectMessages(player, 2)
+    join(player, 0x31)
+    await playerJoined
+
+    const viewer = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const viewerJoined = collectMessages(viewer, 2)
+    spectate(viewer, `identity:${USER_ID_2}`)
+    await expect(viewerJoined).resolves.toEqual([
+      expect.objectContaining({ type: 'reconnect' }),
+      {
+        type: 'spectators_list',
+        spectators: [
+          {
+            id: 0,
+            address: `identity:${USER_ID_1}`,
+            canSeeHand: false
+          }
+        ]
+      }
+    ])
+
+    const mutedMessages: Record<string, unknown>[] = []
+    const mutedListener = (event: MessageEvent) =>
+      mutedMessages.push(JSON.parse(event.data as string))
+    viewer.addEventListener('message', mutedListener)
+    viewer.send(JSON.stringify({ type: 'mute_opponent', muted: true }))
+    await new Promise(resolve => setTimeout(resolve, 50))
+    viewer.removeEventListener('message', mutedListener)
+    expect(mutedMessages).toEqual([])
+    expect(viewer.readyState).toBe(WebSocket.OPEN)
+
+    const playerOnly = nextMessage(player)
+    const leaked: Record<string, unknown>[] = []
+    const leakedListener = (event: MessageEvent) =>
+      leaked.push(JSON.parse(event.data as string))
+    viewer.addEventListener('message', leakedListener)
+    await runInDurableObject(stub() as DurableObjectStub, async instance => {
+      ;(
+        instance as unknown as {
+          sendToPrincipal(
+            principal: string,
+            message: { type: 'rewards'; data: [] }
+          ): void
+        }
+      ).sendToPrincipal(PRINCIPAL_1, { type: 'rewards', data: [] })
+    })
+    await expect(playerOnly).resolves.toEqual({ type: 'rewards', data: [] })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    viewer.removeEventListener('message', leakedListener)
+    expect(leaked).toEqual([])
+
+    const synced = nextMessage(viewer)
+    viewer.send(JSON.stringify({ type: 'timesync', clientTime: 7654 }))
+    await expect(synced).resolves.toMatchObject({
+      type: 'timesync',
+      clientTime: 7654
+    })
   })
 
   it('replaces only the prior joined spectator with the source close frame', async () => {
@@ -2647,13 +2733,67 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     expect(body.players[PRINCIPAL_2].abandonAtMs).toBeUndefined()
   })
 
-  it('caps pending and joined spectators at the source limit', async () => {
+  it('preserves the source joined-spectator limit error and empty close', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     await initializeMatch()
     for (let index = 0; index < 50; index += 1) {
       const principal = `0x${BigInt(index + 100)
         .toString(16)
         .padStart(40, '0')}`
       await connectAs(principal, `spectator-${index}`)
+    }
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const serverSockets = state.getWebSockets()
+        expect(serverSockets).toHaveLength(50)
+        for (const server of serverSockets) {
+          const attachment = server.deserializeAttachment() as {
+            role?: 'player' | 'spectator'
+            joined: boolean
+            spectatedPrincipal?: string
+            spectatedPlayer?: number
+            knowledge?: number
+          }
+          attachment.role = 'spectator'
+          attachment.joined = true
+          attachment.spectatedPrincipal = PRINCIPAL_1
+          attachment.spectatedPlayer = 0
+          attachment.knowledge = 0
+          server.serializeAttachment(attachment)
+        }
+      }
+    )
+
+    const overflow = await connectAs(
+      '0xffffffffffffffffffffffffffffffffffffffff',
+      'spectator-overflow'
+    )
+    const overflowError = nextMessage(overflow)
+    const overflowClosed = new Promise<CloseEvent>(resolve =>
+      overflow.addEventListener('close', resolve, { once: true })
+    )
+    spectate(overflow, PRINCIPAL_1)
+    await expect(overflowError).resolves.toEqual({
+      type: 'error',
+      level: 'user',
+      message: 'too many spectators'
+    })
+    await expect(overflowClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+  })
+
+  it('bounds pending spectator sockets above the source joined limit', async () => {
+    await initializeMatch()
+    for (let index = 0; index < 64; index += 1) {
+      const principal = `0x${BigInt(index + 100)
+        .toString(16)
+        .padStart(40, '0')}`
+      await connectAs(principal, `pending-spectator-${index}`)
     }
 
     const overflow = await SELF.fetch(
@@ -2671,6 +2811,22 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
     expect(overflow.status).toBe(429)
     expect(await overflow.text()).toBe('Too many spectators')
+
+    const duplicateOverflow = await SELF.fetch(
+      `https://game.example/v1/matches/${proposalId}`,
+      {
+        headers: {
+          Upgrade: 'websocket',
+          Origin: 'https://opensky.example',
+          [INTERNAL_AUTH_HEADER]: 'game-server-test-secret',
+          [TRUSTED_PRINCIPAL_HEADER]:
+            '0x0000000000000000000000000000000000000064',
+          [TRUSTED_USER_ID_HEADER]: 'duplicate-spectator-overflow'
+        }
+      }
+    )
+    expect(duplicateOverflow.status).toBe(429)
+    expect(await duplicateOverflow.text()).toBe('Too many spectators')
   })
 
   it('preserves the source client time-sync-before-join handshake', async () => {
