@@ -150,12 +150,18 @@ These remain release blockers, with three interpretation rules:
   fulfilled off chain. They do not require the source relayer's terminal
   failure mode, transaction queue layout, or polling cadence.
 
-## 4. Mixed gates requiring refactoring
+## 4. Mixed-gate conversion status
 
 Four gates currently combine valuable effect protection with implementation
 locks. They must not be removed wholesale. Split each one so the behavioral
 and safety portions remain release blockers while the Go-mechanism assertions
 become provenance-only or disappear after replacement evidence exists.
+
+The `worker-runners` and `match-completion` conversions were completed at
+`6795a7fd`. Their release checks now require recoverability beyond the source
+retry ceiling, exactly-once application, independent progress, terminal-client
+ordering, and Durable Object eviction recovery. The `matchmaker-cadence` and
+`conquest-gate` conversions remain outstanding.
 
 ### `worker-runners`
 
@@ -201,13 +207,13 @@ Replace:
   fifteen-second retry, maximum-attempt, target table, and target status-name
   requirements where those are not externally observable.
 
-Existing useful black-box evidence already covers terminal publication and
-later independent maintenance in
+Black-box evidence covers terminal publication and later independent
+maintenance in
 `game-server-cloudflare/test-cloudflare/game-match.test.ts`. Deck aggregate
 idempotency, serialization, and transactional rollback are exercised in
-`game-server-cloudflare/test-cloudflare/deck-ranks.test.ts`. The missing
-replacement is recovery/re-drive after more failures than the copied Go
-terminal bound.
+`game-server-cloudflare/test-cloudflare/deck-ranks.test.ts`. Both suites now
+also prove recovery/re-drive after more failures than the copied Go terminal
+bound; the mutation-tested gate rejects removal of that evidence.
 
 ### `matchmaker-cadence`
 
@@ -279,16 +285,13 @@ For every implementation lock, use this sequence:
 No conversion is complete merely because the suite stays green. The
 replacement test must fail when the protected effect is deliberately broken.
 
-## Recommended conversion order
+## Remaining conversion order
 
-1. Split exact retry constants out of `worker-runners`.
-2. Add post-match recovery/re-drive tests, then split the same constants,
-   ticker, batch, and work-group tokens out of `match-completion`.
-3. Convert `matchmaker-cadence` from a nine-runner topology check to
+1. Convert `matchmaker-cadence` from a nine-runner topology check to
    fake-time latency, mode coverage, ordering, and eviction recovery.
-4. Narrow the one source-ticker assertion in `matchmaker-session` to its
+2. Narrow the one source-ticker assertion in `matchmaker-session` to its
    already-tested authentication/read deadline effect.
-5. Let the Conquest Workflow/Queue decision provide the final target evidence
+3. Let the Conquest Workflow/Queue decision provide the final target evidence
    for `conquest-gate`.
 
 This order preserves the strongest existing safety boundaries while removing

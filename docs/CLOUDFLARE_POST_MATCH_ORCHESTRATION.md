@@ -2,8 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: ratified local implementation direction. Production migration and
-deployment remain paused.
+Status: implemented and locally verified at `6795a7fd`. Production migration
+and deployment remain paused; the complete release contract and exact-head PR
+CI are still required before any separately authorized deployment.
 
 ## Decision
 
@@ -52,7 +53,7 @@ work-group names, and terminal task failure are not part of this contract.
 Keep `multiplayer_match_deck_rank_jobs`, but treat it as a durable
 responsibility receipt rather than a copy of the Go task engine.
 
-Required final shape:
+Implemented shape:
 
 - immutable `proposal_id`, library revision, season, and creation time;
 - `PENDING` and `APPLIED` only—no terminal `FAILED` state;
@@ -72,7 +73,7 @@ an operational policy and must not be enforced as a source-parity invariant.
 Keep attempt observation and a due index on
 `multiplayer_grandweaver_jobs`, but remove the copied Go execution policy.
 
-Required final shape:
+Implemented shape:
 
 - immutable proposal, game mode, season, and creation time;
 - `PENDING` and `APPLIED` only;
@@ -107,7 +108,7 @@ sequence unless it becomes a documented operator or player contract.
 
 ## Required replacement evidence
 
-Before removing the copied mechanism gates, Workers tests must prove:
+The replacement Workers tests prove:
 
 - six consecutive injected failures remain `PENDING`, have six observed
   attempts, and retain a later recovery cursor;
@@ -120,15 +121,15 @@ Before removing the copied mechanism gates, Workers tests must prove:
 - analytics waits for both responsibilities without becoming authoritative
   for either one.
 
-The mutation-tested `match-completion` gate should then protect those test
-names and effect tokens, not Go `MaxBatchSize`, `time.NewTicker`, retry-delay,
+The mutation-tested `match-completion` gate protects those test names and
+effect tokens, not Go `MaxBatchSize`, `time.NewTicker`, retry-delay,
 maximum-retry, or work-group tokens.
 
 ## Production safety
 
-Migrations `0119` and `0120` have not been applied to production, so they may
-be corrected in place before first application. Production preflight must be
-updated in the same milestone to require:
+Migrations `0119` and `0120` have not been applied to production, so they were
+corrected in place before first application. Production preflight now
+requires:
 
 - both responsibility tables and their behavior-critical identity,
   publication, receipt, and no-delete guards;

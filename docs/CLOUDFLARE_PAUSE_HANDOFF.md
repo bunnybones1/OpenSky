@@ -14,17 +14,18 @@ services are behavioral oracles, not architecture templates. The uncommitted
 Conquest `0121` attempt lifecycle was discarded; migrations `0119` and `0120`
 were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
-and must be corrected and reverified before production. The production
-mutation pause remains in force.
+and were corrected and locally reverified at `6795a7fd`. Complete release
+validation and exact-head PR CI remain outstanding. The production mutation
+pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `1e7f878c`
-  (`Preserve source Grandweaver task lifecycle`)
-- Latest tested runtime commit: `1e7f878c`
-  (`Preserve source Grandweaver task lifecycle`)
+- Last code/test checkpoint: `6795a7fd`
+  (`Keep post-match responsibilities recoverable`)
+- Latest tested runtime commit: `6795a7fd`
+  (`Keep post-match responsibilities recoverable`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -33,10 +34,12 @@ mutation pause remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `1e7f878c` are committed and
-  tested but are **not deployed**. The complete exact-commit build at
-  `1e7f878c` produced web entry `/assets/index-1eddfd33.js` and game entry
-  `/game/cloudflare/assets/index-ccb53c4b.js`.
+- The runtime changes from `38386294` through `6795a7fd` are committed and
+  tested but are **not deployed**. The most recent complete release build is
+  still the earlier `1e7f878c` checkpoint, which produced web entry
+  `/assets/index-1eddfd33.js` and game entry
+  `/game/cloudflare/assets/index-ccb53c4b.js`; a complete build of the current
+  head remains required.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus
@@ -48,8 +51,8 @@ mutation pause remains in force.
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
   may be deployed until `0118` exists. No Worker from `36498a51` or later may
   be deployed until `0119` exists, and no Worker from `1e7f878c` or later may
-  be deployed until all six exist. Apply them in order while match allocation
-  is quiescent as described below.
+  be deployed until all six exist in their current `6795a7fd` shape. Apply
+  them in order while match allocation is quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -61,6 +64,15 @@ mutation pause remains in force.
 The reported Practice PvP replay enum failure was fixed earlier and is already
 deployed. Commits `24e9c8e4` and `b0271620` normalize legacy enum shapes and
 verify the exact reported replay from both player perspectives.
+
+The asynchronous deck-rank and Grandweaver sections below preserve the
+historical behavior of commits `36498a51` and `1e7f878c`. Their copied retry
+delays, five-attempt ceilings, terminal `FAILED` states, and source-work-group
+language are **not current architecture**. Commit `6795a7fd` supersedes those
+mechanisms with `PENDING`/`APPLIED` responsibility receipts, target-owned
+bounded exponential backoff with no terminal attempt limit, independent
+progress, and Durable Object eviction recovery. Six injected failures remain
+recoverable and attempt seven applies exactly once.
 
 ## Multiplayer XP publication milestone
 
