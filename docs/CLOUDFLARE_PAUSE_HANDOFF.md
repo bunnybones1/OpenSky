@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `86a95e03`
-  (`Pin source matchmaker completion wires`)
-- Latest tested runtime commit: `9ee8d521`
-  (`Preserve source match found ordering`)
+- Last code/test checkpoint: `64686dae`
+  (`Preserve source match reward ordering`)
+- Latest tested runtime commit: `64686dae`
+  (`Preserve source match reward ordering`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,8 +23,8 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `9ee8d521` are committed and
-  tested but are **not deployed**. The exact local build at `9ee8d521`
+- The runtime changes from `38386294` through `64686dae` are committed and
+  tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
@@ -182,9 +182,11 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
-The newer `86a95e03` matchmaker completion-wire safety checkpoint and this
-refreshed handoff require a later green exact-head CI run before any production
-mutation.
+Run <https://github.com/bunnybones1/OpenSky/actions/runs/32481031436> passed the
+matchmaker completion-wire safety checkpoint and its refreshed handoff at exact
+pushed head `367e3880` in 13m54s. The newer `64686dae` reward-order checkpoint
+and this refreshed handoff require a later green exact-head CI run before any
+production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1718,6 +1720,42 @@ assembled entries are `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source terminal reward-order milestone
+
+Commit `64686dae` restores the per-player terminal reward order produced by the
+Go API and preserved by the original game server. The source appends ranked
+stats/rank-up rewards, base match XP, legacy Conquest card rewards, Conquest V2
+points, and finally level-up promotion rewards; its player and recent-match
+filters preserve that relative order. The Worker previously returned Conquest
+points, Conquest cards, ranked rewards, then a combined XP/promotion receipt.
+
+One source-order assembler now separates the persisted base-XP and later
+promotion phases, emits cards before points, and normalizes the complete Go
+reward union only after the source order is restored. It fails closed if a
+rank/stat, experience, Conquest-card, or Conquest-point receipt crosses its
+reviewed producer phase. Quest progress remains persisted and published, but
+its intentionally empty receipt is no longer treated as a terminal reward
+producer that the Go source does not have.
+
+The source gate derives the stage order through `endMatch`, both Conquest
+progress updates, the V2 points updater, the XP awarder/updater/leveller and
+promotion path, and both original order-preserving player filters. Mutation
+tests reject source, phase, filter, assembler, or callsite drift. Unit coverage
+pins rank-up, rank, base-XP, card, point, and promotion interleaving and rejects
+invalid phases. The Workers regression exercises the real Durable Object
+terminal socket, D1 result, hibernated reconnect, and recent-match projection
+with exact rank-before-XP ordering.
+
+The exact complete local release contract passed with exit code zero at
+`64686dae`: 514 main-Worker tests, 39 game-server unit and 130 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1829,7 +1867,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `152138fe`. Keep
+- Deploy and verify the tested runtime changes through `64686dae`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
