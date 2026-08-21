@@ -2,9 +2,10 @@
 
 Status date: 2026-08-21
 
-Status: implemented and tested locally at `e4ec21f5`; not provisioned,
-migrated, activated, deployed, or exercised against production. This milestone
-does not authorize any Cloudflare mutation.
+Status: implemented and tested locally at `e4ec21f5`, with pending-read
+least-authority hardening at `339d7f9d`; not provisioned, migrated, activated,
+deployed, or exercised against production. This milestone does not authorize
+any Cloudflare mutation.
 
 ## Decision
 

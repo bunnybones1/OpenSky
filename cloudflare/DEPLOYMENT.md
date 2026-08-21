@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `e4ec21f5` is tested but not
+- Paused branch checkpoint: runtime hardening commit `339d7f9d` is tested but not
   deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
@@ -21,7 +21,7 @@
   Apply them in that order at the documented quiescent boundary before
   deploying the current Workers. The Conquest V2 and leaderboard Workflows,
   their delivery Queues/DLQs, and the delayed-Gold Queue/DLQ are also not
-  provisioned. No Worker from `e4ec21f5` or later may be deployed until all
+  provisioned. No Worker from `339d7f9d` or later may be deployed until all
   nine migrations and all three exact reviewed topologies exist. Every
   checked-in deploy command now
   performs a fail-closed, account-pinned, read-only D1 schema preflight first;

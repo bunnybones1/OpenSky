@@ -3091,6 +3091,11 @@ operator recovery. Migration `0123`, the Queue/DLQ, and both producer/consumer
 bindings remain local and undeployed. No remote preflight, provisioning,
 migration, activation, deployment, or live drill was performed.
 
+Follow-up `339d7f9d` removes unused card-selection authority from the
+player-facing pending-card query and scopes its mutation-tested wire gate to
+that exact projection. Queue delivery still re-reads the full entitlement only
+inside the independent consumer boundary.
+
 ## Suggested next slice
 
 The Conquest, post-match, matchmaker-cadence, leaderboard, and delayed-Gold

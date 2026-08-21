@@ -31,10 +31,10 @@ remains in force.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `e4ec21f5`
-  (`Deliver delayed Conquest Gold through Queues`)
-- Latest tested runtime commit: `e4ec21f5`
-  (`Deliver delayed Conquest Gold through Queues`)
+- Last code/test checkpoint: `339d7f9d`
+  (`Scope pending Gold reads to wire authority`)
+- Latest tested runtime commit: `339d7f9d`
+  (`Scope pending Gold reads to wire authority`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -43,7 +43,7 @@ remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `e4ec21f5` are committed and
+- The runtime changes from `38386294` through `339d7f9d` are committed and
   tested but are **not deployed**. The prior complete release and exact-head
   draft-PR CI passed at `43ae47d8`. It produced web entry
   `/assets/index-fd3d9163.js`, game entry
@@ -109,6 +109,12 @@ The delayed Conquest Gold Queue/D1 boundary selected in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md)
 is implemented at `e4ec21f5`. Its Queue, DLQ, bindings, and migration `0123`
 also remain unprovisioned, unapplied, undeployed, and dormant.
+
+Follow-up `339d7f9d` removes unused `card_ids_json` authority from the
+player-facing pending-card query and scopes that wire gate to the exact
+projection. The independent Queue consumer still re-reads the complete D1
+entitlement. This hardening was found by the full release contract before any
+push or production action.
 
 ## Conquest V2 Workflow/Queue milestone
 
