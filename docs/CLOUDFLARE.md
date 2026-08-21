@@ -2815,6 +2815,28 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source matchmaker error-wire parity — 2026-08-21
+
+Runtime milestone `ba2baaaf` narrows the TypeScript matchmaker error helper to
+the original Go `NewErrorMessage` contract. It now accepts only a reason and
+always emits that literal in both `reason` and `message`, with `level: server`.
+Cloudflare-specific socket and match-service diagnostics remain server-side
+instead of entering the player wire.
+
+Unit and Workers regressions pin the helper and a final `RANK_TOO_LOW`
+precondition response. The mutation-tested matchmaker-ingress gate derives the
+alias from Go and rejects a second runtime argument or weakened evidence.
+Follow-up safety-gate commit `5d1f12fe` preserves the exact independent session
+mutation after the narrowed helper introduced another one-argument call.
+
+The complete local release contract passed at `5d1f12fe`: 514 main-Worker
+tests, 37 game-server unit and 130 Workers tests, 45 match-service tests, 63
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

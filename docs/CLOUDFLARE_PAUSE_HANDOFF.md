@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `29996d35`
-  (`Preserve source game server status`)
-- Latest tested runtime commit: `29996d35`
-  (`Preserve source game server status`)
+- Last code/test checkpoint: `5d1f12fe`
+  (`Keep matchmaker session gate exact`)
+- Latest tested runtime commit: `ba2baaaf`
+  (`Preserve source matchmaker error wire`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,8 +23,8 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `29996d35` are committed and
-  tested but are **not deployed**. The exact local build at `29996d35`
+- The runtime changes from `38386294` through `ba2baaaf` are committed and
+  tested but are **not deployed**. The exact local build at `5d1f12fe`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
@@ -182,8 +182,8 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
 public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
-The newer `29996d35` game-server-status checkpoint and its refreshed handoff
-require a later green exact-head CI run before any production mutation.
+The newer `5d1f12fe` matchmaker-error-wire checkpoint and its refreshed
+handoff require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1629,6 +1629,34 @@ disconnect timeouts, and allocation behavior are unchanged.
 The exact complete local release contract passed with exit code zero for
 `29996d35`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
 45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source matchmaker error-wire milestone
+
+Runtime commit `ba2baaaf` makes every TypeScript matchmaker error follow the
+original Go `NewErrorMessage` constructor: `reason` and `message` contain the
+same reason literal and `level` remains `server`. The helper no longer accepts
+a second player-facing message, so a missing internal socket attachment and a
+final match-service precondition cannot expose Cloudflare-only diagnostic
+text. Match-service detail remains available in server logs.
+
+A focused unit regression pins the one-argument helper and exact error object.
+The Workers regression for a final `RANK_TOO_LOW` match precondition now
+requires `message: 'RANK_TOO_LOW'` instead of the internal
+`ranked play is not unlocked` description. The mutation-tested
+`check:cloudflare:matchmaker-ingress` gate derives the alias from Go, rejects
+any second-argument runtime call, and requires both regressions. Follow-up
+commit `5d1f12fe` keeps the independent session-lifecycle mutation aimed at the
+correct decline-error call after the helper was narrowed.
+
+The exact complete local release contract passed with exit code zero at
+`5d1f12fe`: 514 main-Worker tests, 37 game-server unit and 130 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries are `/assets/index-1eddfd33.js` and
