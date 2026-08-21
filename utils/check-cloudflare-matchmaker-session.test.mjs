@@ -174,6 +174,41 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'd.playerQueue.Remove(p)',
+        'd.playerQueue.Push(p)'
+      )
+    },
+    {
+      ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'if p.IsConquestMatch() {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'd.matchProposalRepository.Delete(matchProposal)',
+        'd.matchProposalRepository.Save(matchProposal)'
+      )
+    },
+    {
+      ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'd.refusalPenaltySetter.SetRefusalPenalty(p)',
+        'd.refusalPenaltySetter.ClearRefusalPenalty(p)'
+      )
+    },
+    {
+      ...value,
+      sourceDecliner: value.sourceDecliner.replace(
+        'if matchProposal == nil {',
+        'if matchProposal != nil && !matchProposal.IsFound() {\n\t\treturn nil\n\t}\n\n\tif matchProposal == nil {'
+      )
+    },
+    {
+      ...value,
       sourceMatchProposalRepository:
         value.sourceMatchProposalRepository.replace(
           'if ttl < 0 || errors.Is(err, store.ErrNoSuchItem) {',
@@ -534,8 +569,8 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
-        'proposal.expiresAtMs < Date.now()',
-        'proposal.expiresAtMs <= Date.now()'
+        'if (!proposal || proposal.expiresAtMs < Date.now()) return',
+        'if (!proposal || proposal.expiresAtMs <= Date.now()) return'
       )
     },
     {
@@ -555,8 +590,22 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
-        'proposal.expiresAtMs >= Date.now()',
+        'proposal.expiresAtMs < Date.now()',
         'proposal.expiresAtMs <= Date.now()'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'if (!proposal || proposal.expiresAtMs < Date.now()) return',
+        "if (!proposal || proposal.status !== 'FOUND' || proposal.expiresAtMs < Date.now()) return"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'await this.state.storage.delete(ticketKey(principal))',
+        'await Promise.resolve(ticketKey(principal))'
       )
     },
     {
@@ -606,6 +655,41 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'reports a referenced missing proposal as timed out before closing',
         'reports a referenced missing proposal as absent'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        'await this.declineMatch(attachment.principal)',
+        'await this.state.storage.delete(ticketKey(attachment.principal))'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'declines an accepted proposal while the source pending lifetime is live',
+        'preserves an accepted proposal after decline'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'continues an in-flight source director copy after a live decline',
+        'abandons an in-flight source director copy after decline'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'declines a dispatching proposal when its final player channel closes',
+        'preserves a dispatching proposal after disconnect'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'ignores an accepted decline after the source pending lifetime expires',
+        'declines an expired accepted proposal'
       )
     },
     {

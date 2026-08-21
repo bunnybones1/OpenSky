@@ -16,6 +16,22 @@ const defaultGameModeStatus = () => ({
 
 let gameModeStatus = defaultGameModeStatus()
 let gameModeStatusAvailable = true
+let dispatchGate: Promise<void> | undefined
+let releaseDispatchGate: (() => void) | undefined
+
+const setDispatchBlocked = (blocked: boolean) => {
+  if (blocked) {
+    if (!dispatchGate) {
+      dispatchGate = new Promise(resolve => {
+        releaseDispatchGate = resolve
+      })
+    }
+    return
+  }
+  releaseDispatchGate?.()
+  dispatchGate = undefined
+  releaseDispatchGate = undefined
+}
 
 export default defineConfig({
   plugins: [
@@ -25,10 +41,28 @@ export default defineConfig({
         serviceBindings: {
           MATCH_SERVICE: async request => {
             const url = new URL(request.url)
+            if (url.pathname === '/__test/dispatch') {
+              if (request.method === 'DELETE') {
+                setDispatchBlocked(false)
+                return new Response(null, { status: 204 })
+              }
+              const body = (await request.json()) as { blocked?: boolean }
+              if (
+                request.method !== 'POST' ||
+                typeof body.blocked !== 'boolean'
+              ) {
+                return new Response('invalid test dispatch update', {
+                  status: 400
+                })
+              }
+              setDispatchBlocked(body.blocked)
+              return new Response(null, { status: 204 })
+            }
             if (url.pathname === '/__test/game-modes') {
               if (request.method === 'DELETE') {
                 gameModeStatus = defaultGameModeStatus()
                 gameModeStatusAvailable = true
+                setDispatchBlocked(false)
                 return new Response(null, { status: 204 })
               }
               const body = (await request.json()) as {
@@ -210,6 +244,7 @@ export default defineConfig({
                 { status: 503 }
               )
             }
+            if (dispatchGate) await dispatchGate
             if (
               dispatch.participants?.some(
                 participant =>

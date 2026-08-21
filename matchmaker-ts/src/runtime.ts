@@ -830,35 +830,34 @@ export class MatchmakerPool implements DurableObject {
   }
 
   private async declineMatch(principal: string) {
-    const proposal = await this.proposalForPrincipal(principal)
-    if (!proposal) {
-      await this.state.storage.delete(ticketKey(principal))
-      return
-    }
-    if (proposal.status !== 'FOUND') {
-      throw new ProtocolError(
-        'INVALID_OPERATION',
-        'match proposal is not accepting responses'
+    // Source Decliner always removes the player from the queue first, then
+    // relies on the independently expiring pending-match reference. It does
+    // not restrict decline to FOUND proposals: ACCEPTED and TO_BE_MADE remain
+    // declinable while that reference is live.
+    await this.state.storage.delete(ticketKey(principal))
+    try {
+      const proposal = await this.proposalForPrincipal(principal)
+      if (!proposal || proposal.expiresAtMs < Date.now()) return
+      const player = proposal.participants.find(
+        participant => participant.player.address === principal
       )
+      if (player && isConquestMatch(deserializePlayer(player.player))) {
+        throw new ProtocolError(
+          'INVALID_OPERATION',
+          'conquest cannot be declined'
+        )
+      }
+      this.broadcastProposal(proposal, {
+        type: 'decline_match',
+        playerID: principal
+      })
+      await this.deleteProposal(proposal)
+      if (player && !isChallengeMatch(deserializePlayer(player.player))) {
+        await this.penalties.setRefusalPenalty(deserializePlayer(player.player))
+      }
+    } finally {
+      await this.rescheduleAlarm(Date.now())
     }
-    const player = proposal.participants.find(
-      participant => participant.player.address === principal
-    )
-    if (player && isConquestMatch(deserializePlayer(player.player))) {
-      throw new ProtocolError(
-        'INVALID_OPERATION',
-        'conquest cannot be declined'
-      )
-    }
-    this.broadcastProposal(proposal, {
-      type: 'decline_match',
-      playerID: principal
-    })
-    await this.deleteProposal(proposal)
-    if (player && !isChallengeMatch(deserializePlayer(player.player))) {
-      await this.penalties.setRefusalPenalty(deserializePlayer(player.player))
-    }
-    await this.rescheduleAlarm(Date.now())
   }
 
   private async attemptMatches(now: number) {
@@ -1588,29 +1587,14 @@ export class MatchmakerPool implements DurableObject {
       webSocket.deserializeAttachment() as SocketAttachment | null
     if (!attachment) return
     if (this.hasSubscribedSocket(attachment.principal)) return
-    await this.state.storage.delete(ticketKey(attachment.principal))
-    const proposal = await this.proposalForPrincipal(attachment.principal)
-    if (proposal?.status === 'FOUND' && proposal.expiresAtMs >= Date.now()) {
-      const participant = proposal.participants.find(
-        current => current.player.address === attachment.principal
-      )
-      if (
-        !participant ||
-        !isConquestMatch(deserializePlayer(participant.player))
-      ) {
-        this.broadcastProposal(proposal, {
-          type: 'decline_match',
-          playerID: attachment.principal
-        })
-        await this.deleteProposal(proposal)
-        if (participant) {
-          const player = deserializePlayer(participant.player)
-          if (!isChallengeMatch(player)) {
-            await this.penalties.setRefusalPenalty(player)
-          }
-        }
-      }
+    try {
+      // Source DeclineMatchChannelCloser invokes the same Decliner used by the
+      // explicit command after the final subscription closes.
+      await this.declineMatch(attachment.principal)
+    } catch (error) {
+      // The source player-channel factory logs closer errors after cleanup;
+      // websocket closure itself remains complete.
+      console.error('matchmaker socket cleanup decline failed', error)
     }
-    await this.rescheduleAlarm(Date.now())
   }
 }

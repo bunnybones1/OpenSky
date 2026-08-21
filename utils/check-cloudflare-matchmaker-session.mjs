@@ -143,15 +143,34 @@ export const matchmakerSessionErrors = (
   )
   requireOrdered(
     errors,
-    'Source expired pending-match close behavior',
+    'Source status-independent pending-match decline behavior',
     sourceDeclineMatch,
     [
+      'd.playerRepository.Load(address)',
+      'd.playerQueue.Remove(p)',
       'd.matchProposalRepository.HasMatchProposal(p.Address())',
       'if !hasMatchProposal {',
       'return nil',
-      'd.matchProposalRepository.Load(p.GetMatchProposalID())'
+      'if p.IsConquestMatch() {',
+      'd.matchProposalRepository.Locker(p.GetMatchProposalID())',
+      'd.matchProposalRepository.Load(p.GetMatchProposalID())',
+      'if matchProposal == nil {',
+      'declineMessage := events.EventDeclinedMessage{',
+      'd.notifier.Message(ctx, declineMessage, players...)',
+      'd.matchProposalRepository.Delete(matchProposal)',
+      'if p.IsChallengeMatch() {',
+      'd.refusalPenaltySetter.SetRefusalPenalty(p)'
     ]
   )
+  for (const forbidden of [
+    'matchProposal.IsFound()',
+    'matchProposal.IsAccepted()',
+    'matchProposal.IsToBeMade()'
+  ]) {
+    if (sourceDeclineMatch.includes(forbidden)) {
+      errors.push(`Source decline became proposal-status gated: ${forbidden}`)
+    }
+  }
   const sourceHasMatchProposal = bodyBetween(
     sourceMatchProposalRepository,
     'func (r *matchProposalRepository) HasMatchProposal(',
@@ -577,21 +596,22 @@ export const matchmakerSessionErrors = (
     'private async declineMatch(',
     'private async attemptMatches('
   )
-  requireOrdered(
-    errors,
-    'Worker decline-match invalid-operation identity',
-    workerDecline,
-    [
-      "proposal.status !== 'FOUND'",
-      'throw new ProtocolError(',
-      "'INVALID_OPERATION'",
-      "'match proposal is not accepting responses'",
-      'isConquestMatch(deserializePlayer(player.player))',
-      'throw new ProtocolError(',
-      "'INVALID_OPERATION'",
-      "'conquest cannot be declined'"
-    ]
-  )
+  requireOrdered(errors, 'Worker source decline lifecycle', workerDecline, [
+    'await this.state.storage.delete(ticketKey(principal))',
+    'const proposal = await this.proposalForPrincipal(principal)',
+    'if (!proposal || proposal.expiresAtMs < Date.now()) return',
+    'isConquestMatch(deserializePlayer(player.player))',
+    'throw new ProtocolError(',
+    "'INVALID_OPERATION'",
+    "'conquest cannot be declined'",
+    "type: 'decline_match'",
+    'await this.deleteProposal(proposal)',
+    'this.penalties.setRefusalPenalty(',
+    'await this.rescheduleAlarm(Date.now())'
+  ])
+  if (workerDecline.includes('proposal.status')) {
+    errors.push('Worker decline is still restricted by proposal status')
+  }
   if (workerDecline.includes("errorMessage('INVALID_OPERATION')")) {
     errors.push('Worker decline-match bypasses its source outer exception')
   }
@@ -667,15 +687,21 @@ export const matchmakerSessionErrors = (
   }
   requireOrdered(
     errors,
-    'Worker expired proposal close behavior',
+    'Worker last-subscriber decline behavior',
     workerCleanup,
     [
-      "proposal?.status === 'FOUND'",
-      'proposal.expiresAtMs >= Date.now()',
-      "type: 'decline_match'",
-      'await this.deleteProposal(proposal)'
+      'if (this.hasSubscribedSocket(attachment.principal)) return',
+      'await this.declineMatch(attachment.principal)',
+      "console.error('matchmaker socket cleanup decline failed', error)"
     ]
   )
+  if (
+    workerCleanup.includes('proposal.status') ||
+    workerCleanup.includes('this.broadcastProposal(') ||
+    workerCleanup.includes('this.deleteProposal(')
+  ) {
+    errors.push('Worker socket cleanup bypasses the shared source decline path')
+  }
 
   const workerReschedule = bodyBetween(
     worker,
@@ -913,7 +939,7 @@ export const matchmakerSessionErrors = (
   const declineInvalidOperationTest = bodyBetween(
     workerRuntimeTest,
     "it('keeps the channel open only for decline invalid-operation errors'",
-    "it('does not cancel a match for a decline after acceptance completed'"
+    "it('declines an accepted proposal while the source pending lifetime is live'"
   )
   requireOrdered(
     errors,
@@ -924,6 +950,88 @@ export const matchmakerSessionErrors = (
       "message: 'INVALID_OPERATION'",
       "first.send('PING')",
       'expect(first.readyState).toBe(WebSocket.OPEN)'
+    ]
+  )
+  const acceptedDeclineTest = bodyBetween(
+    workerRuntimeTest,
+    "it('declines an accepted proposal while the source pending lifetime is live'",
+    "it('continues an in-flight source director copy after a live decline'"
+  )
+  requireOrdered(
+    errors,
+    'Worker accepted-proposal decline regression',
+    acceptedDeclineTest,
+    [
+      "status: 'ACCEPTED'",
+      'accepted: [PRINCIPAL_1, PRINCIPAL_2]',
+      "first.send(JSON.stringify({ type: 'decline_match' }))",
+      "type: 'decline_match'",
+      'playerID: PRINCIPAL_1',
+      'activeProposals: 0',
+      ').toMatchObject({ count: 1 })'
+    ]
+  )
+  const inFlightDeclineTest = bodyBetween(
+    workerRuntimeTest,
+    "it('continues an in-flight source director copy after a live decline'",
+    "it('declines a dispatching proposal when its final player channel closes'"
+  )
+  requireOrdered(
+    errors,
+    'Worker in-flight source director decline regression',
+    inFlightDeclineTest,
+    [
+      'await setDispatchBlocked(true)',
+      "second.send(JSON.stringify({ type: 'accept_match' }))",
+      ".toBe('DISPATCHING')",
+      "first.send(JSON.stringify({ type: 'decline_match' }))",
+      "type: 'decline_match'",
+      'playerID: PRINCIPAL_1',
+      'await setDispatchBlocked(false)',
+      "type: 'match_made'",
+      "type: 'match_ready_to_start'",
+      "state.storage.list({ prefix: 'proposal:' })",
+      ').toBe(0)',
+      ').toMatchObject({ count: 1 })'
+    ]
+  )
+  const dispatchingDisconnectTest = bodyBetween(
+    workerRuntimeTest,
+    "it('declines a dispatching proposal when its final player channel closes'",
+    "it('ignores an accepted decline after the source pending lifetime expires'"
+  )
+  requireOrdered(
+    errors,
+    'Worker dispatching-proposal disconnect regression',
+    dispatchingDisconnectTest,
+    [
+      "status: 'DISPATCHING'",
+      "first.close(1000, 'disconnect during dispatch')",
+      "type: 'decline_match'",
+      'playerID: PRINCIPAL_1',
+      'activeProposals: 0',
+      'connectedSockets: 1',
+      ').toMatchObject({ count: 1 })'
+    ]
+  )
+  const expiredAcceptedDeclineTest = bodyBetween(
+    workerRuntimeTest,
+    "it('ignores an accepted decline after the source pending lifetime expires'",
+    "it('persists queue state and socket identity through Durable Object eviction'"
+  )
+  requireOrdered(
+    errors,
+    'Worker expired accepted-proposal decline regression',
+    expiredAcceptedDeclineTest,
+    [
+      "status: 'ACCEPTED'",
+      'expiresAtMs: Date.now() - 1',
+      "first.send(JSON.stringify({ type: 'decline_match' }))",
+      'await Promise.all([firstStayedSilent, secondStayedSilent])',
+      "state.storage.list({ prefix: 'proposal:' })",
+      ').toBe(1)',
+      "state.storage.list({ prefix: 'penalty:refusal-count:' })",
+      ').toBe(0)'
     ]
   )
 
@@ -1075,7 +1183,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, expired-accept, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
     )
   }
 }
