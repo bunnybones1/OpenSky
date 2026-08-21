@@ -7,7 +7,7 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `ba2baaaf` is tested but not
+- Paused branch checkpoint: runtime commit `9ee8d521` is tested but not
   deployed and passed the complete local release contract. Migrations
   `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
@@ -89,6 +89,9 @@
   `message` are the same public reason literal and `level` is `server`.
   Cloudflare socket and match-service diagnostics remain in server logs and
   cannot be supplied as a second player-facing message.
+  Match-found participants are also recipient-relative like the Go event
+  publisher and sender: every subscriber receives `[self, opponent]`, so the
+  second socket does not inherit the proposal's first-player ordering.
 - Deployed source includes `ea989a4` for the API/web and game Workers,
   `56c606d` for recent-match recovery, `72eece1` for the
   loading-timer milestone, `1e31b4f` for socket handoff, `1d14982` for the game

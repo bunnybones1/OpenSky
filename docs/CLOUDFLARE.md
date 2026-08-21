@@ -2837,6 +2837,29 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source recipient-first match-found parity — 2026-08-21
+
+Runtime milestone `9ee8d521` restores the original per-recipient player order
+in `match_found`. Go publishes one event per player and sends
+`[player, opponent]`; the TypeScript matchmaker now resolves the proposal
+participants relative to each subscriber and sends `[self, opponent]` instead
+of sharing one proposal-order array between both sockets. Per-player mode and
+the existing acceptance timeout remain unchanged.
+
+The shared Workers regression requires exact mirrored arrays for both
+participants. The mutation-tested matchmaker-ingress gate derives the
+publication lifecycle and serialization order from the Go backend and sender,
+then rejects source drift, a fixed proposal-order Worker implementation, or
+weakened two-recipient evidence.
+
+The complete local release contract passed at `9ee8d521`: 514
+main-Worker tests, 37 game-server unit and 130 Workers tests, 45 match-service
+tests, 63 matchmaker unit and 67 Workers tests, 30 browser-game tests, nine
+analytics tests, every source/off-chain gate and typecheck, both production
+builds, and 594-file artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
