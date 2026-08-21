@@ -132,11 +132,24 @@ mutation-tested `check:cloudflare:matchmaker-deck` gate derives this ordering,
 filtering, source deck/API constraints, direct tests, and release wiring from
 the checked-in Go implementation.
 
+The source wait-time score calculator selects five independent relaxation
+intervals: default, both ranked queues, and both Conquest queues. The Worker
+accepts the same logical configuration and passes it unchanged to PvP score,
+Conquest win-distance, and Conquest Elo-distance calculators. Direct tests use
+the source's deliberately distinct 1/11/12/21/22-second boundaries. Cloud
+Weasel production and Workers tests explicitly pin all five values to 30
+seconds to preserve the already reviewed behavior rather than inferring policy
+from the source's differing sample and compose files. Invalid or absent
+mode-specific overrides inherit that default for rolling compatibility. The
+mutation-tested `check:cloudflare:matchmaker-relaxation` gate protects the Go
+oracle, TypeScript selection, explicit policy, tests, and release wiring.
+
 ## Deployment gates
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
 - `pnpm check:cloudflare:matchmaker-deck`
+- `pnpm check:cloudflare:matchmaker-relaxation`
 - `pnpm check:cloudflare:release`
 - `go test ./matchmaker/lib/matchmaker/matching/matchers/...`
 - Set the same long `INTERNAL_AUTH_SECRET` on the gateway and matchmaker.

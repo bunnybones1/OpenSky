@@ -2171,6 +2171,41 @@ artifact validation. The assembled entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker per-mode relaxation parity — 2026-08-20
+
+Milestone `13b72c31` restores the independent relaxation intervals selected by
+the source wait-time score calculator. Go carries one default plus separate
+ranked-constructed, ranked-discovery, Conquest-constructed, and
+Conquest-discovery values; its direct regression uses 1, 11, 12, 21, and 22
+seconds so a plausible single shared interval cannot pass.
+
+The Cloudflare runtime now reads the same five logical values and supplies the
+complete interval object to its PvP score, Conquest win-distance, and Conquest
+Elo-distance calculators. Direct tests cover just below, exactly at, and twice
+each mode's boundary. Missing or invalid mode-specific values inherit the
+default, preserving the previously deployed single-value configuration during
+a rolling upgrade.
+
+The source sample's default/Conquest values are one second and its ranked
+values are two seconds, while its compose profile uses one second everywhere.
+Neither development file is treated as Cloud Weasel production policy.
+Production and Workers tests explicitly pin every interval to the already
+reviewed 30 seconds, so this source-fidelity milestone adds independent control
+without silently changing live matching behavior. The mutation-tested
+`check:cloudflare:matchmaker-relaxation` gate covers the Go configuration,
+conversion, selector and regression; the Worker environment, reader,
+consumers, mode boundaries, both explicit policies, and build/deploy wiring;
+the non-deploying CI audit requires that gate in the complete release contract.
+
+The exact complete local contract passed at `13b72c31`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 55
+matchmaker unit and 60 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `e23c2a0c`
-  (`Preserve source pre-queue deck validation`)
-- Latest tested runtime commit: `e23c2a0c`
-  (`Preserve source pre-queue deck validation`)
+- Last code/test checkpoint: `13b72c31`
+  (`Preserve source per-mode match relaxation`)
+- Latest tested runtime commit: `13b72c31`
+  (`Preserve source per-mode match relaxation`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `e23c2a0c` are committed and
+- The runtime changes from `38386294` through `13b72c31` are committed and
   tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-c8882239.js` and game entry
+  `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migration `0115_authoritative_match_decks.sql` is committed locally but has
   **not** been applied to production. The new game-server runtime must not be
@@ -133,9 +133,13 @@ Run <https://github.com/bunnybones1/OpenSky/actions/runs/32438805522> passed the
 independent-pending-lifetime checkpoint and its handoff at exact pushed head
 `b3e061a4`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32439602947> passed the
-orphaned-queue checkpoint and its handoff at exact pushed head `d10cd71b`. The
-newer `9621ee09` empty-IP checkpoint and this refreshed handoff must receive
-exact-head CI before any production mutation.
+orphaned-queue checkpoint and its handoff at exact pushed head `d10cd71b`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32440649547> passed the
+empty-IP checkpoint and its handoff at exact pushed head `eb1a556d`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32442312407> passed the
+deck-admission checkpoint and its handoff at exact pushed head `703e4de8` in
+10m48s. The newer `13b72c31` relaxation checkpoint and this refreshed handoff
+must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -881,6 +885,43 @@ artifact validation. The assembled web and game entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker per-mode relaxation milestone
+
+Commit `13b72c31` restores the source matchmaker's five independent wait-time
+relaxation clocks:
+
+- Go selects separate default, ranked-constructed, ranked-discovery,
+  Conquest-constructed, and Conquest-discovery intervals before advancing its
+  score, win-distance, and Elo-distance rules;
+- the source regression deliberately distinguishes those paths with 1, 11,
+  12, 21, and 22 seconds, and the TypeScript boundary tests now exercise just
+  below, exactly at, and twice every corresponding interval;
+- the Worker reads four optional mode-specific overrides in addition to its
+  existing default and passes the complete interval object to all three source
+  calculators; and
+- production and test configurations explicitly pin all five values to the
+  already reviewed 30 seconds, preserving deployed Cloud Weasel behavior while
+  making that choice independent of the source sample's 1/2/1-second values.
+
+Absent or invalid mode overrides safely inherit the reviewed default, keeping
+older configurations compatible instead of accidentally relaxing a ranked
+queue immediately. The mutation-tested
+`check:cloudflare:matchmaker-relaxation` gate derives the five source fields,
+duration conversions, mode switch, distinct Go test values, source sample,
+Worker reader/consumer, boundary regressions, both Wrangler policies, and
+build/deployment wiring. The independent CI audit also requires this gate in
+the complete release path.
+
+The exact complete local release contract passed at committed runtime head
+`13b72c31` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 55 matchmaker unit tests, 60
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -985,7 +1026,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `e23c2a0c`. Keep
+- Deploy and verify the tested runtime changes through `13b72c31`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
