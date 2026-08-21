@@ -199,9 +199,9 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migrations through `0118`, including the authoritative-deck table,
-registered-bot registry and immutable guards, XP publication state, ranked
-account-stat before/after receipts, and the exact nested match-season guard. It
+requires migrations through `0121`, including authoritative decks, registered
+bots, atomic XP/account-stat publication, recoverable post-match
+responsibilities, and Conquest Workflow/Queue handoff receipts and guards. It
 refuses to spawn the deploy process on a missing, malformed, unsuccessful,
 duplicate, or unexpected result. The migration command is intentionally exempt
 so it can bring the schema forward before a deploy.
@@ -3006,19 +3006,51 @@ assembled entries are `/assets/index-1eddfd33.js` and
 deployment, provisioning, activation, live match, or production mutation was
 performed.
 
+## Effect-faithful post-match and Conquest orchestration — 2026-08-21
+
+The ratified effect-fidelity contract now treats the Go services as behavioral
+oracles rather than Cloudflare implementation templates. Commit `6795a7fd`
+corrects the still-undeployed `0119` and `0120` migrations in place: deck-rank
+and Grandweaver work retain durable `PENDING` responsibility, exact-once atomic
+application, independent progress, and eviction recovery without copied linear
+delays, five-attempt ceilings, or terminal `FAILED` business states. The
+mutation gates now require those outcomes rather than Go worker tokens.
+
+Commit `36ca654d` implements the selected Conquest V2 boundary. One
+deterministically named Workflow owns each accepted weekly cycle; one Queue
+message represents each immutable player entitlement; D1 remains authoritative
+for point rollover, policy, inventory, notification/feed publication, failure
+evidence, and completion. Cron performs due-cycle discovery and creation-gap
+recovery only. Queue duplicates, reordering, retries, and DLQ retention cannot
+lose or complete a business entitlement.
+
+The new `0121_conquest_v2_workflow_handoffs.sql` migration is deliberately not
+the discarded attempt-runner migration that previously used that number. It
+adds only immutable cycle-to-Workflow responsibility and per-delivery failure
+evidence. Tests prove no pre-boundary publication, duplicate-safe application,
+per-player fault isolation, six recorded failures followed by exact-once
+attempt-seven recovery, tamper rejection, and completion only after all awards.
+A fresh local D1 accepted the full migration chain and passed the production
+schema preflight. No remote preflight, migration, Workflow/Queue provisioning,
+deployment, activation, or live drill was performed.
+
 ## Suggested next slice
 
-No known dormant matchmaker, non-RPC service-route, or active source-worker
-parity slice remains. The PromoteGrandmasters retry/terminal-failure audit is
-complete. The next local work should begin with a fresh source-contract audit,
-prioritizing Conquest settlement/task boundaries or remaining player-facing
-behavior rather than inventing a replacement interface.
+The Conquest and post-match orchestration corrections are complete locally.
+The next safe slice is an effect-level audit of the matchmaker's nine-runner
+cadence gate and alarm topology: preserve player-visible acceptance,
+relaxation, refusal, timeout, bot, and allocation timing while removing any
+requirement that Durable Object alarms reproduce Go ticker grouping or runner
+cadence. Follow it with the remaining main-Worker cron responsibilities one at
+a time; do not redesign the original player interface.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, `0119`, and `0120` at the documented quiescent boundary,
-deploy the exact tested Workers with both bot flags still false, and only
-consider a bounded ranked/PvP-bot soak after ordinary multiplayer and
-analytics paths are healthy.
+then `0116`, `0117`, `0118`, `0119`, `0120`, and `0121` at the documented
+quiescent boundary, provision the exact reviewed Conquest Workflow/Queue/DLQ
+topology, deploy the exact tested Workers with both bot flags still false, and
+only consider a bounded ranked/PvP-bot soak after ordinary multiplayer and
+analytics paths are healthy. This remains unauthorized while the production
+pause is in force.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,

@@ -118,23 +118,23 @@ observable contract.
 | `DeckRankCoordinator` Durable Object | Keep, re-test by effect | Global serialization may be required for deterministic rank ordering; Go work-group naming and retry cadence are not. |
 | D1 match/reward receipts and transactional batches | Keep | They protect durable business state, idempotency, and atomic publication. |
 | R2 analytics plus Queue and dead-letter queue | Keep | Analytics is asynchronous, retryable, and must not block a match. |
-| Main Worker's one-minute nine-job fan-out | Redesign | One cron currently couples unrelated reward, notification, cleanup, and drill lifecycles. Cron should trigger a due workflow or an outbox dispatcher, not emulate nine task runners. |
-| Deck-rank and Grandweaver attempt tables in migrations `0119` and `0120` | Reassess before deployment | Their safety properties are useful, but exact five-attempt and linear-delay lifecycles copy Go mechanics rather than a demonstrated product effect. |
-| Uncommitted Conquest migration `0121` and runner changes | Do not commit | The change expands the same implementation-coupled pattern. Retain it only as audit material until a Cloudflare-native spike chooses the orchestration boundary. |
+| Main Worker's one-minute fan-out | Redesign incrementally | Conquest cron work now only discovers/recovers a deterministic Workflow; the remaining unrelated reward, notification, cleanup, and drill responsibilities still need individual target boundaries. |
+| Deck-rank and Grandweaver responsibility tables in migrations `0119` and `0120` | Keep corrected effect state | `6795a7fd` removed terminal failure and copied retry limits while retaining exactly-once application, ordering, independent progress, and eviction recovery. |
+| Conquest Workflow/Queue handoffs in migration `0121` | Keep undeployed | `36ca654d` stores only deterministic business responsibility and immutable failure evidence; Workflow and Queue own execution/transport state. |
 | Static gates that parse Go ticker, batch, work-group, or retry tokens | Replace | They should derive behavioral test cases from the source and then test the TypeScript boundary as a black box. |
 | Protocol, enum, game-rule, atomic-publication, eviction, reconnect, off-chain, auth, and production-disable gates | Keep | These directly protect client, player, security, or operator effects. |
 
-The committed migrations through `0120` contain 402 triggers. The uncommitted
-`0121` raises that count to 411. A high trigger count is not automatically a
-defect, but in this repository it is a warning that D1 is absorbing generic
-job-orchestration responsibilities in addition to protecting business state.
+The initial audit found that the discarded source-style `0121` would have
+raised an already large trigger inventory from 402 to 411. Trigger count is not
+itself a defect, but it exposed D1 absorbing generic execution-engine state.
+The committed replacement uses D1 only for guarded business handoffs and
+failure evidence.
 
-Concrete implementation coupling exists in
-`utils/check-cloudflare-match-completion.mjs` and the uncommitted
-`utils/check-cloudflare-conquest-gate.mjs`: they require source
-`MaxBatchSize`, `time.NewTicker`, retry-delay, maximum-retry, and work-group
-tokens. Those checks can remain temporarily as provenance evidence, but they
-must not decide the target architecture.
+Concrete implementation coupling previously existed in the match-completion,
+worker-runner, and Conquest gates. The first two were converted at `6795a7fd`;
+the Conquest gate was converted at `36ca654d`. They now derive source behavior
+but decide release safety through black-box target outcomes rather than source
+ticker, batch, retry-limit, or work-group tokens.
 
 ## Cloudflare target responsibilities
 
@@ -243,15 +243,17 @@ deployed while the production pause remains active.
 ### 1. Ratify this contract and dispose of the frozen WIP (completed)
 
 - This document was ratified as the architecture rule on 2026-08-21.
-- The uncommitted Conquest `0121` migration and its four attempt-lifecycle
-  source/test/gate changes were discarded rather than committed.
+- The earlier uncommitted source-style Conquest `0121` migration and its four
+  attempt-lifecycle source/test/gate changes were discarded rather than
+  committed. The later minimal handoff migration that reuses the number is a
+  distinct design.
 - Salvage only independently justified behavior, such as an immutable atomic
   snapshot, in a later clean change.
 
 Exit evidence: clean worktree except user-owned `temp/`, the contract and gate
 audit committed, and no runtime change hidden in either documentation commit.
 
-### 2. Build the behavior map and reclassify gates
+### 2. Build the behavior map and reclassify gates (completed)
 
 - Map every active Go runner and externally used RPC to an observable effect,
   approved divergence, target primitive, and black-box evidence.
@@ -261,11 +263,14 @@ audit committed, and no runtime change hidden in either documentation commit.
 Exit evidence: no active source behavior lacks a disposition, and no
 implementation-lock gate is treated as architectural authority.
 
-### 3. Run a Conquest orchestration spike
+Completed in `a11574bf`, `29e5e65c`, and the later gate conversions.
 
-- Implement a non-production Workflow/Queue prototype with a deterministic
-  cycle instance ID, atomic D1 snapshot/outbox, delayed delivery, idempotent
-  per-player consumer, incident visibility, and re-drive.
+### 3. Run a Conquest orchestration spike (completed)
+
+- Implement a non-production Workflow/Queue boundary with a deterministic
+  cycle instance ID, atomic D1 snapshot, recoverable orchestration receipt,
+  delayed delivery, idempotent per-player consumer, incident visibility, and
+  re-drive.
 - Fault-test duplicate triggers, partial batches, Workflow retry, Queue retry,
   dead letter, and a schedule change during an active cycle.
 - Compare it with the existing cron/D1 approach for correctness, limits,
@@ -274,7 +279,12 @@ implementation-lock gate is treated as architectural authority.
 Exit evidence: a recorded decision backed by executable effect tests, not by
 similarity to the Go task runner.
 
-### 4. Reframe post-match maintenance
+The decision is recorded in
+[`CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md`](./CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md)
+and implemented locally at `36ca654d`. Production resources remain
+unprovisioned and the migration remains unapplied.
+
+### 4. Reframe post-match maintenance (completed)
 
 The selected Cloudflare-native boundary and the `0119`/`0120` migration
 disposition are recorded in
@@ -290,6 +300,8 @@ disposition are recorded in
 
 Exit evidence: all multiplayer behavior tests pass under eviction, duplicate
 delivery, and repeated injected failure without relying on Go runner tokens.
+
+Completed at `6795a7fd`; migrations `0119` and `0120` remain undeployed.
 
 ### 5. Complete player-facing parity
 

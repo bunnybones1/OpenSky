@@ -2,10 +2,11 @@
 
 Status date: 2026-08-21
 
-Status: selected implementation direction after the effect-fidelity audit.
+Status: implemented locally at `36ca654d` after the effect-fidelity audit.
 This document does not authorize provisioning, migration, activation, or
-deployment. The previously discarded `0121` attempt-runner design remains
-discarded.
+deployment. The previously discarded source-style `0121` attempt-runner
+design remains discarded; the new minimal `0121` handoff migration is a
+different design.
 
 ## Decision
 
@@ -83,9 +84,9 @@ terminal state, and task-table topology are not part of this contract.
 
 Cycle acceptance and its exact policy receipt happen in one D1 transaction.
 The orchestration receipt uses a deterministic Workflow instance ID derived
-from the schedule version and scheduled timestamp. If Workflow creation fails
-or its response is lost, the next discovery trigger repeats `create/get` for
-that same ID. No second cycle or point snapshot can result.
+from the accepted D1 cycle identity. If Workflow creation fails or its response
+is lost, the next discovery trigger repeats `create/get` for that same ID. No
+second cycle or point snapshot can result.
 
 A newer disabled schedule prevents another cycle from being accepted. It does
 not invalidate a cycle whose D1 policy receipt already exists.
@@ -145,7 +146,7 @@ responsibility and outcome.
 
 ## Required executable evidence
 
-Before the release gate accepts this architecture, tests must prove:
+The executable gate and integration suite prove:
 
 - concurrent discovery accepts one cycle and one deterministic Workflow ID;
 - a D1-to-Workflow creation gap recovers without a second snapshot;
@@ -170,7 +171,8 @@ or D1 transport-attempt schema.
 
 The production schedule is currently absent/disabled. Keep it that way. The
 Workflow binding, Queue producer/consumer, dead-letter queue, migration, code,
-tests, production preflight, and recovery tooling must land together and pass
-the complete exact-head release contract and PR CI. Provisioning and deployment
-still require a separate explicit user authorization; schedule activation
-requires the existing two-actor exact-policy process after deployment.
+tests, production preflight, and recovery evidence are committed together but
+remain unapplied and unprovisioned. They must pass the complete exact-head
+release contract and PR CI before any separately authorized deployment.
+Schedule activation still requires the existing two-actor exact-policy process
+after deployment.

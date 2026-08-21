@@ -10,22 +10,24 @@ without a new user request.
 The effect-fidelity contract was ratified on 2026-08-21, so local runtime,
 test, and architecture work may resume under
 [`CLOUDFLARE_EFFECT_FIDELITY.md`](./CLOUDFLARE_EFFECT_FIDELITY.md). The Go
-services are behavioral oracles, not architecture templates. The uncommitted
-Conquest `0121` attempt lifecycle was discarded; migrations `0119` and `0120`
-were reassessed in
+services are behavioral oracles, not architecture templates. The earlier
+uncommitted source-style Conquest `0121` attempt lifecycle was discarded;
+migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. Complete release
-validation and exact-head PR CI remain outstanding. The production mutation
-pause remains in force.
+validation and exact-head PR CI remain outstanding. A distinct, minimal
+`0121_conquest_v2_workflow_handoffs.sql` now protects the selected
+Workflow/Queue boundary at `36ca654d`; it does not recreate the discarded
+attempt runner. The production mutation pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `6795a7fd`
-  (`Keep post-match responsibilities recoverable`)
-- Latest tested runtime commit: `6795a7fd`
-  (`Keep post-match responsibilities recoverable`)
+- Last code/test checkpoint: `36ca654d`
+  (`Orchestrate Conquest rewards with Workflows and Queues`)
+- Latest tested runtime commit: `36ca654d`
+  (`Orchestrate Conquest rewards with Workflows and Queues`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -34,7 +36,7 @@ pause remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `6795a7fd` are committed and
+- The runtime changes from `38386294` through `36ca654d` are committed and
   tested but are **not deployed**. The most recent complete release build is
   still the earlier `1e7f878c` checkpoint, which produced web entry
   `/assets/index-1eddfd33.js` and game entry
@@ -45,14 +47,18 @@ pause remains in force.
   `0117_match_experience_publication_state.sql`, plus
   `0118_match_account_stat_publication.sql`, plus
   `0119_match_deck_rank_jobs.sql`, plus
-  `0120_grandweaver_task_attempts.sql`, are committed but have **not** been applied
-  to production. No Worker from `90ebe652` or later may be
+  `0120_grandweaver_task_attempts.sql`, plus
+  `0121_conquest_v2_workflow_handoffs.sql`, are committed but have **not**
+  been applied to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
   may be deployed until `0118` exists. No Worker from `36498a51` or later may
-  be deployed until `0119` exists, and no Worker from `1e7f878c` or later may
-  be deployed until all six exist in their current `6795a7fd` shape. Apply
-  them in order while match allocation is quiescent as described below.
+  be deployed until `0119` exists, no Worker from `1e7f878c` or later may be
+  deployed until migrations `0115` through `0120` exist in their current
+  `6795a7fd` shape, and no Worker from `36ca654d` or later may be deployed
+  until `0121` and the exact reviewed Workflow/Queue/DLQ topology exist. Apply
+  the migrations in order while match allocation is quiescent as described
+  below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -76,8 +82,37 @@ recoverable and attempt seven applies exactly once.
 
 The Conquest V2 Workflow/Queue boundary is now selected in
 [`CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md`](./CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md).
-It is a local design only: no Workflow, Queue, DLQ, migration, schedule, or
-production resource has been provisioned or activated.
+Its local runtime and minimal D1 handoff receipts are implemented at
+`36ca654d`. No Workflow, Queue, DLQ, migration, schedule, or production
+resource has been provisioned, applied, or activated.
+
+## Conquest V2 Workflow/Queue milestone
+
+Commit `36ca654d` replaces direct cron-owned player iteration with Cloudflare
+responsibility boundaries while preserving the source-derived player effect:
+
+- cron only accepts or recovers one immutable due D1 cycle and ensures its
+  deterministic Workflow instance;
+- the Workflow snapshots point rollover once, sleeps until the immutable
+  delivery boundary, publishes unapplied entries in platform-bounded Queue
+  batches, and completes only after every D1 award receipt is applied;
+- each Queue message contains only cycle and player identity, while the
+  consumer re-derives cards, quantity, timing, and award state from guarded D1
+  business truth;
+- a duplicate message is harmless, one failing player cannot block another,
+  six failures remain immutable and re-drivable, and attempt seven applies
+  exactly once; and
+- migration `0121` stores only deterministic orchestration responsibility and
+  immutable per-delivery failure evidence. Workflow and Queue transport state
+  are not copied into a D1 attempt engine.
+
+The focused Conquest suite passes 21/21 tests. The full main-Worker suite
+passed 531/531 before the final assertion-only immutability hardening;
+typecheck, the 13-case mutation gate, worker-runner audit, production-runner
+tests, target gate, and fresh local migration/schema preflight pass. Complete
+exact-head release validation and PR CI remain outstanding. No remote
+preflight, provisioning, migration, deployment, schedule activation, or live
+drill was performed.
 
 ## Multiplayer XP publication milestone
 
@@ -2315,14 +2350,16 @@ production gate after any later commit.
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
 4. Complete the quiescent migration `0115` transition, then apply `0116`,
-   `0117`, `0118`, `0119`, and `0120` in order while allocations remain stopped, and
-   then deploy/verify the exact tested game server without analytics producer
-   bindings, as described under Production rollout. The analytics consumer
+   `0117`, `0118`, `0119`, `0120`, and `0121` in order while allocations remain
+   stopped, and then deploy/verify the exact tested game server without
+   analytics producer bindings, as described under Production rollout. The
+   analytics consumer
    requires `0115`, every Worker from `90ebe652` assumes `0116`, every Worker
    from `5636d901` assumes `0117`, and every Worker from `c22d9263` assumes
-   `0118`; every Worker from `36498a51` assumes `0119`, and every Worker from
-   `1e7f878c` assumes `0120`. No current deploy command may run against an
-   older database.
+   `0118`; every Worker from `36498a51` assumes `0119`, every Worker from
+   `1e7f878c` assumes `0120`, and the main Worker from `36ca654d` assumes
+   `0121` plus the reviewed Conquest Workflow/Queue/DLQ topology. No current
+   deploy command may run against an older database or incomplete topology.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 6. Create a separate private client-feedback bucket and add the reviewed
@@ -2364,13 +2401,14 @@ production migration state. Migrations
 `0117_match_experience_publication_state.sql`, plus
 `0118_match_account_stat_publication.sql`,
 `0119_match_deck_rank_jobs.sql`, and
-`0120_grandweaver_task_attempts.sql` are not: apply `0115` first at its quiescent
-game-server boundary, then `0116`, `0117`, `0118`, `0119`, and `0120` before deploying
-the current Workers. Keep both ranked-bot flags false throughout that baseline
-rollout. Every checked-in deploy command now performs the read-only schema
-preflight advanced by `1e7f878c` and refuses to spawn Wrangler unless the prior
-invariants plus the `0119` deck-rank job contract and `0120` Grandweaver
-attempt-state/transition contract are present.
+`0120_grandweaver_task_attempts.sql`, and
+`0121_conquest_v2_workflow_handoffs.sql` are not: apply `0115` first at its
+quiescent game-server boundary, then `0116` through `0121` before deploying the
+current Workers. Keep both ranked-bot flags false and the Conquest V2 schedule
+disabled throughout that baseline rollout. Every checked-in deploy command now
+performs the read-only schema preflight and refuses to spawn Wrangler unless
+the prior invariants, corrected `0119`/`0120` responsibility contracts, `0121`
+handoff guards, and exact reviewed Workflow/Queue/DLQ topology are present.
 
 ## Other outstanding work
 
@@ -2378,8 +2416,9 @@ attempt-state/transition contract are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `1e7f878c` from its
-  exact green release-gate head. Keep
+- Deploy and verify the tested runtime changes through `36ca654d` only after a
+  later documentation head passes the full release contract and exact-head PR
+  CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
@@ -2387,10 +2426,9 @@ attempt-state/transition contract are present.
   a separately authorized bounded activation soak all succeed.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
-  and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`,
-  `0117`, `0118`, `0119`, and `0120`; deploy the exact tested game-server runtime
-  immediately, verify protocol health, and only then restore the previously
-  enabled modes.
+  and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`
+  through `0121`; deploy the exact tested game-server runtime immediately,
+  verify protocol health, and only then restore the previously enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
 - Provision and verify the private analytics consumer in the safe order above;
@@ -2411,11 +2449,12 @@ attempt-state/transition contract are present.
 The TypeScript implementation, settlement receipts, operator flow, and safety
 gates are complete, including bounded level-ten delivery and delivery of
 snapshotted cycles across a later schedule disable. Production remains
-deliberately disabled. Before enabling it, Cloud Weasel still needs
-authoritative eligible Silver card IDs, weekly Gold IDs and window, separate
-proposer/activator/runner/verifier identities, three real drill matches, and
-the unchanged 24-hour observation period. Do not create or activate pools
-merely to make the UI nonempty.
+deliberately disabled. The reviewed Workflow, delivery Queue, and DLQ are not
+provisioned and migration `0121` is not applied. Before enabling it, Cloud
+Weasel still needs those resources, authoritative eligible Silver card IDs,
+weekly Gold IDs and window, separate proposer/activator/runner/verifier
+identities, three real drill matches, and the unchanged 24-hour observation
+period. Do not create or activate pools merely to make the UI nonempty.
 
 ### Product configuration and decisions
 

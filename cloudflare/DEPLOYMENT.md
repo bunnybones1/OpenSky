@@ -7,24 +7,31 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `1e7f878c` is tested but not
-  deployed and passed the complete local release contract. Migrations
+- Paused branch checkpoint: runtime commit `36ca654d` is tested but not
+  deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
   `0117_match_experience_publication_state.sql`,
   `0118_match_account_stat_publication.sql`,
   `0119_match_deck_rank_jobs.sql`, and
-  `0120_grandweaver_task_attempts.sql` are intentionally not applied. Apply them in
-  that order at the documented quiescent boundary before deploying the current
-  Workers. No Worker from `1e7f878c` or later may be deployed until all six
-  exist. Every checked-in deploy command now performs a fail-closed,
+  `0120_grandweaver_task_attempts.sql`, followed by
+  `0121_conquest_v2_workflow_handoffs.sql`, are intentionally not applied.
+  Apply them in that order at the documented quiescent boundary before
+  deploying the current Workers. The Conquest V2 Workflow, delivery Queue,
+  and dead-letter Queue are also not provisioned. No Worker from `36ca654d` or
+  later may be deployed until all seven migrations and the exact reviewed
+  bindings exist. Every checked-in deploy command now performs a fail-closed,
   account-pinned, read-only D1 schema preflight first; the migration command is
-  intentionally exempt so it can advance the schema. The exact local release
-  at `1e7f878c` passed 528 main-Worker tests, 40 game-server unit and 135
-  Workers tests, 48 match-service tests, 63 matchmaker unit and 67 Workers
-  tests, 30 browser-game tests, nine analytics tests, all source and mutation
-  gates/typechecks, both production builds, and 594-file artifact validation.
-  Its assembled entries are `/assets/index-1eddfd33.js` and
+  intentionally exempt so it can advance the schema. The current Conquest
+  milestone passed 21 focused integration tests, 531 main-Worker tests before
+  the final assertion-only hardening, TypeScript validation, mutation-tested
+  Conquest/runner/production gates, and a fresh local application of every D1
+  migration plus the production schema preflight. The last complete local
+  release remains `1e7f878c`; it passed 528 main-Worker tests, 40 game-server
+  unit and 135 Workers tests, 48 match-service tests, 63 matchmaker unit and 67
+  Workers tests, 30 browser-game tests, nine analytics tests, all source and
+  mutation gates/typechecks, both production builds, and 594-file artifact
+  validation. Its assembled entries are `/assets/index-1eddfd33.js` and
   `/game/cloudflare/assets/index-ccb53c4b.js`.
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed
@@ -191,15 +198,18 @@
 - Source-faithful Conquest V2 weekly treasure rollover and delayed off-chain
   Silver delivery, dormant until a two-actor approval binds the exact cadence,
   settings mutation, algorithm digest, quantities, and generated-card pool;
-  started cycles remain deliverable from immutable receipts
+  started cycles remain deliverable from immutable D1 receipts through one
+  deterministic Workflow per cycle and one Queue message per player
+  entitlement. Queue retry/DLQ state is transport evidence, never terminal
+  business state
 - Retry-safe ranked-constructed deck aggregation, including source Glicko
   transitions, Apprentice eligibility, match-status counters, current-season
   highest-player wins, a global Durable Object serializer, and D1 receipts
-- Source `PromoteGrandmastersRunner` lifecycle through a separately serialized
-  global Durable Object work group: terminal clients never wait for an attempt,
-  and D1 persists the exact 15-second linear backoff, five-attempt bound,
-  atomic rank mutation, and terminal `APPLIED`/`FAILED` state from migration
-  `0120`
+- Source `PromoteGrandmastersRunner` effect through a separately serialized
+  global Durable Object responsibility: terminal clients never wait for an
+  attempt, D1 retains a `PENDING` responsibility until atomic application, and
+  target-owned bounded exponential retry remains recoverable without a copied
+  terminal attempt ceiling
 - Source deck ownership, class-unlock, and partial-deck validation checks
 - Atomic, owner-scoped deck favorite toggling
 - Identity-owned inventory, equipment, summaries, and Cloud Weasel supply reads

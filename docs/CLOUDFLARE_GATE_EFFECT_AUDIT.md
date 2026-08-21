@@ -160,8 +160,9 @@ become provenance-only or disappear after replacement evidence exists.
 The `worker-runners` and `match-completion` conversions were completed at
 `6795a7fd`. Their release checks now require recoverability beyond the source
 retry ceiling, exactly-once application, independent progress, terminal-client
-ordering, and Durable Object eviction recovery. The `matchmaker-cadence` and
-`conquest-gate` conversions remain outstanding.
+ordering, and Durable Object eviction recovery. The `conquest-gate` conversion
+completed at `36ca654d` with Workflow/Queue/D1 handoff evidence. The
+`matchmaker-cadence` conversion remains outstanding.
 
 ### `worker-runners`
 
@@ -240,10 +241,12 @@ allocation. Rewrite their language around latency/deadline effects; a future
 implementation may coalesce alarms as long as no eligible attempt is delayed
 beyond the preserved boundary and ordering remains deterministic.
 
-### `conquest-gate`
+### `conquest-gate` (converted at `36ca654d`)
 
-The uncommitted `0121` audit material was discarded when the effect-fidelity
-contract was ratified. It is not accepted release architecture.
+The earlier uncommitted source-style `0121` audit material was discarded when
+the effect-fidelity contract was ratified. The distinct committed `0121`
+migration protects only the accepted Workflow and Queue business handoffs; it
+does not restore the discarded attempt engine.
 
 Keep:
 
@@ -265,15 +268,16 @@ Replace:
 
 The target effect is not "fail like the mint runner." It is "record every
 earned award exactly once and eventually deliver it or retain explicit
-re-drive authority." A Workflow/Queue spike must prove that contract under
-duplicate scheduling, step retry, queue retry, dead letter, and schedule
-mutation before this gate chooses target implementation evidence.
+re-drive authority." The Workflow/Queue integration suite proves that contract
+under duplicate scheduling, step retry, Queue re-publication beyond the source
+attempt ceiling, per-player failure, and schedule mutation.
 
 The target boundary is selected in
 [`CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md`](./CLOUDFLARE_CONQUEST_V2_ORCHESTRATION.md):
 one Workflow per accepted cycle, one Queue responsibility per immutable player
-entry, and D1 as the business authority. Implementation and replacement gate
-evidence remain outstanding.
+entry, and D1 as the business authority. The replacement gate requires that
+runtime, migration, configuration, and fault-injection evidence together and
+rejects restoration of direct cron delivery or a copied fixed player batch.
 
 ## Gate conversion rule
 
