@@ -31,8 +31,8 @@ remains in force.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `339d7f9d`
-  (`Scope pending Gold reads to wire authority`)
+- Last code/test checkpoint: `4816f37a`
+  (`Drive readiness through Gold Queue consumer`)
 - Latest tested runtime commit: `339d7f9d`
   (`Scope pending Gold reads to wire authority`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
@@ -115,6 +115,11 @@ player-facing pending-card query and scopes that wire gate to the exact
 projection. The independent Queue consumer still re-reads the complete D1
 entitlement. This hardening was found by the full release contract before any
 push or production action.
+
+Follow-up `4816f37a` replaces the match-service readiness test's stale direct
+cron-grant import with the real Gold Queue consumer boundary. Match-service
+typecheck, all 48 Workers integration tests, and both Conquest gates pass. No
+runtime compatibility alias was added for the removed direct-grant path.
 
 ## Conquest V2 Workflow/Queue milestone
 
