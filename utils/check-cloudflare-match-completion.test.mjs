@@ -248,6 +248,8 @@ const rankFixtures = async () => {
       migration:
         'cloudflare/migrations/0118_match_account_stat_publication.sql',
       deckRankMigration: 'cloudflare/migrations/0119_match_deck_rank_jobs.sql',
+      grandweaverTaskMigration:
+        'cloudflare/migrations/0120_grandweaver_task_attempts.sql',
       rankPublication: 'cloudflare/src/rank-publication.ts',
       competitive: 'cloudflare/src/competitive.ts',
       conquest: 'cloudflare/src/conquest.ts',
@@ -980,6 +982,20 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     },
     {
       ...value,
+      grandweaverTaskMigration: value.grandweaverTaskMigration.replace(
+        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
+        "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED'))"
+      )
+    },
+    {
+      ...value,
+      grandweaverTaskMigration: value.grandweaverTaskMigration.replace(
+        'OLD.attempt_count < 5',
+        'OLD.attempt_count < 50'
+      )
+    },
+    {
+      ...value,
       deckRankMigration: value.deckRankMigration.replace(
         "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
         "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'active'"
@@ -1064,9 +1080,23 @@ test('rejects weakened rank receipts, projections, writers, or runtime proof', a
     },
     {
       ...value,
+      progression: value.progression.replace(
+        'GRANDWEAVER_MAX_ATTEMPTS = 5',
+        'GRANDWEAVER_MAX_ATTEMPTS = 50'
+      )
+    },
+    {
+      ...value,
       gameMatch: value.gameMatch.replace(
-        'metadata.grandweaverRecalculationPending = true',
-        'metadata.grandweaverRecalculationPending = false'
+        '/internal/apply-grandweaver',
+        '/internal/skip-grandweaver'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'metadata.grandweaverRecalculationPending =\n        grandweaverJob.state ===',
+        'await runPublishedGrandweaverJob(\n        this.env.AUTH_DB,\n        metadata.proposalId,\n        endedAt\n      )\n      metadata.grandweaverRecalculationPending =\n        grandweaverJob.state ==='
       )
     },
     {

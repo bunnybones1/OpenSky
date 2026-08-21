@@ -11,7 +11,7 @@ export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0119_match_deck_rank_jobs.sql'
+  '0120_grandweaver_task_attempts.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -80,6 +80,19 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       AND name = 'multiplayer_match_account_stat_snapshot_guard'
       AND instr(sql, '$.match.matchSettings.season') > 0)
     AS account_stat_payload_guard_present,
+  (SELECT COUNT(*)
+     FROM pragma_table_info('multiplayer_grandweaver_jobs')
+     WHERE name IN ('attempt_count', 'last_attempt_at', 'next_attempt_at'))
+    AS grandweaver_task_columns_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'multiplayer_grandweaver_job_update_guard'
+      AND instr(sql, 'OLD.attempt_count < 5') > 0
+      AND instr(sql, '15 * NEW.attempt_count') > 0
+      AND instr(sql, "NEW.status = 'FAILED'") > 0
+      AND instr(sql, "NEW.status = 'APPLIED'") > 0
+      AND instr(sql, "ledger.status = 'ended'") > 0)
+    AS grandweaver_task_contract_guard_present,
   (SELECT COUNT(*) FROM sqlite_schema
     WHERE type = 'table'
       AND name = 'multiplayer_match_deck_rank_jobs')
@@ -383,6 +396,8 @@ export const productionSchemaRow = output => {
     row?.account_stat_publication_tables_present !== 3 ||
     row?.account_stat_publication_guards_present !== 12 ||
     row?.account_stat_payload_guard_present !== 1 ||
+    row?.grandweaver_task_columns_present !== 3 ||
+    row?.grandweaver_task_contract_guard_present !== 1 ||
     row?.deck_rank_job_table_present !== 1 ||
     row?.deck_rank_job_guards_present !== 7 ||
     row?.deck_rank_job_contract_guards_present !== 3

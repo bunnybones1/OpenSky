@@ -44,8 +44,9 @@ import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
-  applyPublishedGrandweavers,
   applyWarmUpProgress,
+  GRANDWEAVER_RETRY_DELAY_MS,
+  type GrandweaverJobReceipt,
   warmUpProgressPlayer
 } from './progression'
 import {
@@ -85,8 +86,6 @@ const QUEST_PROGRESS_KEY = 'match:quest-progress'
 const REPLAY_RECORD_PREFIX = 'match:replay:'
 const REPLAY_NEXT_INDEX_KEY = 'match:replay-next-index'
 const MAX_REPLAY_RECORD_BYTES = 1024 * 1024
-const GRANDWEAVER_RETRY_DELAY_MS = 15_000
-
 export interface GameServerEnv {
   GAME_MATCHES: DurableObjectNamespace
   DECK_RANK_COORDINATOR: DurableObjectNamespace
@@ -855,6 +854,8 @@ export class GameMatch implements DurableObject {
       questProgress: runtime.questProgress(),
       completionRecorded: metadata.completionRecorded === true,
       deckRankUpdatePending: metadata.deckRankUpdatePending === true,
+      grandweaverRecalculationPending:
+        metadata.grandweaverRecalculationPending === true,
       analyticsEnqueuedAt: metadata.analyticsEnqueuedAt,
       sockets: this.state.getWebSockets().length
     })
@@ -1692,7 +1693,11 @@ export class GameMatch implements DurableObject {
           `deck-rank coordinator returned ${deckRanksResponse.status}`
         )
       }
-      const { stats } = await deckRanksResponse.json<RankedSettlementReceipt>()
+      const { stats, grandweaverJob } =
+        await deckRanksResponse.json<RankedSettlementReceipt>()
+      if (!['not_required', 'pending'].includes(grandweaverJob.state)) {
+        throw new Error('Grandweaver job staging result is invalid')
+      }
       const experience = await applyMatchExperience(
         this.env.AUTH_DB,
         metadata.proposalId,
@@ -1791,23 +1796,8 @@ export class GameMatch implements DurableObject {
         }
       })
       metadata.deckRankUpdatePending = deckRankJob.state === 'pending'
-      try {
-        metadata.grandweaverRecalculationPending =
-          (await applyPublishedGrandweavers(
-            this.env.AUTH_DB,
-            metadata.proposalId,
-            endedAt
-          )) === 'waiting'
-      } catch (error) {
-        // The source promote-grandweavers task is asynchronous. A transient
-        // task failure must not delay terminal rewards or socket completion.
-        metadata.grandweaverRecalculationPending = true
-        console.error(
-          'grandweaver recalculation failed',
-          metadata.proposalId,
-          error
-        )
-      }
+      metadata.grandweaverRecalculationPending =
+        grandweaverJob.state === 'pending'
       // The source does not send rewards or its terminal client signal until
       // InternalMatchEnd returns. Persist this retry boundary first so a
       // reconnect can safely replay both messages after an interrupted send.
@@ -1925,14 +1915,42 @@ export class GameMatch implements DurableObject {
     now: number
   ): Promise<number | undefined> {
     try {
-      const result = await applyPublishedGrandweavers(
-        this.env.AUTH_DB,
-        metadata.proposalId
+      // A separately named coordinator preserves the source work group's
+      // global single-task lock without serializing it behind deck-rank work.
+      const response = await this.env.DECK_RANK_COORDINATOR.getByName(
+        'grandweaver'
+      ).fetch(
+        new Request(
+          'https://deck-rank-coordinator/internal/apply-grandweaver',
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+            },
+            body: JSON.stringify({
+              proposalId: metadata.proposalId,
+              attemptedAt: new Date(now).toISOString()
+            })
+          }
+        )
       )
-      metadata.grandweaverRecalculationPending = result === 'waiting'
+      if (!response.ok) {
+        throw new Error(`Grandweaver task returned ${response.status}`)
+      }
+      const job = await response.json<GrandweaverJobReceipt>()
+      if (!['pending', 'applied', 'failed'].includes(job.state)) {
+        throw new Error('Grandweaver task result is invalid')
+      }
+      metadata.grandweaverRecalculationPending = job.state === 'pending'
       await this.state.storage.put(METADATA_KEY, metadata)
       if (metadata.grandweaverRecalculationPending) {
-        return now + GRANDWEAVER_RETRY_DELAY_MS
+        const nextAttemptAt = job.nextAttemptAt
+          ? Date.parse(job.nextAttemptAt)
+          : Number.NaN
+        return Number.isFinite(nextAttemptAt) && nextAttemptAt > now
+          ? nextAttemptAt
+          : now + GRANDWEAVER_RETRY_DELAY_MS
       }
       return undefined
     } catch (error) {

@@ -269,6 +269,12 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'multiplayer_match_stats_publication_guard',
     'multiplayer_match_ranked_unlock_publication_guard',
     'multiplayer_grandweaver_job_update_guard',
+    'attempt_count',
+    'last_attempt_at',
+    'next_attempt_at',
+    '15 * NEW.attempt_count',
+    "NEW.status = 'FAILED'",
+    "NEW.status = 'APPLIED'",
     'multiplayer_match_deck_rank_jobs',
     'multiplayer_match_deck_rank_job_guard',
     'multiplayer_match_deck_rank_job_update_guard',
@@ -345,6 +351,8 @@ test('accepts only one successful complete read-only schema row', () => {
     account_stat_publication_tables_present: 3,
     account_stat_publication_guards_present: 12,
     account_stat_payload_guard_present: 1,
+    grandweaver_task_columns_present: 3,
+    grandweaver_task_contract_guard_present: 1,
     deck_rank_job_table_present: 1,
     deck_rank_job_guards_present: 7,
     deck_rank_job_contract_guards_present: 3
@@ -413,6 +421,18 @@ test('accepts only one successful complete read-only schema row', () => {
     ]),
     JSON.stringify([
       {
+        results: [{ ...complete, grandweaver_task_columns_present: 2 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, grandweaver_task_contract_guard_present: 0 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
         results: [{ ...complete, deck_rank_job_table_present: 0 }],
         success: true
       }
@@ -425,9 +445,7 @@ test('accepts only one successful complete read-only schema row', () => {
     ]),
     JSON.stringify([
       {
-        results: [
-          { ...complete, deck_rank_job_contract_guards_present: 2 }
-        ],
+        results: [{ ...complete, deck_rank_job_contract_guards_present: 2 }],
         success: true
       }
     ]),

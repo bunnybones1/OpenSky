@@ -38,8 +38,9 @@ import {
   applyMatchExperience,
   applyMatchProgression,
   applyMatchStats,
-  applyPublishedGrandweavers,
-  applyWarmUpProgress
+  applyWarmUpProgress,
+  publishedGrandweaverJob,
+  runPublishedGrandweaverJob
 } from '../src/progression'
 import { initializeStateWasm } from '../src/state-runtime'
 import {
@@ -1293,7 +1294,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toBe(1)
   })
 
-  it('projects source Master positions and promotes the top 100 once', async () => {
+  it('projects source Master positions and runs the asynchronous Grandweaver job with bounded retries', async () => {
     await insertExperiencePlayers()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     const earlier = '2026-08-13T20:00:00.000Z'
@@ -1459,9 +1460,28 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         .bind(USER_ID_1)
         .first('player_rank')
     ).toBe('MASTER')
-    expect(await applyPublishedGrandweavers(env.AUTH_DB, proposalId)).toBe(
-      'waiting'
-    )
+    expect(
+      await publishedGrandweaverJob(env.AUTH_DB, proposalId)
+    ).toMatchObject({
+      state: 'pending',
+      attemptCount: 0,
+      createdAt: processedAt
+    })
+    expect(
+      await runPublishedGrandweaverJob(env.AUTH_DB, proposalId, processedAt)
+    ).toMatchObject({ state: 'pending', attemptCount: 0 })
+    await expect(
+      runPublishedGrandweaverJob(env.AUTH_DB, proposalId, 'not-a-timestamp')
+    ).rejects.toThrow('Grandweaver attempt time is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_grandweaver_jobs
+         SET attempt_count = 1, last_attempt_at = ?, next_attempt_at = ?
+         WHERE proposal_id = ?`
+      )
+        .bind(processedAt, '2026-08-13T22:00:15.000Z', proposalId)
+        .run()
+    ).rejects.toThrow('grandweaver job transition is invalid')
     await env.AUTH_DB.prepare(
       `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
        updated_at = ? WHERE proposal_id = ?`
@@ -1488,9 +1508,24 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
       .bind(blockingProposalId)
       .run()
+    const firstAttempt = await runPublishedGrandweaverJob(
+      env.AUTH_DB,
+      proposalId,
+      processedAt
+    )
+    expect(firstAttempt).toMatchObject({
+      state: 'pending',
+      attemptCount: 1,
+      lastAttemptAt: processedAt,
+      nextAttemptAt: '2026-08-13T22:00:15.000Z'
+    })
     expect(
-      await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)
-    ).toBe('waiting')
+      await runPublishedGrandweaverJob(
+        env.AUTH_DB,
+        proposalId,
+        '2026-08-13T22:00:14.999Z'
+      )
+    ).toEqual(firstAttempt)
     expect(
       await env.AUTH_DB.prepare(
         `SELECT status FROM multiplayer_grandweaver_jobs
@@ -1505,9 +1540,39 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     )
       .bind(processedAt, processedAt, blockingProposalId)
       .run()
+    const appliedJob = await runPublishedGrandweaverJob(
+      env.AUTH_DB,
+      proposalId,
+      firstAttempt.nextAttemptAt!
+    )
+    expect(appliedJob).toMatchObject({
+      state: 'applied',
+      attemptCount: 2,
+      lastAttemptAt: firstAttempt.nextAttemptAt,
+      appliedAt: firstAttempt.nextAttemptAt
+    })
     expect(
-      await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)
-    ).toBe('applied')
+      await runPublishedGrandweaverJob(
+        env.AUTH_DB,
+        proposalId,
+        '2026-08-13T23:00:00.000Z'
+      )
+    ).toEqual(appliedJob)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE multiplayer_grandweaver_jobs SET attempt_count = 3
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .run()
+    ).rejects.toThrow()
+    await expect(
+      env.AUTH_DB.prepare(
+        'DELETE FROM multiplayer_grandweaver_jobs WHERE proposal_id = ?'
+      )
+        .bind(proposalId)
+        .run()
+    ).rejects.toThrow('grandweaver jobs are immutable')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
@@ -1517,12 +1582,12 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     ).toBe('GRANDWEAVER')
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status FROM multiplayer_grandweaver_jobs
+        `SELECT status, attempt_count FROM multiplayer_grandweaver_jobs
          WHERE proposal_id = ?`
       )
         .bind(proposalId)
-        .first('status')
-    ).toBe('APPLIED')
+        .first()
+    ).toEqual({ status: 'APPLIED', attempt_count: 2 })
     expect(
       await env.AUTH_DB.prepare(
         `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
@@ -1553,6 +1618,83 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
            )`
       ).first('count')
     ).toBe(100)
+
+    const failedProposalId = `${proposalId}-failed-grandweaver`
+    const failedProcessedAt = '2026-08-14T00:00:00.000Z'
+    await insertActiveLedgerRow(failedProposalId, [USER_ID_1, USER_ID_2])
+    await applyMatchStats(
+      env.AUTH_DB,
+      failedProposalId,
+      126,
+      0,
+      MatchStatus.COMPLETED,
+      failedProcessedAt
+    )
+    expect(
+      await publishedGrandweaverJob(env.AUTH_DB, failedProposalId)
+    ).toMatchObject({ state: 'pending', attemptCount: 0 })
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(failedProcessedAt, failedProcessedAt, failedProposalId)
+      .run()
+    const ranksBeforeFailedTask = (
+      await env.AUTH_DB.prepare(
+        `SELECT user_id, player_rank FROM player_account_stats
+         WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126
+         ORDER BY user_id`
+      ).all()
+    ).results
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER test_grandweaver_task_failure
+       BEFORE UPDATE ON player_account_stats
+       BEGIN SELECT RAISE(FAIL, 'injected Grandweaver task failure'); END`
+    ).run()
+    let failedJob = await publishedGrandweaverJob(env.AUTH_DB, failedProposalId)
+    let attemptedAt = failedProcessedAt
+    try {
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        failedJob = await runPublishedGrandweaverJob(
+          env.AUTH_DB,
+          failedProposalId,
+          attemptedAt
+        )
+        expect(failedJob.attemptCount).toBe(attempt)
+        if (attempt < 5) {
+          expect(failedJob.state).toBe('pending')
+          expect(failedJob.nextAttemptAt).toBeTruthy()
+          attemptedAt = failedJob.nextAttemptAt!
+        } else {
+          expect(failedJob).toMatchObject({
+            state: 'failed',
+            attemptCount: 5,
+            lastAttemptAt: attemptedAt
+          })
+          expect(failedJob.nextAttemptAt).toBeUndefined()
+        }
+      }
+    } finally {
+      await env.AUTH_DB.prepare(
+        'DROP TRIGGER test_grandweaver_task_failure'
+      ).run()
+    }
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT user_id, player_rank FROM player_account_stats
+           WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126
+           ORDER BY user_id`
+        ).all()
+      ).results
+    ).toEqual(ranksBeforeFailedTask)
+    expect(
+      await runPublishedGrandweaverJob(
+        env.AUTH_DB,
+        failedProposalId,
+        '2026-08-15T00:00:00.000Z'
+      )
+    ).toEqual(failedJob)
   })
 
   it('preserves the source unpositioned after-rank reward on draws', async () => {
@@ -3702,6 +3844,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
   it('uses durable alarms to advance commit-reveal state', async () => {
     await insertQuestPlayers()
     await insertExperienceStateForExistingPlayers()
+    await env.AUTH_DB.prepare(
+      `UPDATE player_account_stats
+       SET score = 1201, player_rank = 'MASTER',
+           player_rank_stage = 'STAGE_NONE',
+           player_rank_state = '[-1,1750,350,1201]'
+       WHERE game_mode = 'RANKED_CONSTRUCTED' AND season = 126`
+    ).run()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
     await initializeMatch()
     const first = await connect(PRINCIPAL_1)
@@ -3871,6 +4020,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       ended: true,
       completionRecorded: true,
       deckRankUpdatePending: true,
+      grandweaverRecalculationPending: true,
       state: { statusType: 'GameOver', winner: 1 },
       questProgress: [{ 7001: 0 }, { 7002: 1 }]
     })
@@ -3912,21 +4062,14 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         'SELECT COUNT(*) AS count FROM player_deck_ranks'
       ).first('count')
     ).toBe(0)
-
-    // The source deck-rank and Grandweaver tasks use independent work groups.
-    // Make both responsibilities pending on the same Durable Object alarm and
-    // prove that completing the deck task does not postpone the other runner.
-    await runInDurableObject(
-      stub() as DurableObjectStub,
-      async (_instance, state) => {
-        const metadata = await state.storage.get<{
-          grandweaverRecalculationPending?: boolean
-        }>('match:metadata')
-        if (!metadata) throw new Error('match metadata was not persisted')
-        metadata.grandweaverRecalculationPending = true
-        await state.storage.put('match:metadata', metadata)
-      }
-    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_grandweaver_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'PENDING', attempt_count: 0 })
 
     // Terminal rewards and match_ended were already delivered and the player
     // socket was already closed above. Only a later alarm may execute both
@@ -3953,6 +4096,14 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         'SELECT COUNT(*) AS count FROM player_deck_ranks'
       ).first('count')
     ).toBe(2)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count FROM multiplayer_grandweaver_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first()
+    ).toEqual({ status: 'APPLIED', attempt_count: 1 })
     await runInDurableObject(
       stub() as DurableObjectStub,
       async (_instance, state) => {
@@ -4178,10 +4329,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         win_streak: 0,
         loss_streak: 1,
         season: 126,
-        score: 0,
-        player_rank: 'WANDERER',
-        player_rank_stage: 'STAGE_I',
-        player_rank_state: '[-1,1750,350,0]'
+        score: 1200,
+        player_rank: 'GRANDWEAVER',
+        player_rank_stage: 'STAGE_NONE',
+        player_rank_state: '[0,1617.8372686356395,318.43042096199133,1200]'
       },
       {
         user_id: USER_ID_2,
@@ -4193,10 +4344,10 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         win_streak: 1,
         loss_streak: 0,
         season: 126,
-        score: 43,
-        player_rank: 'WANDERER',
-        player_rank_stage: 'STAGE_I',
-        player_rank_state: '[1,1882.1627313643605,350,43]'
+        score: 1231,
+        player_rank: 'GRANDWEAVER',
+        player_rank_stage: 'STAGE_NONE',
+        player_rank_state: '[1,1882.1627313643605,318.43042096199133,1231]'
       }
     ])
     expect(

@@ -112,8 +112,15 @@ export const EXPECTED_RUNNERS = {
   },
   PromoteGrandmastersRunner: {
     disposition: 'ported',
-    evidenceFile: 'cloudflare/src/leaderboard-rank-reset.ts',
-    evidence: ['grandweaverStatements', 'GRANDWEAVER_COUNT']
+    evidenceFile: 'game-server-cloudflare/src/progression.ts',
+    evidence: [
+      'runPublishedGrandweaverJob',
+      'multiplayer_grandweaver_jobs',
+      'GRANDWEAVER_RETRY_DELAY_MS = 15_000',
+      'GRANDWEAVER_MAX_ATTEMPTS = 5',
+      'grandweaverStatements',
+      'failExhaustedGrandweaverJob'
+    ]
   },
   PushNotificationsRunner: {
     disposition: 'ported',

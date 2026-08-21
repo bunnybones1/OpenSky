@@ -1035,6 +1035,7 @@ export const rankPublicationErrors = value => {
     deckRanks,
     migration,
     deckRankMigration,
+    grandweaverTaskMigration,
     rankPublication,
     competitive,
     conquest,
@@ -1085,7 +1086,10 @@ export const rankPublicationErrors = value => {
     'PromoteGrandmastersMaxRetries = 5',
     'func (r *PromoteGrandmastersRunner) MaxBatchSize() int',
     'return 1',
-    'grandmastersUpdater.Update(sess, payload.GameMode, payload.Season)'
+    'time.NewTicker(30 * time.Second)',
+    'grandmastersUpdater.Update(sess, payload.GameMode, payload.Season)',
+    'UpdateFailedTasks([]*data.Task{task}, PromoteGrandmastersRetryDelay, PromoteGrandmastersMaxRetries)',
+    'task.Status = proto.TaskStatus_COMPLETED'
   ]) {
     if (!sourceGrandweaverTask.includes(token)) {
       errors.push(`Source Grandweaver task changed: ${token}`)
@@ -1184,6 +1188,37 @@ export const rankPublicationErrors = value => {
     }
   }
 
+  const compactGrandweaverTaskMigration = grandweaverTaskMigration.replace(
+    /\s+/g,
+    ' '
+  )
+  for (const token of [
+    'ALTER TABLE multiplayer_grandweaver_jobs RENAME TO multiplayer_grandweaver_jobs_legacy',
+    "status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPLIED', 'FAILED'))",
+    'attempt_count BETWEEN 0 AND 5',
+    'last_attempt_at TEXT',
+    'next_attempt_at TEXT',
+    'multiplayer_grandweaver_jobs_due_idx',
+    'multiplayer_grandweaver_job_guard',
+    'NEW.attempt_count <> 0',
+    'multiplayer_grandweaver_job_update_guard',
+    'OLD.attempt_count < 5',
+    '15 * NEW.attempt_count',
+    "ledger.proposal_id = OLD.proposal_id AND ledger.status = 'ended'",
+    "NEW.status = 'FAILED'",
+    'OLD.attempt_count = 5',
+    "NEW.status = 'APPLIED'",
+    "pending_match.status <> 'ended'",
+    'multiplayer_grandweaver_job_no_delete'
+  ]) {
+    if (!compactGrandweaverTaskMigration.includes(token)) {
+      errors.push(`Grandweaver task migration is missing: ${token}`)
+    }
+  }
+  if (!/OLD\.attempt_count\s*<\s*5\b/.test(grandweaverTaskMigration)) {
+    errors.push('Grandweaver task migration is missing: exact five attempts')
+  }
+
   const compactProgression = progression.replace(/\s+/g, ' ')
   for (const token of [
     "type AccountStatPublicationPhase = 'RANKED_STATS' | 'EXPERIENCE_UNLOCK'",
@@ -1196,11 +1231,32 @@ export const rankPublicationErrors = value => {
     "'EXPERIENCE_UNLOCK'",
     'INSERT INTO multiplayer_match_stats_applied',
     'INSERT OR IGNORE INTO multiplayer_grandweaver_jobs',
-    "job.status = 'PENDING'",
-    "SET status = 'APPLIED', applied_at = ?"
+    'export const publishedGrandweaverJob',
+    'export const runPublishedGrandweaverJob',
+    "ledgerStatus !== 'ended'",
+    'job.attempt_count + 1',
+    'GRANDWEAVER_RETRY_DELAY_MS * attemptCount',
+    'job.attempt_count = ? AND job.last_attempt_at = ?',
+    'failExhaustedGrandweaverJob('
   ]) {
     if (!compactProgression.includes(token)) {
       errors.push(`rank receipt coordinator is missing: ${token}`)
+    }
+  }
+  if (!/GRANDWEAVER_MAX_ATTEMPTS\s*=\s*5\b/.test(progression)) {
+    errors.push('asynchronous Grandweaver task is missing: exact five attempts')
+  }
+  for (const token of [
+    'grandweaverJob: GrandweaverJobReceipt',
+    'const grandweaverJob = await publishedGrandweaverJob(',
+    'const requiresGrandweaverJob = stats.rewards',
+    "grandweaverJob.state !== 'pending'",
+    "grandweaverJob.state !== 'not_required'",
+    "pathname === '/internal/apply-grandweaver'",
+    'await runPublishedGrandweaverJob('
+  ]) {
+    if (!deckRanks.includes(token)) {
+      errors.push(`Grandweaver job staging receipt is missing: ${token}`)
     }
   }
   for (const token of [
@@ -1276,8 +1332,10 @@ export const rankPublicationErrors = value => {
     workerCompletion,
     [
       'await publishMatchCompletion(this.env.AUTH_DB, {',
-      'await applyPublishedGrandweavers(',
+      'metadata.grandweaverRecalculationPending =',
+      "grandweaverJob.state === 'pending'",
       'metadata.completionRecorded = true',
+      "type: 'rewards'",
       'this.finishMatchSockets()'
     ]
   )
@@ -1305,6 +1363,13 @@ export const rankPublicationErrors = value => {
   if (synchronousCompletion.includes('/internal/apply-deck-rank')) {
     errors.push('Worker applies deck ranks before terminal client delivery')
   }
+  if (
+    synchronousCompletion.includes('/internal/apply-grandweaver') ||
+    synchronousCompletion.includes('runPublishedGrandweaverJob(') ||
+    synchronousCompletion.includes('applyPublishedGrandweavers(')
+  ) {
+    errors.push('Worker runs the Grandweaver task before terminal clients')
+  }
   for (const token of [
     'private async retryDeckRankUpdateWithRetry(',
     '/internal/apply-deck-rank',
@@ -1316,10 +1381,13 @@ export const rankPublicationErrors = value => {
     }
   }
   for (const token of [
-    'metadata.grandweaverRecalculationPending = true',
-    'const GRANDWEAVER_RETRY_DELAY_MS = 15_000',
+    'GRANDWEAVER_RETRY_DELAY_MS',
     'private async retryPostCompletionJobs(',
     'retryGrandweaverRecalculationWithRetry(',
+    "'grandweaver'",
+    '/internal/apply-grandweaver',
+    "metadata.grandweaverRecalculationPending = job.state === 'pending'",
+    'job.nextAttemptAt',
     'metadata.grandweaverRecalculationPending',
     'return now + GRANDWEAVER_RETRY_DELAY_MS'
   ]) {
@@ -1432,7 +1500,13 @@ export const rankPublicationErrors = value => {
     [
       'asynchronous Grandweaver job',
       gameServerTest,
-      'await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)'
+      'runs the asynchronous Grandweaver job with bounded retries'
+    ],
+    ['Grandweaver terminal failure', gameServerTest, "state: 'failed',"],
+    [
+      'Grandweaver terminal-client ordering',
+      gameServerTest,
+      'Terminal rewards and match_ended were already delivered'
     ],
     [
       'match-service rank projection',
@@ -1617,6 +1691,7 @@ const main = async () => {
     deckRanksTest,
     rankMigration,
     deckRankMigration,
+    grandweaverTaskMigration,
     rankPublication,
     conquest,
     progressionSupport,
@@ -1675,6 +1750,15 @@ const main = async () => {
         'cloudflare',
         'migrations',
         '0119_match_deck_rank_jobs.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0120_grandweaver_task_attempts.sql'
       ),
       'utf8'
     ),
@@ -1785,6 +1869,7 @@ const main = async () => {
       deckRanks,
       migration: rankMigration,
       deckRankMigration,
+      grandweaverTaskMigration,
       rankPublication,
       competitive,
       conquest,

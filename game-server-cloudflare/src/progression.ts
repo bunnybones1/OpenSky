@@ -1624,7 +1624,9 @@ const grandweaverStatements = (
   database: D1Database,
   proposalId: string,
   gameMode: GameMode,
-  season: number
+  season: number,
+  attemptCount: number,
+  attemptedAt: string
 ): D1PreparedStatement[] => [
   database
     .prepare(
@@ -1644,9 +1646,10 @@ const grandweaverStatements = (
          AND EXISTS (
            SELECT 1 FROM multiplayer_grandweaver_jobs job
            WHERE job.proposal_id = ? AND job.status = 'PENDING'
+             AND job.attempt_count = ? AND job.last_attempt_at = ?
          )`
     )
-    .bind(gameMode, season, proposalId),
+    .bind(gameMode, season, proposalId, attemptCount, attemptedAt),
   database
     .prepare(
       `UPDATE player_account_stats SET player_rank = 'GRANDWEAVER'
@@ -1672,65 +1675,196 @@ const grandweaverStatements = (
        AND EXISTS (
          SELECT 1 FROM multiplayer_grandweaver_jobs job
          WHERE job.proposal_id = ? AND job.status = 'PENDING'
+           AND job.attempt_count = ? AND job.last_attempt_at = ?
        )`
     )
-    .bind(gameMode, season, proposalId)
+    .bind(gameMode, season, proposalId, attemptCount, attemptedAt)
 ]
 
-/**
- * The source enqueues global Master/Grandweaver membership recalculation only
- * after the match transaction commits. Keep it outside the pre-publication
- * ranked-stat batch so unrelated leaderboard rows never expose partial state.
- */
-export type PublishedGrandweaverResult = 'not_required' | 'waiting' | 'applied'
+interface GrandweaverJobRow {
+  proposal_id: string
+  game_mode: GameMode
+  season: number
+  status: 'PENDING' | 'APPLIED' | 'FAILED'
+  attempt_count: number
+  created_at: string
+  last_attempt_at: string | null
+  next_attempt_at: string | null
+  applied_at: string | null
+}
 
-export const applyPublishedGrandweavers = async (
+export interface GrandweaverJobReceipt {
+  state: 'not_required' | 'pending' | 'applied' | 'failed'
+  attemptCount: number
+  createdAt?: string
+  lastAttemptAt?: string
+  nextAttemptAt?: string
+  appliedAt?: string
+}
+
+export const GRANDWEAVER_RETRY_DELAY_MS = 15_000
+export const GRANDWEAVER_MAX_ATTEMPTS = 5
+
+const canonicalTimestamp = (value: string) => {
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+}
+
+const readGrandweaverJob = (
   database: D1Database,
-  proposalId: string,
-  appliedAt = new Date().toISOString()
-): Promise<PublishedGrandweaverResult> => {
-  const job = await database
+  proposalId: string
+): Promise<GrandweaverJobRow | null> =>
+  database
     .prepare(
-      `SELECT job.game_mode, job.season, job.status, match.status AS match_status
-       FROM multiplayer_grandweaver_jobs job
-       JOIN multiplayer_matches match ON match.proposal_id = job.proposal_id
-       WHERE job.proposal_id = ?`
+      `SELECT proposal_id, game_mode, season, status, attempt_count,
+              created_at, last_attempt_at, next_attempt_at, applied_at
+       FROM multiplayer_grandweaver_jobs WHERE proposal_id = ?`
     )
     .bind(proposalId)
-    .first<{
-      game_mode: GameMode
-      season: number
-      status: 'PENDING' | 'APPLIED'
-      match_status: string
-    }>()
-  if (!job) return 'not_required'
-  if (job.status === 'APPLIED') return 'applied'
-  if (job.match_status !== 'ended') return 'waiting'
+    .first<GrandweaverJobRow>()
+
+const grandweaverJobReceipt = (
+  job: GrandweaverJobRow | null
+): GrandweaverJobReceipt =>
+  job
+    ? {
+        state:
+          job.status === 'APPLIED'
+            ? 'applied'
+            : job.status === 'FAILED'
+              ? 'failed'
+              : 'pending',
+        attemptCount: job.attempt_count,
+        createdAt: job.created_at,
+        ...(job.last_attempt_at ? { lastAttemptAt: job.last_attempt_at } : {}),
+        ...(job.next_attempt_at ? { nextAttemptAt: job.next_attempt_at } : {}),
+        ...(job.applied_at ? { appliedAt: job.applied_at } : {})
+      }
+    : { state: 'not_required', attemptCount: 0 }
+
+/**
+ * Reads the post-commit responsibility without running it. InternalMatchEnd
+ * only enqueues PromoteGrandmastersTask; terminal clients must not wait for
+ * the worker's first attempt.
+ */
+export const publishedGrandweaverJob = async (
+  database: D1Database,
+  proposalId: string
+): Promise<GrandweaverJobReceipt> =>
+  grandweaverJobReceipt(await readGrandweaverJob(database, proposalId))
+
+const failExhaustedGrandweaverJob = async (
+  database: D1Database,
+  proposalId: string
+) => {
+  const failed = await database
+    .prepare(
+      `UPDATE multiplayer_grandweaver_jobs
+       SET status = 'FAILED', next_attempt_at = NULL
+       WHERE proposal_id = ? AND status = 'PENDING' AND attempt_count = ?`
+    )
+    .bind(proposalId, GRANDWEAVER_MAX_ATTEMPTS)
+    .run()
+  if ((failed.meta.changes ?? 0) !== 1) {
+    throw new Error('Grandweaver job exhaustion was not persisted')
+  }
+}
+
+/**
+ * Runs one source PromoteGrandmastersRunner attempt after terminal
+ * publication. Attempt state is committed before the atomic rank batch so an
+ * eviction cannot lose its linear retry deadline.
+ */
+export const runPublishedGrandweaverJob = async (
+  database: D1Database,
+  proposalId: string,
+  attemptedAt: string
+): Promise<GrandweaverJobReceipt> => {
+  if (!canonicalTimestamp(attemptedAt)) {
+    throw new Error('Grandweaver attempt time is invalid')
+  }
+  let job = await readGrandweaverJob(database, proposalId)
+  if (!job || job.status !== 'PENDING') return grandweaverJobReceipt(job)
+
+  const ledgerStatus = await database
+    .prepare('SELECT status FROM multiplayer_matches WHERE proposal_id = ?')
+    .bind(proposalId)
+    .first<string>('status')
+  if (ledgerStatus !== 'ended') return grandweaverJobReceipt(job)
+  if (
+    job.next_attempt_at &&
+    Date.parse(job.next_attempt_at) > Date.parse(attemptedAt)
+  ) {
+    return grandweaverJobReceipt(job)
+  }
+  if (job.attempt_count >= GRANDWEAVER_MAX_ATTEMPTS) {
+    await failExhaustedGrandweaverJob(database, proposalId)
+    return grandweaverJobReceipt(await readGrandweaverJob(database, proposalId))
+  }
+
+  const attemptCount = job.attempt_count + 1
+  const nextAttemptAt = new Date(
+    Date.parse(attemptedAt) + GRANDWEAVER_RETRY_DELAY_MS * attemptCount
+  ).toISOString()
+  const started = await database
+    .prepare(
+      `UPDATE multiplayer_grandweaver_jobs
+       SET attempt_count = attempt_count + 1, last_attempt_at = ?,
+           next_attempt_at = ?
+       WHERE proposal_id = ? AND status = 'PENDING'
+         AND attempt_count = ?
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)`
+    )
+    .bind(
+      attemptedAt,
+      nextAttemptAt,
+      proposalId,
+      job.attempt_count,
+      attemptedAt
+    )
+    .run()
+  if ((started.meta.changes ?? 0) < 1) {
+    return grandweaverJobReceipt(await readGrandweaverJob(database, proposalId))
+  }
+
+  job = await readGrandweaverJob(database, proposalId)
+  if (!job) throw new Error('Grandweaver job disappeared')
   const scopeReady = noUnpublishedAccountStatsInScopeSQL(
     String(job.season),
     `'${job.game_mode}'`
   )
-  await database.batch([
-    database.prepare(
-      `SELECT CASE WHEN ${scopeReady} THEN 1 ELSE 0 END AS ready`
-    ),
-    ...grandweaverStatements(database, proposalId, job.game_mode, job.season),
-    database
-      .prepare(
-        `UPDATE multiplayer_grandweaver_jobs
-         SET status = 'APPLIED', applied_at = ?
-         WHERE proposal_id = ? AND status = 'PENDING'
-           AND ${scopeReady}`
-      )
-      .bind(appliedAt, proposalId)
-  ])
-  const applied = await database
-    .prepare(
-      `SELECT status FROM multiplayer_grandweaver_jobs WHERE proposal_id = ?`
-    )
-    .bind(proposalId)
-    .first<{ status: 'PENDING' | 'APPLIED' }>()
-  return applied?.status === 'APPLIED' ? 'applied' : 'waiting'
+  try {
+    await database.batch([
+      ...grandweaverStatements(
+        database,
+        proposalId,
+        job.game_mode,
+        job.season,
+        attemptCount,
+        attemptedAt
+      ),
+      database
+        .prepare(
+          `UPDATE multiplayer_grandweaver_jobs
+           SET status = 'APPLIED', next_attempt_at = NULL, applied_at = ?
+           WHERE proposal_id = ? AND status = 'PENDING'
+             AND attempt_count = ? AND last_attempt_at = ?
+             AND ${scopeReady}`
+        )
+        .bind(attemptedAt, proposalId, attemptCount, attemptedAt)
+    ])
+  } catch (error) {
+    console.error('Grandweaver task failed', proposalId, error)
+  }
+
+  job = await readGrandweaverJob(database, proposalId)
+  if (!job) throw new Error('Grandweaver job disappeared')
+  if (job.status === 'PENDING' && attemptCount >= GRANDWEAVER_MAX_ATTEMPTS) {
+    await failExhaustedGrandweaverJob(database, proposalId)
+    job = await readGrandweaverJob(database, proposalId)
+    if (!job) throw new Error('Grandweaver job disappeared')
+  }
+  return grandweaverJobReceipt(job)
 }
 
 /**

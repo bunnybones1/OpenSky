@@ -20,7 +20,10 @@ import {
 } from './ranking'
 import {
   applyMatchStats,
+  publishedGrandweaverJob,
   RankPublicationPendingError,
+  runPublishedGrandweaverJob,
+  type GrandweaverJobReceipt,
   type MatchStatsReceipt
 } from './progression'
 import { applyConquestScores } from './conquest-score'
@@ -110,6 +113,7 @@ export interface DeckRankReceipt {
 
 export interface RankedSettlementReceipt {
   stats: MatchStatsReceipt
+  grandweaverJob: GrandweaverJobReceipt
 }
 
 export interface DeckRankJobReceipt {
@@ -288,12 +292,8 @@ const jobReceipt = (job: DeckRankJobRow): DeckRankJobReceipt => ({
         : 'pending',
   attemptCount: job.attempt_count,
   createdAt: job.created_at,
-  ...(job.last_attempt_at
-    ? { lastAttemptAt: job.last_attempt_at }
-    : {}),
-  ...(job.next_attempt_at
-    ? { nextAttemptAt: job.next_attempt_at }
-    : {}),
+  ...(job.last_attempt_at ? { lastAttemptAt: job.last_attempt_at } : {}),
+  ...(job.next_attempt_at ? { nextAttemptAt: job.next_attempt_at } : {}),
   ...(job.applied_at ? { appliedAt: job.applied_at } : {})
 })
 
@@ -632,8 +632,7 @@ export const runDeckRankJob = async (
 
   const attemptCount = job.attempt_count + 1
   const nextAttemptAt = new Date(
-    Date.parse(attemptedAt) +
-      DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount
+    Date.parse(attemptedAt) + DECK_RANK_UPDATE_RETRY_DELAY_MS * attemptCount
   ).toISOString()
   const started = await database
     .prepare(
@@ -752,6 +751,25 @@ export class DeckRankCoordinator implements DurableObject {
           }
           throw error
         }
+        const grandweaverJob = await publishedGrandweaverJob(
+          this.env.AUTH_DB,
+          body.proposalId
+        )
+        const requiresGrandweaverJob = stats.rewards
+          .flat()
+          .some(
+            reward =>
+              reward.rank?.afterMatch !== undefined &&
+              [PlayerRank.MASTER, PlayerRank.GRANDWEAVER].includes(
+                reward.rank.afterMatch.rank
+              )
+          )
+        if (
+          (requiresGrandweaverJob && grandweaverJob.state !== 'pending') ||
+          (!requiresGrandweaverJob && grandweaverJob.state !== 'not_required')
+        ) {
+          throw new Error('Grandweaver job staging result is invalid')
+        }
         // The source recalculates this rolling matchmaking score after saving
         // the match and deliberately treats a score failure as non-fatal.
         try {
@@ -766,7 +784,10 @@ export class DeckRankCoordinator implements DurableObject {
         } catch (error) {
           console.error('recalculate Conquest scores failed', error)
         }
-        return Response.json({ stats } satisfies RankedSettlementReceipt)
+        return Response.json({
+          stats,
+          grandweaverJob
+        } satisfies RankedSettlementReceipt)
       }
 
       if (pathname === '/internal/stage-deck-rank') {
@@ -785,6 +806,24 @@ export class DeckRankCoordinator implements DurableObject {
           body.proposalId,
           body.season,
           body.processedAt
+        )
+        return Response.json(job)
+      }
+
+      if (pathname === '/internal/apply-grandweaver') {
+        if (
+          typeof body.proposalId !== 'string' ||
+          typeof body.attemptedAt !== 'string'
+        ) {
+          return Response.json(
+            { error: 'invalid Grandweaver task request' },
+            { status: 400 }
+          )
+        }
+        const job = await runPublishedGrandweaverJob(
+          this.env.AUTH_DB,
+          body.proposalId,
+          body.attemptedAt
         )
         return Response.json(job)
       }
