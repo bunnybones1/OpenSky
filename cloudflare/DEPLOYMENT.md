@@ -8,7 +8,8 @@
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
 - Paused branch checkpoint: runtime commit `f8b1601a` is tested but not
-  deployed. Migrations `0115_authoritative_match_decks.sql` and
+  deployed; follow-up test checkpoint `9c905d01` passed the complete local
+  release contract. Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are intentionally not applied. Apply
   them in that order at the documented quiescent boundary before deploying
   any Worker from `90ebe652` or later. Every checked-in deploy command now

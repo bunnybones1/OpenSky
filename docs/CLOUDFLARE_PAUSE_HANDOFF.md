@@ -11,8 +11,8 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `f8b1601a`
-  (`Preserve source initializing match retry`)
+- Last code/test checkpoint: `9c905d01`
+  (`Stabilize leaderboard batch verification`)
 - Latest tested runtime commit: `f8b1601a`
   (`Preserve source initializing match retry`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
@@ -24,8 +24,8 @@ without a new user request.
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
 - The runtime changes from `38386294` through `f8b1601a` are committed and
-  tested but are **not deployed**. The exact local build produced web entry
-  `/assets/index-1eddfd33.js` and game entry
+  tested but are **not deployed**. The exact local build at `9c905d01`
+  produced web entry `/assets/index-c8882239.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -1430,6 +1430,15 @@ artifact validation. The assembled entries remain
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
+
+Follow-up test checkpoint `9c905d01` keeps the leaderboard worker's exact
+20-plus-5 batch, receipt, notification, and inventory assertions unchanged but
+gives that deliberately large Workers integration case a scoped 15-second
+timeout. Exact-head CI at `e864ee8a` had passed the other 511 main-Worker tests
+before shared-runner scheduling exceeded Vitest's five-second default; the
+case passed locally in 185 ms when isolated. The complete local release
+contract then passed at `9c905d01` with all counts above and web entry
+`/assets/index-c8882239.js`. The suite-wide timeout remains unchanged.
 
 ## Storage safety milestone
 

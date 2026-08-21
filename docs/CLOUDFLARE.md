@@ -2650,6 +2650,15 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+Follow-up test checkpoint `9c905d01` retains the exact 20-plus-5 leaderboard
+batch, receipt, notification, and inventory assertions while assigning only
+that deliberately large Workers integration case a 15-second timeout. It had
+passed in 185 ms when isolated after an exact-head shared CI run exceeded
+Vitest's five-second default with the other 511 main-Worker tests green. The
+complete local release contract passed again at `9c905d01`, producing web
+entry `/assets/index-c8882239.js`; no suite-wide timeout or production runtime
+behavior changed.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
