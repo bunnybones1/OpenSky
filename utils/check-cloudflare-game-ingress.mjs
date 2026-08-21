@@ -28,13 +28,20 @@ const requireOrdered = (errors, label, source, tokens) => {
 
 export const gameIngressErrors = ({
   sourceServer,
+  sourceConfig,
   sourceMatchManager,
+  sourceMatchHandler,
+  sourceMatchProxy,
   sourcePlayerContext,
   sourceBrowserSocket,
   workerProtocol,
   workerMatch,
+  workerRuntimeSettings,
   workerProtocolTest,
+  workerRuntimeSettingsTest,
   workerRuntimeTest,
+  workerProductionConfig,
+  workerTestConfig,
   rootPackage
 }) => {
   const errors = []
@@ -131,6 +138,51 @@ export const gameIngressErrors = ({
   if (sourceUnlinkedEmote.includes('connection.close(')) {
     errors.push('Source unlinked emote handler became terminal')
   }
+  if (!sourceConfig.includes('chat: false')) {
+    errors.push('Source game-server chat no longer defaults to disabled')
+  }
+  requireOrdered(
+    errors,
+    'Source configurable chat and emote throttle',
+    sourceEmote,
+    [
+      "if ('chat' in message) {",
+      'if (this.config.settings.chat) {',
+      'sendingContext.processMessage(message)',
+      'return',
+      "if ('sticker' in message) {",
+      'const MIN_EMOTE_DELAY = 4000',
+      'const MIN_EMOTE_SPAM_DELAY = 40000',
+      'if (',
+      'timeSinceLastEmote > MIN_EMOTE_DELAY &&',
+      'timeSinceFirstSavedEmote > MIN_EMOTE_SPAM_DELAY',
+      'recvPlayer.processMessage(message)'
+    ]
+  )
+  const sourceEmoteRelay = bodyBetween(
+    sourceMatchHandler,
+    'handleEmoteMessage = (',
+    'handleEnemyMutedMessage = ('
+  )
+  requireOrdered(errors, 'Source emote recipient relay', sourceEmoteRelay, [
+    'player.finishedLoadingAssets && opponent.finishedLoadingAssets',
+    'if (message.fromSpectator) {',
+    'player.send(message)',
+    '} else {',
+    'opponent.send(message)'
+  ])
+  const sourceProxyRelay = bodyBetween(
+    sourceMatchProxy,
+    "case 'relay': {",
+    "case 'internal_match_ended':"
+  )
+  requireOrdered(errors, 'Source spectator relay', sourceProxyRelay, [
+    'player.send(message.message)',
+    "if (message.message.type === 'reconnect') {",
+    '} else {',
+    'for (const s of this.spectators.values()) {',
+    's.context.send(message.message)'
+  ])
   const sourceMute = bodyBetween(
     sourceMatchManager,
     'private handlePlayerMuted(',
@@ -280,6 +332,17 @@ export const gameIngressErrors = ({
       "throw new UnknownGameMessageError('unsupported message type')"
     ]
   )
+  const workerEmoteParser = bodyBetween(
+    workerParser,
+    "case 'emote':",
+    "case 'error':"
+  )
+  if (!workerEmoteParser.includes("typeof value.chat === 'string'")) {
+    errors.push('Worker no longer accepts the source chat string variant')
+  }
+  if (workerEmoteParser.includes('value.chat.length')) {
+    errors.push('Worker reintroduced a non-source chat-length policy')
+  }
   requireOrdered(errors, 'Worker source error protocol', workerProtocol, [
     'export class SourceGameError extends GameProtocolError {',
     "readonly level: 'user' | 'server'",
@@ -420,6 +483,76 @@ export const gameIngressErrors = ({
   ) {
     errors.push('Worker still rejects source participant spectator sessions')
   }
+  if (!workerMatch.includes('CHAT_ENABLED?: string')) {
+    errors.push('Worker game-server environment omits configurable chat')
+  }
+  if (!workerRuntimeSettings.includes("value === 'true'")) {
+    errors.push('Worker chat setting is not strict and fail-closed')
+  }
+  if (
+    !workerMatch.includes('chatEnabled: sourceChatEnabled(env.CHAT_ENABLED)')
+  ) {
+    errors.push('Worker runtime does not bind chat to the reviewed setting')
+  }
+  const workerEmote = bodyBetween(
+    workerMatch,
+    'private async emote(',
+    'private async afterStateChange('
+  )
+  requireOrdered(
+    errors,
+    'Worker source-configurable chat and emote throttle',
+    workerEmote,
+    [
+      "if ((attachment.role ?? 'player') === 'spectator') {",
+      "if (!('sticker' in message) || !attachment.spectatedPrincipal) return",
+      'const sanitized = { ...message } as EmoteMessage',
+      'delete sanitized.fromPlayer',
+      'delete sanitized.fromSpectator',
+      'sanitized.fromPlayer = this.playerIndex(metadata.match, principal)',
+      "if ('chat' in sanitized) {",
+      'if (this.settings.chatEnabled) {',
+      'await this.relayPlayerEmote(metadata, principal, sanitized)',
+      'return',
+      "if ('sticker' in sanitized) {",
+      'const now = Date.now()',
+      'if (sinceLast <= 4_000 || sinceFirst <= 40_000) return',
+      'player.lastEmoteTimestamps = [',
+      'await this.relayPlayerEmote(metadata, principal, sanitized)',
+      'await this.state.storage.put(PLAYERS_KEY, players)'
+    ]
+  )
+  const workerPlayerEmoteRelay = bodyBetween(
+    workerMatch,
+    'private async relayPlayerEmote(',
+    'private async afterStateChange('
+  )
+  requireOrdered(
+    errors,
+    'Worker player emote recipient relay',
+    workerPlayerEmoteRelay,
+    [
+      'this.sendToPrincipal(',
+      'this.opponentAddress(metadata.match, principal)',
+      'this.sendToSpectators(message)',
+      'await this.replayEmote(message)'
+    ]
+  )
+  if (workerProductionConfig?.vars?.CHAT_ENABLED !== 'false') {
+    errors.push('Production game-server chat is not explicitly fail-closed')
+  }
+  if (workerTestConfig?.vars?.CHAT_ENABLED !== 'true') {
+    errors.push('Workers regressions do not exercise enabled chat')
+  }
+  for (const token of [
+    "expect(sourceChatEnabled('true')).toBe(true)",
+    "[undefined, '', 'false', 'TRUE', '1']",
+    'expect(sourceChatEnabled(value)).toBe(false)'
+  ]) {
+    if (!workerRuntimeSettingsTest.includes(token)) {
+      errors.push(`Worker chat-setting regression is missing: ${token}`)
+    }
+  }
   const workerSpectate = bodyBetween(
     workerMatch,
     'private async spectate(',
@@ -521,6 +654,18 @@ export const gameIngressErrors = ({
         "message: 'invalid authentication'",
         "it('rejects player stickers outside the accepted match equipment'",
         "message: 'player used unowned sticker'",
+        "it('preserves source configurable chat outside the emote throttle'",
+        "viewer.send(JSON.stringify({ type: 'emote', chat: 'spectator chat' }))",
+        'expect(spectatorChatLeak).toEqual([])',
+        "const longChat = 'c'.repeat(501)",
+        "chat: 'second chat'",
+        "fromSpectator: 'forged'",
+        'expect(opponentChats).resolves.toEqual(expectedChats)',
+        'expect(spectatorChats).resolves.toEqual(expectedChats)',
+        "prefix: 'match:replay:'",
+        "first.send(JSON.stringify({ type: 'emote', emote: 'hello' }))",
+        'expect(throttledOpponent).toEqual([])',
+        'expect(throttledSpectator).toEqual([])',
         "it('preserves source spectate validation errors and empty closes'",
         "message: 'invalid spectate player'",
         "message: 'you can\\t spectate yourself'",
@@ -616,6 +761,33 @@ export const gameIngressErrors = ({
       "level: 'server'",
       "message: 'player used unowned sticker'",
       "code: 1005, reason: ''"
+    ]
+  )
+  const workerChatTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves source configurable chat outside the emote throttle'",
+    "it('restores public and private spectator state"
+  )
+  requireOrdered(
+    errors,
+    'Worker source chat runtime regression',
+    workerChatTest,
+    [
+      "viewer.send(JSON.stringify({ type: 'emote', chat: 'spectator chat' }))",
+      'expect(spectatorChatLeak).toEqual([])',
+      "const longChat = 'c'.repeat(501)",
+      'fromPlayer: 1,',
+      "fromSpectator: 'forged'",
+      'await expect(opponentChats).resolves.toEqual(expectedChats)',
+      'await expect(spectatorChats).resolves.toEqual(expectedChats)',
+      'lastEmoteTimestamps).toEqual([0, 0, 0])',
+      "prefix: 'match:replay:'",
+      'expect(relayed).toEqual(expectedChats)',
+      "first.send(JSON.stringify({ type: 'emote', emote: 'hello' }))",
+      "first.send(JSON.stringify({ type: 'emote', emote: 'gg' }))",
+      'expect(throttledOpponent).toEqual([])',
+      'expect(throttledSpectator).toEqual([])',
+      'expect.any(Number)'
     ]
   )
   const workerSpectateErrorTest = bodyBetween(
@@ -751,17 +923,30 @@ const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
     sourceServer,
+    sourceConfig,
     sourceMatchManager,
+    sourceMatchHandler,
+    sourceMatchProxy,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
     workerMatch,
+    workerRuntimeSettings,
     workerProtocolTest,
+    workerRuntimeSettingsTest,
     workerRuntimeTest,
+    workerProductionConfig,
+    workerTestConfig,
     rootPackage
   ] = await Promise.all([
     readFile(path.join(root, 'server/src/Server.ts'), 'utf8'),
+    readFile(path.join(root, 'server/src/utils/config.ts'), 'utf8'),
     readFile(path.join(root, 'server/src/core/MatchManager.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'server/src/worker/match/MatchHandler.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'server/src/core/MatchProxy.ts'), 'utf8'),
     readFile(path.join(root, 'server/src/PlayerContext.ts'), 'utf8'),
     readFile(path.join(root, 'game/src/state/net/WebSocketClient.ts'), 'utf8'),
     readFile(path.join(root, 'game-server-cloudflare/src/protocol.ts'), 'utf8'),
@@ -770,7 +955,15 @@ const main = async () => {
       'utf8'
     ),
     readFile(
+      path.join(root, 'game-server-cloudflare/src/runtime-settings.ts'),
+      'utf8'
+    ),
+    readFile(
       path.join(root, 'game-server-cloudflare/test/protocol.test.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare/test/runtime-settings.test.ts'),
       'utf8'
     ),
     readFile(
@@ -780,17 +973,32 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(root, 'game-server-cloudflare/wrangler.jsonc'),
+      'utf8'
+    ).then(JSON.parse),
+    readFile(
+      path.join(root, 'game-server-cloudflare/wrangler.test.jsonc'),
+      'utf8'
+    ).then(JSON.parse),
     readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse)
   ])
   const errors = gameIngressErrors({
     sourceServer,
+    sourceConfig,
     sourceMatchManager,
+    sourceMatchHandler,
+    sourceMatchProxy,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
     workerMatch,
+    workerRuntimeSettings,
     workerProtocolTest,
+    workerRuntimeSettingsTest,
     workerRuntimeTest,
+    workerProductionConfig,
+    workerTestConfig,
     rootPackage
   })
   if (errors.length > 0) {
@@ -798,7 +1006,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare game ingress preserves source text/binary frames, PING, and decode-error behavior'
+      'Cloudflare game ingress preserves source text/binary frames, PING, decode errors, and configurable chat/emote behavior'
     )
   }
 }

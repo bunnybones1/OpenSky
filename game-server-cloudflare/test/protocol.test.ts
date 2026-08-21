@@ -106,6 +106,12 @@ describe('game WebSocket protocol validation', () => {
     expect(
       parseClientMessage(JSON.stringify({ type: 'emote', sticker: 5 }))
     ).toEqual({ type: 'emote', sticker: 5 })
+    const sourceSizedChat = 'c'.repeat(501)
+    expect(
+      parseClientMessage(
+        JSON.stringify({ type: 'emote', chat: sourceSizedChat })
+      )
+    ).toEqual({ type: 'emote', chat: sourceSizedChat })
     for (const message of [
       { type: 'emote' },
       { type: 'emote', emote: 'gg', sticker: 5 },

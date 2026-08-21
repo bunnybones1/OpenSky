@@ -67,6 +67,7 @@ import {
   sourceMatchEndRewardListWire,
   sourceRewardListWire
 } from './reward-wire'
+import { sourceChatEnabled } from './runtime-settings'
 
 const METADATA_KEY = 'match:metadata'
 const SNAPSHOT_KEY = 'match:snapshot'
@@ -94,6 +95,7 @@ export interface GameServerEnv {
   COMMIT_REVEAL_EXPIRY_MS?: string
   ABANDON_TIMEOUT_MS?: string
   BOT_ACTION_DELAY_MS?: string
+  CHAT_ENABLED?: string
   ABANDON_PENALTY_WINDOW_MS?: string
   ABANDON_PENALTY_SECONDS?: string
 }
@@ -266,6 +268,7 @@ interface RuntimeSettings {
   commitRevealExpiryMs: number
   abandonTimeoutMs: number
   botActionDelayMs: number
+  chatEnabled: boolean
 }
 
 const positiveInteger = (
@@ -292,7 +295,8 @@ const runtimeSettings = (env: GameServerEnv): RuntimeSettings => ({
     180_000,
     30 * 60_000
   ),
-  botActionDelayMs: positiveInteger(env.BOT_ACTION_DELAY_MS, 650, 10_000)
+  botActionDelayMs: positiveInteger(env.BOT_ACTION_DELAY_MS, 650, 10_000),
+  chatEnabled: sourceChatEnabled(env.CHAT_ENABLED)
 })
 
 const normalizedAddress = (address: string) => address.toLowerCase()
@@ -1425,13 +1429,25 @@ export class GameMatch implements DurableObject {
     }
     const principal = attachment.principal
     const player = players[principal]
-    if ('sticker' in message) {
+    const sanitized = { ...message } as EmoteMessage
+    delete sanitized.fromPlayer
+    delete sanitized.fromSpectator
+    sanitized.fromPlayer = this.playerIndex(metadata.match, principal)
+    if ('chat' in sanitized) {
+      if (this.settings.chatEnabled) {
+        await this.relayPlayerEmote(metadata, principal, sanitized)
+      }
+      return
+    }
+    if ('sticker' in sanitized) {
       const participant =
         this.playerIndex(metadata.match, principal) === 0
           ? metadata.match.player1
           : metadata.match.player2
       if (
-        !participant.account.deckEquipment?.stickers?.includes(message.sticker)
+        !participant.account.deckEquipment?.stickers?.includes(
+          sanitized.sticker
+        )
       ) {
         throw new SourceGameError('player used unowned sticker', 'server')
       }
@@ -1445,17 +1461,21 @@ export class GameMatch implements DurableObject {
       player.lastEmoteTimestamps[2],
       now
     ]
-    const sanitized = { ...message } as EmoteMessage
-    delete sanitized.fromPlayer
-    delete sanitized.fromSpectator
-    sanitized.fromPlayer = this.playerIndex(metadata.match, principal)
+    await this.relayPlayerEmote(metadata, principal, sanitized)
+    await this.state.storage.put(PLAYERS_KEY, players)
+  }
+
+  private async relayPlayerEmote(
+    metadata: MatchMetadata,
+    principal: string,
+    message: EmoteMessage
+  ) {
     this.sendToPrincipal(
       this.opponentAddress(metadata.match, principal),
-      sanitized
+      message
     )
-    this.sendToSpectators(sanitized)
-    await this.replayEmote(sanitized)
-    await this.state.storage.put(PLAYERS_KEY, players)
+    this.sendToSpectators(message)
+    await this.replayEmote(message)
   }
 
   private async afterStateChange(

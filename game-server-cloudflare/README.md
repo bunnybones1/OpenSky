@@ -50,6 +50,8 @@ wire messages. It is a separate service from `matchmaker-ts`.
   D1;
 - source spectator roles, public/private knowledge levels, private access
   codes, emotes, connection limits, and hibernation-safe attachments; and
+- source-configurable player chat, including its independent unthrottled relay
+  path, spectator visibility, and fail-closed disabled production default; and
 - source-shaped initialization/gameplay replay records exposed through
   capability-protected same-origin archive URLs; and
 - a narrow authenticated pre-runtime `match-info` status projection used by
@@ -115,6 +117,9 @@ Non-secret deployment settings are in `wrangler.jsonc`.
 `ABANDON_PENALTY_WINDOW_MS` and `ABANDON_PENALTY_SECONDS` preserve the source
 fixed-window policy. The committed production map is the source repository's
 disabled default (`0,0,0,0`) until product policy explicitly enables cooldowns.
+`CHAT_ENABLED` likewise defaults to `false` and accepts only the explicit value
+`true`; when enabled, player chat preserves the source path that bypasses the
+sticker/emote spam limiter. Spectators still cannot send chat.
 
 Run:
 

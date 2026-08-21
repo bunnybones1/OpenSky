@@ -168,7 +168,7 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
         [
           typeof value.emote === 'string' &&
             Emotes.includes(value.emote as never),
-          typeof value.chat === 'string' && value.chat.length <= 500,
+          typeof value.chat === 'string',
           Number.isSafeInteger(value.sticker) && (value.sticker as number) >= 0
         ].filter(Boolean).length !== 1
       ) {

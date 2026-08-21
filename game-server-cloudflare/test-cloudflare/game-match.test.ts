@@ -2334,6 +2334,124 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
   })
 
+  it('preserves source configurable chat outside the emote throttle', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const first = await connectAs(PRINCIPAL_1, USER_ID_1)
+    const second = await connectAs(PRINCIPAL_2, USER_ID_2)
+    const firstJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await firstJoined
+    const secondJoined = collectMessages(second, 3)
+    join(second, 0x32)
+    await secondJoined
+
+    const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const viewerJoined = collectMessages(viewer, 2)
+    const firstSpectatorList = nextMessage(first)
+    spectate(viewer, `identity:${USER_ID_1}`)
+    await viewerJoined
+    await firstSpectatorList
+
+    const spectatorChatLeak: Record<string, unknown>[] = []
+    const spectatorChatListener = (event: MessageEvent) =>
+      spectatorChatLeak.push(JSON.parse(event.data as string))
+    first.addEventListener('message', spectatorChatListener)
+    second.addEventListener('message', spectatorChatListener)
+    viewer.addEventListener('message', spectatorChatListener)
+    viewer.send(JSON.stringify({ type: 'emote', chat: 'spectator chat' }))
+    await new Promise(resolve => setTimeout(resolve, 50))
+    first.removeEventListener('message', spectatorChatListener)
+    second.removeEventListener('message', spectatorChatListener)
+    viewer.removeEventListener('message', spectatorChatListener)
+    expect(spectatorChatLeak).toEqual([])
+
+    const longChat = 'c'.repeat(501)
+    const expectedChats = [
+      { type: 'emote', chat: longChat, fromPlayer: 0 },
+      { type: 'emote', chat: 'second chat', fromPlayer: 0 }
+    ]
+    const opponentChats = collectMessages(second, 2)
+    const spectatorChats = collectMessages(viewer, 2)
+    first.send(
+      JSON.stringify({
+        type: 'emote',
+        chat: longChat,
+        fromPlayer: 1,
+        fromSpectator: 'forged'
+      })
+    )
+    first.send(JSON.stringify({ type: 'emote', chat: 'second chat' }))
+    await expect(opponentChats).resolves.toEqual(expectedChats)
+    await expect(spectatorChats).resolves.toEqual(expectedChats)
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players =
+          await state.storage.get<
+            Record<string, { lastEmoteTimestamps: [number, number, number] }>
+          >('match:players')
+        expect(players?.[PRINCIPAL_1].lastEmoteTimestamps).toEqual([0, 0, 0])
+
+        const stored = await state.storage.list<string>({
+          prefix: 'match:replay:'
+        })
+        const relayed = [...stored.values()]
+          .flatMap(value => JSON.parse(value))
+          .map(record => record.message)
+          .filter(message => message?.type === 'emote')
+        expect(relayed).toEqual(expectedChats)
+      }
+    )
+
+    const opponentEmote = nextMessage(second)
+    const spectatorEmote = nextMessage(viewer)
+    first.send(JSON.stringify({ type: 'emote', emote: 'hello' }))
+    await expect(opponentEmote).resolves.toEqual({
+      type: 'emote',
+      emote: 'hello',
+      fromPlayer: 0
+    })
+    await expect(spectatorEmote).resolves.toEqual({
+      type: 'emote',
+      emote: 'hello',
+      fromPlayer: 0
+    })
+
+    const throttledOpponent: Record<string, unknown>[] = []
+    const throttledSpectator: Record<string, unknown>[] = []
+    const opponentListener = (event: MessageEvent) =>
+      throttledOpponent.push(JSON.parse(event.data as string))
+    const spectatorListener = (event: MessageEvent) =>
+      throttledSpectator.push(JSON.parse(event.data as string))
+    second.addEventListener('message', opponentListener)
+    viewer.addEventListener('message', spectatorListener)
+    first.send(JSON.stringify({ type: 'emote', emote: 'gg' }))
+    await new Promise(resolve => setTimeout(resolve, 50))
+    second.removeEventListener('message', opponentListener)
+    viewer.removeEventListener('message', spectatorListener)
+    expect(throttledOpponent).toEqual([])
+    expect(throttledSpectator).toEqual([])
+
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const players =
+          await state.storage.get<
+            Record<string, { lastEmoteTimestamps: [number, number, number] }>
+          >('match:players')
+        expect(players?.[PRINCIPAL_1].lastEmoteTimestamps).toEqual([
+          0,
+          0,
+          expect.any(Number)
+        ])
+      }
+    )
+  })
+
   it('restores public and private spectator state without exposing it to public viewers', async () => {
     await insertSpectateIdentities()
     await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
@@ -3425,8 +3543,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         ].sort()
       )
       expect(reward).toMatchObject({
-        rank:
-          reward.type === RewardType.RANK ? expect.any(Object) : null,
+        rank: reward.type === RewardType.RANK ? expect.any(Object) : null,
         exp: reward.type === RewardType.EXP ? expect.any(Object) : null,
         card: null,
         hero: null,

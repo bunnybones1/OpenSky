@@ -7,37 +7,60 @@ import { gameIngressErrors } from './check-cloudflare-game-ingress.mjs'
 const fixtures = async () => {
   const [
     sourceServer,
+    sourceConfig,
     sourceMatchManager,
+    sourceMatchHandler,
+    sourceMatchProxy,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
     workerMatch,
+    workerRuntimeSettings,
     workerProtocolTest,
+    workerRuntimeSettingsTest,
     workerRuntimeTest,
+    workerProductionConfig,
+    workerTestConfig,
     rootPackage
   ] = await Promise.all([
     readFile('server/src/Server.ts', 'utf8'),
+    readFile('server/src/utils/config.ts', 'utf8'),
     readFile('server/src/core/MatchManager.ts', 'utf8'),
+    readFile('server/src/worker/match/MatchHandler.ts', 'utf8'),
+    readFile('server/src/core/MatchProxy.ts', 'utf8'),
     readFile('server/src/PlayerContext.ts', 'utf8'),
     readFile('game/src/state/net/WebSocketClient.ts', 'utf8'),
     readFile('game-server-cloudflare/src/protocol.ts', 'utf8'),
     readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('game-server-cloudflare/src/runtime-settings.ts', 'utf8'),
     readFile('game-server-cloudflare/test/protocol.test.ts', 'utf8'),
+    readFile('game-server-cloudflare/test/runtime-settings.test.ts', 'utf8'),
     readFile(
       'game-server-cloudflare/test-cloudflare/game-match.test.ts',
       'utf8'
+    ),
+    readFile('game-server-cloudflare/wrangler.jsonc', 'utf8').then(JSON.parse),
+    readFile('game-server-cloudflare/wrangler.test.jsonc', 'utf8').then(
+      JSON.parse
     ),
     readFile('package.json', 'utf8').then(JSON.parse)
   ])
   return {
     sourceServer,
+    sourceConfig,
     sourceMatchManager,
+    sourceMatchHandler,
+    sourceMatchProxy,
     sourcePlayerContext,
     sourceBrowserSocket,
     workerProtocol,
     workerMatch,
+    workerRuntimeSettings,
     workerProtocolTest,
+    workerRuntimeSettingsTest,
     workerRuntimeTest,
+    workerProductionConfig,
+    workerTestConfig,
     rootPackage
   }
 }
@@ -107,6 +130,35 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       sourceMatchManager: value.sourceMatchManager.replace(
         "if (!sendingContext.id || !('sticker' in message)) {\n        return",
         "if (!sendingContext.id || !('sticker' in message)) {\n        sendingContext.connection.close()\n        return"
+      )
+    },
+    {
+      ...value,
+      sourceConfig: value.sourceConfig.replace('chat: false', 'chat: true')
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handlePlayerEmoted(',
+        'if (this.config.settings.chat) {',
+        'if (true) {'
+      )
+    },
+    {
+      ...value,
+      sourceMatchHandler: value.sourceMatchHandler.replace(
+        'opponent.send(message)',
+        'player.send(message)'
+      )
+    },
+    {
+      ...value,
+      sourceMatchProxy: replaceAfter(
+        value.sourceMatchProxy,
+        'for (const s of this.spectators.values()) {',
+        's.context.send(message.message)',
+        'void message.message'
       )
     },
     {
@@ -208,6 +260,13 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
       workerProtocol: value.workerProtocol.replace(
         "throw new UnknownGameMessageError('unsupported message type')",
         "throw new GameProtocolError('unsupported message type')"
+      )
+    },
+    {
+      ...value,
+      workerProtocol: value.workerProtocol.replace(
+        "typeof value.chat === 'string',",
+        "typeof value.chat === 'string' && value.chat.length <= 500,"
       )
     },
     {
@@ -322,6 +381,61 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     {
       ...value,
       workerMatch: value.workerMatch.replace(
+        'if (this.settings.chatEnabled) {',
+        'if (true) {'
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        'chatEnabled: sourceChatEnabled(env.CHAT_ENABLED)',
+        'chatEnabled: true'
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        'this.sendToSpectators(message)',
+        'void message'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeSettings: value.workerRuntimeSettings.replace(
+        "value === 'true'",
+        "value !== 'false'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeSettingsTest: value.workerRuntimeSettingsTest.replace(
+        "[undefined, '', 'false', 'TRUE', '1']",
+        "[undefined, '', 'false']"
+      )
+    },
+    {
+      ...value,
+      workerProductionConfig: {
+        ...value.workerProductionConfig,
+        vars: {
+          ...value.workerProductionConfig.vars,
+          CHAT_ENABLED: 'true'
+        }
+      }
+    },
+    {
+      ...value,
+      workerTestConfig: {
+        ...value.workerTestConfig,
+        vars: {
+          ...value.workerTestConfig.vars,
+          CHAT_ENABLED: 'false'
+        }
+      }
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
         "message.type === 'spectate_server'",
         "role === 'spectator' && message.type === 'spectate_server'"
       )
@@ -427,6 +541,15 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('rejects player stickers outside the accepted match equipment'",
         "message: 'player used unowned sticker'",
         "message: 'Error: player used unowned sticker'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves source configurable chat outside the emote throttle'",
+        'expect(throttledOpponent).toEqual([])',
+        "expect(throttledOpponent).toEqual([{ type: 'emote' }])"
       )
     },
     {
