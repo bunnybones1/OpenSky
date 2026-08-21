@@ -56,6 +56,12 @@ import {
   sourceQuestSpec,
   type SourceQuestSpec
 } from './quest-library'
+import {
+  noUnpublishedQuestProgressForRowsSQL,
+  noUnpublishedQuestProgressForRowSQL,
+  projectUnpublishedQuestProgress,
+  unpublishedQuestProgress
+} from './quest-publication'
 import { identityReferenceFor } from './rpc-principal'
 import { refreshPrivateSpectateCode } from './spectate-code'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
@@ -2372,7 +2378,10 @@ export class PlayerRpcRepository {
     await this.database.batch(statements)
   }
 
-  private async questRows(userId: string): Promise<QuestRow[]> {
+  private async questRowsWithPublication(userId: string): Promise<{
+    rows: QuestRow[]
+    unpublished: ReadonlyMap<number, number>
+  }> {
     const result = await this.database
       .prepare(
         `SELECT rowid AS row_id, quest_key, quest_type, epic_type, epic_index,
@@ -2384,7 +2393,18 @@ export class PlayerRpcRepository {
       )
       .bind(userId)
       .all<QuestRow>()
-    return result.results
+    // Read assignments first and receipts second. If completion lands between
+    // the two statements, projection fails closed instead of exposing a delta
+    // whose source match has not been published yet.
+    const unpublished = await unpublishedQuestProgress(this.database, userId)
+    return {
+      rows: projectUnpublishedQuestProgress(result.results, unpublished),
+      unpublished
+    }
+  }
+
+  private async questRows(userId: string): Promise<QuestRow[]> {
+    return (await this.questRowsWithPublication(userId)).rows
   }
 
   private async questEligibility(userId: string): Promise<QuestEligibility> {
@@ -2488,6 +2508,7 @@ export class PlayerRpcRepository {
       position?: 1 | 2 | 3
       periodicity?: Quest['periodicity']
       claimToken?: string
+      unpublishedGuardRowId?: number
     } = {}
   ): { questKey: string; statement: D1PreparedStatement } {
     const questKey =
@@ -2501,6 +2522,14 @@ export class PlayerRpcRepository {
       options.status ||
       (spec.startProgress >= spec.endProgress ? 'complete' : 'active')
     const now = new Date().toISOString()
+    const unpublishedGuard =
+      options.unpublishedGuardRowId === undefined
+        ? ''
+        : ` AND ${noUnpublishedQuestProgressForRowSQL('?')}`
+    const unpublishedGuardBindings =
+      options.unpublishedGuardRowId === undefined
+        ? []
+        : [userId, userId, options.unpublishedGuardRowId]
     return {
       questKey,
       statement: this.database
@@ -2511,10 +2540,10 @@ export class PlayerRpcRepository {
               epic_index, epic_length, position, periodicity, is_rerollable,
               is_new, active, period, rerolls)
            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
-           WHERE ? IS NULL OR EXISTS (
+           WHERE (? IS NULL OR EXISTS (
              SELECT 1 FROM player_quest_claim_receipts
              WHERE claim_token = ?
-           )`
+           ))${unpublishedGuard}`
         )
         .bind(
           userId,
@@ -2538,7 +2567,8 @@ export class PlayerRpcRepository {
           period,
           rerolls,
           options.claimToken || null,
-          options.claimToken || null
+          options.claimToken || null,
+          ...unpublishedGuardBindings
         )
     }
   }
@@ -2546,13 +2576,16 @@ export class PlayerRpcRepository {
   private async ensureQuestLayout(userId: string): Promise<void> {
     await this.backfillQuestPeriods(userId)
     const eligibility = await this.questEligibility(userId)
-    const active = await this.questRows(userId)
+    const { rows: active, unpublished } =
+      await this.questRowsWithPublication(userId)
 
     for (const assignment of active) {
       const currentPeriod = questPeriodAt(assignment.periodicity)
       if (assignment.period >= currentPeriod) continue
+      if (unpublished.has(assignment.row_id)) continue
       const spec = sourceQuestSpec(assignment.quest_type)
       if (!spec) continue
+      const unpublishedGuard = noUnpublishedQuestProgressForRowSQL('?')
 
       const unfinishedEpic =
         spec.epicType &&
@@ -2580,16 +2613,25 @@ export class PlayerRpcRepository {
           {
             progress: assignment.progress,
             status: assignment.status,
-            isNew: assignment.is_new
+            isNew: assignment.is_new,
+            unpublishedGuardRowId: assignment.row_id
           }
         )
         await this.database.batch([
           this.database
             .prepare(
               `UPDATE player_quests SET active = 0, updated_at = ?
-               WHERE user_id = ? AND rowid = ? AND active = 1`
+               WHERE user_id = ? AND rowid = ? AND active = 1
+                 AND ${unpublishedGuard}`
             )
-            .bind(now, userId, assignment.row_id),
+            .bind(
+              now,
+              userId,
+              assignment.row_id,
+              userId,
+              userId,
+              assignment.row_id
+            ),
           replacement.statement
         ])
         continue
@@ -2607,9 +2649,17 @@ export class PlayerRpcRepository {
         this.database
           .prepare(
             `UPDATE player_quests SET active = 0, updated_at = ?
-             WHERE user_id = ? AND rowid = ? AND active = 1`
+             WHERE user_id = ? AND rowid = ? AND active = 1
+               AND ${unpublishedGuard}`
           )
-          .bind(now, userId, assignment.row_id)
+          .bind(
+            now,
+            userId,
+            assignment.row_id,
+            userId,
+            userId,
+            assignment.row_id
+          )
       ]
       if (replacementSpec) {
         const rerolls = await this.latestQuestRerolls(
@@ -2622,7 +2672,8 @@ export class PlayerRpcRepository {
             userId,
             replacementSpec,
             currentPeriod,
-            rerolls
+            rerolls,
+            { unpublishedGuardRowId: assignment.row_id }
           ).statement
         )
       }
@@ -2690,7 +2741,12 @@ export class PlayerRpcRepository {
       )
       .bind(userId, epicType)
       .all<QuestRow>()
-    const active = assignments.results.find(row => row.active === 1)
+    const unpublished = await unpublishedQuestProgress(this.database, userId)
+    const projectedAssignments = projectUnpublishedQuestProgress(
+      assignments.results,
+      unpublished
+    )
+    const active = projectedAssignments.find(row => row.active === 1)
     const activeIndex = active?.epic_index ?? null
 
     return specs.map(spec => {
@@ -2698,7 +2754,9 @@ export class PlayerRpcRepository {
         activeIndex !== null && spec.epicIndex === activeIndex
           ? active
           : activeIndex !== null && (spec.epicIndex ?? 0) < activeIndex
-            ? assignments.results.find(row => row.quest_type === spec.questType)
+            ? projectedAssignments.find(
+                row => row.quest_type === spec.questType
+              )
             : undefined
       if (assignment) return this.questFromRow(assignment)
       return {
@@ -2739,6 +2797,10 @@ export class PlayerRpcRepository {
       .first<QuestRow>()
     if (!assignment)
       throw new Error(`quest assignment does not exist, ID: ${id}`)
+    const unpublished = await unpublishedQuestProgress(this.database, userId)
+    if (unpublished.has(assignment.row_id)) {
+      throw new Error('quest progress is still publishing')
+    }
     const previousSpec = sourceQuestSpec(assignment.quest_type)
     if (
       !previousSpec?.rerollable ||
@@ -2762,28 +2824,42 @@ export class PlayerRpcRepository {
       userId,
       replacementSpec,
       assignment.period,
-      assignment.rerolls + 1
+      assignment.rerolls + 1,
+      { unpublishedGuardRowId: assignment.row_id }
     )
     const now = new Date().toISOString()
+    const unpublishedGuard = noUnpublishedQuestProgressForRowSQL('?')
     await this.database.batch([
       this.database
         .prepare(
           `UPDATE player_quests SET active = 0, updated_at = ?
-           WHERE user_id = ? AND rowid = ? AND active = 1`
+           WHERE user_id = ? AND rowid = ? AND active = 1
+             AND ${unpublishedGuard}`
         )
-        .bind(now, userId, assignment.row_id),
+        .bind(
+          now,
+          userId,
+          assignment.row_id,
+          userId,
+          userId,
+          assignment.row_id
+        ),
       this.database
         .prepare(
           `UPDATE player_quests
            SET rerolls = rerolls + 1, is_rerollable = 0, updated_at = ?
-           WHERE user_id = ? AND period = ? AND periodicity = ? AND rerolls = ?`
+           WHERE user_id = ? AND period = ? AND periodicity = ? AND rerolls = ?
+             AND ${unpublishedGuard}`
         )
         .bind(
           now,
           userId,
           assignment.period,
           assignment.periodicity,
-          assignment.rerolls
+          assignment.rerolls,
+          userId,
+          userId,
+          assignment.row_id
         ),
       replacement.statement
     ])
@@ -2796,7 +2872,16 @@ export class PlayerRpcRepository {
       )
       .bind(userId, replacement.questKey)
       .first<QuestRow>()
-    if (!row) throw new Error('replacement quest was not created')
+    if (!row) {
+      if (
+        (await unpublishedQuestProgress(this.database, userId)).has(
+          assignment.row_id
+        )
+      ) {
+        throw new Error('quest progress is still publishing')
+      }
+      throw new Error('replacement quest was not created')
+    }
     return { quest: this.questFromRow(row), rewards: [] }
   }
 
@@ -2851,6 +2936,10 @@ export class PlayerRpcRepository {
       const assignment = assignmentsById.get(id)
       return assignment ? [assignment] : []
     })
+    const unpublished = await unpublishedQuestProgress(this.database, userId)
+    if (assignments.some(assignment => unpublished.has(assignment.row_id))) {
+      throw new Error('quest progress is still publishing')
+    }
     if (assignments.some(assignment => assignment.status !== 'complete')) {
       throw new Error('quest must be completed')
     }
@@ -2876,7 +2965,8 @@ export class PlayerRpcRepository {
              SELECT COUNT(*) FROM player_quests
              WHERE user_id = ? AND rowid IN (${claimPlaceholders})
                AND status = 'complete'
-           ) = ?`
+           ) = ?
+             AND ${noUnpublishedQuestProgressForRowsSQL(claimPlaceholders)}`
         )
         .bind(
           claimToken,
@@ -2887,7 +2977,10 @@ export class PlayerRpcRepository {
           now,
           userId,
           ...assignments.map(assignment => assignment.row_id),
-          assignments.length
+          assignments.length,
+          userId,
+          userId,
+          ...assignments.map(assignment => assignment.row_id)
         )
     ]
 

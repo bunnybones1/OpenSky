@@ -338,6 +338,17 @@ its D1 batch runs, applies only that delta, and then completes the receipt.
 Concurrent distinct reports cannot claim the same remaining progress, while
 simultaneous retries of one report cannot replay it.
 
+Multiplayer quest publication preserves the source's separate ordering
+boundary. Go commits `endMatch` before calling `QuestUpdater.UpdateFromMatch`;
+the retryable Worker stages its immutable quest receipt before the shared match
+ledger becomes `ended`. Until that final ledger publication, quest lists, epic
+chains, and identity player state subtract the staged receipt and reconstruct
+the pre-match assignment status. Claims, manual rerolls, and automatic period
+rollovers also use D1 guards against the same non-`ended` receipt so a request
+that races settlement fails closed without creating XP, a replacement quest,
+or a partial lifecycle transition. Local-bot receipts remain immediately
+visible because they do not use the multiplayer publication ledger.
+
 The Cloudflare release gate also keeps preserved legacy transaction controls
 out of `IdentityApp`. Premium SkyPass retains its original page, artwork, reward
 details, and premium-track entry, but Google identities mount only an

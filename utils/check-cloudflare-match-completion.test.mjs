@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { matchCompletionErrors } from './check-cloudflare-match-completion.mjs'
+import {
+  matchCompletionErrors,
+  questPublicationErrors
+} from './check-cloudflare-match-completion.mjs'
 
 const fixtures = async () => {
   const [
@@ -35,6 +38,46 @@ const fixtures = async () => {
     progression
   }
 }
+
+const questFixtures = async () => {
+  const [
+    sourceMatches,
+    sourceQuestUpdater,
+    gameMatch,
+    questPublication,
+    playerRpc,
+    playerState,
+    playerRpcTest
+  ] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('api/lib/quests/updater.go', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('cloudflare/src/quest-publication.ts', 'utf8'),
+    readFile('cloudflare/src/player-rpc.ts', 'utf8'),
+    readFile('cloudflare/src/player.ts', 'utf8'),
+    readFile('cloudflare/test/player-rpc.test.ts', 'utf8')
+  ])
+  return {
+    sourceMatches,
+    sourceQuestUpdater,
+    gameMatch,
+    questPublication,
+    playerRpc,
+    playerState,
+    playerRpcTest
+  }
+}
+
+const questErrorsFor = value =>
+  questPublicationErrors(
+    value.sourceMatches,
+    value.sourceQuestUpdater,
+    value.gameMatch,
+    value.questPublication,
+    value.playerRpc,
+    value.playerState,
+    value.playerRpcTest
+  )
 
 test('pins source transaction semantics and the Worker publication barrier', async () => {
   const value = await fixtures()
@@ -296,6 +339,114 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
       ),
       [],
       `mutation ${index} was not detected`
+    )
+  }
+})
+
+test('pins source-ordered multiplayer quest publication', async () => {
+  assert.deepEqual(questErrorsFor(await questFixtures()), [])
+})
+
+test('rejects weakened quest projections, mutation guards, or runtime proof', async () => {
+  const value = await questFixtures()
+  const mutations = [
+    {
+      ...value,
+      sourceMatches: value.sourceMatches.replace(
+        'rewards, _, err = s.endMatch(ctx, match)',
+        'rewards, _, err = s.endMatchWithoutPublication(ctx, match)'
+      )
+    },
+    {
+      ...value,
+      sourceQuestUpdater: value.sourceQuestUpdater.replace(
+        'assignment.Status == data.QuestStatusInProgress',
+        'assignment.Status == data.QuestStatusCompleted'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'const progression = await applyMatchProgression(',
+        'const progression = await stageUntrustedQuestProgress('
+      )
+    },
+    {
+      ...value,
+      questPublication: value.questPublication.replaceAll(
+        "status <> 'ended'",
+        "status <> 'failed'"
+      )
+    },
+    {
+      ...value,
+      questPublication: value.questPublication.replace(
+        'const progress = row.progress - delta',
+        'const progress = row.progress'
+      )
+    },
+    {
+      ...value,
+      questPublication: value.questPublication.replace(
+        'noUnpublishedQuestProgressForRowsSQL',
+        'unguardedQuestRowsSQL'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replace(
+        'projectUnpublishedQuestProgress(result.results, unpublished)',
+        'result.results'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replaceAll(
+        "throw new Error('quest progress is still publishing')",
+        "throw new Error('no available re-roll')"
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replace(
+        'noUnpublishedQuestProgressForRowsSQL(claimPlaceholders)',
+        'allowAnyQuestClaimSQL'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replaceAll(
+        'unpublishedGuardRowId: assignment.row_id',
+        'unpublishedGuardRowId: undefined'
+      )
+    },
+    {
+      ...value,
+      playerState: value.playerState.replace(
+        'SELECT rowid AS row_id, quest_key',
+        'SELECT 0 AS row_id, quest_key'
+      )
+    },
+    {
+      ...value,
+      playerRpcTest: value.playerRpcTest.replace(
+        'withholds multiplayer quest progress and mutations until the match publishes',
+        'lists quests'
+      )
+    },
+    {
+      ...value,
+      playerRpcTest: value.playerRpcTest.replace(
+        'fails closed on malformed unpublished multiplayer quest receipts',
+        'accepts malformed quest receipts'
+      )
+    }
+  ]
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notDeepEqual(
+      questErrorsFor(mutation),
+      [],
+      `quest publication mutation ${index + 1} was not detected`
     )
   }
 })

@@ -3285,6 +3285,227 @@ describe('legacy player RPC compatibility', () => {
     )
   })
 
+  it('withholds multiplayer quest progress and mutations until the match publishes', async () => {
+    const initial = await rpc('ListQuests', {})
+    const initialQuests = (
+      await initial.json<{
+        quests: Array<{
+          id: number
+          questType: string
+          progress: number
+          isClaimable: boolean
+        }>
+      }>()
+    ).quests
+    const road = initialQuests.find(
+      quest => quest.questType === 'OntheRoadAgain'
+    )
+    const welcome = initialQuests.find(
+      quest => quest.questType === 'WelcomeOpenSky'
+    )
+    expect(road).toBeDefined()
+    expect(welcome).toBeDefined()
+
+    const now = new Date().toISOString()
+    const proposalId = `pending-quest-${crypto.randomUUID()}`
+    const currentPeriod = questPeriodAt(QuestPeriodicity.DAILY)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_progression
+         SET basic_skypass_level = 2, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests SET active = 0, updated_at = ?
+         WHERE user_id = ? AND rowid = ?`
+      ).bind(now, userId, welcome!.id),
+      env.AUTH_DB.prepare(
+        `UPDATE player_quests
+         SET progress = 1, target = 1, status = 'complete', period = ?,
+             updated_at = ?
+         WHERE user_id = ? AND rowid = ?`
+      ).bind(currentPeriod - 1, now, userId, road!.id),
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_quests
+           (user_id, quest_key, title, description, progress, target,
+            reward_xp, status, created_at, updated_at, quest_type, position,
+            periodicity, is_rerollable, is_new, active, period, rerolls)
+         VALUES (?, 'pending-reroll', 'Pending Reroll', 'Test', 1, 2, 100,
+                 'active', ?, ?, 'Strengthweaver', 2, 'DAILY', 1, 1, 1, ?, 0)`
+      ).bind(userId, now, now, currentPeriod),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, status, created_at, updated_at)
+         VALUES (?, ?, 'PRACTICE_PVP', 'quest-publication-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, NULL,
+                 '{}', 'active', ?, ?)`
+      ).bind(proposalId, `${proposalId}-replay`, userId, now, now)
+    ])
+    const rerollable = await env.AUTH_DB.prepare(
+      `SELECT rowid AS id FROM player_quests
+       WHERE user_id = ? AND quest_key = 'pending-reroll'`
+    )
+      .bind(userId)
+      .first<{ id: number }>()
+    expect(rerollable).not.toBeNull()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_progression
+         (proposal_id, player1_quest_progress_json,
+          player2_quest_progress_json, rewards_json, processed_at)
+       VALUES (?, ?, '{}', '[[],[]]', ?)`
+    )
+      .bind(
+        proposalId,
+        JSON.stringify({ [road!.id]: 1, [rerollable!.id]: 1 }),
+        now
+      )
+      .run()
+
+    const hidden = await rpc('ListQuests', {})
+    expect(hidden.status).toBe(200)
+    const hiddenQuests = (
+      await hidden.json<{
+        quests: Array<{
+          id: number
+          questType: string
+          progress: number
+          isClaimable: boolean
+        }>
+      }>()
+    ).quests
+    expect(hiddenQuests.find(quest => quest.id === road!.id)).toMatchObject({
+      progress: 0,
+      isClaimable: false
+    })
+    expect(
+      hiddenQuests.find(quest => quest.id === rerollable!.id)
+    ).toMatchObject({
+      progress: 0,
+      isClaimable: false
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT active, period FROM player_quests WHERE rowid = ?`
+      )
+        .bind(road!.id)
+        .first()
+    ).toEqual({ active: 1, period: currentPeriod - 1 })
+
+    const hiddenChain = await rpc('GetEpicQuestChain', {
+      epicType: 'starter1_test'
+    })
+    expect(
+      (
+        await hiddenChain.json<{
+          quests: Array<{
+            id: number
+            progress: number
+            isClaimable: boolean
+          }>
+        }>()
+      ).quests[0]
+    ).toMatchObject({ id: road!.id, progress: 0, isClaimable: false })
+    const playerState = await new PlayerRepository(env.AUTH_DB).getState(userId)
+    expect(
+      playerState!.quests.find(quest => quest.key === 'starter-deck')
+    ).toMatchObject({ progress: 0, status: 'active' })
+
+    expect((await rpc('ClaimQuestRewards', { ids: [road!.id] })).status).toBe(
+      500
+    )
+    expect((await rpc('ReRollQuest', { id: rerollable!.id })).status).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_quest_claim_receipts
+         WHERE user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ count: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT active, rerolls FROM player_quests WHERE rowid = ?`
+      )
+        .bind(rerollable!.id)
+        .first()
+    ).toEqual({ active: 1, rerolls: 0 })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', winner_player = 0, result_json = '{}',
+           ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(now, now, proposalId)
+      .run()
+
+    const published = await rpc('ListQuests', {})
+    const publishedQuests = (
+      await published.json<{
+        quests: Array<{
+          id: number
+          progress: number
+          isClaimable: boolean
+        }>
+      }>()
+    ).quests
+    expect(publishedQuests.find(quest => quest.id === road!.id)).toMatchObject({
+      progress: 1,
+      isClaimable: true
+    })
+    expect(
+      publishedQuests.find(quest => quest.id === rerollable!.id)
+    ).toMatchObject({ progress: 1, isClaimable: false })
+    expect((await rpc('ReRollQuest', { id: rerollable!.id })).status).toBe(200)
+    expect((await rpc('ClaimQuestRewards', { ids: [road!.id] })).status).toBe(
+      200
+    )
+  })
+
+  it('fails closed on malformed unpublished multiplayer quest receipts', async () => {
+    const now = new Date().toISOString()
+    const proposalId = `malformed-quest-${crypto.randomUUID()}`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, status, created_at, updated_at)
+         VALUES (?, ?, 'PRACTICE_PVP', 'quest-publication-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, NULL,
+                 '{}', 'active', ?, ?)`
+      ).bind(proposalId, `${proposalId}-replay`, userId, now, now),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_progression
+           (proposal_id, player1_quest_progress_json,
+            player2_quest_progress_json, rewards_json, processed_at)
+         VALUES (?, '{"not-a-row":1}', '{}', '[[],[]]', ?)`
+      ).bind(proposalId, now)
+    ])
+
+    expect((await rpc('ListQuests', {})).status).toBe(500)
+    await expect(
+      new PlayerRepository(env.AUTH_DB).getState(userId)
+    ).rejects.toThrow('unpublished quest progress receipt is invalid')
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', winner_player = 0, result_json = '{}',
+           ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(now, now, proposalId)
+      .run()
+    expect((await rpc('ListQuests', {})).status).toBe(200)
+  })
+
   it('claims quest XP and advances the exact legacy epic chain', async () => {
     const initialChain = await rpc('GetEpicQuestChain', {
       epicType: 'starter2_test'

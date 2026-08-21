@@ -1,5 +1,9 @@
 import { STARTER_DECKS } from './starter-decks'
 import { seasonFromDate } from './legacy-seasons'
+import {
+  projectUnpublishedQuestProgress,
+  unpublishedQuestProgress
+} from './quest-publication'
 
 export { STRENGTH_STARTER_DECK } from './starter-decks'
 
@@ -83,6 +87,7 @@ interface SkypassSeasonProgressRow {
 }
 
 interface QuestRow {
+  row_id: number
   quest_key: string
   title: string
   description: string
@@ -368,7 +373,8 @@ export class PlayerRepository {
         .first<SkypassSeasonProgressRow>(),
       this.database
         .prepare(
-          `SELECT quest_key, title, description, progress, target, reward_xp, status
+          `SELECT rowid AS row_id, quest_key, title, description, progress,
+                  target, reward_xp, status
            FROM player_quests WHERE user_id = ?
            ORDER BY created_at ASC, quest_key ASC`
         )
@@ -394,6 +400,11 @@ export class PlayerRepository {
     ])
 
     if (!profile || !progression) return
+    const questDeltas = await unpublishedQuestProgress(this.database, userId)
+    const quests = projectUnpublishedQuestProgress(
+      questsResult.results,
+      questDeltas
+    )
     const basicCards = cardsResult.results.map(row => ({
       id: row.card_id,
       name: row.card_name,
@@ -424,7 +435,7 @@ export class PlayerRepository {
         nextLevelXp: progression.basic_skypass_next_xp
       },
       tutorialCompleted: progression.tutorial_completed === 1,
-      quests: questsResult.results.map(row => ({
+      quests: quests.map(row => ({
         key: row.quest_key,
         title: row.title,
         description: row.description,

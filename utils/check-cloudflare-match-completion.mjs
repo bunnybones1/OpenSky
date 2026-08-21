@@ -463,6 +463,171 @@ export const matchCompletionErrors = (
   return errors
 }
 
+export const questPublicationErrors = (
+  sourceMatches,
+  sourceQuestUpdater,
+  gameMatch,
+  questPublication,
+  playerRpc,
+  playerState,
+  playerRpcTest
+) => {
+  const errors = []
+  const sourceInternalMatchEnd = bodyBetween(
+    sourceMatches,
+    'func (s *Server) InternalMatchEnd(',
+    'func (s *Server) BotMatchEnd('
+  )
+  requireOrdered(
+    errors,
+    'Source multiplayer quest publication',
+    sourceInternalMatchEnd,
+    [
+      'rewards, _, err = s.endMatch(ctx, match)',
+      's.QuestUpdater.UpdateFromMatch(ctx, repo, match.Player1ID, req.Player1QuestProgressUpdates)',
+      's.QuestUpdater.UpdateFromMatch(ctx, repo, match.Player2ID, req.Player2QuestProgressUpdates)'
+    ]
+  )
+
+  const sourceQuestUpdate = bodyBetween(
+    sourceQuestUpdater,
+    'func (u *Updater) UpdateFromMatch(',
+    '\n\treturn nil\n}'
+  )
+  requireOrdered(errors, 'Source quest mutation', sourceQuestUpdate, [
+    'assignment.Status == data.QuestStatusInProgress',
+    'assignment.Progress += questProgress',
+    'assignment.Progress >= spec.EndProgress',
+    'assignment.Status = data.QuestStatusCompleted',
+    'sess.Save(assignment)'
+  ])
+
+  const workerCompletion = bodyBetween(
+    gameMatch,
+    'private async recordCompletionWithRetry(',
+    'private async archiveAndEnqueueAnalyticsWithRetry('
+  )
+  requireOrdered(errors, 'Worker staged quest publication', workerCompletion, [
+    'applyMatchProgression(',
+    'publishMatchCompletion('
+  ])
+
+  const compactProjection = questPublication.replace(/\s+/g, ' ')
+  for (const token of [
+    'FROM multiplayer_match_progression progression',
+    'JOIN multiplayer_matches ledger',
+    "WHERE ledger.status <> 'ended'",
+    'ORDER BY progression.processed_at ASC, progression.proposal_id ASC',
+    'JSON.parse(receipt.quest_progress_json)',
+    'const progress = row.progress - delta',
+    "row.status === 'claimed'",
+    "row.status === 'complete' && progress < row.target",
+    'noUnpublishedQuestProgressForRowSQL',
+    'noUnpublishedQuestProgressForRowsSQL',
+    'JOIN json_each(',
+    "pending_match.status <> 'ended'",
+    'CAST(pending_delta.key AS INTEGER) = ${rowIdExpression}',
+    'CAST(pending_delta.key AS INTEGER) IN (${rowIdPlaceholders})'
+  ]) {
+    if (!compactProjection.includes(token)) {
+      errors.push(`quest publication projection is missing: ${token}`)
+    }
+  }
+
+  const questRows = bodyBetween(
+    playerRpc,
+    'private async questRowsWithPublication(',
+    'private async questRows('
+  )
+  requireOrdered(errors, 'Quest list publication projection', questRows, [
+    '.all<QuestRow>()',
+    'unpublishedQuestProgress(this.database, userId)',
+    'projectUnpublishedQuestProgress(result.results, unpublished)'
+  ])
+  const questLayout = bodyBetween(
+    playerRpc,
+    'private async ensureQuestLayout(',
+    'async listQuests('
+  )
+  for (const token of [
+    'if (unpublished.has(assignment.row_id)) continue',
+    "noUnpublishedQuestProgressForRowSQL('?')",
+    'unpublishedGuardRowId: assignment.row_id'
+  ]) {
+    if (!questLayout.includes(token)) {
+      errors.push(
+        `quest period rollover publication guard is missing: ${token}`
+      )
+    }
+  }
+  const epicChain = bodyBetween(
+    playerRpc,
+    'async epicQuestChain(',
+    'async rerollQuest('
+  )
+  requireOrdered(errors, 'Epic quest publication projection', epicChain, [
+    '.all<QuestRow>()',
+    'unpublishedQuestProgress(this.database, userId)',
+    'projectUnpublishedQuestProgress('
+  ])
+
+  const reroll = bodyBetween(
+    playerRpc,
+    'async rerollQuest(',
+    'private questFromRow('
+  )
+  for (const token of [
+    "throw new Error('quest progress is still publishing')",
+    "noUnpublishedQuestProgressForRowSQL('?')",
+    'unpublishedGuardRowId: assignment.row_id'
+  ]) {
+    if (!reroll.includes(token)) {
+      errors.push(`quest reroll publication guard is missing: ${token}`)
+    }
+  }
+  const claim = bodyBetween(
+    playerRpc,
+    'async claimQuestRewards(',
+    'async setQuestsSeen('
+  )
+  for (const token of [
+    "throw new Error('quest progress is still publishing')",
+    'INSERT INTO player_quest_claim_batches',
+    'noUnpublishedQuestProgressForRowsSQL(claimPlaceholders)'
+  ]) {
+    if (!claim.includes(token)) {
+      errors.push(`quest claim publication guard is missing: ${token}`)
+    }
+  }
+
+  const stateRead = bodyBetween(
+    playerState,
+    'async getState(',
+    'private async ensureAccountSettings('
+  )
+  requireOrdered(errors, 'Identity player-state quest projection', stateRead, [
+    'SELECT rowid AS row_id, quest_key',
+    '.all<QuestRow>()',
+    'unpublishedQuestProgress(this.database, userId)',
+    'projectUnpublishedQuestProgress('
+  ])
+
+  for (const token of [
+    "it('withholds multiplayer quest progress and mutations until the match publishes'",
+    "it('fails closed on malformed unpublished multiplayer quest receipts'",
+    'INSERT INTO multiplayer_match_progression',
+    "rpc('ClaimQuestRewards'",
+    "rpc('ReRollQuest'",
+    'new PlayerRepository(env.AUTH_DB).getState(userId)',
+    "SET status = 'ended'"
+  ]) {
+    if (!playerRpcTest.includes(token)) {
+      errors.push(`quest publication Workers regression is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
@@ -473,7 +638,12 @@ const main = async () => {
     sourceMatchManager,
     gameMatch,
     publication,
-    progression
+    progression,
+    sourceQuestUpdater,
+    questPublication,
+    playerRpc,
+    playerState,
+    playerRpcTest
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
     readFile(
@@ -505,24 +675,46 @@ const main = async () => {
     readFile(
       path.join(root, 'game-server-cloudflare', 'src', 'progression.ts'),
       'utf8'
+    ),
+    readFile(path.join(root, 'api', 'lib', 'quests', 'updater.go'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'quest-publication.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'player-rpc.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'player.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'player-rpc.test.ts'),
+      'utf8'
     )
   ])
-  const errors = matchCompletionErrors(
-    sourceMatches,
-    sourceServerMatch,
-    sourceMatchCollection,
-    sourceMatchProxy,
-    sourceMatchManager,
-    gameMatch,
-    publication,
-    progression
-  )
+  const errors = [
+    ...matchCompletionErrors(
+      sourceMatches,
+      sourceServerMatch,
+      sourceMatchCollection,
+      sourceMatchProxy,
+      sourceMatchManager,
+      gameMatch,
+      publication,
+      progression
+    ),
+    ...questPublicationErrors(
+      sourceMatches,
+      sourceQuestUpdater,
+      gameMatch,
+      questPublication,
+      playerRpc,
+      playerState,
+      playerRpcTest
+    )
+  ]
   if (errors.length > 0) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match completion preserves transactional publication safety'
+      'Cloudflare match completion preserves transactional and quest publication safety'
     )
   }
 }
