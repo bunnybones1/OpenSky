@@ -1,0 +1,213 @@
+# Cloud Weasel main-Worker responsibility audit
+
+Status date: 2026-08-21
+
+Status: architecture decision only. This audit authorizes the next local
+implementation milestone, but it does not authorize provisioning, migration,
+activation, deployment, a live drill, or any production mutation.
+
+## Decision
+
+Keep the one-minute Worker cron only as a bounded discovery and recovery
+trigger while each business responsibility is moved behind the Cloudflare
+primitive that owns its actual effect. Do not replace the current fan-out with
+one generic task engine, and do not preserve a Go runner's ticker, work group,
+batch size, retry delay, attempt ceiling, or task-table shape unless changing it
+would alter a player, client, authorization, publication, or recovery outcome.
+
+The next implementation slice is the weekly leaderboard reward and rank-reset
+cycle. Use one deterministically named Workflow per accepted cycle, one Queue
+message per snapshotted player entitlement, and D1 business receipts for the
+immutable snapshot, off-chain inventory, feed/notification publication, rank
+reset, failures, and completion.
+
+## Current fan-out
+
+`cloudflare/src/index.ts` currently starts nine unrelated lifecycles in one
+`Promise.all`. A failure in any one rejects the shared scheduled invocation,
+even though the responsibilities have different authorities, timing, scale,
+and recovery needs.
+
+| Current call | Observable responsibility | Selected target boundary | Disposition |
+| --- | --- | --- | --- |
+| `deliverDueConquestGold` | Deliver an already-earned delayed Gold-card entitlement exactly once | Queue per pending D1 delivery, with a narrow discovery/re-drive trigger | Later slice; remove copied 100-item/five-attempt terminal behavior |
+| `runConquestReadinessDrills` | Advance an explicitly authorized operational drill and preserve its audit trail | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress |
+| `dispatchDueConquestV2Rewards` | Accept one reviewed weekly cycle and ensure durable delivery | Workflow per cycle plus Queue per player | Completed at `36ca654d` |
+| `runDueLeaderboardRewards` | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset | Workflow per cycle plus Queue per player | Selected next slice |
+| `runReferralStickerRewards` | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory | Workflow per season/cycle plus Queue per prepared user or award batch | Later reward slice |
+| `runDueSkypassAutoClaims` | Close a season and claim every remaining eligible reward for each player | Workflow per close cycle plus Queue per player | Later reward slice; remove copied ten-player/five-reward/five-attempt topology |
+| `runPushNotifications` | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence | High-value later slice; provider/DLQ failure cannot rewrite in-app publication |
+| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data | Workflow per deletion request | Later privacy slice; retain cancellation deadline and auditable partial recovery |
+| `WalletLinksRepository.cleanupExpired` | Remove expired, unused proof challenges | Request-path bounded cleanup plus occasional maintenance trigger | Later low-risk slice; no durable workflow is required for disposable challenges |
+
+These boundaries are independent. Converting one does not authorize changing
+the others or weakening their existing fail-closed gates.
+
+## Why leaderboard is next
+
+Leaderboard processing is the most consequential remaining reward lifecycle
+because its completion controls two coupled player effects:
+
+1. weekly Silver-card and Conquest-ticket entitlements, feed events, and the
+   aggregate reward notification; and
+2. the soft weekly or hard end-of-season rank reset.
+
+The current TypeScript worker preserves the reward calculations and atomic D1
+application well, but its execution topology is source-shaped: a cron call
+selects at most 20 players, increments a cycle attempt counter on any error,
+and permanently changes the business cycle to `FAILED` on attempt five. Those
+numbers are not visible product behavior. A single bad player can therefore
+strand unrelated player rewards and the rank reset even though Cloudflare
+Queues can isolate delivery and the immutable D1 snapshot can be safely
+re-driven.
+
+## Leaderboard observable contract
+
+The Go source remains the oracle for these effects:
+
+- production is inert until an explicit UTC weekly schedule and the exact
+  reviewed policy are activated by independent authorized actors;
+- one due boundary selects the prior day's season/week exactly once, including
+  the source's season-transition rule;
+- ranked constructed and ranked discovery standings are snapshotted from
+  eligible active player accounts with the source ranking and tie ordering;
+- the top-500 snapshot, top-100 Silver curve, top-250 ticket curve, eligible
+  season card pool, per-mode feed entries, aggregate notification, and earned
+  rank history remain unchanged;
+- every source mint outcome is fulfilled only as authoritative off-chain
+  inventory and remains independent of login wallet state;
+- one player's inventory, immutable grant evidence, feed events, notification,
+  and award receipt publish atomically and exactly once;
+- the rank reset starts only after every rewarded player has an applied award
+  and after in-flight match/account-stat publication is complete;
+- weeks one through three apply the source soft reset, while week four applies
+  the source hard reset and next-season carry behavior exactly once;
+- disabling or superseding a schedule prevents future acceptance but cannot
+  cancel a cycle already accepted under an immutable policy; and
+- a persistent player or reset failure remains visible and safely re-drivable
+  without duplicating inventory or permanently abandoning the cycle.
+
+The following source mechanisms are explicitly not part of the target
+contract:
+
+- the one-minute `time.Ticker` and work-group names;
+- a runner batch size of one or a target-side 20-player cron page;
+- five-minute retry delay;
+- terminal failure after five aggregate attempts;
+- the separate legacy mint task and its two-attempt retry budget; and
+- source task-table or process topology.
+
+## Leaderboard target boundary
+
+### Cron to Workflow
+
+Cron may discover the oldest accepted/incomplete cycle or accept one newly due
+cycle. The D1 cycle identity and Workflow instance ID are deterministic. If
+the D1 cycle commit succeeds but Workflow creation fails or its response is
+lost, a later cron invocation ensures the same instance instead of creating a
+second snapshot.
+
+A newer disabled schedule stops future cycle creation. Recovery must first
+prefer an incomplete accepted cycle so that the disable cannot revoke an
+already-earned responsibility.
+
+### Workflow sequence
+
+The Workflow owns the dependent lifecycle:
+
+1. validate its D1 orchestration receipt;
+2. atomically freeze both leaderboard snapshots and the exact reward-policy
+   receipt, then transition the cycle to delivery;
+3. publish every still-unapplied rewarded player to the Queue;
+4. reconcile Queue results from D1 and republish missing responsibilities;
+5. after all player awards are applied, attempt the source-faithful rank reset;
+6. wait and retry if match/account-stat publication is still in flight; and
+7. complete the orchestration receipt only after the reset and cycle are
+   durably complete.
+
+Workflow sleeps, step retry policy, and reconciliation cadence are operational
+tuning. They are not player timing promises because cycle acceptance occurs at
+the approved weekly boundary and no artificial post-snapshot delivery delay
+exists in the source contract.
+
+### Workflow to Queue
+
+Each Queue body carries only a version, responsibility kind, cycle ID, and user
+ID. The consumer re-reads the immutable D1 cycle, entries, policy, and open
+orchestration. Caller-supplied ranks, cards, quantities, balances, reset data,
+or timestamps are never authoritative.
+
+Publishing may repeat. The Workflow pages at the Cloudflare `sendBatch`
+platform maximum only as a transport constraint; that page size is not a
+release-level product invariant. Queue retry count and DLQ retention are also
+transport observations, not permission to discard a D1 entitlement.
+
+### Queue to D1
+
+The consumer applies each player's existing atomic award batch. The stable
+cycle/user award key absorbs duplicate and reordered Queue messages. One
+player's failure is recorded immutably and retried independently while other
+messages acknowledge normally.
+
+Invalid or tampered messages cannot mutate business state. An already-applied
+award acknowledges as a duplicate. The Workflow considers only D1 applied
+receipts when deciding that delivery is complete.
+
+### D1 business truth
+
+A new migration may add only:
+
+- one immutable cycle-to-Workflow orchestration receipt with deterministic
+  instance identity;
+- a guarded orchestration completion timestamp; and
+- immutable per-message failure observations for unresolved player
+  responsibilities.
+
+The existing schedule, policy, snapshot, award, inventory-grant, feed,
+notification, and rank-reset receipts remain authoritative. Existing legacy
+`attempt_count`/`FAILED` columns may remain for deployed-schema compatibility,
+but the new runtime must not use them as an execution engine or terminal
+entitlement state.
+
+## Recovery matrix
+
+| Interruption | Required recovery |
+| --- | --- |
+| Cycle committed before Workflow create | Next cron ensures the deterministic instance; no second cycle is possible. |
+| Schedule disabled after acceptance | The accepted Workflow completes; no later cycle is accepted. |
+| Workflow retries snapshot | D1 policy and leaderboard entries remain one immutable atomic snapshot. |
+| Workflow crashes around Queue publication | Missing D1 award receipts are published again safely. |
+| Queue duplicates or reorders a player | The cycle/user award key applies inventory and publication once. |
+| One player fails repeatedly | Other players progress; immutable failure evidence and the unapplied entitlement remain re-drivable beyond the source ceiling. |
+| Queue message reaches a DLQ or expires | D1 remains pending and Workflow reconciliation can create another transport message. |
+| Rank reset is blocked by in-flight match publication | Awards remain applied; Workflow waits and retries the guarded reset without duplicating either effect. |
+| Workflow reaches a terminal platform error | D1 exposes the incomplete cycle and deterministic instance; an operator can inspect and restart after correction. |
+
+## Required executable evidence
+
+The implementation milestone is incomplete until tests and release gates prove:
+
+- concurrent discovery creates one cycle, one orchestration receipt, and one
+  deterministic Workflow identity;
+- the D1-to-Workflow creation gap recovers after a later schedule disable;
+- snapshot publication is atomic and unchanged from the current behavior;
+- direct cron player delivery and the copied 20-player/five-attempt limits are
+  absent from the production path;
+- Queue tampering cannot select ranks, cards, quantities, identity, or timing;
+- duplicate/reordered messages apply one player effect once;
+- one faulted player does not block another;
+- at least six failures remain pending and an attempt-seven recovery applies
+  the entitlement exactly once;
+- cycle/orchestration completion is impossible before every rewarded player
+  and the one guarded rank reset are complete; and
+- typecheck, focused Workers tests, mutation-tested leaderboard gate, fresh D1
+  migration, production schema/topology preflight, full release, and exact-head
+  PR CI all pass before any deployment can be considered.
+
+## Rollout safety
+
+The leaderboard schedule remains absent/disabled in production. The new
+Workflow, Queue, DLQ, migration, and code must remain unprovisioned and
+undeployed until separately authorized after exact-head CI. Schedule activation
+is a later two-actor operation and is not implied by deploying dormant
+infrastructure.

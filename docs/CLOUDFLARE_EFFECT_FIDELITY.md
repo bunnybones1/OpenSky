@@ -321,9 +321,12 @@ The next selected conversion is the matchmaker alarm boundary in
 It retains five observable find windows and per-proposal allocation deadlines
 without copying nine Go runner loops into Durable Object storage.
 
-That conversion completed locally at `d5764b4e`. The next background slice
-must choose one remaining main-Worker cron responsibility by its business
-effect and recovery boundary rather than refactoring the fan-out wholesale.
+That conversion completed locally at `d5764b4e`. The remaining fan-out was
+then classified in
+[`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md).
+The next selected slice is the weekly leaderboard reward/reset lifecycle: one
+Workflow per accepted cycle, one Queue message per snapshotted player, and D1
+business receipts. The other responsibilities remain separate later slices.
 
 - Move one responsibility at a time to the selected Workflow, Queue, Durable
   Object alarm, request-path idempotent update, or explicit retirement.

@@ -303,12 +303,15 @@ replacement test must fail when the protected effect is deliberately broken.
 
 ## Remaining conversion order
 
-1. Convert `matchmaker-cadence` from a nine-runner topology check to
-   fake-time latency, mode coverage, ordering, and eviction recovery.
-2. Narrow the one source-ticker assertion in `matchmaker-session` to its
-   already-tested authentication/read deadline effect.
-3. Let the Conquest Workflow/Queue decision provide the final target evidence
-   for `conquest-gate`.
+The four originally mixed gates are converted. The next implementation-coupled
+boundary is inside the otherwise valuable `leaderboard-gate`: production
+runtime still performs player delivery directly from cron with a copied
+20-player page and terminal five-attempt cycle state.
 
-This order preserves the strongest existing safety boundaries while removing
-the clearest architectural constraints first.
+The selected replacement in
+[`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md)
+keeps schedule authorization, policy, snapshot, entitlement, publication, and
+rank-reset assertions. It replaces cron page/attempt topology with black-box
+Workflow/Queue evidence for creation-gap recovery, per-player fault isolation,
+re-drive beyond the source ceiling, and completion only after all awards and
+the guarded reset.
