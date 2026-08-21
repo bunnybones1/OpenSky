@@ -2739,6 +2739,35 @@ tests, every source/off-chain gate and typecheck, both production builds, and
 `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source public recent-match wire parity — 2026-08-21
+
+Milestone `0e928b59` restores the source's stored-versus-public recent-match
+distinction. The TypeScript game server omits `conquestInfo` for non-Conquest
+matches, but Go decodes that JSON into the required `[2]proto.Conquest` field
+and always re-emits the pair from `/matchinfo`. Cloudflare now returns two
+complete zero/default Conquest objects for a non-Conquest recovery and
+re-serializes the supplied pair for a Conquest recovery.
+
+Shared TypeScript contracts now separate stored and public recent-match
+objects, public and registry match information, and the Go-optional server
+fields. The gateway requires a valid two-object pair for Conquest, fills the
+same Go zero/null fields, and fails closed when the trusted internal recovery
+is malformed. Participant-only recovery, 24-hour expiry, store, rewards, and
+the original browser consumer are unchanged.
+
+The mutation-tested `check:cloudflare:match-info` gate derives recent-match
+and Conquest field names plus zero enum names from Go, pins the shared type
+split and gateway normalization, and requires exact runtime evidence for
+non-Conquest defaults, Conquest passthrough, and malformed-pair rejection.
+
+The complete local release contract passed for `0e928b59`: 514 main-Worker
+tests, 36 game-server unit and 130 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries are
+`/assets/index-c8882239.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains

@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `942cc42b`
-  (`Preserve source match server wire`)
-- Latest tested runtime commit: `942cc42b`
-  (`Preserve source match server wire`)
+- Last code/test checkpoint: `0e928b59`
+  (`Preserve source recent match wire`)
+- Latest tested runtime commit: `0e928b59`
+  (`Preserve source recent match wire`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,9 +23,9 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `942cc42b` are committed and
-  tested but are **not deployed**. The exact local build at `942cc42b`
-  produced web entry `/assets/index-1eddfd33.js` and game entry
+- The runtime changes from `38386294` through `0e928b59` are committed and
+  tested but are **not deployed**. The exact local build at `0e928b59`
+  produced web entry `/assets/index-c8882239.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
@@ -180,7 +180,9 @@ handoff then passed exact-head run
 timeout-countdown checkpoint and its handoff at exact pushed head `dab12467`.
 Run <https://github.com/bunnybones1/OpenSky/actions/runs/32473859719> passed the
 public-match-info checkpoint and its handoff at exact pushed head `0c1a697c`.
-The newer `942cc42b` public-server-wire checkpoint and this refreshed handoff
+Run <https://github.com/bunnybones1/OpenSky/actions/runs/32475057049> passed the
+public-server-wire checkpoint and its handoff at exact pushed head `3658ef72`.
+The newer `0e928b59` recent-match-wire checkpoint and this refreshed handoff
 require a later green exact-head CI run before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
@@ -1536,6 +1538,41 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source public recent-match wire milestone
+
+Commit `0e928b59` restores the original two-stage recent-match boundary. The
+TypeScript game server stores `conquestInfo` only for Conquest matches, but the
+Go matchmaker decodes that optional value into its required
+`[2]proto.Conquest` field and always emits the pair from `/matchinfo`. For a
+non-Conquest result this produces two complete zero/default Conquest objects;
+for a Conquest result it re-serializes both supplied objects.
+
+Cloudflare now preserves that behavior at the public gateway while retaining
+the original optional internal game-server representation. Shared TypeScript
+types distinguish stored and public recent-match objects, distinguish the
+registry-only `replayID` from public `MatchInfo`, and reflect every optional
+Go `GameServerInfo` field. The gateway validates the internal Conquest pair,
+requires it for a Conquest recovery, fills Go-compatible zero/null fields, and
+continues to keep recent state and rewards private to the participant.
+
+Exact Workers regressions cover non-Conquest default-pair serialization,
+real Conquest pair passthrough, missing-Conquest-pair failure, participant
+privacy, and expiry. The expanded mutation-tested
+`check:cloudflare:match-info` gate derives the public recent-match and Conquest
+fields plus zero-enum names from Go, pins the stored/public TypeScript split,
+and rejects weakened validation, normalization, runtime assertions, or build
+wiring.
+
+The exact complete local release contract passed with exit code zero for
+`0e928b59`: 514 main-Worker tests, 36 game-server unit and 130 Workers tests,
+45 match-service tests, 62 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries are `/assets/index-c8882239.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.
