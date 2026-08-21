@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `ae801409`
-  (`Preserve source join admission errors`)
-- Latest tested runtime commit: `ae801409`
-  (`Preserve source join admission errors`)
+- Last code/test checkpoint: `f8b1601a`
+  (`Preserve source initializing match retry`)
+- Latest tested runtime commit: `f8b1601a`
+  (`Preserve source initializing match retry`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `ae801409` are committed and
+- The runtime changes from `38386294` through `f8b1601a` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -167,8 +167,14 @@ explicit-error checkpoint and its refreshed handoff at exact pushed head
 `594e78ca`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32468152805> passed the
 spectator-admission checkpoint and its refreshed handoff at exact pushed head
-`ade7c5b7`. The newer `ae801409` join-admission checkpoint and its refreshed
-handoff must receive exact-head CI before any production mutation.
+`ade7c5b7`. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32469100637> exercised the
+join-admission checkpoint and refreshed handoff at `e864ee8a`, but one
+leaderboard batch test exceeded its five-second timeout after the other 511
+main-Worker tests passed. The same complete release contract passed locally.
+That CI timing failure must be reproduced or hardened, and the newer
+`f8b1601a` initializing-match checkpoint plus this refreshed handoff must
+receive green exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1388,6 +1394,39 @@ The exact complete local release contract passed with exit code zero for
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
 assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source initializing-match retry milestone
+
+Commit `f8b1601a` preserves the source registry's observable match-creation
+lifecycle instead of briefly telling an allocated player that no match exists:
+
+- the source registers a new match with `initialized: false`, changes it to
+  `true` only after game-server health registration, and the preserved browser
+  waits three seconds before querying again while initialization is false;
+- the same-origin match-info gateway now finds both `creating` and ready
+  `active` rows and projects a `creating` row as
+  `in_progress_match_info` with `initialized: false` rather than
+  `no_match_found`;
+- the pending response derives the same-origin game WebSocket address from the
+  proposal while retaining the source-shaped server metadata and the immutable
+  matcher release; and
+- the active path continues to require a nonempty server address and validates
+  both player addresses from the authoritative match payload before reporting
+  `initialized: true`.
+
+A new mutation-tested `check:cloudflare:match-info` gate parses the source
+false-to-true registration sequence, the browser's three-second retry, both
+Worker query states, the pending-address derivation, direct Workers evidence,
+and its own complete-build wiring. The exact complete local release contract
+passed with exit code zero for `f8b1601a`: 513 main-Worker tests, 36 game-server
+unit and 129 Workers tests, 45 match-service tests, 62 matchmaker unit and 67
+Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate and typecheck, both production builds, and 594-file
+artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
 migration, provisioning, activation, live match, or production mutation was
 performed.

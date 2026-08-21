@@ -2621,6 +2621,35 @@ typecheck, both production builds, and 594-file artifact validation. The
 assembled entries remain `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
 
+## Source initializing-match retry parity — 2026-08-21
+
+Milestone `f8b1601a` preserves the source registry's observable
+false-to-true initialization transition. The source registers an allocated
+match with `initialized: false`, reports `true` only after game-server health
+registration, and the preserved browser waits three seconds before querying
+again while initialization is false.
+
+The same-origin match-info gateway now selects both `creating` and ready
+`active` rows. A creating row returns source-shaped
+`in_progress_match_info` with `initialized: false`, the participants and
+immutable matcher release already stored in D1, and a same-origin WebSocket
+address derived from its proposal. It no longer produces a transient
+`no_match_found` response that sends an allocated player down the original
+client's “No match in progress” path. The active path remains fail-closed: it
+requires a server address, parses the authoritative match payload, and
+validates both player addresses before reporting `initialized: true`.
+
+The new mutation-tested `check:cloudflare:match-info` gate derives the
+registry sequence, browser retry interval, Worker query and projection, direct
+Workers regression, and complete-build wiring from the reviewed source. The
+complete local release contract passed for `f8b1601a`: 513 main-Worker tests,
+36 game-server unit and 129 Workers tests, 45 match-service tests, 62
+matchmaker unit and 67 Workers tests, 30 browser-game tests, nine analytics
+tests, every source/off-chain gate and typecheck, both production builds, and
+594-file artifact validation. The assembled entries remain
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No production operation was run.
+
 ## Suggested next slice
 
 No known dormant matchmaker or non-RPC service-route parity slice remains
