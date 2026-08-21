@@ -170,6 +170,67 @@ export const matchmakerSessionErrors = (
   if (sourceAuthenticationTimeout.includes('SendErrorMessage')) {
     errors.push('Source authentication timeout now sends an application error')
   }
+  requireOrdered(
+    errors,
+    'Source command failure outer lifecycle',
+    sourceWebsocketSession,
+    [
+      'if err := h.listenOnMessage(ctx, client); err != nil {',
+      'if !errors.As(err, &closeErr) {',
+      'h.messageSender.SendErrorMessage(client, *mmerrors.ErrServerError)',
+      'client.Close()',
+      'return nil'
+    ]
+  )
+  const sourceWebsocketListen = bodyBetween(
+    sourceWebsocketHandler,
+    'func (h *websocketHandler) listenOnMessage(',
+    'func (h *websocketHandler) addClient('
+  )
+  for (const [label, start, end, handler, failure] of [
+    [
+      'find',
+      'case messages.FindMatchType:',
+      'case messages.AcceptMatchType:',
+      'h.findMatchHandler.Handle(ctx, client, findMatchMessage)',
+      'return fmt.Errorf("handle find match: %w", err)'
+    ],
+    [
+      'accept',
+      'case messages.AcceptMatchType:',
+      'case messages.DeclineMatchType:',
+      'h.acceptMatchHandler.Handle(ctx, client)',
+      'return fmt.Errorf("handle accept match: %w", err)'
+    ]
+  ]) {
+    const sourceCommand = bodyBetween(sourceWebsocketListen, start, end)
+    requireOrdered(
+      errors,
+      `Source ${label}-match fatal handler error`,
+      sourceCommand,
+      [handler, failure]
+    )
+    if (sourceCommand.includes('SendErrorMessage')) {
+      errors.push(`Source ${label}-match handler error became nonfatal`)
+    }
+  }
+  const sourceDeclineCommand = bodyBetween(
+    sourceWebsocketListen,
+    'case messages.DeclineMatchType:',
+    'default:'
+  )
+  requireOrdered(
+    errors,
+    'Source decline-match invalid-operation exception',
+    sourceDeclineCommand,
+    [
+      'h.declineMatchHandler.Handle(ctx, client)',
+      'errors.Is(err, mmerrors.ErrInvalidOperation)',
+      'h.messageSender.SendErrorMessage(client, *mmerrors.ErrInvalidOperation)',
+      '} else {',
+      'return fmt.Errorf("handle decline match: %w", err)'
+    ]
+  )
   requireOrdered(errors, 'Source authentication timeout config', sourceConfig, [
     'AuthenticationTimeoutSeconds float32',
     'if cfg.MatchMaker.AuthenticationTimeoutSeconds <= 0 {',
@@ -341,10 +402,31 @@ export const matchmakerSessionErrors = (
     )
     requireOrdered(errors, `Worker ${command} channel authority`, commandBody, [
       'if (attachment.subscribed === false) {',
-      "'SERVER_ERROR'",
-      "'player channel is missing'",
+      "throw new Error('player channel is missing')",
       handler
     ])
+  }
+  const workerCommandFailure = bodyBetween(
+    workerMessages,
+    '// Source websocket_handler.go exposes only decline',
+    'private failMalformedClientMessage('
+  )
+  requireOrdered(
+    errors,
+    'Worker source command failure lifecycle',
+    workerCommandFailure,
+    [
+      "command.type === 'decline_match'",
+      'error instanceof ProtocolError',
+      "error.reason === 'INVALID_OPERATION'",
+      "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))",
+      'return',
+      "this.safeSend(webSocket, errorMessage('SERVER_ERROR'))",
+      'webSocket.close()'
+    ]
+  )
+  if (workerCommandFailure.includes('errorMessage(error.reason')) {
+    errors.push('Worker command failure leaks arbitrary handler details')
   }
 
   const workerFind = bodyBetween(
@@ -378,6 +460,48 @@ export const matchmakerSessionErrors = (
         `Worker pre-subscription response is not socket-scoped: ${directType}`
       )
     }
+  }
+
+  const workerAccept = bodyBetween(
+    worker,
+    'private async acceptMatch(',
+    'private async recordAcceptance('
+  )
+  requireOrdered(errors, 'Worker accept-match error identity', workerAccept, [
+    'if (!proposal) {',
+    "'INVALID_OPERATION'",
+    'await this.expireProposal(proposal)',
+    "'match proposal timed out'",
+    'if (proposal.accepted.includes(principal)) return',
+    "proposal.status !== 'FOUND'",
+    "'INVALID_OPERATION'"
+  ])
+  if (workerAccept.includes('this.sendToPrincipal(')) {
+    errors.push('Worker accept-match failure bypasses the fatal outer handler')
+  }
+
+  const workerDecline = bodyBetween(
+    worker,
+    'private async declineMatch(',
+    'private async attemptMatches('
+  )
+  requireOrdered(
+    errors,
+    'Worker decline-match invalid-operation identity',
+    workerDecline,
+    [
+      "proposal.status !== 'FOUND'",
+      'throw new ProtocolError(',
+      "'INVALID_OPERATION'",
+      "'match proposal is not accepting responses'",
+      'isConquestMatch(deserializePlayer(player.player))',
+      'throw new ProtocolError(',
+      "'INVALID_OPERATION'",
+      "'conquest cannot be declined'"
+    ]
+  )
+  if (workerDecline.includes("errorMessage('INVALID_OPERATION')")) {
+    errors.push('Worker decline-match bypasses its source outer exception')
   }
 
   const workerDuplicate = bodyBetween(
@@ -572,9 +696,83 @@ export const matchmakerSessionErrors = (
       errors.push(`Worker read-timeout regression is missing: ${title}`)
     }
   }
-  if (!workerRuntimeTest.includes('.toEqual([0, 0])')) {
-    errors.push('Worker read-timeout cleanup regression is missing')
+  const zeroSocketCleanupAssertions =
+    workerRuntimeTest.match(/\.toEqual\(\[0, 0\]\)/g)?.length ?? 0
+  if (zeroSocketCleanupAssertions < 2) {
+    errors.push(
+      'Worker read-timeout or fatal accept cleanup regression is missing'
+    )
   }
+  for (const title of [
+    'sends the source generic error and closes when find-match handling fails',
+    'sends the source generic error and closes when accept-match handling fails',
+    'keeps the channel open only for decline invalid-operation errors'
+  ]) {
+    if (!workerRuntimeTest.includes(title)) {
+      errors.push(`Worker command-error regression is missing: ${title}`)
+    }
+  }
+  const genericServerErrorFixture = bodyBetween(
+    workerRuntimeTest,
+    'const GENERIC_SERVER_ERROR = {',
+    'const runtimeEnv ='
+  )
+  requireOrdered(
+    errors,
+    'Worker generic command-error fixture',
+    genericServerErrorFixture,
+    [
+      "type: 'error'",
+      "reason: 'SERVER_ERROR'",
+      "message: 'SERVER_ERROR'",
+      "level: 'server'"
+    ]
+  )
+  const findFailureTest = bodyBetween(
+    workerRuntimeTest,
+    "it('sends the source generic error and closes when find-match handling fails'",
+    "it('rejects a chosen deck from discovery before queueing'"
+  )
+  requireOrdered(
+    errors,
+    'Worker fatal find-match regression',
+    findFailureTest,
+    [
+      'expect(await error).toEqual(GENERIC_SERVER_ERROR)',
+      "expect(await closed).toMatchObject({ code: 1005, reason: '' })"
+    ]
+  )
+  const acceptFailureTest = bodyBetween(
+    workerRuntimeTest,
+    "it('sends the source generic error and closes when accept-match handling fails'",
+    "it('keeps the channel open only for decline invalid-operation errors'"
+  )
+  requireOrdered(
+    errors,
+    'Worker fatal accept-match regression',
+    acceptFailureTest,
+    [
+      'expect(await error).toEqual(GENERIC_SERVER_ERROR)',
+      "expect(await closed).toMatchObject({ code: 1005, reason: '' })",
+      '.toEqual([0, 0])'
+    ]
+  )
+  const declineInvalidOperationTest = bodyBetween(
+    workerRuntimeTest,
+    "it('keeps the channel open only for decline invalid-operation errors'",
+    "it('does not cancel a match for a decline after acceptance completed'"
+  )
+  requireOrdered(
+    errors,
+    'Worker nonfatal decline invalid-operation regression',
+    declineInvalidOperationTest,
+    [
+      "reason: 'INVALID_OPERATION'",
+      "message: 'INVALID_OPERATION'",
+      "first.send('PING')",
+      'expect(first.readyState).toBe(WebSocket.OPEN)'
+    ]
+  )
 
   const scripts = rootPackage?.scripts ?? {}
   if (
@@ -691,7 +889,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, command-error, authentication-timeout, and read-timeout contracts'
     )
   }
 }

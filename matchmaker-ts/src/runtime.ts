@@ -384,7 +384,7 @@ export class MatchmakerPool implements DurableObject {
           return
         case 'accept_match':
           if (attachment.subscribed === false) {
-            throw new ProtocolError('SERVER_ERROR', 'player channel is missing')
+            throw new Error('player channel is missing')
           }
           // The command's playerID is intentionally ignored. The authenticated
           // WebSocket principal is the sole authority for this transition.
@@ -392,24 +392,31 @@ export class MatchmakerPool implements DurableObject {
           return
         case 'decline_match':
           if (attachment.subscribed === false) {
-            throw new ProtocolError('SERVER_ERROR', 'player channel is missing')
+            throw new Error('player channel is missing')
           }
           await this.declineMatch(attachment.principal)
           return
       }
     } catch (error) {
-      if (error instanceof ProtocolError) {
+      // Source websocket_handler.go exposes only decline's invalid-operation
+      // sentinel. Every find/accept failure and every other decline failure
+      // escapes listenOnMessage, becomes the generic server error, and closes.
+      if (
+        command.type === 'decline_match' &&
+        error instanceof ProtocolError &&
+        error.reason === 'INVALID_OPERATION'
+      ) {
         console.warn(
           'matchmaker protocol rejected',
           error.reason,
           error.message
         )
-        this.safeSend(webSocket, errorMessage(error.reason, error.message))
-      } else {
-        console.error('matchmaker message failed', error)
-        this.safeSend(webSocket, errorMessage('SERVER_ERROR'))
-        webSocket.close()
+        this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))
+        return
       }
+      console.error('matchmaker message failed', error)
+      this.safeSend(webSocket, errorMessage('SERVER_ERROR'))
+      webSocket.close()
     }
   }
 
@@ -761,13 +768,19 @@ export class MatchmakerPool implements DurableObject {
 
   private async acceptMatch(principal: string) {
     const proposal = await this.proposalForPrincipal(principal)
-    if (!proposal || proposal.status !== 'FOUND') {
-      this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
-      return
+    if (!proposal) {
+      throw new ProtocolError('INVALID_OPERATION', 'match proposal is not set')
     }
     if (proposal.expiresAtMs <= Date.now()) {
       await this.expireProposal(proposal)
-      return
+      throw new ProtocolError('INVALID_OPERATION', 'match proposal timed out')
+    }
+    if (proposal.accepted.includes(principal)) return
+    if (proposal.status !== 'FOUND') {
+      throw new ProtocolError(
+        'INVALID_OPERATION',
+        'match proposal is not accepting responses'
+      )
     }
     await this.recordAcceptance(proposal, principal)
     await this.rescheduleAlarm(Date.now())
@@ -814,15 +827,19 @@ export class MatchmakerPool implements DurableObject {
       return
     }
     if (proposal.status !== 'FOUND') {
-      this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
-      return
+      throw new ProtocolError(
+        'INVALID_OPERATION',
+        'match proposal is not accepting responses'
+      )
     }
     const player = proposal.participants.find(
       participant => participant.player.address === principal
     )
     if (player && isConquestMatch(deserializePlayer(player.player))) {
-      this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))
-      return
+      throw new ProtocolError(
+        'INVALID_OPERATION',
+        'conquest cannot be declined'
+      )
     }
     this.broadcastProposal(proposal, {
       type: 'decline_match',

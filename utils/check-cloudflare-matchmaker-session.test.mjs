@@ -170,6 +170,27 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     },
     {
       ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'h.messageSender.SendErrorMessage(client, *mmerrors.ErrServerError)',
+        'h.messageSender.SendErrorMessage(client, *mmerrors.ErrInvalidOperation)'
+      )
+    },
+    {
+      ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'return fmt.Errorf("handle find match: %w", err)',
+        'return nil'
+      )
+    },
+    {
+      ...value,
+      sourceWebsocketHandler: value.sourceWebsocketHandler.replace(
+        'if errors.Is(err, mmerrors.ErrInvalidOperation) {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
       sourceConfig: value.sourceConfig.replace(
         'cfg.MatchMaker.AuthenticationTimeout = secondsToDuration(cfg.MatchMaker.AuthenticationTimeoutSeconds)',
         'cfg.MatchMaker.AuthenticationTimeout = time.Hour'
@@ -408,6 +429,69 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       worker: value.worker.replace(
         "case 'decline_match':\n          if (attachment.subscribed === false) {",
         "case 'decline_match':\n          if (false) {"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "command.type === 'decline_match'",
+        "command.type === 'accept_match'"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "this.safeSend(webSocket, errorMessage('INVALID_OPERATION'))",
+        'this.safeSend(webSocket, errorMessage(error.reason, error.message))'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "this.safeSend(webSocket, errorMessage('SERVER_ERROR'))\n      webSocket.close()",
+        "this.safeSend(webSocket, errorMessage('SERVER_ERROR'))\n      webSocket.close(1008, 'Handler failed')"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "throw new ProtocolError('INVALID_OPERATION', 'match proposal is not set')",
+        "this.sendToPrincipal(principal, errorMessage('INVALID_OPERATION'))\n      return"
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
+        "'conquest cannot be declined'",
+        "'conquest decline was ignored'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'keeps the channel open only for decline invalid-operation errors',
+        'closes every decline invalid-operation error'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        "reason: 'SERVER_ERROR',\n  message: 'SERVER_ERROR'",
+        "reason: 'OUTDATED_CLIENT',\n  message: 'OUTDATED_CLIENT'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'sends the source generic error and closes when find-match handling fails',
+        'keeps find-match failures open'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'sends the source generic error and closes when accept-match handling fails',
+        'keeps accept-match failures open'
       )
     },
     {

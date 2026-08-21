@@ -29,6 +29,12 @@ const PRINCIPAL_5 = '0x5555555555555555555555555555555555555555'
 const PRINCIPAL_6 = '0x6666666666666666666666666666666666666666'
 const PRINCIPAL_7 = '0x7777777777777777777777777777777777777777'
 const PRINCIPAL_8 = '0x8888888888888888888888888888888888888888'
+const GENERIC_SERVER_ERROR = {
+  type: 'error',
+  reason: 'SERVER_ERROR',
+  message: 'SERVER_ERROR',
+  level: 'server'
+}
 
 const runtimeEnv = env as unknown as MatchmakerEnv
 const pool = () =>
@@ -437,20 +443,17 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
-  it('rejects a client release that differs from the deployed matchmaker', async () => {
+  it('sends the source generic error and closes when find-match handling fails', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const error = nextMessage(player)
+    const closed = nextClose(player)
     player.send(
       JSON.stringify(
         findCommand(GameMode.RANKED_CONSTRUCTED, '', 'stale-release')
       )
     )
-    expect(await error).toEqual({
-      type: 'error',
-      reason: 'OUTDATED_CLIENT',
-      message: 'OUTDATED_CLIENT',
-      level: 'server'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
     const status = await pool().fetch('https://pool.example/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
@@ -465,12 +468,7 @@ describe('Cloudflare matchmaker Worker', () => {
         findCommand(GameMode.RANKED_DISCOVERY, '', 'release-1', ['str'], ['6'])
       )
     )
-    expect(await error).toEqual({
-      type: 'error',
-      reason: 'DECK_IS_NOT_RANDOM',
-      message: 'DECK_IS_NOT_RANDOM',
-      level: 'server'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
     const status = await pool().fetch('https://pool.example/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
@@ -481,12 +479,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const error = nextMessage(player)
     player.send(JSON.stringify(findCommand(GameMode.CHALLENGE_CONSTRUCTED, '')))
-    expect(await error).toEqual({
-      type: 'error',
-      reason: 'SESSION_IS_EMPTY',
-      message: 'SESSION_IS_EMPTY',
-      level: 'server'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
     const status = await pool().fetch('https://pool.example/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
@@ -499,12 +492,7 @@ describe('Cloudflare matchmaker Worker', () => {
     command.privateSeed.subkey = [1, 2, 3]
     const error = nextMessage(player)
     player.send(JSON.stringify(command))
-    expect(await error).toEqual({
-      type: 'error',
-      reason: 'INVALID_PRIVATE_SEED',
-      message: 'INVALID_PRIVATE_SEED',
-      level: 'server'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
     const status = await pool().fetch('https://pool.example/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
@@ -548,12 +536,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const error = nextMessage(player)
     player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))
-    expect(await error).toEqual({
-      type: 'error',
-      reason: 'GAME_MODE_DISABLED',
-      message: 'GAME_MODE_DISABLED',
-      level: 'server'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
   })
 
   it('drains a lone queued player after an operator disables the mode', async () => {
@@ -686,10 +669,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const [player] = track(await connect(PRINCIPAL_5, '192.0.2.5'))
     const error = nextMessage(player)
     player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED, '')))
-    expect(await error).toMatchObject({
-      type: 'error',
-      reason: 'CONQUEST_DECK_CLASS_MISMATCH'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
     const status = await pool().fetch('https://pool.example/internal/status', {
       headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
     })
@@ -700,10 +680,7 @@ describe('Cloudflare matchmaker Worker', () => {
     const [player] = track(await connect(PRINCIPAL_6, '192.0.2.6'))
     const error = nextMessage(player)
     player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED, '')))
-    expect(await error).toMatchObject({
-      type: 'error',
-      reason: 'INVALID_ACCOUNT'
-    })
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
   })
 
   it('terminates proposals rejected by final match preconditions', async () => {
@@ -975,6 +952,66 @@ describe('Cloudflare matchmaker Worker', () => {
         }
       ])
     }
+  })
+
+  it('sends the source generic error and closes when accept-match handling fails', async () => {
+    const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
+    player.send(JSON.stringify(findCommand()))
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        return (await status.json<{ queuedPlayers: number }>()).queuedPlayers
+      })
+      .toBe(1)
+
+    const error = nextMessage(player)
+    const closed = nextClose(player)
+    player.send(JSON.stringify({ type: 'accept_match' }))
+    expect(await error).toEqual(GENERIC_SERVER_ERROR)
+    expect(await closed).toMatchObject({ code: 1005, reason: '' })
+    await expect
+      .poll(async () => {
+        const status = await pool().fetch(
+          'https://pool.example/internal/status',
+          { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+        )
+        const body = await status.json<{
+          queuedPlayers: number
+          connectedSockets: number
+        }>()
+        return [body.queuedPlayers, body.connectedSockets]
+      })
+      .toEqual([0, 0])
+  })
+
+  it('keeps the channel open only for decline invalid-operation errors', async () => {
+    const { first, second } = await pairPlayers(
+      GameMode.CONQUEST_CONSTRUCTED,
+      'release-1',
+      [PRINCIPAL_7, PRINCIPAL_2]
+    )
+    track(first, second)
+
+    const error = nextMessage(first)
+    first.send(JSON.stringify({ type: 'decline_match' }))
+    expect(await error).toEqual({
+      type: 'error',
+      reason: 'INVALID_OPERATION',
+      message: 'INVALID_OPERATION',
+      level: 'server'
+    })
+    const stayedSilent = expectNoMessage(first)
+    first.send('PING')
+    await stayedSilent
+    expect(first.readyState).toBe(WebSocket.OPEN)
+
+    const status = await pool().fetch('https://pool.example/internal/status', {
+      headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' }
+    })
+    expect(await status.json()).toMatchObject({ activeProposals: 1 })
   })
 
   it('does not cancel a match for a decline after acceptance completed', async () => {
@@ -1533,15 +1570,14 @@ describe('Cloudflare matchmaker Worker', () => {
     const replacement = await connect(PRINCIPAL_1, '192.0.2.1')
     const firstStayedSilent = expectNoMessage(first)
     const rejected = nextMessage(replacement)
+    const replacementClosed = nextClose(replacement)
     replacement.send(
       JSON.stringify(
         findCommand(GameMode.RANKED_CONSTRUCTED, '', 'stale-release')
       )
     )
-    expect(await rejected).toMatchObject({
-      type: 'error',
-      reason: 'OUTDATED_CLIENT'
-    })
+    expect(await rejected).toEqual(GENERIC_SERVER_ERROR)
+    expect(await replacementClosed).toMatchObject({ code: 1005, reason: '' })
     await firstStayedSilent
 
     const second = await connect(PRINCIPAL_2, '192.0.2.2')
@@ -1592,25 +1628,19 @@ describe('Cloudflare matchmaker Worker', () => {
     track(first, second, pendingAccept, pendingDecline)
 
     const acceptError = nextMessage(pendingAccept)
+    const acceptClosed = nextClose(pendingAccept)
     const firstStayedSilent = expectNoMessage(first)
     const secondStayedSilent = expectNoMessage(second)
     pendingAccept.send(JSON.stringify({ type: 'accept_match' }))
-    expect(await acceptError).toEqual({
-      type: 'error',
-      reason: 'SERVER_ERROR',
-      message: 'player channel is missing',
-      level: 'server'
-    })
+    expect(await acceptError).toEqual(GENERIC_SERVER_ERROR)
+    expect(await acceptClosed).toMatchObject({ code: 1005, reason: '' })
     await Promise.all([firstStayedSilent, secondStayedSilent])
 
     const declineError = nextMessage(pendingDecline)
+    const declineClosed = nextClose(pendingDecline)
     pendingDecline.send(JSON.stringify({ type: 'decline_match' }))
-    expect(await declineError).toEqual({
-      type: 'error',
-      reason: 'SERVER_ERROR',
-      message: 'player channel is missing',
-      level: 'server'
-    })
+    expect(await declineError).toEqual(GENERIC_SERVER_ERROR)
+    expect(await declineClosed).toMatchObject({ code: 1005, reason: '' })
 
     await runInDurableObject(
       pool() as DurableObjectStub<MatchmakerPool>,
