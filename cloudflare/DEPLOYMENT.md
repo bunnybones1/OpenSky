@@ -7,21 +7,22 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `5636d901` is tested but not
+- Paused branch checkpoint: runtime commit `c22d9263` is tested but not
   deployed and passed the complete local release contract. Migrations
   `0115_authoritative_match_decks.sql`,
-  `0116_registered_matchmaker_bots.sql`, and
-  `0117_match_experience_publication_state.sql` are intentionally not applied.
+  `0116_registered_matchmaker_bots.sql`,
+  `0117_match_experience_publication_state.sql`, and
+  `0118_match_account_stat_publication.sql` are intentionally not applied.
   Apply them in that order at the documented quiescent boundary before
-  deploying the current Workers. No Worker from `5636d901` or later may be
-  deployed until all three exist. Every checked-in deploy command now performs
+  deploying the current Workers. No Worker from `c22d9263` or later may be
+  deployed until all four exist. Every checked-in deploy command now performs
   a fail-closed, account-pinned, read-only D1 schema preflight first; the
   migration command is intentionally exempt so it can advance the schema. The
-  exact local release at `5636d901` passed 524 main-Worker tests, 40 game-server
-  unit and 134 Workers tests, 47 match-service tests, 63 matchmaker unit and 67
+  exact local release at `c22d9263` passed 528 main-Worker tests, 40 game-server
+  unit and 134 Workers tests, 48 match-service tests, 63 matchmaker unit and 67
   Workers tests, 30 browser-game tests, nine analytics tests, all source and
   mutation gates/typechecks, both production builds, and 594-file artifact
-  validation. Its assembled entries are `/assets/index-1eddfd33.js` and
+  validation. Its assembled entries are `/assets/index-fd3d9163.js` and
   `/game/cloudflare/assets/index-ccb53c4b.js`.
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed

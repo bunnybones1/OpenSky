@@ -199,11 +199,12 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migration `0116`, the authoritative-deck table from `0115`, the
-registered-bot registry and immutable guards, and the narrowed match-allocation
-guard. It refuses to spawn the deploy process on a missing, malformed,
-unsuccessful, duplicate, or unexpected result. The migration command is
-intentionally exempt so it can bring the schema forward before a deploy.
+requires migrations through `0118`, including the authoritative-deck table,
+registered-bot registry and immutable guards, XP publication state, ranked
+account-stat before/after receipts, and the exact nested match-season guard. It
+refuses to spawn the deploy process on a missing, malformed, unsuccessful,
+duplicate, or unexpected result. The migration command is intentionally exempt
+so it can bring the schema forward before a deploy.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
@@ -2914,19 +2915,46 @@ production builds, and 594-file artifact validation. The assembled entries are
 deployment, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source ranked-stat publication — 2026-08-21
+
+Milestone `c22d9263` extends terminal match publication to ranked account
+counters, Glicko state, score, rank/stage, and XP-triggered Constructed and
+Discovery unlocks. Migration `0118` records exact before/after account-stat
+rows, rejects incomplete or malformed receipts, and withholds every affected
+player, leaderboard, Conquest, staff, match-service, matchmaker, and registered
+bot projection until the shared match ledger reaches `ended`.
+
+Mutation writers also fail closed while a match is staged: quest claims, staff
+level/RP/rank changes, leaderboard reward snapshots, and rank resets cannot
+interleave. The source's separate Grandweaver task is represented by a durable
+post-publication job, so global recalculation can retry without delaying match
+rewards or terminal sockets. Overlapping ranked completions return retryable
+`waiting_for_match_publication` until the preceding source transaction is
+visible.
+
+The production schema preflight requires `0118`, its added Discovery-rank
+snapshot column, all three new tables, and all 12 guards. The complete local
+release contract passed at exact code commit `c22d9263`: 528 main-Worker tests
+across 85 files, 40 game-server unit and 134 Workers tests, 48 match-service
+tests, 63 matchmaker unit and 67 Workers tests, 30 browser-game tests, nine
+analytics tests, every source/off-chain/mutation gate and typecheck, both
+production builds, and 594-file artifact validation. The assembled entries are
+`/assets/index-fd3d9163.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, migration,
+deployment, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Suggested next slice
 
-No known dormant matchmaker or non-RPC service-route parity slice remains.
-The next local completion audit should cover the remaining ranked-stat and
-rank-unlock side effects that the Go match transaction performs after XP,
-including every player/deck/stat read that could expose them before terminal
-publication. That work should extend the existing receipt barrier and mutation
-gate, not introduce a new product surface.
+No known dormant matchmaker or non-RPC service-route parity slice remains. The
+next local completion audit should apply the same terminal publication barrier
+to ranked-constructed deck aggregates and every deck-leaderboard consumer.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, then `0117` at the documented quiescent boundary, deploy the exact
-tested Workers with both bot flags still false, and only consider a bounded
-ranked/PvP-bot soak after ordinary multiplayer and analytics paths are healthy.
+then `0116`, `0117`, and `0118` at the documented quiescent boundary, deploy
+the exact tested Workers with both bot flags still false, and only consider a
+bounded ranked/PvP-bot soak after ordinary multiplayer and analytics paths are
+healthy.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,
