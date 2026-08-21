@@ -1742,6 +1742,64 @@ describe('Cloud Weasel accepted-match service', () => {
     expect(count?.count).toBe(1)
   })
 
+  it('projects unpublished Warm Up progress into authoritative match accounts', async () => {
+    const processedAt = '2026-08-21T15:42:00.000Z'
+    const proposalId = `pending-warm-up-account-${crypto.randomUUID()}`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'WARM_UP', 'WARM_UP', 'WARM_UP',
+                 'warm-up-publication-test', ?, ?, ?, NULL, '{}', 'active',
+                 ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        PRINCIPAL,
+        BOT_PLACEHOLDER,
+        USER_ID,
+        processedAt,
+        processedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_warmups_applied
+           (proposal_id, credited_player, user_id, warm_ups_before,
+            warm_ups_after, processed_at)
+         VALUES (?, 0, ?, 1, 2, ?)`
+      ).bind(proposalId, USER_ID, processedAt)
+    ])
+
+    const repository = new MatchRepository(env.AUTH_DB)
+    const pending = await repository.humanAccount(
+      USER_ID,
+      PRINCIPAL,
+      ['str'],
+      126,
+      GameMode.PRACTICE_BOT,
+      'PLAYER'
+    )
+    expect(pending.account.warmUps).toBe(1)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(processedAt, proposalId)
+      .run()
+    const published = await repository.humanAccount(
+      USER_ID,
+      PRINCIPAL,
+      ['str'],
+      126,
+      GameMode.PRACTICE_BOT,
+      'PLAYER'
+    )
+    expect(published.account.warmUps).toBe(2)
+  })
+
   it('rejects proposal reuse with a different accepted dispatch', async () => {
     const accepted = dispatch()
     const first = await create(accepted)

@@ -4,7 +4,8 @@ import test from 'node:test'
 
 import {
   matchCompletionErrors,
-  questPublicationErrors
+  questPublicationErrors,
+  warmUpPublicationErrors
 } from './check-cloudflare-match-completion.mjs'
 
 const fixtures = async () => {
@@ -77,6 +78,54 @@ const questErrorsFor = value =>
     value.playerRpc,
     value.playerState,
     value.playerRpcTest
+  )
+
+const warmUpFixtures = async () => {
+  const [
+    sourceMatches,
+    gameMatch,
+    warmUpPublication,
+    playerRpc,
+    social,
+    competitive,
+    matchRepository,
+    playerRpcTest,
+    matchServiceTest
+  ] = await Promise.all([
+    readFile('api/rpc/matches.go', 'utf8'),
+    readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
+    readFile('cloudflare/src/warmup-publication.ts', 'utf8'),
+    readFile('cloudflare/src/player-rpc.ts', 'utf8'),
+    readFile('cloudflare/src/social.ts', 'utf8'),
+    readFile('cloudflare/src/competitive.ts', 'utf8'),
+    readFile('match-service-cloudflare/src/repository.ts', 'utf8'),
+    readFile('cloudflare/test/player-rpc.test.ts', 'utf8'),
+    readFile('match-service-cloudflare/test-cloudflare/worker.test.ts', 'utf8')
+  ])
+  return {
+    sourceMatches,
+    gameMatch,
+    warmUpPublication,
+    playerRpc,
+    social,
+    competitive,
+    matchRepository,
+    playerRpcTest,
+    matchServiceTest
+  }
+}
+
+const warmUpErrorsFor = value =>
+  warmUpPublicationErrors(
+    value.sourceMatches,
+    value.gameMatch,
+    value.warmUpPublication,
+    value.playerRpc,
+    value.social,
+    value.competitive,
+    value.matchRepository,
+    value.playerRpcTest,
+    value.matchServiceTest
   )
 
 test('pins source transaction semantics and the Worker publication barrier', async () => {
@@ -447,6 +496,104 @@ test('rejects weakened quest projections, mutation guards, or runtime proof', as
       questErrorsFor(mutation),
       [],
       `quest publication mutation ${index + 1} was not detected`
+    )
+  }
+})
+
+test('pins source-transactional multiplayer Warm Up publication', async () => {
+  assert.deepEqual(warmUpErrorsFor(await warmUpFixtures()), [])
+})
+
+test('rejects weakened Warm Up projections or runtime proof', async () => {
+  const value = await warmUpFixtures()
+  const mutations = [
+    {
+      ...value,
+      sourceMatches: value.sourceMatches.replace(
+        'updateWarmUpCounter(match, winner)',
+        'updateWarmUpCounterAfterCommit(match, winner)'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'await applyWarmUpProgress(',
+        'await skipWarmUpProgress('
+      )
+    },
+    {
+      ...value,
+      warmUpPublication: value.warmUpPublication.replace(
+        "pending_match.status <> 'ended'",
+        "pending_match.status <> 'failed'"
+      )
+    },
+    {
+      ...value,
+      warmUpPublication: value.warmUpPublication.replace(
+        'pending_match.player1_user_id = pending_warmup.user_id',
+        'pending_match.player1_user_id IS NOT NULL'
+      )
+    },
+    {
+      ...value,
+      warmUpPublication: value.warmUpPublication.replace(
+        'THEN pending_warmup.warm_ups_before',
+        'THEN pending_warmup.warm_ups_after'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replace(
+        "publishedWarmUpsSQL('u.id', 'account.warm_ups')",
+        'account.warm_ups'
+      )
+    },
+    {
+      ...value,
+      social: value.social.replace('publishedWarmUpsSQL(', 'rawWarmUpsSQL(')
+    },
+    {
+      ...value,
+      competitive: value.competitive.replace(
+        'sourceVisibleWarmUps(row.warm_ups)',
+        'row.warm_ups'
+      )
+    },
+    {
+      ...value,
+      matchRepository: value.matchRepository.replace(
+        'sourceVisibleWarmUps(profile.warm_ups)',
+        'profile.warm_ups'
+      )
+    },
+    {
+      ...value,
+      playerRpcTest: value.playerRpcTest.replace(
+        'withholds multiplayer Warm Up progress from player-facing accounts until the match publishes',
+        'shows Warm Up progress'
+      )
+    },
+    {
+      ...value,
+      playerRpcTest: value.playerRpcTest.replace(
+        'fails closed on a mismatched unpublished Warm Up receipt',
+        'accepts a mismatched Warm Up receipt'
+      )
+    },
+    {
+      ...value,
+      matchServiceTest: value.matchServiceTest.replace(
+        'projects unpublished Warm Up progress into authoritative match accounts',
+        'loads Warm Up progress'
+      )
+    }
+  ]
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notDeepEqual(
+      warmUpErrorsFor(mutation),
+      [],
+      `Warm Up publication mutation ${index + 1} was not detected`
     )
   }
 })

@@ -628,6 +628,131 @@ export const questPublicationErrors = (
   return errors
 }
 
+export const warmUpPublicationErrors = (
+  sourceMatches,
+  gameMatch,
+  warmUpPublication,
+  playerRpc,
+  social,
+  competitive,
+  matchRepository,
+  playerRpcTest,
+  matchServiceTest
+) => {
+  const errors = []
+  const sourceEndMatch = bodyBetween(
+    sourceMatches,
+    'func (s *Server) endMatch(',
+    'func updateWarmUpCounter('
+  )
+  requireOrdered(
+    errors,
+    'Source Warm Up publication transaction',
+    sourceEndMatch,
+    [
+      'repo.TxContext(ctx, func(tx db.Session) error',
+      'updateWarmUpCounter(match, winner)',
+      'tx.Save(match)',
+      'tx.Save(winner)'
+    ]
+  )
+
+  const workerCompletion = bodyBetween(
+    gameMatch,
+    'private async recordCompletionWithRetry(',
+    'private async archiveAndEnqueueAnalyticsWithRetry('
+  )
+  requireOrdered(
+    errors,
+    'Worker staged Warm Up publication',
+    workerCompletion,
+    ['applyWarmUpProgress(', 'publishMatchCompletion(']
+  )
+
+  const compactProjection = warmUpPublication.replace(/\s+/g, ' ')
+  for (const token of [
+    'FROM multiplayer_match_warmups_applied pending_warmup',
+    'JOIN multiplayer_matches pending_match',
+    "pending_match.status <> 'ended'",
+    'pending_warmup.warm_ups_after = MIN(3, pending_warmup.warm_ups_before + 1)',
+    'pending_match.player1_user_id = pending_warmup.user_id',
+    'pending_match.player2_user_id = pending_warmup.user_id',
+    'THEN pending_warmup.warm_ups_before',
+    'ELSE -1',
+    'ORDER BY pending_warmup.processed_at ASC, pending_warmup.proposal_id ASC',
+    'sourceVisibleWarmUps',
+    'throw new Error(INVALID_WARM_UP_PROJECTION)'
+  ]) {
+    if (!compactProjection.includes(token)) {
+      errors.push(`Warm Up publication projection is missing: ${token}`)
+    }
+  }
+
+  const readSurfaces = [
+    [
+      'identity account',
+      playerRpc,
+      "publishedWarmUpsSQL('u.id', 'account.warm_ups')"
+    ],
+    [
+      'gifted inviter account',
+      social,
+      "publishedWarmUpsSQL( 'users.id', 'account.warm_ups' )"
+    ],
+    [
+      'leaderboard account',
+      competitive,
+      "publishedWarmUpsSQL( 'stats.user_id', 'account.warm_ups' )"
+    ],
+    [
+      'match account',
+      matchRepository,
+      "publishedWarmUpsSQL( 'u.id', 'account.warm_ups' )"
+    ]
+  ]
+  for (const [label, source, queryToken] of readSurfaces) {
+    const compactSource = source.replace(/\s+/g, ' ')
+    if (!compactSource.includes(queryToken)) {
+      errors.push(`${label} does not use the Warm Up publication projection`)
+    }
+    if (!source.includes('sourceVisibleWarmUps(')) {
+      errors.push(`${label} does not fail closed on invalid Warm Up receipts`)
+    }
+  }
+
+  for (const token of [
+    "it('withholds multiplayer Warm Up progress from player-facing accounts until the match publishes'",
+    "it('fails closed on a mismatched unpublished Warm Up receipt'",
+    'INSERT INTO multiplayer_match_warmups_applied',
+    'await expectPublishedWarmUps(1)',
+    'await expectPublishedWarmUps(2)',
+    'await expectPublishedWarmUps(3)',
+    "rpc('GetPointsGifted'",
+    "'ListLeaderboard'",
+    "SET status = 'ended'"
+  ]) {
+    if (!playerRpcTest.includes(token)) {
+      errors.push(
+        `Warm Up player-facing Workers regression is missing: ${token}`
+      )
+    }
+  }
+  for (const token of [
+    "it('projects unpublished Warm Up progress into authoritative match accounts'",
+    'INSERT INTO multiplayer_match_warmups_applied',
+    'expect(pending.account.warmUps).toBe(1)',
+    "SET status = 'ended'",
+    'expect(published.account.warmUps).toBe(2)'
+  ]) {
+    if (!matchServiceTest.includes(token)) {
+      errors.push(
+        `Warm Up match-account Workers regression is missing: ${token}`
+      )
+    }
+  }
+  return errors
+}
+
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
@@ -643,7 +768,12 @@ const main = async () => {
     questPublication,
     playerRpc,
     playerState,
-    playerRpcTest
+    playerRpcTest,
+    warmUpPublication,
+    social,
+    competitive,
+    matchRepository,
+    matchServiceTest
   ] = await Promise.all([
     readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
     readFile(
@@ -686,6 +816,25 @@ const main = async () => {
     readFile(
       path.join(root, 'cloudflare', 'test', 'player-rpc.test.ts'),
       'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'warmup-publication.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'social.ts'), 'utf8'),
+    readFile(path.join(root, 'cloudflare', 'src', 'competitive.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'match-service-cloudflare', 'src', 'repository.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'match-service-cloudflare',
+        'test-cloudflare',
+        'worker.test.ts'
+      ),
+      'utf8'
     )
   ])
   const errors = [
@@ -707,6 +856,17 @@ const main = async () => {
       playerRpc,
       playerState,
       playerRpcTest
+    ),
+    ...warmUpPublicationErrors(
+      sourceMatches,
+      gameMatch,
+      warmUpPublication,
+      playerRpc,
+      social,
+      competitive,
+      matchRepository,
+      playerRpcTest,
+      matchServiceTest
     )
   ]
   if (errors.length > 0) {
@@ -714,7 +874,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match completion preserves transactional and quest publication safety'
+      'Cloudflare match completion preserves transactional, quest, and Warm Up publication safety'
     )
   }
 }

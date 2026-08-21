@@ -31,6 +31,7 @@ import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
 import { sourceGMMatchListWire, sourceMatchWire } from './match-wire'
 import { identityReferenceFor } from './rpc-principal'
+import { publishedWarmUpsSQL, sourceVisibleWarmUps } from './warmup-publication'
 
 const RANKED_MODES = new Set<GameMode>([
   'RANKED_CONSTRUCTED' as GameMode,
@@ -1049,7 +1050,10 @@ export class CompetitiveRepository {
                 users.created_at AS user_created_at,
                 profile.updated_at AS profile_updated_at,
                 profile.level, profile.xp, profile.next_level_xp,
-                account.warm_ups
+                ${publishedWarmUpsSQL(
+                  'stats.user_id',
+                  'account.warm_ups'
+                )} AS warm_ups
          FROM player_account_stats stats
          JOIN users ON users.id = stats.user_id
          JOIN player_profiles profile ON profile.user_id = stats.user_id
@@ -1062,7 +1066,12 @@ export class CompetitiveRepository {
       )
       .bind(request.gameMode, season)
       .all<LeaderboardRow>()
-    let rows = projectLeaderboardRows(result.results)
+    let rows = projectLeaderboardRows(
+      result.results.map(row => ({
+        ...row,
+        warm_ups: sourceVisibleWarmUps(row.warm_ups)
+      }))
+    )
     if (request.region) {
       const region = request.region.trim().toUpperCase()
       rows = rows.filter(row => row.region === region)

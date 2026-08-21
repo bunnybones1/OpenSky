@@ -18,6 +18,10 @@ import {
 import { sourceHeroSkinIdForDeckClass } from '@opensky/shared/source-hero-skins'
 import { ConquestRepository } from '../../cloudflare/src/conquest'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
+import {
+  publishedWarmUpsSQL,
+  sourceVisibleWarmUps
+} from '../../cloudflare/src/warmup-publication'
 
 type OwnedCardRarity = 'base' | 'silver' | 'gold'
 export type UserKind = 'PLAYER' | 'SYSTEM'
@@ -566,7 +570,10 @@ export class MatchRepository {
                   account.region,
                   account.tag_art_id,
                   account.title_id,
-                  account.warm_ups,
+                  ${publishedWarmUpsSQL(
+                    'u.id',
+                    'account.warm_ups'
+                  )} AS warm_ups,
                   u.created_at AS user_created_at,
                   account.updated_at AS account_updated_at,
                   p.level,
@@ -744,7 +751,7 @@ export class MatchRepository {
         createdAt: profile.user_created_at,
         updatedAt: profile.account_updated_at,
         experience: profile.xp,
-        warmUps: profile.warm_ups,
+        warmUps: sourceVisibleWarmUps(profile.warm_ups),
         level: profile.level,
         seasonLevel: profile.season_level,
         levelUpXP: profile.next_level_xp,

@@ -369,6 +369,191 @@ describe('legacy player RPC compatibility', () => {
     expect(await next.json()).toMatchObject({ account: { crystalID: 2 } })
   })
 
+  it('withholds multiplayer Warm Up progress from player-facing accounts until the match publishes', async () => {
+    await addInviter()
+    const inviterReference = `identity:${inviterUserId}`
+    const season = seasonFromDate()
+    const firstProcessedAt = '2026-08-21T15:40:00.001Z'
+    const secondProcessedAt = '2026-08-21T15:40:00.002Z'
+    const firstProposal = `warm-up-publication-a-${crypto.randomUUID()}`
+    const secondProposal = `warm-up-publication-b-${crypto.randomUUID()}`
+    const insertPendingMatch = (
+      proposalId: string,
+      processedAt: string,
+      before: number,
+      after: number
+    ) => [
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'WARM_UP', 'WARM_UP', 'WARM_UP',
+                 'warm-up-publication-test', ?, ?, ?, NULL, '{}', 'active',
+                 ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        inviterReference,
+        `identity:bot:${proposalId}`,
+        inviterUserId,
+        processedAt,
+        processedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_warmups_applied
+           (proposal_id, credited_player, user_id, warm_ups_before,
+            warm_ups_after, processed_at)
+         VALUES (?, 0, ?, ?, ?, ?)`
+      ).bind(proposalId, inviterUserId, before, after, processedAt)
+    ]
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings
+         SET warm_ups = 3, updated_at = ? WHERE user_id = ?`
+      ).bind(secondProcessedAt, inviterUserId),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET score = 25, player_rank = 'WANDERER',
+             player_rank_stage = 'STAGE_I', updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      ).bind(secondProcessedAt, inviterUserId, season),
+      ...insertPendingMatch(firstProposal, firstProcessedAt, 1, 2),
+      ...insertPendingMatch(secondProposal, secondProcessedAt, 2, 3)
+    ])
+
+    const expectPublishedWarmUps = async (expected: number) => {
+      const account = await rpc(
+        'GetAccount',
+        { address: inviterReference },
+        false
+      )
+      expect(account.status).toBe(200)
+      expect(await account.json()).toMatchObject({
+        account: { warmUps: expected }
+      })
+
+      const session = await rpcAs(inviterUserId, 'GetSession', {})
+      expect(session.status).toBe(200)
+      expect(await session.json()).toMatchObject({
+        account: { warmUps: expected }
+      })
+
+      const gifted = await rpc('GetPointsGifted', {
+        address: identityReference
+      })
+      expect(gifted.status).toBe(200)
+      expect(await gifted.json()).toMatchObject({
+        inviter: { address: inviterReference, warmUps: expected }
+      })
+
+      const leaderboard = await rpc(
+        'ListLeaderboard',
+        {
+          page: { pageSize: 10 },
+          req: { gameMode: 'RANKED_CONSTRUCTED', season }
+        },
+        false
+      )
+      expect(leaderboard.status).toBe(200)
+      const body = await leaderboard.json<{
+        res: Array<{ account: { address: string; warmUps: number } }>
+      }>()
+      expect(
+        body.res.find(entry => entry.account.address === inviterReference)
+      ).toMatchObject({ account: { warmUps: expected } })
+    }
+
+    await expectPublishedWarmUps(1)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(secondProcessedAt, firstProposal)
+      .run()
+    await expectPublishedWarmUps(2)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(secondProcessedAt, secondProposal)
+      .run()
+    await expectPublishedWarmUps(3)
+  })
+
+  it('fails closed on a mismatched unpublished Warm Up receipt', async () => {
+    const processedAt = '2026-08-21T15:41:00.000Z'
+    const proposalId = `invalid-warm-up-publication-${crypto.randomUUID()}`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_settings
+         SET warm_ups = 2, updated_at = ? WHERE user_id = ?`
+      ).bind(processedAt, userId),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'WARM_UP', 'WARM_UP', 'WARM_UP',
+                 'warm-up-publication-test', ?, ?, ?, NULL, '{}', 'active',
+                 ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        identityReference,
+        `identity:bot:${proposalId}`,
+        userId,
+        processedAt,
+        processedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_warmups_applied
+           (proposal_id, credited_player, user_id, warm_ups_before,
+            warm_ups_after, processed_at)
+         VALUES (?, 1, ?, 1, 2, ?)`
+      ).bind(proposalId, userId, processedAt)
+    ])
+
+    expect(
+      (await rpc('GetAccount', { address: identityReference }, false)).status
+    ).toBe(500)
+    expect((await rpc('GetSession', {})).status).toBe(500)
+    expect(
+      (
+        await rpc(
+          'ListLeaderboard',
+          {
+            page: { pageSize: 10 },
+            req: {
+              gameMode: 'RANKED_CONSTRUCTED',
+              season: seasonFromDate()
+            }
+          },
+          false
+        )
+      ).status
+    ).toBe(500)
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(processedAt, proposalId)
+      .run()
+    const published = await rpc(
+      'GetAccount',
+      { address: identityReference },
+      false
+    )
+    expect(published.status).toBe(200)
+    expect(await published.json()).toMatchObject({ account: { warmUps: 2 } })
+  })
+
   it('persists source-compatible identity profile updates', async () => {
     const transitional = await rpc('UpdateAccount', {
       account: {

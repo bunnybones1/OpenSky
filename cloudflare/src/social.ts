@@ -5,6 +5,7 @@ import type {
 } from './friend-points-wire'
 import { seasonFromDate } from './legacy-seasons'
 import { identityReferenceFor } from './rpc-principal'
+import { publishedWarmUpsSQL, sourceVisibleWarmUps } from './warmup-publication'
 
 interface FriendPointRow {
   invitee_user_id: string
@@ -194,7 +195,10 @@ export class SocialRepository {
                 account.locale,
                 account.created_at,
                 account.updated_at,
-                account.warm_ups,
+                ${publishedWarmUpsSQL(
+                  'users.id',
+                  'account.warm_ups'
+                )} AS warm_ups,
                 profile.level,
                 account.region,
                 account.tag_art_id
@@ -216,7 +220,7 @@ export class SocialRepository {
             locale: inviter.locale,
             createdAt: inviter.created_at,
             updatedAt: inviter.updated_at,
-            warmUps: inviter.warm_ups,
+            warmUps: sourceVisibleWarmUps(inviter.warm_ups),
             level: inviter.level,
             ...(inviter.region ? { region: inviter.region } : {}),
             ...(inviter.tag_art_id ? { tagArtID: inviter.tag_art_id } : {})

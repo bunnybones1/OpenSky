@@ -65,6 +65,7 @@ import {
 import { identityReferenceFor } from './rpc-principal'
 import { refreshPrivateSpectateCode } from './spectate-code'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
+import { publishedWarmUpsSQL, sourceVisibleWarmUps } from './warmup-publication'
 
 const CARD_FRAMES = [
   'SW_BASE_CARDS',
@@ -1184,7 +1185,7 @@ export class PlayerRpcRepository {
                 account.request_more_invites,
                 account.twitch_profile,
                 account.rename_locked_until,
-                account.warm_ups,
+                ${publishedWarmUpsSQL('u.id', 'account.warm_ups')} AS warm_ups,
                 account.spectate_code,
                 account.spectate_code_expires_at,
                 u.created_at AS user_created_at,
@@ -1217,7 +1218,7 @@ export class PlayerRpcRepository {
       createdAt: row.user_created_at,
       updatedAt: row.profile_updated_at,
       experience: row.xp,
-      warmUps: row.warm_ups,
+      warmUps: sourceVisibleWarmUps(row.warm_ups),
       level: row.level,
       seasonLevel:
         row.initial_account_level === null ||
