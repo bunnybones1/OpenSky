@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `a4f7d9b9`
-  (`Preserve source configurable match chat`)
-- Latest tested runtime commit: `a4f7d9b9`
-  (`Preserve source configurable match chat`)
+- Last code/test checkpoint: `9f3de2fc`
+  (`Preserve source loaded-player mute gate`)
+- Latest tested runtime commit: `9f3de2fc`
+  (`Preserve source loaded-player mute gate`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,11 +23,11 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `a4f7d9b9` are committed and
+- The runtime changes from `38386294` through `9f3de2fc` are committed and
   tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
-  `a4f7d9b9` retained both entries.
+  `9f3de2fc` retained both entries.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -188,9 +188,12 @@ matchmaker completion-wire safety checkpoint and its refreshed handoff at exact
 pushed head `367e3880` in 13m54s. The `64686dae` reward-order checkpoint and
 its handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32484167880> at
-`2d6dd16b` in 13m43s. The newer `a4f7d9b9` configurable-chat checkpoint and
-this refreshed handoff require a later green exact-head CI run before any
-production mutation.
+`2d6dd16b` in 13m43s. The configurable-chat checkpoint and its refreshed
+handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32487556774> at
+`2d3c0103`. The newer `9f3de2fc` loaded-player mute checkpoint and this
+refreshed handoff require a later green exact-head CI run before any production
+mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -1797,6 +1800,41 @@ assembled entries remain `/assets/index-1eddfd33.js` and
 migration, provisioning, activation, live match, or production mutation was
 performed.
 
+## Source loaded-player mute milestone
+
+Commit `9f3de2fc` restores the original game server's loading gate for persisted
+player mute state. `MatchManager` accepts mute messages only from real players,
+while `MatchHandler` records `opponentMuted` only after both player contexts
+have finished loading assets; a later reconnect projects that stored value.
+The Worker previously persisted an authenticated player's mute selection as
+soon as that player joined, even when the opponent had not loaded, creating
+reconnect state the source never kept.
+
+The Cloudflare Durable Object now silently ignores spectator mute messages and
+player mute messages sent before every player has finished loading. Once both
+players are loaded, it persists the requesting player's state and returns that
+state through the existing reconnect projection. The real Workers regression
+uses same-socket time-sync replies as ordering barriers: it proves an early
+mute has not changed Durable Object storage, then proves a post-load mute has,
+and finally verifies source-shaped session displacement and reconnect state on
+the same socket.
+
+The expanded mutation-tested game-ingress gate derives the real-player filter,
+both-loaded condition, stored field, and reconnect projection from the source;
+pins the corresponding Worker structure; and requires the real Durable Object
+regression. Mutations reject removal of either source condition, the Worker
+gate, reconnect evidence, or the early-mute assertion.
+
+The exact complete local release contract passed with exit code zero at
+`9f3de2fc`: 514 main-Worker tests, 40 game-server unit and 132 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1908,7 +1946,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `a4f7d9b9`. Keep
+- Deploy and verify the tested runtime changes through `9f3de2fc`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
