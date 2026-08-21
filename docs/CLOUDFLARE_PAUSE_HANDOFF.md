@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `da4bdbb1`
-  (`Preserve source Conquest settlement admission`)
-- Latest tested runtime commit: `da4bdbb1`
-  (`Preserve source Conquest settlement admission`)
+- Last code/test checkpoint: `aaa6f4e7`
+  (`Gate Conquest projections on match publication`)
+- Latest tested runtime commit: `aaa6f4e7`
+  (`Gate Conquest projections on match publication`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,11 +23,11 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `da4bdbb1` are committed and
+- The runtime changes from `38386294` through `aaa6f4e7` are committed and
   tested but are **not deployed**. The exact local build at `64686dae`
   produced web entry `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`; the complete build at
-  `da4bdbb1` retained both entries.
+  `aaa6f4e7` retained both entries.
 - Migrations `0115_authoritative_match_decks.sql` and
   `0116_registered_matchmaker_bots.sql` are committed but have **not** been
   applied to production. No Worker from `90ebe652` or later may be deployed
@@ -197,7 +197,10 @@ exact-head run
 `f89200e9` in 11m17s. The player-lifecycle recipient checkpoint and its
 refreshed handoff passed exact-head run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32490731783> at
-`f95d7bec` in 10m21s. The newer `da4bdbb1` Conquest settlement-admission
+`f95d7bec` in 10m21s. The Conquest settlement-admission checkpoint and its
+refreshed handoff passed exact-head run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32492219003> at
+`edea0920` in 11m22s. The newer `aaa6f4e7` Conquest publication-projection
 checkpoint and this refreshed handoff require a later green exact-head CI run
 before any production mutation.
 
@@ -1891,11 +1894,13 @@ completes.
 Cloudflare admission now preserves the source single-run boundary across that
 temporary state. An existing `IN_PROGRESS` run remains an idempotent success,
 while `REWARDS_PENDING` returns the same generic internal-error class used by
-source state-manager failures. `ConquestStatus` still exposes only a real
-in-progress run, so no invented player wire appears. The ticket-backed insert
-also repeats the `IN_PROGRESS`/`REWARDS_PENDING` `NOT EXISTS` check, and a
-post-batch state read resolves concurrent idempotent or pending outcomes
-without spending another ticket.
+source state-manager failures. `ConquestStatus` does not expose
+`REWARDS_PENDING` itself; the later publication-projection checkpoint
+reconstructs the prior `IN_PROGRESS` view only when that row is tied to an
+unpublished match. The ticket-backed insert also repeats the
+`IN_PROGRESS`/`REWARDS_PENDING` `NOT EXISTS` check, and a post-batch state read
+resolves concurrent idempotent or pending outcomes without spending another
+ticket.
 
 The expanded mutation-tested Conquest gate derives the atomic source boundary
 from `endMatch`, pins the Worker's progress/settlement/publication order,
@@ -1906,6 +1911,45 @@ behavior, or a weakened ticket-balance assertion.
 
 The exact complete local release contract passed with exit code zero at
 `da4bdbb1`: 515 main-Worker tests, 40 game-server unit and 133 Workers tests,
+45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
+browser-game tests, nine analytics tests, every source/off-chain gate and
+typecheck, both production builds, and 594-file artifact validation. The
+assembled entries remain `/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No remote preflight, deployment,
+migration, provisioning, activation, live match, or production mutation was
+performed.
+
+## Source Conquest publication-projection milestone
+
+Commit `aaa6f4e7` closes the player-read window created by decomposing the
+source match-completion transaction into retryable Worker stages. Go updates
+Conquest progress and saves the terminal match inside one SQL transaction. The
+Worker intentionally persists Conquest progress before
+`publishMatchCompletion` changes the multiplayer ledger to `ended`, so a retry
+or failure could otherwise expose terminal Conquest progress and reward counts
+while every match-facing publication surface still treated the match as
+unfinished.
+
+`ConquestStatus` and `ConquestStats` now derive the player's known unpublished
+match IDs from non-`ended` multiplayer ledgers. A terminal or transient run
+linked to one of those matches is projected as its prior `IN_PROGRESS` view:
+known unpublished match keys are withheld, the terminal status is hidden, and
+`endedAt` remains null. Stats similarly exclude those keys from matches played
+and win rate and withhold terminal Silver/Gold reward counts. Unknown JSON
+keys remain untouched, preserving the source JSONB behavior. Once final match
+publication commits, the ordinary source-compatible terminal status and full
+stats become visible together.
+
+The exported mutation-tested Conquest gate derives the source transaction and
+read behavior, pins the Worker's final `status = 'ended'` publication barrier,
+requires the unpublished-match lookup and prior-state projection, and requires
+a real Workers regression. That regression proves an ended match remains
+visible while a second active match is withheld, then proves the full played,
+win-rate, and reward projection appears only after the second ledger is
+published.
+
+The exact complete local release contract passed with exit code zero at
+`aaa6f4e7`: 516 main-Worker tests, 40 game-server unit and 133 Workers tests,
 45 match-service tests, 63 matchmaker unit and 67 Workers tests, 30
 browser-game tests, nine analytics tests, every source/off-chain gate and
 typecheck, both production builds, and 594-file artifact validation. The
@@ -2025,7 +2069,7 @@ five required invariants are not present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `da4bdbb1`. Keep
+- Deploy and verify the tested runtime changes through `aaa6f4e7`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
