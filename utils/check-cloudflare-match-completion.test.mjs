@@ -171,6 +171,13 @@ test('rejects missing, reordered, or weakened completion requirements', async ()
     {
       ...value,
       gameMatch: value.gameMatch.replace(
+        'if (attachment.joined) {',
+        'if (false) {'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
         "message: 'You connected in another session, please play there.'\n      })",
         "message: 'You connected in another session, please play there.'\n      })\n      previous.close()"
       )

@@ -126,6 +126,39 @@ export const gameIngressErrors = ({
     'if (sendingGamePlayer !== undefined && sendingGamePlayer !== -1) {',
     'sendingContext.processMessage(message)'
   ])
+  const sourceSpectate = bodyBetween(
+    sourceMatchManager,
+    'private handleSpectate = async (',
+    'private handleLoadingProgress = ('
+  )
+  requireOrdered(errors, 'Source explicit spectate errors', sourceSpectate, [
+    "this.sendError(context, 'invalid spectate player')",
+    "this.sendError(context, 'you can\\t spectate yourself')",
+    "this.sendError(context, 'invalid spectate code')",
+    'existing.context.send({',
+    "level: 'user'",
+    "message: 'connected in another location'",
+    'existing.context.connection.close()'
+  ])
+  const sourceSendError = bodyBetween(
+    sourceMatchManager,
+    'private sendError = (',
+    'private handlePlayerEmoted('
+  )
+  requireOrdered(errors, 'Source server-error wire', sourceSendError, [
+    'player.send({',
+    "type: 'error'",
+    'message,',
+    "level: 'server'",
+    'player.connection.close()'
+  ])
+  requireOrdered(errors, 'Source unowned-sticker error wire', sourceEmote, [
+    'sendingContext.send({',
+    "type: 'error'",
+    "level: 'server'",
+    "message: 'player used unowned sticker'",
+    'sendingContext.connection.close()'
+  ])
 
   if (!sourcePlayerContext.includes('const KEEPALIVE_INTERVAL = 5000')) {
     errors.push('Source game keepalive interval is no longer five seconds')
@@ -228,6 +261,12 @@ export const gameIngressErrors = ({
       "throw new UnknownGameMessageError('unsupported message type')"
     ]
   )
+  requireOrdered(errors, 'Worker source error protocol', workerProtocol, [
+    'export class SourceGameError extends GameProtocolError {',
+    "readonly level: 'user' | 'server'",
+    "throw new SourceGameError('invalid spectate player', 'server')",
+    "throw new SourceGameError('invalid spectate code', 'server')"
+  ])
 
   const workerMessage = bodyBetween(
     workerMatch,
@@ -245,6 +284,27 @@ export const gameIngressErrors = ({
   requireOrdered(errors, 'Worker game decode failure routing', workerMessage, [
     'if (error instanceof IgnoredGameMessageError) return',
     'if (error instanceof UnknownGameMessageError) {',
+    'socket.close()',
+    'return',
+    'this.safeSend(socket, stateError(error))'
+  ])
+  const workerUnknownErrorRoute = bodyBetween(
+    workerMessage,
+    'if (error instanceof UnknownGameMessageError) {',
+    '// MatchManager.sendError'
+  )
+  requireOrdered(
+    errors,
+    'Worker unknown-message empty close',
+    workerUnknownErrorRoute,
+    ['socket.close()', 'return']
+  )
+  requireOrdered(errors, 'Worker source error routing', workerMessage, [
+    'if (error instanceof SourceGameError) {',
+    'this.safeSend(socket, {',
+    "type: 'error'",
+    'message: error.message',
+    'level: error.level',
     'socket.close()',
     'return',
     'this.safeSend(socket, stateError(error))'
@@ -274,6 +334,27 @@ export const gameIngressErrors = ({
   if (workerUnjoined.includes('attachment.detachedPlayerSession &&')) {
     errors.push('Worker no-game gameplay remains limited to detached players')
   }
+  requireOrdered(errors, 'Worker explicit source errors', workerMatch, [
+    "throw new SourceGameError('connected in another location', 'user')",
+    "throw new SourceGameError('match ended or cannot be found.', 'server')",
+    "throw new SourceGameError('you can\\t spectate yourself', 'server')"
+  ])
+  const sourceUnavailableErrorCount = workerMatch.match(
+    /throw new SourceGameError\('match ended or cannot be found\.', 'server'\)/g
+  )?.length
+  if (sourceUnavailableErrorCount !== 2) {
+    errors.push(
+      `Worker source unavailable-match errors changed: expected 2, found ${sourceUnavailableErrorCount ?? 0}`
+    )
+  }
+  const sourceStickerErrorCount = workerMatch.match(
+    /throw new SourceGameError\('player used unowned sticker', 'server'\)/g
+  )?.length
+  if (sourceStickerErrorCount !== 3) {
+    errors.push(
+      `Worker source unowned-sticker errors changed: expected 3, found ${sourceStickerErrorCount ?? 0}`
+    )
+  }
   for (const token of [
     'Cloudflare owns protocol ping/pong and disconnect detection',
     'the preserved browser still closes',
@@ -294,7 +375,9 @@ export const gameIngressErrors = ({
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
         'new ArrayBuffer(MAX_GAME_MESSAGE_BYTES + 1)',
         "parseClientMessage('null')).toThrow(IgnoredGameMessageError)",
-        "parseClientMessage('{}')).toThrow(UnknownGameMessageError)"
+        "parseClientMessage('{}')).toThrow(UnknownGameMessageError)",
+        "it('classifies source spectate validation errors with their exact wire'",
+        'expect(error).toBeInstanceOf(SourceGameError)'
       ]
     ],
     [
@@ -320,7 +403,19 @@ export const gameIngressErrors = ({
         "type: 'error', message: 'client diagnostic'",
         "it('preserves source no-game gameplay before join_server'",
         "message: 'You have no game in progress!'",
-        "code: 1005, reason: ''"
+        "code: 1005, reason: ''",
+        "it('rejects player stickers outside the accepted match equipment'",
+        "message: 'player used unowned sticker'",
+        "it('preserves source spectate validation errors and empty closes'",
+        "message: 'invalid spectate player'",
+        "message: 'you can\\t spectate yourself'",
+        "it('preserves the source unavailable-match player error and empty close'",
+        "it('preserves the source unavailable-match spectator error and empty close'",
+        "message: 'match ended or cannot be found.'",
+        "it('preserves the source same-socket spectator replacement close'",
+        "message: 'connected in another location'",
+        "it('preserves the source same-socket player replacement rejoin'",
+        "message: 'You connected in another session, please play there.'"
       ]
     ]
   ]) {
@@ -365,6 +460,88 @@ export const gameIngressErrors = ({
       "level: 'user'",
       "message: 'You have no game in progress!'",
       "code: 1005, reason: ''"
+    ]
+  )
+  const workerStickerErrorTest = bodyBetween(
+    workerRuntimeTest,
+    "it('rejects player stickers outside the accepted match equipment'",
+    "it('restores public and private spectator state"
+  )
+  requireOrdered(
+    errors,
+    'Worker source sticker-error runtime regression',
+    workerStickerErrorTest,
+    [
+      "type: 'emote', sticker: 999",
+      "level: 'server'",
+      "message: 'player used unowned sticker'",
+      "code: 1005, reason: ''"
+    ]
+  )
+  const workerSpectateErrorTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves source spectate validation errors and empty closes'",
+    "it('preserves the source same-socket spectator replacement close'"
+  )
+  requireOrdered(
+    errors,
+    'Worker source spectate-error runtime regression',
+    workerSpectateErrorTest,
+    [
+      "message: 'invalid spectate player'",
+      'code: 1005',
+      "message: 'you can\\t spectate yourself'",
+      'code: 1005'
+    ]
+  )
+  const workerUnavailableMatchTests = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves the source unavailable-match player error and empty close'",
+    "it('preserves the source same-socket spectator replacement close'"
+  )
+  requireOrdered(
+    errors,
+    'Worker source unavailable-match runtime regressions',
+    workerUnavailableMatchTests,
+    [
+      'expiredBeforeLoad: true',
+      "message: 'match ended or cannot be found.'",
+      "code: 1005, reason: ''",
+      "it('preserves the source unavailable-match spectator error and empty close'",
+      "message: 'match ended or cannot be found.'",
+      "code: 1005, reason: ''"
+    ]
+  )
+  const workerSameSocketSpectatorTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves the source same-socket spectator replacement close'",
+    "it('replaces only the prior joined spectator"
+  )
+  requireOrdered(
+    errors,
+    'Worker same-socket spectator runtime regression',
+    workerSameSocketSpectatorTest,
+    [
+      "level: 'user'",
+      "message: 'connected in another location'",
+      "code: 1005, reason: ''"
+    ]
+  )
+  const workerSameSocketPlayerTest = bodyBetween(
+    workerRuntimeTest,
+    "it('preserves the source same-socket player replacement rejoin'",
+    "it('replaces only the prior joined spectator"
+  )
+  requireOrdered(
+    errors,
+    'Worker same-socket player runtime regression',
+    workerSameSocketPlayerTest,
+    [
+      "level: 'server'",
+      "message: 'You connected in another session, please play there.'",
+      "type: 'reconnect'",
+      "type: 'timesync'",
+      'expect(first.readyState).toBe(WebSocket.OPEN)'
     ]
   )
 

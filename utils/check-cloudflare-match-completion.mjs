@@ -282,6 +282,29 @@ export const matchCompletionErrors = (
   if (workerPlayerReplacement.includes('previous.close(')) {
     errors.push('Worker active-player replacement closes the detached socket')
   }
+  const workerHandleMessage = bodyBetween(
+    gameMatch,
+    'private async handleMessage(',
+    'private async join('
+  )
+  const workerSameSocketPlayer = bodyBetween(
+    workerHandleMessage,
+    'if (attachment.joined) {',
+    'await this.join(socket, attachment, message)'
+  )
+  requireOrdered(
+    errors,
+    'Worker same-socket player replacement',
+    workerSameSocketPlayer,
+    [
+      'this.safeSend(socket, {',
+      "level: 'server'",
+      "message: 'You connected in another session, please play there.'"
+    ]
+  )
+  if (workerSameSocketPlayer.includes('socket.close(')) {
+    errors.push('Worker same-socket player replacement became terminal')
+  }
   const workerUnjoinedGameplay = bodyBetween(
     gameMatch,
     'if (!attachment.joined) {',

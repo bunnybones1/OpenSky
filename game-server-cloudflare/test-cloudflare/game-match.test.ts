@@ -2259,11 +2259,16 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     await secondJoined
 
     const rejected = nextMessage(first)
+    const closed = new Promise<CloseEvent>(resolve =>
+      first.addEventListener('close', resolve, { once: true })
+    )
     first.send(JSON.stringify({ type: 'emote', sticker: 999 }))
-    expect(await rejected).toMatchObject({
+    expect(await rejected).toEqual({
       type: 'error',
-      message: 'Error: player used unowned sticker'
+      level: 'server',
+      message: 'player used unowned sticker'
     })
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
   })
 
   it('restores public and private spectator state without exposing it to public viewers', async () => {
@@ -2379,11 +2384,158 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
     })
 
     const stickerError = nextMessage(viewer)
+    const viewerClosed = new Promise<CloseEvent>(resolve =>
+      viewer.addEventListener('close', resolve, { once: true })
+    )
     viewer.send(JSON.stringify({ type: 'emote', sticker: 1 }))
-    expect(await stickerError).toMatchObject({
+    expect(await stickerError).toEqual({
       type: 'error',
-      message: 'Error: player used unowned sticker'
+      level: 'server',
+      message: 'player used unowned sticker'
     })
+    await expect(viewerClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+  })
+
+  it('preserves source spectate validation errors and empty closes', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const invalidPlayer = await connectAs(
+      SPECTATOR_PRINCIPAL,
+      SPECTATOR_USER_ID
+    )
+    const invalidPlayerError = nextMessage(invalidPlayer)
+    const invalidPlayerClosed = new Promise<CloseEvent>(resolve =>
+      invalidPlayer.addEventListener('close', resolve, { once: true })
+    )
+    spectate(invalidPlayer, '.private-code')
+    await expect(invalidPlayerError).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'invalid spectate player'
+    })
+    await expect(invalidPlayerClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+
+    const self = await connectAs(SPECTATOR_PRINCIPAL, USER_ID_1)
+    const selfError = nextMessage(self)
+    const selfClosed = new Promise<CloseEvent>(resolve =>
+      self.addEventListener('close', resolve, { once: true })
+    )
+    spectate(self, `identity:${USER_ID_1}`)
+    await expect(selfError).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'you can\t spectate yourself'
+    })
+    await expect(selfClosed).resolves.toMatchObject({
+      code: 1005,
+      reason: ''
+    })
+  })
+
+  it('preserves the source unavailable-match player error and empty close', async () => {
+    await initializeMatch()
+    await runInDurableObject(
+      stub() as DurableObjectStub,
+      async (_instance, state) => {
+        const metadata =
+          await state.storage.get<Record<string, unknown>>('match:metadata')
+        expect(metadata).toBeDefined()
+        await state.storage.put('match:metadata', {
+          ...metadata,
+          expiredBeforeLoad: true
+        })
+      }
+    )
+
+    const first = await connect(PRINCIPAL_1)
+    const unavailable = nextMessage(first)
+    const closed = new Promise<CloseEvent>(resolve =>
+      first.addEventListener('close', resolve, { once: true })
+    )
+    join(first, 0x31)
+    await expect(unavailable).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'match ended or cannot be found.'
+    })
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
+  })
+
+  it('preserves the source unavailable-match spectator error and empty close', async () => {
+    await initializeMatch()
+    const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const unavailable = nextMessage(viewer)
+    const closed = new Promise<CloseEvent>(resolve =>
+      viewer.addEventListener('close', resolve, { once: true })
+    )
+    spectate(viewer, PRINCIPAL_1)
+    await expect(unavailable).resolves.toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'match ended or cannot be found.'
+    })
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
+  })
+
+  it('preserves the source same-socket spectator replacement close', async () => {
+    await insertSpectateIdentities()
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, USER_ID_2])
+    await initializeMatch()
+
+    const viewer = await connectAs(SPECTATOR_PRINCIPAL, SPECTATOR_USER_ID)
+    const joined = collectMessages(viewer, 2)
+    spectate(viewer, `identity:${USER_ID_1}`)
+    await joined
+
+    const displaced = nextMessage(viewer)
+    const closed = new Promise<CloseEvent>(resolve =>
+      viewer.addEventListener('close', resolve, { once: true })
+    )
+    spectate(viewer, `identity:${USER_ID_1}`)
+    await expect(displaced).resolves.toEqual({
+      type: 'error',
+      level: 'user',
+      message: 'connected in another location'
+    })
+    await expect(closed).resolves.toMatchObject({ code: 1005, reason: '' })
+  })
+
+  it('preserves the source same-socket player replacement rejoin', async () => {
+    await initializeMatch()
+    const first = await connect(PRINCIPAL_1)
+    const initiallyJoined = collectMessages(first, 2)
+    join(first, 0x31)
+    await initiallyJoined
+
+    const rejoined = collectMessages(first, 3)
+    join(first, 0x31)
+    const [displaced, reconnect, loading] = await rejoined
+    expect(displaced).toEqual({
+      type: 'error',
+      level: 'server',
+      message: 'You connected in another session, please play there.'
+    })
+    expect(reconnect).toMatchObject({
+      type: 'reconnect',
+      replayID: 'replay-test-42'
+    })
+    expect(loading).toMatchObject({ type: 'opponent_loading_progress' })
+
+    const continued = nextMessage(first)
+    first.send(JSON.stringify({ type: 'timesync', clientTime: 6543 }))
+    await expect(continued).resolves.toMatchObject({
+      type: 'timesync',
+      clientTime: 6543
+    })
+    expect(first.readyState).toBe(WebSocket.OPEN)
   })
 
   it('replaces only the prior joined spectator with the source close frame', async () => {

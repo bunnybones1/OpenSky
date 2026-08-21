@@ -102,6 +102,42 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handleSpectate = async (',
+        "this.sendError(context, 'invalid spectate player')",
+        "this.sendError(context, 'invalid spectator')"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handleSpectate = async (',
+        "this.sendError(context, 'you can\\t spectate yourself')",
+        "this.sendError(context, 'you cannot spectate yourself')"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private sendError = (',
+        "level: 'server'",
+        "level: 'state'"
+      )
+    },
+    {
+      ...value,
+      sourceMatchManager: replaceAfter(
+        value.sourceMatchManager,
+        'private handlePlayerEmoted(',
+        "message: 'player used unowned sticker'",
+        "message: 'invalid sticker'"
+      )
+    },
+    {
+      ...value,
       sourcePlayerContext: value.sourcePlayerContext.replace(
         'const KEEPALIVE_GRACE_PERIOD = 2000',
         'const KEEPALIVE_GRACE_PERIOD = 4000'
@@ -158,6 +194,20 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerProtocol: value.workerProtocol.replace(
+        'export class SourceGameError extends GameProtocolError {',
+        'export class SourceGameError extends Error {'
+      )
+    },
+    {
+      ...value,
+      workerProtocol: value.workerProtocol.replace(
+        "throw new SourceGameError('invalid spectate code', 'server')",
+        "throw new GameProtocolError('invalid spectate code')"
+      )
+    },
+    {
+      ...value,
       workerMatch: value.workerMatch.replace(
         'this.safeSend(socket, `PONG:${ping.id}`)',
         "this.safeSend(socket, 'PONG')"
@@ -200,6 +250,43 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
     },
     {
       ...value,
+      workerMatch: replaceAfter(
+        value.workerMatch,
+        'if (error instanceof SourceGameError) {',
+        'socket.close()',
+        'socket.close(1008, error.message)'
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "throw new SourceGameError('connected in another location', 'user')",
+        "throw new GameProtocolError('spectator is already joined')"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "throw new SourceGameError('you can\\t spectate yourself', 'server')",
+        "throw new GameProtocolError('you cannot spectate yourself')"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "throw new SourceGameError('match ended or cannot be found.', 'server')",
+        "throw new GameProtocolError('match ended or cannot be found.')"
+      )
+    },
+    {
+      ...value,
+      workerMatch: value.workerMatch.replace(
+        "throw new SourceGameError('player used unowned sticker', 'server')",
+        "throw new GameProtocolError('player used unowned sticker')"
+      )
+    },
+    {
+      ...value,
       workerProtocolTest: value.workerProtocolTest.replace(
         "it('accepts source-compatible binary JSON and bounds malformed messages'",
         "it('rejects binary game messages'"
@@ -226,6 +313,51 @@ test('rejects weakened source, Worker, test, and release requirements', async ()
         "it('preserves source no-game gameplay before join_server'",
         "message: 'You have no game in progress!'",
         "message: 'Error: join_server is required first'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('rejects player stickers outside the accepted match equipment'",
+        "message: 'player used unowned sticker'",
+        "message: 'Error: player used unowned sticker'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves source spectate validation errors and empty closes'",
+        "message: 'invalid spectate player'",
+        "message: 'Error: invalid spectate player'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves the source unavailable-match player error and empty close'",
+        "message: 'match ended or cannot be found.'",
+        "message: 'Error: match ended or cannot be found.'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves the source same-socket spectator replacement close'",
+        "level: 'user'",
+        "level: 'state'"
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        "it('preserves the source same-socket player replacement rejoin'",
+        "message: 'You connected in another session, please play there.'",
+        "message: 'connected elsewhere'"
       )
     },
     {

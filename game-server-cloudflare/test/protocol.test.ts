@@ -6,6 +6,7 @@ import {
   MAX_GAME_MESSAGE_BYTES,
   parseClientMessage,
   parseSourcePing,
+  SourceGameError,
   UnknownGameMessageError
 } from '../src/protocol'
 
@@ -39,6 +40,30 @@ describe('game WebSocket protocol validation', () => {
       spectateToken: 'identity:player.private-code',
       authToken: null
     })
+  })
+
+  it('classifies source spectate validation errors with their exact wire', () => {
+    for (const [spectateToken, message] of [
+      ['', 'invalid spectate player'],
+      ['.code', 'invalid spectate player'],
+      [`player.${'a'.repeat(51)}`, 'invalid spectate code'],
+      ['player.one.two.three', 'invalid spectate code']
+    ]) {
+      let error: unknown
+      try {
+        parseClientMessage(
+          JSON.stringify({
+            type: 'spectate_server',
+            spectateToken,
+            authToken: null
+          })
+        )
+      } catch (caught) {
+        error = caught
+      }
+      expect(error).toBeInstanceOf(SourceGameError)
+      expect(error).toMatchObject({ message, level: 'server' })
+    }
   })
 
   it('preserves the source PING prefix and first colon-delimited ID', () => {

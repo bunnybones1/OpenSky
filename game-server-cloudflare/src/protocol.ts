@@ -36,6 +36,14 @@ export type AcceptedClientMessage = Extract<
 export class GameProtocolError extends Error {}
 export class IgnoredGameMessageError extends GameProtocolError {}
 export class UnknownGameMessageError extends GameProtocolError {}
+export class SourceGameError extends GameProtocolError {
+  constructor(
+    message: string,
+    readonly level: 'user' | 'server'
+  ) {
+    super(message)
+  }
+}
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -104,19 +112,17 @@ export const parseClientMessage = (raw: string | ArrayBuffer) => {
     case 'spectate_server': {
       if (
         typeof value.spectateToken !== 'string' ||
-        value.spectateToken.length < 1 ||
         value.spectateToken.length > 256 ||
         (value.authToken !== null && typeof value.authToken !== 'string')
       ) {
         throw new GameProtocolError('invalid spectate request')
       }
       const [spectatedPlayer, ...codes] = value.spectateToken.split('.')
-      if (
-        !spectatedPlayer ||
-        codes.length > 2 ||
-        codes.some(code => code.length > 50)
-      ) {
-        throw new GameProtocolError('invalid spectate code')
+      if (!spectatedPlayer) {
+        throw new SourceGameError('invalid spectate player', 'server')
+      }
+      if (codes.length > 2 || codes.some(code => code.length > 50)) {
+        throw new SourceGameError('invalid spectate code', 'server')
       }
       return value as unknown as AcceptedClientMessage
     }

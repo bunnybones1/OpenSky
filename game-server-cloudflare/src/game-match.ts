@@ -50,6 +50,7 @@ import {
   INTERNAL_AUTH_HEADER,
   parseClientMessage,
   parseSourcePing,
+  SourceGameError,
   stateError,
   TRUSTED_ANONYMOUS_SPECTATOR_HEADER,
   TRUSTED_PRINCIPAL_HEADER,
@@ -508,6 +509,17 @@ export class GameMatch implements DurableObject {
           socket.close()
           return
         }
+        // MatchManager.sendError and its explicit user-error branches send
+        // their original level/message and then close without a code/reason.
+        if (error instanceof SourceGameError) {
+          this.safeSend(socket, {
+            type: 'error',
+            message: error.message,
+            level: error.level
+          })
+          socket.close()
+          return
+        }
         this.safeSend(socket, stateError(error))
         if (error instanceof GameProtocolError)
           socket.close(1008, error.message)
@@ -956,6 +968,16 @@ export class GameMatch implements DurableObject {
       case 'join_server': {
         if (role !== 'player')
           throw new GameProtocolError('spectator cannot join as a player')
+        // MatchProxy.updateContext treats even the same socket as the prior
+        // active context: it emits the source server-level displacement
+        // notice, keeps the connection open, and then processes the rejoin.
+        if (attachment.joined) {
+          this.safeSend(socket, {
+            type: 'error',
+            level: 'server',
+            message: 'You connected in another session, please play there.'
+          })
+        }
         await this.join(socket, attachment, message)
         return
       }
@@ -963,7 +985,7 @@ export class GameMatch implements DurableObject {
         if (role !== 'spectator')
           throw new GameProtocolError('players cannot spectate their own match')
         if (attachment.joined)
-          throw new GameProtocolError('spectator is already joined')
+          throw new SourceGameError('connected in another location', 'user')
         await this.spectate(socket, attachment, message)
         return
       }
@@ -1010,7 +1032,7 @@ export class GameMatch implements DurableObject {
     const metadata = await this.metadataRequired()
     const runtime = await this.ensureRuntime()
     if (metadata.expiredBeforeLoad) {
-      throw new GameProtocolError('match ended or cannot be found.')
+      throw new SourceGameError('match ended or cannot be found.', 'server')
     }
     if (metadata.ended) {
       // The source authenticates a recent-match connection but does not link
@@ -1101,7 +1123,8 @@ export class GameMatch implements DurableObject {
     )
       .bind(metadata.proposalId)
       .first<MatchLedgerParticipants>()
-    if (!ledger) throw new GameProtocolError('match cannot be found')
+    if (!ledger)
+      throw new SourceGameError('match ended or cannot be found.', 'server')
 
     const [requestedTarget, ...requestedCodes] = message.spectateToken
       .toLowerCase()
@@ -1129,7 +1152,7 @@ export class GameMatch implements DurableObject {
       (targetUserId !== null &&
         attachment.userId.toLowerCase() === targetUserId.toLowerCase())
     ) {
-      throw new GameProtocolError('you cannot spectate yourself')
+      throw new SourceGameError('you can\t spectate yourself', 'server')
     }
 
     const codes = new Set(requestedCodes)
@@ -1340,7 +1363,7 @@ export class GameMatch implements DurableObject {
     if ((attachment.role ?? 'player') === 'spectator') {
       if (!('sticker' in message) || !attachment.spectatedPrincipal) return
       if (attachment.anonymousSpectator) {
-        throw new GameProtocolError('player used unowned sticker')
+        throw new SourceGameError('player used unowned sticker', 'server')
       }
       const owned = await this.env.AUTH_DB.prepare(
         `SELECT 1 FROM player_items
@@ -1349,7 +1372,8 @@ export class GameMatch implements DurableObject {
       )
         .bind(attachment.userId, message.sticker)
         .first()
-      if (!owned) throw new GameProtocolError('player used unowned sticker')
+      if (!owned)
+        throw new SourceGameError('player used unowned sticker', 'server')
       const sanitized: EmoteMessage = {
         type: 'emote',
         sticker: message.sticker,
@@ -1370,7 +1394,7 @@ export class GameMatch implements DurableObject {
       if (
         !participant.account.deckEquipment?.stickers?.includes(message.sticker)
       ) {
-        throw new GameProtocolError('player used unowned sticker')
+        throw new SourceGameError('player used unowned sticker', 'server')
       }
     }
     const now = Date.now()
