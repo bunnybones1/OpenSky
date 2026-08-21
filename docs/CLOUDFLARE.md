@@ -199,12 +199,13 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migrations through `0121`, including authoritative decks, registered
+requires migrations through `0122`, including authoritative decks, registered
 bots, atomic XP/account-stat publication, recoverable post-match
-responsibilities, and Conquest Workflow/Queue handoff receipts and guards. It
-refuses to spawn the deploy process on a missing, malformed, unsuccessful,
-duplicate, or unexpected result. The migration command is intentionally exempt
-so it can bring the schema forward before a deploy.
+responsibilities, and both Conquest and leaderboard Workflow/Queue handoff
+receipts and guards. It refuses to spawn the deploy process on a missing,
+malformed, unsuccessful, duplicate, or unexpected result. The migration
+command is intentionally exempt so it can bring the schema forward before a
+deploy.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
@@ -3053,21 +3054,41 @@ longer requires `time.NewTicker`, nine target runner records, ticker phase
 arithmetic, exact storage topology, or alarm method order. No production action
 was performed.
 
+## Effect-faithful leaderboard orchestration — 2026-08-21
+
+Commit `e555f930` replaces direct cron player delivery with one deterministic
+Workflow per accepted leaderboard cycle and one Queue responsibility per
+snapshotted player. D1 remains authoritative for the independently approved
+schedule and policy, immutable two-mode snapshot, exact off-chain inventory,
+feed and notification publication, guarded rank reset, failure evidence, and
+completion. The Workflow and Queue own execution and transport rather than
+recreating the Go ticker, 20-player page, five-attempt ceiling, or terminal
+entitlement state.
+
+Tests preserve the exact ranking and reward rules, atomic per-player
+publication, duplicate safety, schedule-disable recovery, rank-reset ordering,
+Queue tamper rejection, per-player isolation, and recovery on attempt seven
+after six failures. Migration `0122` and the separate Workflow/Queue/DLQ
+topology remain local and undeployed; the leaderboard schedule remains
+absent/disabled. No remote preflight, provisioning, migration, activation,
+deployment, or live drill was performed.
+
 ## Suggested next slice
 
-The Conquest, post-match, and matchmaker-cadence corrections are complete
-locally. The next safe background slice is one remaining main-Worker cron
-responsibility at a time, beginning with an effect/recovery audit rather than a
-topology rewrite. Player-facing parity remains separate and must continue using
-the original interface rather than redesigning it.
+The Conquest, post-match, matchmaker-cadence, and leaderboard orchestration
+corrections are complete locally. Continue with one remaining main-Worker cron
+responsibility at a time, beginning each with an effect/recovery audit rather
+than a topology rewrite. No next responsibility has been selected yet.
+Player-facing parity remains separate and must continue using the original
+interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, `0119`, `0120`, and `0121` at the documented
-quiescent boundary, provision the exact reviewed Conquest Workflow/Queue/DLQ
-topology, deploy the exact tested Workers with both bot flags still false, and
-only consider a bounded ranked/PvP-bot soak after ordinary multiplayer and
-analytics paths are healthy. This remains unauthorized while the production
-pause is in force.
+then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, and `0122` at the
+documented quiescent boundary, provision both exact reviewed reward
+Workflow/Queue/DLQ topologies, deploy the exact tested Workers with both bot
+flags still false and both reward schedules disabled, and only consider a
+bounded ranked/PvP-bot soak after ordinary multiplayer and analytics paths are
+healthy. This remains unauthorized while the production pause is in force.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,

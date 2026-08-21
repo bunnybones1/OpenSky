@@ -7,35 +7,34 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime commit `d5764b4e` is tested but not
+- Paused branch checkpoint: runtime commit `e555f930` is tested but not
   deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
   `0117_match_experience_publication_state.sql`,
   `0118_match_account_stat_publication.sql`,
   `0119_match_deck_rank_jobs.sql`, and
-  `0120_grandweaver_task_attempts.sql`, followed by
-  `0121_conquest_v2_workflow_handoffs.sql`, are intentionally not applied.
+  `0120_grandweaver_task_attempts.sql`,
+  `0121_conquest_v2_workflow_handoffs.sql`, and
+  `0122_leaderboard_reward_workflow_handoffs.sql`, are intentionally not
+  applied.
   Apply them in that order at the documented quiescent boundary before
-  deploying the current Workers. The Conquest V2 Workflow, delivery Queue,
-  and dead-letter Queue are also not provisioned. No Worker from `36ca654d` or
-  later may be deployed until all seven migrations and the exact reviewed
-  bindings exist. Every checked-in deploy command now performs a fail-closed,
-  account-pinned, read-only D1 schema preflight first; the migration command is
-  intentionally exempt so it can advance the schema. The current matchmaker
-  cadence milestone passed 63 unit and 69 Durable Object integration tests,
-  TypeScript validation, the converted mutation-tested cadence gate, and all
-  related session/ingress/deck/relaxation/Conquest/bot, release, target,
-  service, and CI gates. The preceding Conquest milestone passed 21 focused
-  integration tests, 531 main-Worker tests before final assertion-only
-  hardening, TypeScript validation, mutation-tested
-  Conquest/runner/production gates, and a fresh local application of every D1
-  migration plus the production schema preflight. The last complete local
-  release remains `1e7f878c`; it passed 528 main-Worker tests, 40 game-server
-  unit and 135 Workers tests, 48 match-service tests, 63 matchmaker unit and 67
+  deploying the current Workers. The Conquest V2 and leaderboard Workflows,
+  delivery Queues, and dead-letter Queues are also not provisioned. No Worker
+  from `e555f930` or later may be deployed until all eight migrations and both
+  exact reviewed topologies exist. Every checked-in deploy command now
+  performs a fail-closed, account-pinned, read-only D1 schema preflight first;
+  the migration command is intentionally exempt so it can advance the schema.
+  The current leaderboard
+  milestone passed 22 focused Workers tests, all 534 main-Worker tests,
+  TypeScript validation, mutation-tested leaderboard and production topology
+  gates, and a fresh local application of every D1 migration through `0122`
+  plus the exact production schema query. The previous exact-head release and
+  draft-PR CI passed at `8e1468e2`: 531 main-Worker tests, 43 game-server unit
+  and 135 Workers tests, 48 match-service tests, 63 matchmaker unit and 69
   Workers tests, 30 browser-game tests, nine analytics tests, all source and
   mutation gates/typechecks, both production builds, and 594-file artifact
-  validation. Its assembled entries are `/assets/index-1eddfd33.js` and
+  validation. Its assembled entries are `/assets/index-fd3d9163.js` and
   `/game/cloudflare/assets/index-ccb53c4b.js`.
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed

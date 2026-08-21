@@ -108,21 +108,22 @@ observable contract.
 
 ## Current component audit
 
-| Component | Disposition | Effect-level rationale |
-| --- | --- | --- |
-| Original React webapp and browser game | Keep | This is the presentation and client behavior that must be preserved. |
-| Google identity and optional wallet boundary | Keep | Matches the approved product changes and leaves wallet-independent features available. |
-| `GameMatch` Durable Object | Keep | A uniquely addressed, single-threaded match authority fits the required live-state and reconnect effects. |
-| `MatchmakerPool` Durable Object | Keep | Per-pool serialized coordination fits queue membership, relaxation, and allocation effects. |
-| Stateless match service | Keep | Validation and allocation remain independently testable without owning live session state. |
-| `DeckRankCoordinator` Durable Object | Keep, re-test by effect | Global serialization may be required for deterministic rank ordering; Go work-group naming and retry cadence are not. |
-| D1 match/reward receipts and transactional batches | Keep | They protect durable business state, idempotency, and atomic publication. |
-| R2 analytics plus Queue and dead-letter queue | Keep | Analytics is asynchronous, retryable, and must not block a match. |
-| Main Worker's one-minute fan-out | Redesign incrementally | Conquest cron work now only discovers/recovers a deterministic Workflow; the remaining unrelated reward, notification, cleanup, and drill responsibilities still need individual target boundaries. |
-| Deck-rank and Grandweaver responsibility tables in migrations `0119` and `0120` | Keep corrected effect state | `6795a7fd` removed terminal failure and copied retry limits while retaining exactly-once application, ordering, independent progress, and eviction recovery. |
-| Conquest Workflow/Queue handoffs in migration `0121` | Keep undeployed | `36ca654d` stores only deterministic business responsibility and immutable failure evidence; Workflow and Queue own execution/transport state. |
-| Static gates that parse Go ticker, batch, work-group, or retry tokens | Replace | They should derive behavioral test cases from the source and then test the TypeScript boundary as a black box. |
-| Protocol, enum, game-rule, atomic-publication, eviction, reconnect, off-chain, auth, and production-disable gates | Keep | These directly protect client, player, security, or operator effects. |
+| Component                                                                                                         | Disposition                 | Effect-level rationale                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Original React webapp and browser game                                                                            | Keep                        | This is the presentation and client behavior that must be preserved.                                                                                                                                               |
+| Google identity and optional wallet boundary                                                                      | Keep                        | Matches the approved product changes and leaves wallet-independent features available.                                                                                                                             |
+| `GameMatch` Durable Object                                                                                        | Keep                        | A uniquely addressed, single-threaded match authority fits the required live-state and reconnect effects.                                                                                                          |
+| `MatchmakerPool` Durable Object                                                                                   | Keep                        | Per-pool serialized coordination fits queue membership, relaxation, and allocation effects.                                                                                                                        |
+| Stateless match service                                                                                           | Keep                        | Validation and allocation remain independently testable without owning live session state.                                                                                                                         |
+| `DeckRankCoordinator` Durable Object                                                                              | Keep, re-test by effect     | Global serialization may be required for deterministic rank ordering; Go work-group naming and retry cadence are not.                                                                                              |
+| D1 match/reward receipts and transactional batches                                                                | Keep                        | They protect durable business state, idempotency, and atomic publication.                                                                                                                                          |
+| R2 analytics plus Queue and dead-letter queue                                                                     | Keep                        | Analytics is asynchronous, retryable, and must not block a match.                                                                                                                                                  |
+| Main Worker's one-minute fan-out                                                                                  | Redesign incrementally      | Conquest and leaderboard cron work now only discovers/recovers deterministic Workflows; the remaining unrelated reward, notification, cleanup, and drill responsibilities still need individual target boundaries. |
+| Deck-rank and Grandweaver responsibility tables in migrations `0119` and `0120`                                   | Keep corrected effect state | `6795a7fd` removed terminal failure and copied retry limits while retaining exactly-once application, ordering, independent progress, and eviction recovery.                                                       |
+| Conquest Workflow/Queue handoffs in migration `0121`                                                              | Keep undeployed             | `36ca654d` stores only deterministic business responsibility and immutable failure evidence; Workflow and Queue own execution/transport state.                                                                     |
+| Leaderboard Workflow/Queue handoffs in migration `0122`                                                           | Keep undeployed             | `e555f930` preserves weekly entitlements and reset ordering while removing direct cron pages and terminal aggregate attempt state.                                                                                 |
+| Static gates that parse Go ticker, batch, work-group, or retry tokens                                             | Replace                     | They should derive behavioral test cases from the source and then test the TypeScript boundary as a black box.                                                                                                     |
+| Protocol, enum, game-rule, atomic-publication, eviction, reconnect, off-chain, auth, and production-disable gates | Keep                        | These directly protect client, player, security, or operator effects.                                                                                                                                              |
 
 The initial audit found that the discarded source-style `0121` would have
 raised an already large trigger inventory from 402 to 411. Trigger count is not
@@ -221,16 +222,16 @@ operator effect regressed.
 
 ## Required black-box evidence
 
-| Area | Evidence required before deployment |
-| --- | --- |
-| Web parity | Route-level and browser tests for signed-out entry, Google return, home, quests, cards, decks, SkyPass, Practice, PvP, history, and replay; wallet absence is included. |
-| Match authority | Two-client and bot matches covering allocation, authentication, commit/reveal, timeouts, reconnect, eviction, terminal delivery, and replay from both perspectives. |
-| Match publication | Fault injection before and after each durable boundary proves no partial visibility and exactly-once recovery. |
-| Matchmaking | Boundary-time tests prove eligibility, refusal, penalties, relaxation, timeout, stale release, bot policy, and allocation retry outcomes without asserting ticker implementation. |
-| Post-match maintenance | Terminal sockets close first; deck rank and global rank update independently, deterministically, exactly once, and remain re-drivable after repeated failure. |
-| Conquest settlement | Concurrent scheduler invocations create one immutable cycle; snapshot/rollover is atomic; every award is eventually delivered once or remains visibly re-drivable; disable/edit cannot rewrite an active cycle. |
-| Off-chain rewards | Every source player outcome maps to an inventory or entitlement receipt and no path requires a wallet or emits a cash/token promise. |
-| Production safety | Missing schema, binding, policy, approval, or disabled flag fails closed before mutation; exact tested commit and artifact are identified. |
+| Area                   | Evidence required before deployment                                                                                                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web parity             | Route-level and browser tests for signed-out entry, Google return, home, quests, cards, decks, SkyPass, Practice, PvP, history, and replay; wallet absence is included.                                         |
+| Match authority        | Two-client and bot matches covering allocation, authentication, commit/reveal, timeouts, reconnect, eviction, terminal delivery, and replay from both perspectives.                                             |
+| Match publication      | Fault injection before and after each durable boundary proves no partial visibility and exactly-once recovery.                                                                                                  |
+| Matchmaking            | Boundary-time tests prove eligibility, refusal, penalties, relaxation, timeout, stale release, bot policy, and allocation retry outcomes without asserting ticker implementation.                               |
+| Post-match maintenance | Terminal sockets close first; deck rank and global rank update independently, deterministically, exactly once, and remain re-drivable after repeated failure.                                                   |
+| Conquest settlement    | Concurrent scheduler invocations create one immutable cycle; snapshot/rollover is atomic; every award is eventually delivered once or remains visibly re-drivable; disable/edit cannot rewrite an active cycle. |
+| Off-chain rewards      | Every source player outcome maps to an inventory or entitlement receipt and no path requires a wallet or emits a cash/token promise.                                                                            |
+| Production safety      | Missing schema, binding, policy, approval, or disabled flag fails closed before mutation; exact tested commit and artifact are identified.                                                                      |
 
 Source-parsing tests may generate fixtures or enumerate cases, but the decisive
 assertion must exercise the TypeScript/Cloudflare behavior.
@@ -324,9 +325,11 @@ without copying nine Go runner loops into Durable Object storage.
 That conversion completed locally at `d5764b4e`. The remaining fan-out was
 then classified in
 [`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md).
-The next selected slice is the weekly leaderboard reward/reset lifecycle: one
-Workflow per accepted cycle, one Queue message per snapshotted player, and D1
-business receipts. The other responsibilities remain separate later slices.
+The weekly leaderboard reward/reset conversion completed locally at
+`e555f930`: one Workflow per accepted cycle, one Queue message per snapshotted
+player, and D1 business receipts replace direct cron delivery and copied
+page/attempt limits. The other responsibilities remain separate later slices;
+none is selected without its own effect/recovery audit.
 
 - Move one responsibility at a time to the selected Workflow, Queue, Durable
   Object alarm, request-path idempotent update, or explicit retirement.

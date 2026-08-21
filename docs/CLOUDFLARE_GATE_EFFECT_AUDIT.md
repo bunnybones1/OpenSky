@@ -152,10 +152,11 @@ These remain release blockers, with three interpretation rules:
 
 ## 4. Mixed-gate conversion status
 
-Four gates currently combine valuable effect protection with implementation
-locks. They must not be removed wholesale. Split each one so the behavioral
-and safety portions remain release blockers while the Go-mechanism assertions
-become provenance-only or disappear after replacement evidence exists.
+Four gates originally combined valuable effect protection with implementation
+locks. They were not removed wholesale: their behavioral and safety portions
+remain release blockers while Go-mechanism assertions became provenance-only
+or disappeared after replacement evidence existed. The same method has now
+also narrowed the leaderboard gate's copied runner assumptions.
 
 The `worker-runners` and `match-completion` conversions were completed at
 `6795a7fd`. Their release checks now require recoverability beyond the source
@@ -163,7 +164,10 @@ retry ceiling, exactly-once application, independent progress, terminal-client
 ordering, and Durable Object eviction recovery. The `conquest-gate` conversion
 completed at `36ca654d` with Workflow/Queue/D1 handoff evidence. The
 `matchmaker-cadence` conversion completed at `d5764b4e` with durable
-deadline, eviction, duplicate-alarm, and rolling-upgrade evidence.
+deadline, eviction, duplicate-alarm, and rolling-upgrade evidence. The
+implementation-coupled portion of `leaderboard-gate` converted at `e555f930`
+with Workflow/Queue creation-gap recovery, per-player isolation, re-drive
+beyond the source ceiling, and guarded completion evidence.
 
 ### `worker-runners`
 
@@ -285,6 +289,27 @@ entry, and D1 as the business authority. The replacement gate requires that
 runtime, migration, configuration, and fault-injection evidence together and
 rejects restoration of direct cron delivery or a copied fixed player batch.
 
+### `leaderboard-gate` (converted at `e555f930`)
+
+Keep:
+
+- explicit independent schedule and exact-policy activation;
+- source-faithful standings, reward curves, off-chain fulfillment, feed and
+  notification publication, and soft/hard reset outcomes;
+- one immutable snapshot and exactly-once per-player application; and
+- completion only after all entitlements and the guarded reset are durable.
+
+Replace:
+
+- direct cron-owned player delivery;
+- the target-side 20-player page and aggregate attempt counter; and
+- terminal abandonment after the source five-attempt ceiling.
+
+The gate now requires deterministic Workflow creation-gap recovery, Queue
+tamper rejection, duplicate safety, per-player failure isolation, recovery on
+attempt seven after six failures, and guarded cycle/reset completion. It also
+fails when direct cron delivery or copied page/attempt mechanisms return.
+
 ## Gate conversion rule
 
 For every implementation lock, use this sequence:
@@ -303,15 +328,13 @@ replacement test must fail when the protected effect is deliberately broken.
 
 ## Remaining conversion order
 
-The four originally mixed gates are converted. The next implementation-coupled
-boundary is inside the otherwise valuable `leaderboard-gate`: production
-runtime still performs player delivery directly from cron with a copied
-20-player page and terminal five-attempt cycle state.
+The four originally mixed gates and the implementation-coupled leaderboard
+boundary are converted. The leaderboard gate still protects schedule
+authorization, policy, snapshot, entitlement, publication, and rank-reset
+effects, but now rejects direct cron delivery and copied page/attempt limits in
+favor of black-box Workflow/Queue evidence.
 
-The selected replacement in
-[`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md)
-keeps schedule authorization, policy, snapshot, entitlement, publication, and
-rank-reset assertions. It replaces cron page/attempt topology with black-box
-Workflow/Queue evidence for creation-gap recovery, per-player fault isolation,
-re-drive beyond the source ceiling, and completion only after all awards and
-the guarded reset.
+Continue with one unconverted main-Worker responsibility at a time from
+[`CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md`](./CLOUDFLARE_MAIN_WORKER_RESPONSIBILITY_AUDIT.md).
+Each next slice requires its own effect/recovery audit before a target topology
+or gate conversion is selected.

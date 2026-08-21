@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: architecture decision only. This audit authorizes the next local
-implementation milestone, but it does not authorize provisioning, migration,
-activation, deployment, a live drill, or any production mutation.
+Status: implemented locally at `e555f930`. This audit and milestone do not
+authorize provisioning, migration, activation, deployment, a live drill, or
+any production mutation.
 
 ## Decision
 
@@ -15,11 +15,11 @@ one generic task engine, and do not preserve a Go runner's ticker, work group,
 batch size, retry delay, attempt ceiling, or task-table shape unless changing it
 would alter a player, client, authorization, publication, or recovery outcome.
 
-The next implementation slice is the weekly leaderboard reward and rank-reset
-cycle. Use one deterministically named Workflow per accepted cycle, one Queue
-message per snapshotted player entitlement, and D1 business receipts for the
-immutable snapshot, off-chain inventory, feed/notification publication, rank
-reset, failures, and completion.
+The selected implementation slice was the weekly leaderboard reward and
+rank-reset cycle. It now uses one deterministically named Workflow per accepted
+cycle, one Queue message per snapshotted player entitlement, and D1 business
+receipts for the immutable snapshot, off-chain inventory, feed/notification
+publication, rank reset, failures, and completion.
 
 ## Current fan-out
 
@@ -28,22 +28,22 @@ reset, failures, and completion.
 even though the responsibilities have different authorities, timing, scale,
 and recovery needs.
 
-| Current call | Observable responsibility | Selected target boundary | Disposition |
-| --- | --- | --- | --- |
-| `deliverDueConquestGold` | Deliver an already-earned delayed Gold-card entitlement exactly once | Queue per pending D1 delivery, with a narrow discovery/re-drive trigger | Later slice; remove copied 100-item/five-attempt terminal behavior |
-| `runConquestReadinessDrills` | Advance an explicitly authorized operational drill and preserve its audit trail | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress |
-| `dispatchDueConquestV2Rewards` | Accept one reviewed weekly cycle and ensure durable delivery | Workflow per cycle plus Queue per player | Completed at `36ca654d` |
-| `runDueLeaderboardRewards` | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset | Workflow per cycle plus Queue per player | Selected next slice |
-| `runReferralStickerRewards` | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory | Workflow per season/cycle plus Queue per prepared user or award batch | Later reward slice |
-| `runDueSkypassAutoClaims` | Close a season and claim every remaining eligible reward for each player | Workflow per close cycle plus Queue per player | Later reward slice; remove copied ten-player/five-reward/five-attempt topology |
-| `runPushNotifications` | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence | High-value later slice; provider/DLQ failure cannot rewrite in-app publication |
-| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data | Workflow per deletion request | Later privacy slice; retain cancellation deadline and auditable partial recovery |
-| `WalletLinksRepository.cleanupExpired` | Remove expired, unused proof challenges | Request-path bounded cleanup plus occasional maintenance trigger | Later low-risk slice; no durable workflow is required for disposable challenges |
+| Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `deliverDueConquestGold`                | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Queue per pending D1 delivery, with a narrow discovery/re-drive trigger                 | Later slice; remove copied 100-item/five-attempt terminal behavior               |
+| `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress               |
+| `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                          |
+| `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                          |
+| `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per season/cycle plus Queue per prepared user or award batch                   | Later reward slice                                                               |
+| `runDueSkypassAutoClaims`               | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Later reward slice; remove copied ten-player/five-reward/five-attempt topology   |
+| `runPushNotifications`                  | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | High-value later slice; provider/DLQ failure cannot rewrite in-app publication   |
+| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request                                                           | Later privacy slice; retain cancellation deadline and auditable partial recovery |
+| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges  |
 
 These boundaries are independent. Converting one does not authorize changing
 the others or weakening their existing fail-closed gates.
 
-## Why leaderboard is next
+## Why leaderboard was next
 
 Leaderboard processing is the most consequential remaining reward lifecycle
 because its completion controls two coupled player effects:
@@ -171,21 +171,21 @@ entitlement state.
 
 ## Recovery matrix
 
-| Interruption | Required recovery |
-| --- | --- |
-| Cycle committed before Workflow create | Next cron ensures the deterministic instance; no second cycle is possible. |
-| Schedule disabled after acceptance | The accepted Workflow completes; no later cycle is accepted. |
-| Workflow retries snapshot | D1 policy and leaderboard entries remain one immutable atomic snapshot. |
-| Workflow crashes around Queue publication | Missing D1 award receipts are published again safely. |
-| Queue duplicates or reorders a player | The cycle/user award key applies inventory and publication once. |
-| One player fails repeatedly | Other players progress; immutable failure evidence and the unapplied entitlement remain re-drivable beyond the source ceiling. |
-| Queue message reaches a DLQ or expires | D1 remains pending and Workflow reconciliation can create another transport message. |
-| Rank reset is blocked by in-flight match publication | Awards remain applied; Workflow waits and retries the guarded reset without duplicating either effect. |
-| Workflow reaches a terminal platform error | D1 exposes the incomplete cycle and deterministic instance; an operator can inspect and restart after correction. |
+| Interruption                                         | Required recovery                                                                                                              |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Cycle committed before Workflow create               | Next cron ensures the deterministic instance; no second cycle is possible.                                                     |
+| Schedule disabled after acceptance                   | The accepted Workflow completes; no later cycle is accepted.                                                                   |
+| Workflow retries snapshot                            | D1 policy and leaderboard entries remain one immutable atomic snapshot.                                                        |
+| Workflow crashes around Queue publication            | Missing D1 award receipts are published again safely.                                                                          |
+| Queue duplicates or reorders a player                | The cycle/user award key applies inventory and publication once.                                                               |
+| One player fails repeatedly                          | Other players progress; immutable failure evidence and the unapplied entitlement remain re-drivable beyond the source ceiling. |
+| Queue message reaches a DLQ or expires               | D1 remains pending and Workflow reconciliation can create another transport message.                                           |
+| Rank reset is blocked by in-flight match publication | Awards remain applied; Workflow waits and retries the guarded reset without duplicating either effect.                         |
+| Workflow reaches a terminal platform error           | D1 exposes the incomplete cycle and deterministic instance; an operator can inspect and restart after correction.              |
 
-## Required executable evidence
+## Executable evidence
 
-The implementation milestone is incomplete until tests and release gates prove:
+The local implementation tests and release gates prove:
 
 - concurrent discovery creates one cycle, one orchestration receipt, and one
   deterministic Workflow identity;
@@ -203,6 +203,13 @@ The implementation milestone is incomplete until tests and release gates prove:
 - typecheck, focused Workers tests, mutation-tested leaderboard gate, fresh D1
   migration, production schema/topology preflight, full release, and exact-head
   PR CI all pass before any deployment can be considered.
+
+At `e555f930`, the focused suite passes 22/22 tests, the full main-Worker suite
+passes 534/534, the leaderboard mutation gate passes 5/5 plus its live check,
+the production runner passes 12/12, and a fresh local D1 accepts every migration
+through `0122` and the exact production schema query. Full release and
+exact-head PR CI remain mandatory for the later documentation head before any
+deployment can be considered.
 
 ## Rollout safety
 
