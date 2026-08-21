@@ -1094,6 +1094,46 @@ artifact validation. The assembled entries are
 legacy lint messages remained warnings. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source registered ranked/PvP bot milestone
+
+Commit `90ebe652` restores the source registered-account path behind the
+optional Practice PvP/ranked catch-all bot:
+
+- migration `0116_registered_matchmaker_bots.sql` installs the exact 308-name
+  source registry without creating login users, makes registry identity
+  immutable, and narrowly permits enabled registered `SYSTEM` accounts in
+  ordinary matches while preserving readiness-only isolation for every other
+  system account;
+- the match service lazily provisions only the selected bot, uses the source
+  short prism wire, all five historical rank bands, current mode/season,
+  opponent rank/score, and active-match exclusion, and creates only the
+  selected ranked-mode stat; Practice PvP does not invent ranked stats;
+- the source human unlocked-starter-deck choice is frozen into the proposal,
+  Discovery replaces its cards with the source empty deck, and allocation
+  validates the registry, principal, deck, and active-match state again before
+  constructing the bot participant;
+- matchmaker selection failure follows the Go matcher and continues without a
+  proposal, while successful bots auto-accept using their real registered
+  principal and survive Durable Object persistence and allocation retries;
+- the game ledger stores the registered bot user, ranked settlement updates
+  that bot without changing its `SYSTEM` kind, and player match lists/replays
+  expose the source bot opponent while operational readiness matches remain
+  private; and
+- both production configs still pin `ENABLE_RANKED_BOTS=false`.
+
+The mutation-tested `check:cloudflare:registered-bots` gate covers the source
+names, rank seeds, prism JSON, factory and selection flow, D1 isolation,
+cross-service protocol, allocation, regressions, deployment commands, false
+production flags, and non-deploying CI. The exact complete local contract
+passed with exit code zero at `90ebe652`: 511 main-Worker tests, 34 game-server
+unit and 118 Workers tests, 45 match-service tests, 62 matchmaker unit and 66
+Workers tests, 30 browser-game tests, nine analytics tests, every source and
+off-chain gate, all typechecks, both production builds, and 594-file artifact
+validation. The assembled entries are `/assets/index-874772de.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. Migration `0116` was not applied;
+no deployment, provisioning, activation, live match, or production mutation
+was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1150,10 +1190,12 @@ production gate after any later commit.
 3. Preserve the source analytics retention behavior unless an explicit product
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
-4. Complete the quiescent migration `0115` transition and deploy/verify the
-   exact tested game server without analytics producer bindings, as described
-   under Production rollout. The analytics consumer now requires that schema
-   and must not be deployed against the older database.
+4. Complete the quiescent migration `0115` transition, apply `0116` while
+   allocations remain stopped, and then deploy/verify the exact tested game
+   server without analytics producer bindings, as described under Production
+   rollout. The analytics consumer now requires `0115`, and every Worker from
+   `90ebe652` assumes `0116` exists; neither may be deployed against an older
+   database.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 6. Create a separate private client-feedback bucket and add the reviewed
@@ -1189,8 +1231,11 @@ pnpm deploy:cloudflare
 
 Each command should be run only at its corresponding stage above. Migration
 `0065_multiplayer_match_analytics.sql` was already present in the last observed
-production migration state; migration `0115_authoritative_match_decks.sql` is
-not and must precede both the tested game-server runtime and analytics Worker.
+production migration state. Migrations `0115_authoritative_match_decks.sql`
+and `0116_registered_matchmaker_bots.sql` are not: apply `0115` first at its
+quiescent game-server boundary, then apply `0116` before deploying any Worker
+from `90ebe652`. Keep both ranked-bot flags false throughout that baseline
+rollout.
 
 ## Other outstanding work
 
@@ -1198,16 +1243,18 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `60292a03`. Keep
+- Deploy and verify the tested runtime changes through `90ebe652`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
-- Keep optional ranked/PvP bots disabled until the source registered bot
-  account and unlocked-deck selection path is ported and separately verified.
+- The source registered bot account and unlocked-deck path is ported and
+  verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
+  false-flag baseline deploy, ordinary multiplayer/analytics verification, and
+  a separately authorized bounded activation soak all succeed.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
-  and verify zero `creating` or `active` match rows. Apply `0115`, deploy the
-  exact tested game-server runtime immediately, verify protocol health, and
-  only then restore the previously enabled modes. Do not leave old game-server
-  code accepting matches after the migration boundary.
+  and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`,
+  deploy the exact tested game-server runtime immediately, verify protocol
+  health, and only then restore the previously enabled modes. Do not leave old
+  game-server code accepting matches after the migration boundary.
 - Provision and verify the private analytics consumer in the safe order above;
   R2 is enabled, but the bucket and Worker do not yet exist.
 - Only after the consumer is healthy, enable and deploy the game-server
@@ -1259,6 +1306,8 @@ At the pause audit:
 - all 108 browser RPC calls had a Worker implementation or reviewed identity
   disposition, with direct tests for all 103 Worker-backed calls;
 - every original deployable service had a reviewed Cloudflare disposition;
+- the source registered ranked/PvP bot path was ported and verified locally,
+  but migration `0116`, deployment, and activation remain paused;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;

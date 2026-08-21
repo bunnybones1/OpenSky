@@ -161,6 +161,22 @@ maps. `check:cloudflare:matchmaker-cadence` mutation-tests the source topology,
 direct bot processor, durable scheduler, explicit Wrangler policies, runtime
 regressions, and release wiring.
 
+The optional catch-all in the Practice PvP/ranked runner now follows the
+source registered-account path rather than retaining the unregistered
+placeholder snapshot. The matchmaker asks the match service for a current
+season/mode/rank/score-compatible bot, persists the frozen registry identity
+and one human unlocked-starter-deck choice, auto-accepts with the selected
+principal, and dispatches that exact selection. Selection failures preserve
+the Go matcher's continue-without-proposal behavior. The match service
+revalidates registry, principal, unlocked deck, and active-match state before
+allocation; registered `SYSTEM` users remain isolated from player discovery
+and unrelated rewards while their selected ranked-mode stats settle normally.
+Discovery uses the source empty deck and all bot prisms retain their generated
+short JSON wire. `check:cloudflare:registered-bots` mutation-tests the complete
+Go, D1, runtime, replay, settlement, deployment, and false-flag contract.
+Production retains `ENABLE_RANKED_BOTS=false`; migration `0116` and activation
+remain paused.
+
 The source Conquest validator next checks both ranked ladders before active-run,
 status, locked-deck, game-mode, reconnect, pending-match, penalty, or queue
 behavior. A player qualifies when either Ranked Constructed or Ranked Discovery
@@ -179,6 +195,7 @@ deployment paths.
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
 - `pnpm check:cloudflare:matchmaker-cadence`
+- `pnpm check:cloudflare:registered-bots`
 - `pnpm check:cloudflare:matchmaker-deck`
 - `pnpm check:cloudflare:matchmaker-relaxation`
 - `pnpm check:cloudflare:matchmaker-conquest`

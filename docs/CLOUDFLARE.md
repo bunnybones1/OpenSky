@@ -2342,15 +2342,63 @@ validation. The assembled entries are `/assets/index-1eddfd33.js` and
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source registered ranked/PvP bots — 2026-08-20
+
+Milestone `90ebe652` restores the source `CreateRegistered` path used when the
+Practice PvP/ranked runner is configured to add its catch-all bot. Migration
+`0116_registered_matchmaker_bots.sql` records the exact 308 source names in an
+immutable registry without creating login users. A selected entry is lazily
+provisioned as an isolated `SYSTEM` account, remains ineligible for public
+leaderboards and unrelated player rewards, and receives only the current
+ranked-mode stat required by that selection. Practice PvP selection does not
+invent ranked stats.
+
+The match service applies the source season/mode/rank/score filters, ports all
+five historical rank seed bands, excludes bots already in an active match, and
+chooses one of the human player's unlocked starter-deck classes. Constructed
+and Practice modes retain that deck; Discovery retains its class and source
+short prism wire (`str`, `hrt`, `agy`, `int`, or `wis`) while supplying the
+source empty deck. The frozen selection is persisted in the proposal and
+validated again against the registry, derived principal, unlocked deck, and
+active-match ledger immediately before idempotent allocation.
+
+The resulting game payload uses the registered account address and name, a bot
+subkey, base card rarities, and no inherited unregistered hero ability. Its
+real `SYSTEM` user ID reaches the match ledger so ranked settlement updates the
+bot's own selected-mode stats. Registered bots remain visible as normal match
+opponents and in replays, while readiness/staff system accounts remain private.
+The replacement allocation trigger permits only enabled registry accounts on
+ordinary matches and keeps all other `SYSTEM` users readiness-only.
+
+Direct and Workers regressions cover the exact registry, immutable identity,
+disabled allocation rejection, source-compatible selection and replacement,
+empty Discovery decks, Practice stat isolation, malformed selectors and deck
+snapshots, frozen allocation validation, public replay identity, and ranked
+settlement without changing `SYSTEM` isolation. The mutation-tested
+`check:cloudflare:registered-bots` gate derives those contracts from the Go
+factory, API selection, source migrations, JSON prism wire, D1 schema,
+cross-service runtime, production flags, deployment commands, and CI wiring.
+
+The exact complete local contract passed with exit code zero at `90ebe652`:
+511 main-Worker tests, 34 game-server unit and 118 Workers tests, 45
+match-service tests, 62 matchmaker unit and 66 Workers tests, 30 browser-game
+tests, nine analytics tests, every source and off-chain gate, all typechecks,
+both production builds, and 594-file artifact validation. The assembled
+entries are `/assets/index-874772de.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. Both production Workers retain
+`ENABLE_RANKED_BOTS=false`. Migration `0116` was not applied and no deployment,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
-The remaining dormant matchmaker parity slice is the source registered-bot
-path used only when ranked/PvP bots are enabled. It selects a provisioned bot
-account compatible with the opponent's season/mode/rank/score, excludes bots
-already in a match, chooses among the human player's unlocked starter decks,
-and replaces the unregistered bot snapshot with that account/deck. Both
-production Workers retain `ENABLE_RANKED_BOTS=false` until that separate D1
-account authority and selection path are ported and verified.
+No known dormant matchmaker parity slice remains after the registered-bot
+milestone. The next safe local step is a completion audit for any source-backed
+cross-service behavior not already covered by the RPC, runner, reward,
+matchmaker, and service inventories. Production activation remains a separate
+authorized exercise: apply `0115` and then `0116` at the documented quiescent
+boundary, deploy the exact tested Workers with both bot flags still false, and
+only consider a bounded ranked/PvP-bot soak after the ordinary multiplayer and
+analytics paths are healthy.
 
 The dormant, separately authorized readiness orchestrator is deployed and
 verified inert. The next Conquest step is an explicitly authorized exercise,
