@@ -10,8 +10,13 @@ export const REVIEWED_ANALYTICS_QUEUE = 'cloud-weasel-game-analytics'
 export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
+export const REVIEWED_CONQUEST_V2_WORKFLOW = 'cloud-weasel-conquest-v2-rewards'
+export const REVIEWED_CONQUEST_V2_QUEUE =
+  'cloud-weasel-conquest-v2-reward-delivery'
+export const REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE =
+  'cloud-weasel-conquest-v2-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0120_grandweaver_task_attempts.sql'
+  '0121_conquest_v2_workflow_handoffs.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -134,7 +139,33 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       OR
       (name = 'multiplayer_match_deck_rank_receipt_guard'
         AND instr(sql, "ledger.status = 'ended'") > 0)
-    )) AS deck_rank_job_contract_guards_present;`
+    )) AS deck_rank_job_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'conquest_v2_reward_cycle_orchestrations',
+      'conquest_v2_reward_delivery_failures'
+    )) AS conquest_v2_workflow_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'conquest_v2_reward_cycle_orchestration_insert_guard',
+      'conquest_v2_reward_cycle_orchestration_update_guard',
+      'conquest_v2_reward_cycle_orchestrations_no_delete',
+      'conquest_v2_reward_delivery_failures_insert_guard',
+      'conquest_v2_reward_delivery_failures_no_update',
+      'conquest_v2_reward_delivery_failures_no_delete'
+    )) AS conquest_v2_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND (
+      (name = 'conquest_v2_reward_cycle_orchestration_insert_guard'
+        AND instr(sql, 'conquest_v2_reward_cycle_policy_receipts') > 0)
+      OR
+      (name = 'conquest_v2_reward_cycle_orchestration_update_guard'
+        AND instr(sql, "award.application_status = 'APPLIED'") > 0)
+      OR
+      (name = 'conquest_v2_reward_delivery_failures_insert_guard'
+        AND instr(sql, "cycle.status = 'DELIVERING'") > 0
+        AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
+    )) AS conquest_v2_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -142,7 +173,8 @@ export const REVIEWED_PRODUCTION_TARGETS = new Map([
     {
       name: 'opensky-webapp',
       requiresAuthDatabase: true,
-      supportsClientFeedback: true
+      supportsClientFeedback: true,
+      requiresConquestV2Orchestration: true
     }
   ],
   [
@@ -267,6 +299,35 @@ const optionalClientFeedbackErrors = config => {
   return []
 }
 
+const conquestV2OrchestrationErrors = config => {
+  const workflows = config?.workflows ?? []
+  const producers = config?.queues?.producers ?? []
+  const consumers = config?.queues?.consumers ?? []
+  const workflow = workflows.find(
+    value => value.binding === 'CONQUEST_V2_REWARD_WORKFLOW'
+  )
+  const producer = producers.find(
+    value => value.binding === 'CONQUEST_V2_REWARD_QUEUE'
+  )
+  const consumer = consumers.find(
+    value => value.queue === REVIEWED_CONQUEST_V2_QUEUE
+  )
+  if (
+    workflows.length !== 1 ||
+    workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
+    workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
+    producers.length !== 1 ||
+    producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
+    consumers.length !== 1 ||
+    consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE
+  ) {
+    return [
+      'main Worker must retain the reviewed Conquest V2 Workflow, Queue, and dead-letter topology'
+    ]
+  }
+  return []
+}
+
 export const productionTargetErrors = (
   targetPath,
   config,
@@ -319,6 +380,9 @@ export const productionTargetErrors = (
   }
   if (reviewed.supportsClientFeedback) {
     errors.push(...optionalClientFeedbackErrors(config))
+  }
+  if (reviewed.requiresConquestV2Orchestration) {
+    errors.push(...conquestV2OrchestrationErrors(config))
   }
   return errors
 }
@@ -415,7 +479,10 @@ export const productionSchemaRow = output => {
     row?.grandweaver_task_contract_guard_present !== 1 ||
     row?.deck_rank_job_table_present !== 1 ||
     row?.deck_rank_job_guards_present !== 7 ||
-    row?.deck_rank_job_contract_guards_present !== 3
+    row?.deck_rank_job_contract_guards_present !== 3 ||
+    row?.conquest_v2_workflow_tables_present !== 2 ||
+    row?.conquest_v2_workflow_guards_present !== 6 ||
+    row?.conquest_v2_workflow_contract_guards_present !== 3
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

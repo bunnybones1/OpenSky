@@ -205,7 +205,7 @@ export const conquestV2ResumeSafetyErrors = source => {
     )
   }
 
-  const run = bracedBlock(source, 'export const runDueConquestV2Rewards')
+  const run = bracedBlock(source, 'export const acceptDueConquestV2RewardCycle')
   const compactRun = run?.replace(/\s+/g, ' ') ?? ''
   if (
     !compactRun.includes(
@@ -798,7 +798,8 @@ export const conquestFilledDeckAuthorityErrors = (source, worker) => {
  * statements per distinct card inside the bounded player loop.
  */
 export const conquestV2DeliveryBatchErrors = source => {
-  const delivery = bracedBlock(source, 'const deliverPlayer') ?? ''
+  const delivery =
+    bracedBlock(source, 'export const deliverConquestV2RewardEntry') ?? ''
   const errors = []
   for (const token of [
     'INSERT INTO player_conquest_v2_reward_inventory_grants',
@@ -826,6 +827,87 @@ export const conquestV2DeliveryBatchErrors = source => {
     errors.push(
       'Conquest V2 delivery cannot issue statements per distinct card'
     )
+  }
+  return errors
+}
+
+export const conquestV2CloudflareOrchestrationErrors = evidence => {
+  const errors = []
+  for (const token of [
+    'CREATE TABLE conquest_v2_reward_cycle_orchestrations',
+    "workflow_instance_id = 'conquest-v2-cycle-' || cycle_id",
+    'JOIN conquest_v2_reward_cycle_policy_receipts receipt',
+    'conquest_v2_reward_cycle_orchestration_update_guard',
+    "award.application_status = 'APPLIED'",
+    'CREATE TABLE conquest_v2_reward_delivery_failures',
+    'conquest_v2_reward_delivery_failures_insert_guard',
+    "cycle.status = 'DELIVERING'",
+    'conquest_v2_reward_delivery_failures_no_delete'
+  ]) {
+    if (!evidence.migration.includes(token)) {
+      errors.push(`Conquest V2 Workflow handoff migration is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'extends WorkflowEntrypoint',
+    'step.sleepUntil(',
+    'acceptDueConquestV2RewardCycle(env.AUTH_DB, now)',
+    'accepted.orchestration!.workflowInstanceId',
+    'CONQUEST_V2_REWARD_WORKFLOW.create({',
+    'CONQUEST_V2_REWARD_QUEUE.sendBatch(',
+    'applyConquestV2RewardQueueMessage(',
+    'conquestV2RewardCycleById(database, body.cycleId)',
+    'rewardEntry(database, body.cycleId, body.userId)',
+    "cycle.status !== 'DELIVERING'",
+    'message.ack()',
+    'message.retry()',
+    'conquest_v2_reward_delivery_failures'
+  ]) {
+    if (!evidence.orchestration.includes(token)) {
+      errors.push(`Conquest V2 Workflow/Queue adapter is missing: ${token}`)
+    }
+  }
+  if (evidence.worker.includes('MAX_PLAYERS_PER_RUN')) {
+    errors.push('Conquest V2 still copies a cron player batch limit')
+  }
+  for (const token of [
+    'dispatchDueConquestV2Rewards(env)',
+    'handleConquestV2RewardQueue(batch, env.AUTH_DB)',
+    'export { ConquestV2RewardWorkflow }'
+  ]) {
+    if (!evidence.scheduler.includes(token)) {
+      errors.push(`Conquest V2 main Worker integration is missing: ${token}`)
+    }
+  }
+  if (evidence.scheduler.includes('runDueConquestV2Rewards(env.AUTH_DB)')) {
+    errors.push('Conquest V2 cron still performs reward delivery directly')
+  }
+  const workflow = evidence.config.workflows?.find(
+    value => value.binding === 'CONQUEST_V2_REWARD_WORKFLOW'
+  )
+  if (workflow?.class_name !== 'ConquestV2RewardWorkflow' || !workflow.name) {
+    errors.push('Conquest V2 Workflow binding is missing')
+  }
+  const producer = evidence.config.queues?.producers?.find(
+    value => value.binding === 'CONQUEST_V2_REWARD_QUEUE'
+  )
+  const consumer = evidence.config.queues?.consumers?.find(
+    value => value.queue === producer?.queue
+  )
+  if (!producer?.queue || !consumer?.dead_letter_queue) {
+    errors.push('Conquest V2 Queue/DLQ topology is missing')
+  }
+  for (const token of [
+    "it('recovers a D1-to-Workflow creation gap with one deterministic cycle'",
+    "it('uses Workflow sleep and Queue receipts without early or duplicate rewards'",
+    "it('isolates players and recovers attempt seven after six Queue failures'",
+    'for (let attempt = 2; attempt <= 6; attempt += 1)',
+    "message is invalid')",
+    "status: 'COMPLETED', completed_at: expect.any(String)"
+  ]) {
+    if (!evidence.test.includes(token)) {
+      errors.push(`Conquest V2 orchestration regression is missing: ${token}`)
+    }
   }
   return errors
 }
@@ -919,10 +1001,7 @@ export const conquestSettlementAdmissionErrors = (
   rpcTest
 ) => {
   const errors = []
-  const sourceEndMatch = bracedBlock(
-    sourceMatches,
-    'func (s *Server) endMatch'
-  )
+  const sourceEndMatch = bracedBlock(sourceMatches, 'func (s *Server) endMatch')
   const sourceTransaction = sourceEndMatch
     ? bracedBlock(
         sourceEndMatch,
@@ -961,10 +1040,7 @@ export const conquestSettlementAdmissionErrors = (
     )
   }
 
-  const entryStatus = bracedBlock(
-    repository,
-    'private async entryStatus'
-  )
+  const entryStatus = bracedBlock(repository, 'private async entryStatus')
   const compactEntryStatus = entryStatus?.replace(/\s+/g, ' ') ?? ''
   for (const token of [
     'SELECT status FROM player_conquests',
@@ -1052,10 +1128,7 @@ export const conquestProjectionPublicationErrors = (
   rpcTest
 ) => {
   const errors = []
-  const sourceEndMatch = bracedBlock(
-    sourceMatches,
-    'func (s *Server) endMatch'
-  )
+  const sourceEndMatch = bracedBlock(sourceMatches, 'func (s *Server) endMatch')
   const sourceTransaction = sourceEndMatch
     ? bracedBlock(
         sourceEndMatch,
@@ -1067,7 +1140,9 @@ export const conquestProjectionPublicationErrors = (
     'tx.Save(match)'
   ]) {
     if (!sourceTransaction?.includes(token)) {
-      errors.push(`source Conquest publication transaction is missing: ${token}`)
+      errors.push(
+        `source Conquest publication transaction is missing: ${token}`
+      )
     }
   }
   const sourceStatus = bracedBlock(
@@ -1085,7 +1160,10 @@ export const conquestProjectionPublicationErrors = (
     errors.push('source ConquestStats committed-progress boundary is missing')
   }
 
-  const publish = bracedBlock(publication, 'export const publishMatchCompletion')
+  const publish = bracedBlock(
+    publication,
+    'export const publishMatchCompletion'
+  )
   for (const token of [
     "SET status = 'ended'",
     "ledger.status = 'active'",
@@ -1199,10 +1277,7 @@ export const conquestV2PointsPublicationErrors = (
   rpcTest
 ) => {
   const errors = []
-  const sourceEndMatch = bracedBlock(
-    sourceMatches,
-    'func (s *Server) endMatch'
-  )
+  const sourceEndMatch = bracedBlock(sourceMatches, 'func (s *Server) endMatch')
   const sourceTransaction = sourceEndMatch
     ? bracedBlock(
         sourceEndMatch,
@@ -1250,7 +1325,10 @@ export const conquestV2PointsPublicationErrors = (
     }
   }
 
-  const publish = bracedBlock(publication, 'export const publishMatchCompletion')
+  const publish = bracedBlock(
+    publication,
+    'export const publishMatchCompletion'
+  )
   for (const token of [
     "SET status = 'ended'",
     'FROM multiplayer_match_conquest_points points',
@@ -1272,7 +1350,9 @@ export const conquestV2PointsPublicationErrors = (
     '(SELECT before_total_points FROM unpublished)'
   ]) {
     if (!compactPoints.includes(token)) {
-      errors.push(`ConquestV2Progress publication projection is missing: ${token}`)
+      errors.push(
+        `ConquestV2Progress publication projection is missing: ${token}`
+      )
     }
   }
 
@@ -2432,6 +2512,37 @@ const main = async () => {
       })
     )
   ])
+  const [v2Orchestration, v2WorkflowMigration, v2RewardTest, mainConfig] =
+    await Promise.all([
+      readFile(
+        path.join(
+          root,
+          'cloudflare',
+          'src',
+          'conquest-v2-reward-orchestration.ts'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare',
+          'migrations',
+          '0121_conquest_v2_workflow_handoffs.sql'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          root,
+          'cloudflare',
+          'test',
+          'conquest-v2-reward-worker.test.ts'
+        ),
+        'utf8'
+      ),
+      readFile(path.join(root, 'wrangler.jsonc'), 'utf8').then(JSON.parse)
+    ])
   const errors = [
     ...conquestGateErrors(config, {
       matchService,
@@ -2525,7 +2636,15 @@ const main = async () => {
       drainRepository,
       conquestRpcTest
     ),
-    ...conquestV2DeliveryBatchErrors(v2RewardWorker)
+    ...conquestV2DeliveryBatchErrors(v2RewardWorker),
+    ...conquestV2CloudflareOrchestrationErrors({
+      migration: v2WorkflowMigration,
+      orchestration: v2Orchestration,
+      worker: v2RewardWorker,
+      scheduler,
+      config: mainConfig,
+      test: v2RewardTest
+    })
   ]
   if (errors.length) {
     for (const error of errors)

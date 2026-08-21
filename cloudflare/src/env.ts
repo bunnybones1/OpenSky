@@ -1,3 +1,8 @@
+import type {
+  ConquestV2RewardQueueMessage,
+  ConquestV2RewardWorkflowParams
+} from './conquest-v2-reward-orchestration'
+
 export interface Env {
   ASSETS: Fetcher
   AUTH_DB: D1Database
@@ -35,5 +40,7 @@ export interface Env {
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
   MATCH_SERVICE: Fetcher
+  CONQUEST_V2_REWARD_WORKFLOW?: Workflow<ConquestV2RewardWorkflowParams>
+  CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>
   WORKER_VERSION: WorkerVersionMetadata
 }

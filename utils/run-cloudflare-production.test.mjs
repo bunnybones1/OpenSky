@@ -16,6 +16,9 @@ import {
   REVIEWED_AUTH_DB_ID,
   REVIEWED_CLIENT_FEEDBACK_BUCKET,
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
+  REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE,
+  REVIEWED_CONQUEST_V2_QUEUE,
+  REVIEWED_CONQUEST_V2_WORKFLOW,
   REVIEWED_PRODUCTION_TARGETS,
   REQUIRED_PRODUCTION_SCHEMA_MIGRATION
 } from './run-cloudflare-production.mjs'
@@ -57,6 +60,31 @@ const configFor = target => ({
         },
         vars: { ANALYTICS_RELEASE_VERSION: 'cloudflare' }
       }
+    : {}),
+  ...(target.requiresConquestV2Orchestration
+    ? {
+        workflows: [
+          {
+            name: REVIEWED_CONQUEST_V2_WORKFLOW,
+            binding: 'CONQUEST_V2_REWARD_WORKFLOW',
+            class_name: 'ConquestV2RewardWorkflow'
+          }
+        ],
+        queues: {
+          producers: [
+            {
+              queue: REVIEWED_CONQUEST_V2_QUEUE,
+              binding: 'CONQUEST_V2_REWARD_QUEUE'
+            }
+          ],
+          consumers: [
+            {
+              queue: REVIEWED_CONQUEST_V2_QUEUE,
+              dead_letter_queue: REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE
+            }
+          ]
+        }
+      }
     : {})
 })
 
@@ -90,6 +118,32 @@ test('rejects account, environment, Worker, and database drift', () => {
     })[0],
     /conflicts/
   )
+})
+
+test('pins the Conquest V2 Workflow, Queue, and dead-letter topology', () => {
+  const targetPath = 'wrangler.jsonc'
+  const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
+  for (const changed of [
+    { ...baseline, workflows: [] },
+    {
+      ...baseline,
+      workflows: [
+        { ...baseline.workflows[0], name: 'lookalike-conquest-workflow' }
+      ]
+    },
+    { ...baseline, queues: { ...baseline.queues, producers: [] } },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        consumers: [
+          { ...baseline.queues.consumers[0], dead_letter_queue: undefined }
+        ]
+      }
+    }
+  ]) {
+    assert.match(productionTargetErrors(targetPath, changed)[0], /Conquest V2/)
+  }
 })
 
 test('pins the analytics consumer bucket, release, retry, and dead-letter topology', () => {
@@ -276,7 +330,7 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'attempt_count >= 0',
     'NEW.attempt_count = OLD.attempt_count + 1',
     'NEW.next_attempt_at > NEW.last_attempt_at',
-    "instr(sql, \"'FAILED'\") = 0",
+    'instr(sql, "\'FAILED\'") = 0',
     "NEW.status = 'APPLIED'",
     'multiplayer_match_deck_rank_jobs',
     'multiplayer_match_deck_rank_job_guard',
@@ -285,7 +339,14 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'multiplayer_match_deck_rank_receipt_apply_job',
     'multiplayer_match_experience',
     "ledger.status = 'ended'",
-    '$.match.matchSettings.season'
+    '$.match.matchSettings.season',
+    'conquest_v2_reward_cycle_orchestrations',
+    'conquest_v2_reward_delivery_failures',
+    'conquest_v2_reward_cycle_orchestration_insert_guard',
+    'conquest_v2_reward_cycle_orchestration_update_guard',
+    'conquest_v2_reward_delivery_failures_insert_guard',
+    "cycle.status = 'DELIVERING'",
+    'orchestration.completed_at IS NULL'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -357,7 +418,10 @@ test('accepts only one successful complete read-only schema row', () => {
     grandweaver_task_contract_guard_present: 1,
     deck_rank_job_table_present: 1,
     deck_rank_job_guards_present: 7,
-    deck_rank_job_contract_guards_present: 3
+    deck_rank_job_contract_guards_present: 3,
+    conquest_v2_workflow_tables_present: 2,
+    conquest_v2_workflow_guards_present: 6,
+    conquest_v2_workflow_contract_guards_present: 3
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -448,6 +512,26 @@ test('accepts only one successful complete read-only schema row', () => {
     JSON.stringify([
       {
         results: [{ ...complete, deck_rank_job_contract_guards_present: 2 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_v2_workflow_tables_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_v2_workflow_guards_present: 5 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, conquest_v2_workflow_contract_guards_present: 2 }
+        ],
         success: true
       }
     ]),

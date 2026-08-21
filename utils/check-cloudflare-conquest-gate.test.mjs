@@ -9,6 +9,7 @@ import {
   conquestProjectionPublicationErrors,
   conquestSettlementAdmissionErrors,
   conquestSettlementSourceParityErrors,
+  conquestV2CloudflareOrchestrationErrors,
   conquestV2DeliveryBatchErrors,
   conquestV2PointsPublicationErrors,
   conquestV2PointsSourceParityErrors,
@@ -246,7 +247,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       "WHERE cycle.status <> 'COMPLETED'",
       '}',
       'const validatedSchedule = () => {}',
-      'export const runDueConquestV2Rewards = async () => {',
+      'export const acceptDueConquestV2RewardCycle = async () => {',
       'const schedule =',
       '(await resumableSchedule(database, now)) ??',
       '(await activeSchedule(database, now))',
@@ -525,6 +526,71 @@ test('keeps snapshotted Conquest V2 delivery ahead of later schedule changes', a
     (await resumableSchedule(database, now))`
       )
     ).some(error => error.includes('resume a pinned incomplete cycle'))
+  )
+})
+
+test('requires Workflow, Queue, D1, and recovery evidence for Conquest V2', async () => {
+  const [migration, orchestration, worker, scheduler, testSource, configText] =
+    await Promise.all([
+      readFile(
+        'cloudflare/migrations/0121_conquest_v2_workflow_handoffs.sql',
+        'utf8'
+      ),
+      readFile('cloudflare/src/conquest-v2-reward-orchestration.ts', 'utf8'),
+      readFile('cloudflare/src/conquest-v2-reward-worker.ts', 'utf8'),
+      readFile('cloudflare/src/index.ts', 'utf8'),
+      readFile('cloudflare/test/conquest-v2-reward-worker.test.ts', 'utf8'),
+      readFile('wrangler.jsonc', 'utf8')
+    ])
+  const evidence = {
+    migration,
+    orchestration,
+    worker,
+    scheduler,
+    test: testSource,
+    config: JSON.parse(configText)
+  }
+  assert.deepEqual(conquestV2CloudflareOrchestrationErrors(evidence), [])
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      orchestration: orchestration.replace('step.sleepUntil(', 'step.sleep(')
+    }).some(error => error.includes('Workflow/Queue adapter'))
+  )
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      migration: migration.replace(
+        'conquest_v2_reward_delivery_failures_no_delete',
+        'weakened_delivery_failures_guard'
+      )
+    }).some(error => error.includes('handoff migration'))
+  )
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      scheduler: scheduler.replace(
+        'dispatchDueConquestV2Rewards(env)',
+        'runDueConquestV2Rewards(env.AUTH_DB)'
+      )
+    }).some(error => error.includes('cron'))
+  )
+  const unsafeConfig = structuredClone(evidence.config)
+  delete unsafeConfig.queues.consumers[0].dead_letter_queue
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      config: unsafeConfig
+    }).some(error => error.includes('Queue/DLQ'))
+  )
+  assert.ok(
+    conquestV2CloudflareOrchestrationErrors({
+      ...evidence,
+      test: testSource.replace(
+        'attempt seven after six Queue failures',
+        'terminally fails after five Queue attempts'
+      )
+    }).some(error => error.includes('orchestration regression'))
   )
 })
 
@@ -976,10 +1042,7 @@ test('withholds Conquest projections until source-atomic match publication', asy
     await Promise.all([
       readFile('api/rpc/matches.go', 'utf8'),
       readFile('api/rpc/conquests.go', 'utf8'),
-      readFile(
-        'game-server-cloudflare/src/completion-publication.ts',
-        'utf8'
-      ),
+      readFile('game-server-cloudflare/src/completion-publication.ts', 'utf8'),
       readFile('cloudflare/src/conquest.ts', 'utf8'),
       readFile('cloudflare/test/conquest-rpc.test.ts', 'utf8')
     ])
@@ -1054,7 +1117,7 @@ test('withholds Conquest projections until source-atomic match publication', asy
       sourceConquests,
       publication,
       repository.replace(
-        ".filter(([matchId]) => !unpublishedMatchIds.has(matchId))",
+        '.filter(([matchId]) => !unpublishedMatchIds.has(matchId))',
         '.filter(() => true)'
       )
     ).some(error => error.includes('progress filter'))
@@ -1173,7 +1236,10 @@ test('withholds Conquest V2 points until source-atomic match publication', async
       sourcePoints,
       publication,
       repository,
-      rpcTest.replace('current: 200,\n      total: 1200', 'current: 500,\n      total: 1500')
+      rpcTest.replace(
+        'current: 200,\n      total: 1200',
+        'current: 500,\n      total: 1500'
+      )
     ).some(error => error.includes('runtime proof'))
   )
 })

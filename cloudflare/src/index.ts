@@ -3,7 +3,12 @@ import { AccountDeletionRepository } from './account-deletion'
 import { applyAssetCachePolicy } from './asset-cache'
 import { deliverDueConquestGold } from './conquest-delivery'
 import { runConquestReadinessDrills } from './conquest-drill'
-import { runDueConquestV2Rewards } from './conquest-v2-reward-worker'
+import {
+  ConquestV2RewardWorkflow,
+  dispatchDueConquestV2Rewards,
+  handleConquestV2RewardQueue,
+  type ConquestV2RewardQueueMessage
+} from './conquest-v2-reward-orchestration'
 import type { Env } from './env'
 import { handleIdentityRequest } from './identity-api'
 import { runDueLeaderboardRewards } from './leaderboard-reward-worker'
@@ -50,7 +55,7 @@ export default {
       Promise.all([
         deliverDueConquestGold(env.AUTH_DB),
         runConquestReadinessDrills(env),
-        runDueConquestV2Rewards(env.AUTH_DB),
+        dispatchDueConquestV2Rewards(env),
         runDueLeaderboardRewards(env.AUTH_DB),
         runReferralStickerRewards(env.AUTH_DB),
         runDueSkypassAutoClaims(env.AUTH_DB),
@@ -62,5 +67,13 @@ export default {
         new WalletLinksRepository(env.AUTH_DB).cleanupExpired()
       ]).then(() => undefined)
     )
+  },
+  async queue(
+    batch: MessageBatch<ConquestV2RewardQueueMessage>,
+    env
+  ): Promise<void> {
+    await handleConquestV2RewardQueue(batch, env.AUTH_DB)
   }
-} satisfies ExportedHandler<Env>
+} satisfies ExportedHandler<Env, ConquestV2RewardQueueMessage>
+
+export { ConquestV2RewardWorkflow }

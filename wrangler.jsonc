@@ -39,6 +39,27 @@
       }
     ]
   },
+  "workflows": [
+    {
+      "name": "cloud-weasel-conquest-v2-rewards",
+      "binding": "CONQUEST_V2_REWARD_WORKFLOW",
+      "class_name": "ConquestV2RewardWorkflow"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "cloud-weasel-conquest-v2-reward-delivery",
+        "binding": "CONQUEST_V2_REWARD_QUEUE"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "cloud-weasel-conquest-v2-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-conquest-v2-reward-delivery-dlq"
+      }
+    ]
+  },
   "services": [
     {
       "binding": "MATCH_SERVICE",

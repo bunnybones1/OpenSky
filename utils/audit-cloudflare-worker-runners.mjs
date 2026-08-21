@@ -24,13 +24,13 @@ export const EXPECTED_RUNNERS = {
   },
   ConquestV2RewardsRunner: {
     disposition: 'ported',
-    evidenceFile: 'cloudflare/src/conquest-v2-reward-worker.ts',
+    evidenceFile: 'cloudflare/test/conquest-v2-reward-worker.test.ts',
     evidence: [
-      'runDueConquestV2Rewards',
-      'conquest_v2_reward_schedule_activations',
-      'conquest_v2_reward_cycle_policy_receipts',
-      'player_conquest_v2_reward_awards',
-      'player_items'
+      'recovers a D1-to-Workflow creation gap with one deterministic cycle',
+      'uses Workflow sleep and Queue receipts without early or duplicate rewards',
+      'isolates players and recovers attempt seven after six Queue failures',
+      'for (let attempt = 2; attempt <= 6; attempt += 1)',
+      "status: 'COMPLETED', completed_at: expect.any(String)"
     ]
   },
   CrashedMatchCleanupRunner: {
@@ -40,8 +40,7 @@ export const EXPECTED_RUNNERS = {
   },
   DeckRankUpdateRunner: {
     disposition: 'ported',
-    evidenceFile:
-      'game-server-cloudflare/test-cloudflare/deck-ranks.test.ts',
+    evidenceFile: 'game-server-cloudflare/test-cloudflare/deck-ranks.test.ts',
     evidence: [
       'serializes concurrent completions through the coordinator',
       'rolls back every aggregate write when a D1 batch statement fails',
@@ -109,8 +108,7 @@ export const EXPECTED_RUNNERS = {
   },
   PromoteGrandmastersRunner: {
     disposition: 'ported',
-    evidenceFile:
-      'game-server-cloudflare/test-cloudflare/game-match.test.ts',
+    evidenceFile: 'game-server-cloudflare/test-cloudflare/game-match.test.ts',
     evidence: [
       'keeps the asynchronous Grandweaver job recoverable',
       'for (let attempt = 1; attempt <= 6; attempt += 1)',

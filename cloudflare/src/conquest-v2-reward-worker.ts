@@ -14,7 +14,6 @@ import {
 
 const EVENT_ID = 2
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const MAX_PLAYERS_PER_RUN = 5
 const SILVER_TOKEN_OFFSET = 65_536
 
 interface ScheduleRow {
@@ -42,7 +41,7 @@ interface ScheduleRow {
   current_weight_per_silver_card: number
 }
 
-interface CycleRow {
+export interface ConquestV2RewardCycleRow {
   id: number
   schedule_version: number
   scheduled_at: string
@@ -59,10 +58,23 @@ interface CycleRow {
   attempt_count: number
 }
 
-interface EntryRow {
+export interface ConquestV2RewardEntryRow {
   user_id: string
   treasure_level: number
   treasure_weight: number
+}
+
+export interface ConquestV2RewardOrchestrationReceipt {
+  cycleId: number
+  workflowInstanceId: string
+  acceptedAt: string
+  completedAt?: string
+}
+
+export interface AcceptedConquestV2RewardCycle {
+  status: 'disabled' | 'not_due' | 'accepted' | 'already_completed'
+  cycle?: ConquestV2RewardCycleRow
+  orchestration?: ConquestV2RewardOrchestrationReceipt
 }
 
 export interface ConquestV2RewardRun {
@@ -105,7 +117,7 @@ export const conquestV2LegacyUsdcMicros = (
   const divisor = totalWeight === 0 ? 1 : totalWeight
   const share = Math.fround(
     Math.fround(Math.fround(poolAmount) / Math.fround(divisor)) *
-    Math.fround(CONQUEST_V2_TREASURE_TOTAL_WEIGHTS[treasureLevel] ?? 0)
+      Math.fround(CONQUEST_V2_TREASURE_TOTAL_WEIGHTS[treasureLevel] ?? 0)
   )
   return Math.round(Number(share) * 1_000_000)
 }
@@ -165,8 +177,7 @@ const activeSchedule = async (
     .first<ScheduleRow>()
   return approvedSchedule(schedule, now) &&
     schedule!.settings_version === schedule!.current_settings_version &&
-    schedule!.settings_mutation_id ===
-      schedule!.current_settings_mutation_id &&
+    schedule!.settings_mutation_id === schedule!.current_settings_mutation_id &&
     schedule!.approved_weight_per_silver_card ===
       schedule!.current_weight_per_silver_card
     ? schedule
@@ -270,7 +281,7 @@ const cycleBySchedule = async (
   database: D1Database,
   scheduleVersion: number,
   scheduledAt: string
-): Promise<CycleRow | null> =>
+): Promise<ConquestV2RewardCycleRow | null> =>
   database
     .prepare(
       `SELECT id, schedule_version, scheduled_at, delivery_at, season, week,
@@ -281,7 +292,22 @@ const cycleBySchedule = async (
        WHERE schedule_version = ? AND scheduled_at = ?`
     )
     .bind(scheduleVersion, scheduledAt)
-    .first<CycleRow>()
+    .first<ConquestV2RewardCycleRow>()
+
+export const conquestV2RewardCycleById = async (
+  database: D1Database,
+  cycleId: number
+): Promise<ConquestV2RewardCycleRow | null> =>
+  database
+    .prepare(
+      `SELECT id, schedule_version, scheduled_at, delivery_at, season, week,
+              random_seed, reward_card_sets_json, eligible_card_ids_json,
+              pool_amount, weight_per_silver_card, total_weight, status,
+              attempt_count
+       FROM conquest_v2_reward_cycles WHERE id = ?`
+    )
+    .bind(cycleId)
+    .first<ConquestV2RewardCycleRow>()
 
 const nextDueTime = async (
   database: D1Database,
@@ -295,7 +321,10 @@ const nextDueTime = async (
        WHERE schedule_version = ? ORDER BY scheduled_at DESC LIMIT 1`
     )
     .bind(schedule.version)
-    .first<{ scheduled_at: string; status: CycleRow['status'] }>()
+    .first<{
+      scheduled_at: string
+      status: ConquestV2RewardCycleRow['status']
+    }>()
   if (latest && latest.status !== 'COMPLETED') {
     return new Date(latest.scheduled_at)
   }
@@ -356,12 +385,12 @@ export const conquestV2OffchainTreasureInfo = async (
   )
 }
 
-const ensureCycle = async (
+export const ensureConquestV2RewardCycle = async (
   database: D1Database,
   schedule: ScheduleRow,
   scheduledAt: Date,
   now: Date
-): Promise<CycleRow> => {
+): Promise<ConquestV2RewardCycleRow> => {
   const existing = await cycleBySchedule(
     database,
     schedule.version,
@@ -387,29 +416,32 @@ const ensureCycle = async (
   }
   const pool = await economy.poolSnapshot(now)
   await database.batch([
-    database.prepare(
-      `INSERT OR IGNORE INTO conquest_v2_reward_cycles
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO conquest_v2_reward_cycles
          (schedule_version, scheduled_at, delivery_at, season, week,
           random_seed, reward_card_sets_json, eligible_card_ids_json, pool_amount,
           weight_per_silver_card, status, attempt_count, started_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARING', 0, ?)`
-    ).bind(
-      schedule.version,
-      scheduledAt.toISOString(),
-      new Date(
-        scheduledAt.getTime() + deliveryDelaySeconds * 1_000
-      ).toISOString(),
-      season,
-      week,
-      crypto.randomUUID(),
-      JSON.stringify(rewardCardSets),
-      JSON.stringify(eligibleCardIds),
-      pool.amount,
-      weightPerSilverCard,
-      now.toISOString()
-    ),
-    database.prepare(
-      `INSERT OR IGNORE INTO conquest_v2_reward_cycle_policy_receipts
+      )
+      .bind(
+        schedule.version,
+        scheduledAt.toISOString(),
+        new Date(
+          scheduledAt.getTime() + deliveryDelaySeconds * 1_000
+        ).toISOString(),
+        season,
+        week,
+        crypto.randomUUID(),
+        JSON.stringify(rewardCardSets),
+        JSON.stringify(eligibleCardIds),
+        pool.amount,
+        weightPerSilverCard,
+        now.toISOString()
+      ),
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO conquest_v2_reward_cycle_policy_receipts
          (cycle_id, schedule_version, policy_version, policy_hash,
           settings_version, settings_mutation_id, weight_per_silver_card,
           silver_counts_json, eligible_card_ids_json, created_at)
@@ -418,16 +450,17 @@ const ensureCycle = async (
        FROM conquest_v2_reward_cycles
        WHERE schedule_version = ? AND scheduled_at = ?
          AND status = 'PREPARING'`
-    ).bind(
-      CONQUEST_V2_REWARD_POLICY_VERSION,
-      CONQUEST_V2_REWARD_POLICY_HASH,
-      schedule.settings_version,
-      schedule.settings_mutation_id,
-      weightPerSilverCard,
-      schedule.silver_counts_json,
-      schedule.version,
-      scheduledAt.toISOString()
-    )
+      )
+      .bind(
+        CONQUEST_V2_REWARD_POLICY_VERSION,
+        CONQUEST_V2_REWARD_POLICY_HASH,
+        schedule.settings_version,
+        schedule.settings_mutation_id,
+        weightPerSilverCard,
+        schedule.silver_counts_json,
+        schedule.version,
+        scheduledAt.toISOString()
+      )
   ])
   const cycle = await cycleBySchedule(
     database,
@@ -438,9 +471,93 @@ const ensureCycle = async (
   return cycle
 }
 
-const snapshotCycle = async (
+const orchestrationReceipt = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycleId: number
+): Promise<ConquestV2RewardOrchestrationReceipt | null> => {
+  const row = await database
+    .prepare(
+      `SELECT cycle_id, workflow_instance_id, accepted_at, completed_at
+       FROM conquest_v2_reward_cycle_orchestrations WHERE cycle_id = ?`
+    )
+    .bind(cycleId)
+    .first<{
+      cycle_id: number
+      workflow_instance_id: string
+      accepted_at: string
+      completed_at: string | null
+    }>()
+  return row
+    ? {
+        cycleId: row.cycle_id,
+        workflowInstanceId: row.workflow_instance_id,
+        acceptedAt: row.accepted_at,
+        ...(row.completed_at ? { completedAt: row.completed_at } : {})
+      }
+    : null
+}
+
+export const ensureConquestV2RewardOrchestration = async (
+  database: D1Database,
+  cycle: ConquestV2RewardCycleRow,
+  now: Date
+): Promise<ConquestV2RewardOrchestrationReceipt> => {
+  const existing = await orchestrationReceipt(database, cycle.id)
+  if (existing) return existing
+  const workflowInstanceId = `conquest-v2-cycle-${cycle.id}`
+  await database
+    .prepare(
+      `INSERT OR IGNORE INTO conquest_v2_reward_cycle_orchestrations
+         (cycle_id, workflow_instance_id, accepted_at, completed_at)
+       VALUES (?, ?, ?, NULL)`
+    )
+    .bind(cycle.id, workflowInstanceId, now.toISOString())
+    .run()
+  const receipt = await orchestrationReceipt(database, cycle.id)
+  if (!receipt) {
+    throw new Error('Conquest V2 orchestration receipt was not created')
+  }
+  return receipt
+}
+
+/**
+ * Accepts at most one approved due cycle as durable D1 business work. This is
+ * safe to call from every cron recovery trigger; both the cycle and Workflow
+ * identity are deterministic and duplicate-safe.
+ */
+export const acceptDueConquestV2RewardCycle = async (
+  database: D1Database,
+  now = new Date()
+): Promise<AcceptedConquestV2RewardCycle> => {
+  const schedule =
+    (await resumableSchedule(database, now)) ??
+    (await activeSchedule(database, now))
+  if (!schedule) return { status: 'disabled' }
+  const scheduledAt = await nextDueTime(database, schedule, now)
+  if (!scheduledAt) return { status: 'not_due' }
+  const cycle = await ensureConquestV2RewardCycle(
+    database,
+    schedule,
+    scheduledAt,
+    now
+  )
+  if (cycle.status === 'COMPLETED') {
+    return { status: 'already_completed', cycle }
+  }
+  return {
+    status: 'accepted',
+    cycle,
+    orchestration: await ensureConquestV2RewardOrchestration(
+      database,
+      cycle,
+      now
+    )
+  }
+}
+
+export const snapshotConquestV2RewardCycle = async (
+  database: D1Database,
+  cycle: ConquestV2RewardCycleRow,
   now: Date
 ): Promise<void> => {
   const timestamp = now.toISOString()
@@ -527,10 +644,10 @@ const drawCards = async (
   return draws
 }
 
-const deliverPlayer = async (
+export const deliverConquestV2RewardEntry = async (
   database: D1Database,
-  cycle: CycleRow,
-  entry: EntryRow,
+  cycle: ConquestV2RewardCycleRow,
+  entry: ConquestV2RewardEntryRow,
   now: Date
 ): Promise<boolean> => {
   const pool = JSON.parse(cycle.eligible_card_ids_json) as number[]
@@ -702,7 +819,7 @@ const deliverPlayer = async (
 
 const deliverCycle = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycle: ConquestV2RewardCycleRow,
   now: Date
 ): Promise<number> => {
   const entries = await database
@@ -713,19 +830,20 @@ const deliverCycle = async (
          ON award.cycle_id = entry.cycle_id AND award.user_id = entry.user_id
         AND award.application_status = 'APPLIED'
        WHERE entry.cycle_id = ? AND award.id IS NULL
-       ORDER BY entry.treasure_level DESC, entry.user_id
-       LIMIT ?`
+       ORDER BY entry.treasure_level DESC, entry.user_id`
     )
-    .bind(cycle.id, MAX_PLAYERS_PER_RUN)
-    .all<EntryRow>()
+    .bind(cycle.id)
+    .all<ConquestV2RewardEntryRow>()
   let delivered = 0
   for (const entry of entries.results) {
-    if (await deliverPlayer(database, cycle, entry, now)) delivered++
+    if (await deliverConquestV2RewardEntry(database, cycle, entry, now)) {
+      delivered++
+    }
   }
   return delivered
 }
 
-const cycleDeliveryComplete = async (
+export const conquestV2CycleDeliveryComplete = async (
   database: D1Database,
   cycleId: number
 ): Promise<boolean> => {
@@ -742,9 +860,69 @@ const cycleDeliveryComplete = async (
   return row?.expected === row?.delivered
 }
 
+export const beginConquestV2RewardDelivery = async (
+  database: D1Database,
+  cycleId: number,
+  now: Date
+): Promise<ConquestV2RewardCycleRow> => {
+  let cycle = await conquestV2RewardCycleById(database, cycleId)
+  if (!cycle) throw new Error('Conquest V2 reward cycle was not found')
+  if (cycle.status === 'PREPARING') {
+    throw new Error('Conquest V2 reward cycle was not snapshotted')
+  }
+  if (cycle.status === 'PENDING_DELIVERY') {
+    if (Date.parse(cycle.delivery_at) > now.getTime()) {
+      throw new Error('Conquest V2 reward delivery is not due')
+    }
+    await database
+      .prepare(
+        `UPDATE conquest_v2_reward_cycles SET status = 'DELIVERING'
+         WHERE id = ? AND status = 'PENDING_DELIVERY'`
+      )
+      .bind(cycleId)
+      .run()
+    cycle = await conquestV2RewardCycleById(database, cycleId)
+    if (!cycle) throw new Error('Conquest V2 reward cycle disappeared')
+  }
+  return cycle
+}
+
+export const completeConquestV2RewardCycle = async (
+  database: D1Database,
+  cycleId: number,
+  now: Date
+): Promise<boolean> => {
+  if (!(await conquestV2CycleDeliveryComplete(database, cycleId))) return false
+  const completedAt = now.toISOString()
+  await database.batch([
+    database
+      .prepare(
+        `UPDATE conquest_v2_reward_cycles
+         SET status = 'COMPLETED', completed_at = ?
+         WHERE id = ? AND status = 'DELIVERING'`
+      )
+      .bind(completedAt, cycleId),
+    database
+      .prepare(
+        `UPDATE conquest_v2_reward_cycle_orchestrations
+         SET completed_at = ?
+         WHERE cycle_id = ? AND completed_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM conquest_v2_reward_cycles cycle
+             WHERE cycle.id = ? AND cycle.status = 'COMPLETED'
+               AND cycle.completed_at = ?
+           )`
+      )
+      .bind(completedAt, cycleId, cycleId, completedAt)
+  ])
+  return (
+    (await conquestV2RewardCycleById(database, cycleId))?.status === 'COMPLETED'
+  )
+}
+
 const recordFailure = async (
   database: D1Database,
-  cycle: CycleRow,
+  cycle: ConquestV2RewardCycleRow,
   error: unknown,
   now: Date
 ) => {
@@ -783,24 +961,18 @@ export const runDueConquestV2Rewards = async (
   database: D1Database,
   now = new Date()
 ): Promise<ConquestV2RewardRun> => {
-  const schedule =
-    (await resumableSchedule(database, now)) ??
-    (await activeSchedule(database, now))
-  if (!schedule) return { status: 'disabled', delivered: 0 }
-  const scheduledAt = await nextDueTime(database, schedule, now)
-  if (!scheduledAt) return { status: 'not_due', delivered: 0 }
-  let cycle = await ensureCycle(database, schedule, scheduledAt, now)
-  if (cycle.status === 'COMPLETED') {
+  const accepted = await acceptDueConquestV2RewardCycle(database, now)
+  if (accepted.status === 'disabled' || accepted.status === 'not_due') {
+    return { status: accepted.status, delivered: 0 }
+  }
+  let cycle = accepted.cycle!
+  if (accepted.status === 'already_completed') {
     return { status: 'already_completed', cycleId: cycle.id, delivered: 0 }
   }
   try {
     if (cycle.status === 'PREPARING') {
-      await snapshotCycle(database, cycle, now)
-      cycle = (await cycleBySchedule(
-        database,
-        schedule.version,
-        scheduledAt.toISOString()
-      ))!
+      await snapshotConquestV2RewardCycle(database, cycle, now)
+      cycle = (await conquestV2RewardCycleById(database, cycle.id))!
     }
     if (
       cycle.status === 'PENDING_DELIVERY' &&
@@ -812,36 +984,10 @@ export const runDueConquestV2Rewards = async (
         delivered: 0
       }
     }
-    if (cycle.status === 'PENDING_DELIVERY') {
-      await database
-        .prepare(
-          `UPDATE conquest_v2_reward_cycles SET status = 'DELIVERING'
-           WHERE id = ? AND status = 'PENDING_DELIVERY'`
-        )
-        .bind(cycle.id)
-        .run()
-      cycle = (await cycleBySchedule(
-        database,
-        schedule.version,
-        scheduledAt.toISOString()
-      ))!
-    }
+    cycle = await beginConquestV2RewardDelivery(database, cycle.id, now)
     const delivered = await deliverCycle(database, cycle, now)
-    if (await cycleDeliveryComplete(database, cycle.id)) {
-      await database
-        .prepare(
-          `UPDATE conquest_v2_reward_cycles
-           SET status = 'COMPLETED', completed_at = ?
-           WHERE id = ? AND status = 'DELIVERING'`
-        )
-        .bind(now.toISOString(), cycle.id)
-        .run()
-    }
-    const completed = await cycleBySchedule(
-      database,
-      schedule.version,
-      scheduledAt.toISOString()
-    )
+    await completeConquestV2RewardCycle(database, cycle.id, now)
+    const completed = await conquestV2RewardCycleById(database, cycle.id)
     return {
       status: completed?.status === 'COMPLETED' ? 'completed' : 'in_progress',
       cycleId: cycle.id,

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import cardLibrary from '../src/generated/card-library.json'
 import { ContentRepository } from '../src/content'
 import {
+  acceptDueConquestV2RewardCycle,
   conquestV2LegacyUsdcMicros,
   conquestV2OffchainTreasureInfo,
   conquestV2RewardCardIds,
@@ -22,6 +23,16 @@ import {
 } from '../src/conquest-v2-treasure'
 import { PlayerRepository } from '../src/player'
 import { PlayerRpcRepository } from '../src/player-rpc'
+import {
+  applyConquestV2RewardQueueMessage,
+  dispatchDueConquestV2Rewards,
+  handleConquestV2RewardQueue,
+  publishUnappliedConquestV2Rewards,
+  runConquestV2RewardWorkflow,
+  snapshotAcceptedConquestV2RewardCycle,
+  type ConquestV2RewardQueueMessage
+} from '../src/conquest-v2-reward-orchestration'
+import type { Env } from '../src/env'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
@@ -131,6 +142,38 @@ const silverTotal = async (userId: string) =>
     .bind(userId)
     .first<number>('total')
 
+const queueMessage = (
+  body: ConquestV2RewardQueueMessage,
+  id: string,
+  attempts: number
+) => {
+  const outcome = { acked: false, retried: false }
+  const message = {
+    id,
+    timestamp: SNAPSHOT_NOW,
+    body,
+    attempts,
+    ack: () => {
+      outcome.acked = true
+    },
+    retry: () => {
+      outcome.retried = true
+    }
+  } as Message<ConquestV2RewardQueueMessage>
+  return { message, outcome }
+}
+
+const messageBatch = (messages: Message<ConquestV2RewardQueueMessage>[]) =>
+  ({
+    messages,
+    queue: 'cloud-weasel-conquest-v2-reward-delivery',
+    metadata: {
+      metrics: { backlogCount: messages.length, backlogBytes: 0 }
+    },
+    ackAll: () => undefined,
+    retryAll: () => undefined
+  }) as MessageBatch<ConquestV2RewardQueueMessage>
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
     env.AUTH_DB.prepare(
@@ -162,6 +205,12 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare(
       'DROP TRIGGER IF EXISTS conquest_v2_reward_cycle_policy_receipts_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS conquest_v2_reward_cycle_orchestrations_no_delete'
+    ),
+    env.AUTH_DB.prepare(
+      'DROP TRIGGER IF EXISTS conquest_v2_reward_delivery_failures_no_delete'
     )
   ])
   await env.AUTH_DB.batch([
@@ -170,6 +219,8 @@ beforeEach(async () => {
     ),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_v2_reward_feed_events'),
     env.AUTH_DB.prepare('DELETE FROM player_conquest_v2_reward_awards'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_delivery_failures'),
+    env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_cycle_orchestrations'),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_cycle_failures'),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_entries'),
     env.AUTH_DB.prepare('DELETE FROM conquest_v2_reward_cycle_policy_receipts'),
@@ -246,6 +297,20 @@ beforeEach(async () => {
        BEFORE DELETE ON conquest_v2_reward_cycle_policy_receipts
        BEGIN
          SELECT RAISE(ABORT, 'Conquest V2 reward cycle policy receipts are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER conquest_v2_reward_cycle_orchestrations_no_delete
+       BEFORE DELETE ON conquest_v2_reward_cycle_orchestrations
+       BEGIN
+         SELECT RAISE(ABORT, 'Conquest V2 orchestration receipts are immutable');
+       END`
+    ),
+    env.AUTH_DB.prepare(
+      `CREATE TRIGGER conquest_v2_reward_delivery_failures_no_delete
+       BEFORE DELETE ON conquest_v2_reward_delivery_failures
+       BEGIN
+         SELECT RAISE(ABORT, 'Conquest V2 delivery failures are immutable');
        END`
     )
   ])
@@ -326,10 +391,7 @@ describe('Conquest V2 off-chain weekly rewards', () => {
        FROM conquest_v2_reward_policy_cards
        WHERE policy_version = ? AND policy_hash = ? ORDER BY card_id`
     )
-      .bind(
-        CONQUEST_V2_REWARD_POLICY_VERSION,
-        CONQUEST_V2_REWARD_POLICY_HASH
-      )
+      .bind(CONQUEST_V2_REWARD_POLICY_VERSION, CONQUEST_V2_REWARD_POLICY_HASH)
       .all<{
         card_id: number
         card_set: string
@@ -388,9 +450,9 @@ describe('Conquest V2 off-chain weekly rewards', () => {
 
   it('refuses activation that could deduct points without an off-chain item', async () => {
     await setupPlayer('treasure-guard', 250)
-    await expect(
-      enableSchedule()
-    ).rejects.toThrow('must start as a valid draft')
+    await expect(enableSchedule()).rejects.toThrow(
+      'must start as a valid draft'
+    )
     expect(
       await env.AUTH_DB.prepare(
         `SELECT current_points FROM player_conquest_points
@@ -901,6 +963,329 @@ describe('Conquest V2 off-chain weekly rewards', () => {
     expect(await silverTotal('treasure-receipt-retry')).toBe(1)
   })
 
+  it('recovers a D1-to-Workflow creation gap with one deterministic cycle', async () => {
+    await setupPlayer('treasure-workflow-gap', 250)
+    await setWeightPerSilver(1)
+    await enableSchedule()
+
+    const unavailableWorkflow = {
+      create: async () => {
+        throw new Error('injected Workflow creation failure')
+      },
+      get: async () => {
+        throw new Error('Workflow instance does not exist')
+      }
+    } as unknown as Workflow<ConquestV2RewardQueueMessage>
+    await expect(
+      dispatchDueConquestV2Rewards(
+        {
+          AUTH_DB: env.AUTH_DB,
+          CONQUEST_V2_REWARD_WORKFLOW: unavailableWorkflow as never
+        },
+        SNAPSHOT_NOW
+      )
+    ).rejects.toThrow('injected Workflow creation failure')
+
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM conquest_v2_reward_cycles) AS cycles,
+           (SELECT COUNT(*)
+            FROM conquest_v2_reward_cycle_orchestrations) AS orchestrations,
+           (SELECT COUNT(*) FROM conquest_v2_reward_entries) AS entries`
+      ).first()
+    ).toEqual({ cycles: 1, orchestrations: 1, entries: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT current_points FROM player_conquest_points
+         WHERE user_id = 'treasure-workflow-gap' AND event_id = 2`
+      ).first('current_points')
+    ).toBe(250)
+    const identity = await env.AUTH_DB.prepare(
+      `SELECT cycle_id, workflow_instance_id
+       FROM conquest_v2_reward_cycle_orchestrations`
+    ).first<{ cycle_id: number; workflow_instance_id: string }>()
+
+    const creations: Array<{ id?: string; params?: unknown }> = []
+    const recoveredWorkflow = {
+      create: async (options?: { id?: string; params?: unknown }) => {
+        creations.push(options ?? {})
+        return { id: options?.id }
+      }
+    } as unknown as Workflow
+    expect(
+      await dispatchDueConquestV2Rewards(
+        {
+          AUTH_DB: env.AUTH_DB,
+          CONQUEST_V2_REWARD_WORKFLOW: recoveredWorkflow
+        } as Pick<Env, 'AUTH_DB' | 'CONQUEST_V2_REWARD_WORKFLOW'>,
+        SNAPSHOT_NOW
+      )
+    ).toEqual({
+      status: 'started',
+      cycleId: identity!.cycle_id,
+      workflowInstanceId: identity!.workflow_instance_id
+    })
+    expect(creations).toEqual([
+      {
+        id: identity!.workflow_instance_id,
+        params: { cycleId: identity!.cycle_id }
+      }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM conquest_v2_reward_cycles) AS cycles,
+           (SELECT COUNT(*)
+            FROM conquest_v2_reward_cycle_orchestrations) AS orchestrations`
+      ).first()
+    ).toEqual({ cycles: 1, orchestrations: 1 })
+  })
+
+  it('uses Workflow sleep and Queue receipts without early or duplicate rewards', async () => {
+    await setupPlayer('treasure-workflow-player', 250)
+    await setWeightPerSilver(1)
+    await enableSchedule()
+    const accepted = await acceptDueConquestV2RewardCycle(
+      env.AUTH_DB,
+      SNAPSHOT_NOW
+    )
+    expect(accepted.status).toBe('accepted')
+    const cycle = accepted.cycle!
+    const instanceId = accepted.orchestration!.workflowInstanceId
+    await snapshotAcceptedConquestV2RewardCycle(
+      env.AUTH_DB,
+      cycle.id,
+      instanceId,
+      SNAPSHOT_NOW
+    )
+
+    const deliveredBodies: ConquestV2RewardQueueMessage[] = []
+    const queue = {
+      sendBatch: async (
+        messages: Iterable<{ body: ConquestV2RewardQueueMessage }>
+      ) => {
+        for (const message of messages) {
+          deliveredBodies.push(message.body)
+          await applyConquestV2RewardQueueMessage(
+            env.AUTH_DB,
+            message.body,
+            DELIVERY_NOW
+          )
+        }
+        return {
+          metadata: {
+            metrics: { backlogCount: 0, backlogBytes: 0 }
+          }
+        }
+      }
+    } as unknown as Queue<ConquestV2RewardQueueMessage>
+    await expect(
+      publishUnappliedConquestV2Rewards(
+        { AUTH_DB: env.AUTH_DB, CONQUEST_V2_REWARD_QUEUE: queue },
+        cycle.id,
+        SNAPSHOT_NOW
+      )
+    ).rejects.toThrow('delivery is not due')
+    expect(deliveredBodies).toEqual([])
+    expect(await silverTotal('treasure-workflow-player')).toBe(0)
+
+    const calls: Array<{ kind: string; name: string; value?: unknown }> = []
+    const step = {
+      do: async (name: string, ...args: unknown[]) => {
+        calls.push({ kind: 'do', name })
+        const callback = args.find(value => typeof value === 'function') as
+          | (() => Promise<unknown>)
+          | undefined
+        if (!callback) throw new Error('missing Workflow callback')
+        return callback()
+      },
+      sleepUntil: async (name: string, value: Date | number) => {
+        calls.push({ kind: 'sleepUntil', name, value })
+      },
+      sleep: async (name: string, value: unknown) => {
+        calls.push({ kind: 'sleep', name, value })
+      }
+    } as unknown as Parameters<typeof runConquestV2RewardWorkflow>[2]
+    expect(
+      await runConquestV2RewardWorkflow(
+        { AUTH_DB: env.AUTH_DB, CONQUEST_V2_REWARD_QUEUE: queue },
+        {
+          payload: { cycleId: cycle.id },
+          timestamp: SNAPSHOT_NOW,
+          instanceId,
+          workflowName: 'cloud-weasel-conquest-v2-rewards'
+        },
+        step
+      )
+    ).toEqual({ cycleId: cycle.id, completed: true })
+    expect(calls.find(call => call.kind === 'sleepUntil')?.value).toEqual(
+      DELIVERY
+    )
+    expect(deliveredBodies).toEqual([
+      { version: 1, cycleId: cycle.id, userId: 'treasure-workflow-player' }
+    ])
+    expect(await silverTotal('treasure-workflow-player')).toBe(1)
+    expect(
+      await applyConquestV2RewardQueueMessage(
+        env.AUTH_DB,
+        deliveredBodies[0],
+        DELIVERY_NOW
+      )
+    ).toBe('duplicate')
+    expect(await silverTotal('treasure-workflow-player')).toBe(1)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT cycle.status, orchestration.completed_at
+         FROM conquest_v2_reward_cycles cycle
+         JOIN conquest_v2_reward_cycle_orchestrations orchestration
+           ON orchestration.cycle_id = cycle.id
+         WHERE cycle.id = ?`
+      )
+        .bind(cycle.id)
+        .first()
+    ).toEqual({ status: 'COMPLETED', completed_at: expect.any(String) })
+  })
+
+  it('isolates players and recovers attempt seven after six Queue failures', async () => {
+    await setupPlayer('treasure-queue-fault', 250)
+    await setupPlayer('treasure-queue-success', 250)
+    await setWeightPerSilver(1)
+    await enableSchedule(0)
+    const accepted = await acceptDueConquestV2RewardCycle(
+      env.AUTH_DB,
+      SNAPSHOT_NOW
+    )
+    const cycle = accepted.cycle!
+    await snapshotAcceptedConquestV2RewardCycle(
+      env.AUTH_DB,
+      cycle.id,
+      accepted.orchestration!.workflowInstanceId,
+      SNAPSHOT_NOW
+    )
+    const bodies: ConquestV2RewardQueueMessage[] = []
+    const queue = {
+      sendBatch: async (
+        messages: Iterable<{ body: ConquestV2RewardQueueMessage }>
+      ) => {
+        bodies.push(...[...messages].map(message => message.body))
+        return {
+          metadata: {
+            metrics: { backlogCount: bodies.length, backlogBytes: 0 }
+          }
+        }
+      }
+    } as unknown as Queue<ConquestV2RewardQueueMessage>
+    await publishUnappliedConquestV2Rewards(
+      { AUTH_DB: env.AUTH_DB, CONQUEST_V2_REWARD_QUEUE: queue },
+      cycle.id,
+      SNAPSHOT_NOW
+    )
+    const faultBody = bodies.find(
+      body => body.userId === 'treasure-queue-fault'
+    )!
+    const successBody = bodies.find(
+      body => body.userId === 'treasure-queue-success'
+    )!
+    await expect(
+      applyConquestV2RewardQueueMessage(
+        env.AUTH_DB,
+        { ...faultBody, treasureLevel: 10 },
+        SNAPSHOT_NOW
+      )
+    ).rejects.toThrow('Queue message is invalid')
+
+    await env.AUTH_DB.prepare(
+      `CREATE TRIGGER reject_one_conquest_v2_queue_player
+       BEFORE INSERT ON player_items
+       WHEN NEW.unlock_source LIKE 'conquest-v2:%'
+         AND NEW.user_id = 'treasure-queue-fault'
+       BEGIN SELECT RAISE(ABORT, 'injected per-player Queue failure'); END`
+    ).run()
+    const faultOne = queueMessage(faultBody, 'fault-message', 1)
+    const successOne = queueMessage(successBody, 'success-message', 1)
+    await handleConquestV2RewardQueue(
+      messageBatch([faultOne.message, successOne.message]),
+      env.AUTH_DB,
+      SNAPSHOT_NOW
+    )
+    expect(faultOne.outcome).toEqual({ acked: false, retried: true })
+    expect(successOne.outcome).toEqual({ acked: true, retried: false })
+    expect(await silverTotal('treasure-queue-fault')).toBe(0)
+    expect(await silverTotal('treasure-queue-success')).toBe(1)
+
+    for (let attempt = 2; attempt <= 6; attempt += 1) {
+      const failed = queueMessage(faultBody, 'fault-message', attempt)
+      await handleConquestV2RewardQueue(
+        messageBatch([failed.message]),
+        env.AUTH_DB,
+        SNAPSHOT_NOW
+      )
+      expect(failed.outcome).toEqual({ acked: false, retried: true })
+    }
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM conquest_v2_reward_delivery_failures
+         WHERE cycle_id = ? AND user_id = 'treasure-queue-fault'`
+      )
+        .bind(cycle.id)
+        .first('count')
+    ).toBe(6)
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_v2_reward_delivery_failures
+         SET error = 'rewritten'
+         WHERE cycle_id = ? AND user_id = 'treasure-queue-fault'`
+      )
+        .bind(cycle.id)
+        .run()
+    ).rejects.toThrow('delivery failures are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM conquest_v2_reward_delivery_failures
+         WHERE cycle_id = ? AND user_id = 'treasure-queue-fault'`
+      )
+        .bind(cycle.id)
+        .run()
+    ).rejects.toThrow('delivery failures are immutable')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM conquest_v2_reward_cycles WHERE id = ?`
+      )
+        .bind(cycle.id)
+        .first('status')
+    ).toBe('DELIVERING')
+
+    await env.AUTH_DB.prepare(
+      'DROP TRIGGER reject_one_conquest_v2_queue_player'
+    ).run()
+    const recovered = queueMessage(faultBody, 'fault-message', 7)
+    await handleConquestV2RewardQueue(
+      messageBatch([recovered.message]),
+      env.AUTH_DB,
+      SNAPSHOT_NOW
+    )
+    expect(recovered.outcome).toEqual({ acked: true, retried: false })
+    const duplicate = queueMessage(faultBody, 'fault-message', 8)
+    await handleConquestV2RewardQueue(
+      messageBatch([duplicate.message]),
+      env.AUTH_DB,
+      SNAPSHOT_NOW
+    )
+    expect(duplicate.outcome).toEqual({ acked: true, retried: false })
+    expect(await silverTotal('treasure-queue-fault')).toBe(1)
+    expect(await silverTotal('treasure-queue-success')).toBe(1)
+
+    expect(
+      await publishUnappliedConquestV2Rewards(
+        { AUTH_DB: env.AUTH_DB, CONQUEST_V2_REWARD_QUEUE: queue },
+        cycle.id,
+        SNAPSHOT_NOW
+      )
+    ).toEqual({ completed: true, published: 0 })
+  })
+
   it('keeps schedules and reward evidence immutable', async () => {
     await setupPlayer('treasure-audit', 250)
     await setWeightPerSilver(1)
@@ -931,5 +1316,16 @@ describe('Conquest V2 off-chain weekly rewards', () => {
          WHERE conquest_v2_award_id IS NOT NULL`
       ).run()
     ).rejects.toThrow('reward notifications are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE conquest_v2_reward_cycle_orchestrations
+         SET workflow_instance_id = 'rewritten'`
+      ).run()
+    ).rejects.toThrow('orchestration completion is invalid')
+    await expect(
+      env.AUTH_DB.prepare(
+        'DELETE FROM conquest_v2_reward_cycle_orchestrations'
+      ).run()
+    ).rejects.toThrow('orchestration receipts are immutable')
   })
 })
