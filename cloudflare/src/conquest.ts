@@ -84,6 +84,10 @@ interface WeeklyGoldRow {
   total_supply: number
 }
 
+interface ConquestMatchPublicationRow {
+  match_id: string
+}
+
 const conquest = (row: ConquestRow): Conquest =>
   sourceConquestWire({
     id: row.id,
@@ -104,7 +108,10 @@ const rewardsForWins = (wins: number) => ({
   gold: wins === 3 ? 1 : 0
 })
 
-const conquestStatsResults = (value: string): unknown[] => {
+const conquestStatsResults = (
+  value: string,
+  unpublishedMatchIds: ReadonlySet<string>
+): { results: unknown[]; withheld: boolean } => {
   let parsed: unknown
   try {
     parsed = JSON.parse(value)
@@ -118,7 +125,13 @@ const conquestStatsResults = (value: string): unknown[] => {
   // ConquestStats uses PostgreSQL jsonb_object_keys/jsonb_each directly in
   // the source. It counts every raw object key and only the exact JSON string
   // "WIN" as a win; unlike ConquestStatus, it never decodes map[uint64].
-  return Object.values(parsed)
+  const entries = Object.entries(parsed)
+  return {
+    results: entries
+      .filter(([matchId]) => !unpublishedMatchIds.has(matchId))
+      .map(([, result]) => result),
+    withheld: entries.some(([matchId]) => unpublishedMatchIds.has(matchId))
+  }
 }
 
 export const conquestTreasureProgress = conquestV2TreasureProgress
@@ -138,6 +151,19 @@ export class ConquestRepository {
       .bind(userId)
       .first<{ status: ConquestStatus }>()
     return row?.status ?? null
+  }
+
+  private async unpublishedMatchIds(userId: string): Promise<Set<string>> {
+    const rows = await this.database
+      .prepare(
+        `SELECT CAST(id AS TEXT) AS match_id
+         FROM multiplayer_matches
+         WHERE status <> 'ended'
+           AND (player1_user_id = ? OR player2_user_id = ?)`
+      )
+      .bind(userId, userId)
+      .all<ConquestMatchPublicationRow>()
+    return new Set(rows.results.map(row => row.match_id))
   }
 
   async isDrainable(userId: string, mode: GameMode): Promise<boolean> {
@@ -315,13 +341,37 @@ export class ConquestRepository {
       .prepare(
         `SELECT id, user_id, status, nonce, mode, hero,
                 match_progress, created_at, ended_at
-         FROM player_conquests
-         WHERE user_id = ? AND status = 'IN_PROGRESS'
+         FROM player_conquests conquest
+         WHERE conquest.user_id = ?
+           AND (
+             conquest.status = 'IN_PROGRESS'
+             OR EXISTS (
+               SELECT 1
+               FROM json_each(conquest.match_progress) progress
+               JOIN multiplayer_matches match
+                 ON CAST(match.id AS TEXT) = CAST(progress.key AS TEXT)
+               WHERE match.status <> 'ended'
+                 AND (
+                   match.player1_user_id = conquest.user_id
+                   OR match.player2_user_id = conquest.user_id
+                 )
+             )
+           )
+         ORDER BY conquest.id DESC
          LIMIT 1`
       )
       .bind(userId)
       .first<ConquestRow>()
-    return row ? conquest(row) : null
+    if (!row) return null
+    const unpublishedMatchIds = await this.unpublishedMatchIds(userId)
+    const matchProgress = parseConquestMatchProgress(row.match_progress)
+    for (const matchId of unpublishedMatchIds) delete matchProgress[matchId]
+    return conquest({
+      ...row,
+      status: ConquestStatus.IN_PROGRESS,
+      match_progress: JSON.stringify(matchProgress),
+      ended_at: null
+    })
   }
 
   async stats(userId: string): Promise<
@@ -338,6 +388,7 @@ export class ConquestRepository {
       )
       .bind(userId)
       .all<ConquestRow>()
+    const unpublishedMatchIds = await this.unpublishedMatchIds(userId)
     const result = {
       discoveryTicketsUsed: 0,
       constructedTicketsUsed: 0,
@@ -354,24 +405,27 @@ export class ConquestRepository {
     let discoveryWins = 0
     let constructedWins = 0
     for (const row of rows.results) {
-      const progress = conquestStatsResults(row.match_progress)
-      const wins = progress.filter(
+      const progress = conquestStatsResults(
+        row.match_progress,
+        unpublishedMatchIds
+      )
+      const wins = progress.results.filter(
         value => value === ConquestMatchResult.WIN
       ).length
       if (row.mode === GameMode.CONQUEST_DISCOVERY) {
         result.discoveryTicketsUsed++
-        result.discoveryMatchesPlayed += progress.length
+        result.discoveryMatchesPlayed += progress.results.length
         discoveryWins += wins
-        if (row.status === ConquestStatus.COMPLETED) {
+        if (row.status === ConquestStatus.COMPLETED && !progress.withheld) {
           const reward = rewardsForWins(wins)
           result.discoverySilverCardsWon += reward.silver
           result.discoveryGoldCardsWon += reward.gold
         }
       } else {
         result.constructedTicketsUsed++
-        result.constructedMatchesPlayed += progress.length
+        result.constructedMatchesPlayed += progress.results.length
         constructedWins += wins
-        if (row.status === ConquestStatus.COMPLETED) {
+        if (row.status === ConquestStatus.COMPLETED && !progress.withheld) {
           const reward = rewardsForWins(wins)
           result.constructedSilverCardsWon += reward.silver
           result.constructedGoldCardsWon += reward.gold

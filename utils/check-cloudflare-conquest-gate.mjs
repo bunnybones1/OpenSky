@@ -1038,6 +1038,152 @@ export const conquestSettlementAdmissionErrors = (
   return errors
 }
 
+/**
+ * The source publishes the match row and Conquest progress from one database
+ * transaction. Worker stages must therefore keep progress tied to any
+ * non-ended match out of ConquestStatus and ConquestStats until the final
+ * publication statement succeeds.
+ */
+export const conquestProjectionPublicationErrors = (
+  sourceMatches,
+  sourceConquests,
+  publication,
+  repository,
+  rpcTest
+) => {
+  const errors = []
+  const sourceEndMatch = bracedBlock(
+    sourceMatches,
+    'func (s *Server) endMatch'
+  )
+  const sourceTransaction = sourceEndMatch
+    ? bracedBlock(
+        sourceEndMatch,
+        'repo.TxContext(ctx, func(tx db.Session) error'
+      )
+    : undefined
+  for (const token of [
+    's.updateConquestProgress(ctx, tx, match, winner, loser, isDraw)',
+    'tx.Save(match)'
+  ]) {
+    if (!sourceTransaction?.includes(token)) {
+      errors.push(`source Conquest publication transaction is missing: ${token}`)
+    }
+  }
+  const sourceStatus = bracedBlock(
+    sourceConquests,
+    'func (s *Server) ConquestStatus'
+  )
+  if (!sourceStatus?.includes('repo.Conquests().FindInProgress(accountID)')) {
+    errors.push('source ConquestStatus committed-progress boundary is missing')
+  }
+  const sourceStats = bracedBlock(
+    sourceConquests,
+    'func (s *Server) ConquestStats'
+  )
+  if (!sourceStats?.includes('jsonb_object_keys(match_progress)')) {
+    errors.push('source ConquestStats committed-progress boundary is missing')
+  }
+
+  const publish = bracedBlock(publication, 'export const publishMatchCompletion')
+  for (const token of [
+    "SET status = 'ended'",
+    "ledger.status = 'active'",
+    'match completion publication requirements are incomplete'
+  ]) {
+    if (!publish?.includes(token)) {
+      errors.push(`Worker match publication barrier is missing: ${token}`)
+    }
+  }
+
+  const unpublished = bracedBlock(
+    repository,
+    'private async unpublishedMatchIds'
+  )
+  const compactUnpublished = unpublished?.replace(/\s+/g, ' ') ?? ''
+  for (const token of [
+    'SELECT CAST(id AS TEXT) AS match_id FROM multiplayer_matches',
+    "WHERE status <> 'ended'",
+    '(player1_user_id = ? OR player2_user_id = ?)'
+  ]) {
+    if (!compactUnpublished.includes(token)) {
+      errors.push(`Conquest unpublished-match lookup is missing: ${token}`)
+    }
+  }
+
+  const status = bracedBlock(repository, 'async status(') ?? ''
+  const compactStatus = status.replace(/\s+/g, ' ')
+  for (const token of [
+    "conquest.status = 'IN_PROGRESS' OR EXISTS (",
+    'FROM json_each(conquest.match_progress) progress',
+    "WHERE match.status <> 'ended'",
+    'await this.unpublishedMatchIds(userId)',
+    'delete matchProgress[matchId]',
+    'status: ConquestStatus.IN_PROGRESS',
+    'ended_at: null'
+  ]) {
+    if (!compactStatus.includes(token)) {
+      errors.push(`ConquestStatus publication projection is missing: ${token}`)
+    }
+  }
+
+  const statsProgressStart = repository.indexOf('const conquestStatsResults')
+  const statsProgressEnd = repository.indexOf(
+    'export const conquestTreasureProgress',
+    statsProgressStart
+  )
+  const statsProgress =
+    statsProgressStart >= 0 && statsProgressEnd > statsProgressStart
+      ? repository.slice(statsProgressStart, statsProgressEnd)
+      : ''
+  const compactStatsProgress = statsProgress.replace(/\s+/g, ' ')
+  for (const token of [
+    '.filter(([matchId]) => !unpublishedMatchIds.has(matchId))',
+    'withheld: entries.some(([matchId]) => unpublishedMatchIds.has(matchId))'
+  ]) {
+    if (!compactStatsProgress.includes(token)) {
+      errors.push(`ConquestStats progress filter is missing: ${token}`)
+    }
+  }
+  const statsStart = repository.indexOf('async stats(')
+  const statsEnd = repository.indexOf('\n  async points(', statsStart)
+  const stats =
+    statsStart >= 0 && statsEnd > statsStart
+      ? repository.slice(statsStart, statsEnd)
+      : ''
+  if (
+    !stats.includes('await this.unpublishedMatchIds(userId)') ||
+    occurrences(stats, /!progress\.withheld/g) !== 2 ||
+    occurrences(stats, /progress\.results\.length/g) !== 2
+  ) {
+    errors.push(
+      'ConquestStats must withhold unpublished matches and their terminal rewards'
+    )
+  }
+
+  const runtimeTest = bracedBlock(
+    rpcTest,
+    "it('withholds Conquest projections until the source-atomic match publishes'"
+  )
+  const compactRuntimeTest = runtimeTest?.replace(/\s+/g, ' ') ?? ''
+  for (const token of [
+    "'active'",
+    'status: ConquestStatus.IN_PROGRESS',
+    'matchProgress: { [publishedMatchId]: ConquestMatchResult.WIN }',
+    'constructedMatchesPlayed: 1',
+    'constructedSilverCardsWon: 0',
+    "SET status = 'ended'",
+    'conquest: null',
+    'constructedMatchesPlayed: 2',
+    'constructedSilverCardsWon: 1'
+  ]) {
+    if (!compactRuntimeTest.includes(token)) {
+      errors.push(`Conquest publication runtime proof is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const reviewedPoolCardIds = poolActivation => {
   const match = poolActivation.match(
     /INSERT INTO conquest_reward_pool_valid_card_ranges[\s\S]*?VALUES([\s\S]*?);/
@@ -1765,6 +1911,8 @@ const main = async () => {
     sourceRewardPool,
     boundaryMigration,
     sourceMatchCompletion,
+    sourceConquestRpc,
+    completionPublication,
     conquestRpcTest,
     filledDeckEvidence
   ] = await Promise.all([
@@ -2100,6 +2248,16 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'api', 'rpc', 'matches.go'), 'utf8'),
+    readFile(path.join(root, 'api', 'rpc', 'conquests.go'), 'utf8'),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'src',
+        'completion-publication.ts'
+      ),
+      'utf8'
+    ),
     readFile(
       path.join(root, 'cloudflare', 'test', 'conquest-rpc.test.ts'),
       'utf8'
@@ -2235,6 +2393,13 @@ const main = async () => {
     ...conquestSettlementAdmissionErrors(
       sourceMatchCompletion,
       gameMatch,
+      drainRepository,
+      conquestRpcTest
+    ),
+    ...conquestProjectionPublicationErrors(
+      sourceMatchCompletion,
+      sourceConquestRpc,
+      completionPublication,
       drainRepository,
       conquestRpcTest
     ),

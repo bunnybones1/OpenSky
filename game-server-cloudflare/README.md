@@ -78,6 +78,10 @@ wire messages. It is a separate service from `matchmaker-ts`.
   existing `IN_PROGRESS` entry remains idempotent, while `REWARDS_PENDING`
   blocks another ticket spend without inventing a player-visible pending run;
   the admission insert repeats the same guard to close concurrent races; and
+- source-atomic Conquest projections across match publication: status and
+  statistics withhold progress and terminal reward counts tied to a non-ended
+  match ledger row, then expose them only after the final receipt-backed
+  publication statement succeeds; and
 - a final player-visible publication barrier that requires the authoritative
   deck pair and every applicable progression, rank, experience, warm-up,
   Conquest, and abandon receipt before the match ledger can become `ended`.

@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers'
 import {
+  ConquestMatchResult,
   ConquestStatus,
   DeckClass,
   GameMode,
@@ -466,6 +467,114 @@ describe('source conquest RPC foundation', () => {
         .bind(userId, userId, userId)
         .first()
     ).toEqual({ balance: 2, conquests: 1, in_progress: 0 })
+  })
+
+  it('withholds Conquest projections until the source-atomic match publishes', async () => {
+    const now = new Date().toISOString()
+    const publishedProposal = `published-conquest-${crypto.randomUUID()}`
+    const pendingProposal = `pending-conquest-${crypto.randomUUID()}`
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, status, winner_player, result_json, ended_at,
+            created_at, updated_at)
+         VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'projection-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, NULL,
+                 '{}', 'ended', 0, '{"status":"COMPLETED"}', ?, ?, ?)`
+      ).bind(
+        publishedProposal,
+        `${publishedProposal}-replay`,
+        userId,
+        now,
+        now,
+        now
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version, player1_principal,
+            player2_principal, player1_user_id, player2_user_id,
+            match_payload_json, status, created_at, updated_at)
+         VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'projection-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, NULL,
+                 '{}', 'active', ?, ?)`
+      ).bind(
+        pendingProposal,
+        `${pendingProposal}-replay`,
+        userId,
+        now,
+        now
+      )
+    ])
+    const matchRows = await env.AUTH_DB.prepare(
+      `SELECT id, proposal_id FROM multiplayer_matches
+       WHERE proposal_id IN (?, ?)`
+    )
+      .bind(publishedProposal, pendingProposal)
+      .all<{ id: number; proposal_id: string }>()
+    const matchId = (proposalId: string) =>
+      matchRows.results.find(row => row.proposal_id === proposalId)!.id
+    const publishedMatchId = matchId(publishedProposal)
+    const pendingMatchId = matchId(pendingProposal)
+    await env.AUTH_DB.prepare(
+      `INSERT INTO player_conquests
+         (entry_key, user_id, status, nonce, mode, hero, deck_class,
+          match_progress, created_at, ended_at)
+       VALUES (?, ?, 'COMPLETED', 1, 'CONQUEST_CONSTRUCTED', 'ADA', 'STR',
+               ?, ?, ?)`
+    )
+      .bind(
+        `projection-entry-${crypto.randomUUID()}`,
+        userId,
+        JSON.stringify({
+          [publishedMatchId]: ConquestMatchResult.WIN,
+          [pendingMatchId]: ConquestMatchResult.LOSS
+        }),
+        now,
+        now
+      )
+      .run()
+
+    expect(await (await rpc('ConquestStatus', {})).json()).toMatchObject({
+      conquest: {
+        status: ConquestStatus.IN_PROGRESS,
+        matchProgress: { [publishedMatchId]: ConquestMatchResult.WIN },
+        endedAt: null
+      }
+    })
+    expect(await (await rpc('ConquestStats', {})).json()).toMatchObject({
+      stats: {
+        constructedTicketsUsed: 1,
+        constructedMatchesPlayed: 1,
+        constructedWinRate: 100,
+        constructedSilverCardsWon: 0,
+        constructedGoldCardsWon: 0
+      }
+    })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches
+       SET status = 'ended', winner_player = 1,
+           result_json = '{"status":"COMPLETED"}', ended_at = ?, updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(now, now, pendingProposal)
+      .run()
+    expect(await (await rpc('ConquestStatus', {})).json()).toEqual({
+      conquest: null
+    })
+    expect(await (await rpc('ConquestStats', {})).json()).toMatchObject({
+      stats: {
+        constructedTicketsUsed: 1,
+        constructedMatchesPlayed: 2,
+        constructedWinRate: 50,
+        constructedSilverCardsWon: 1,
+        constructedGoldCardsWon: 0
+      }
+    })
   })
 
   it('recreates source conquest statistics in row insertion order', async () => {

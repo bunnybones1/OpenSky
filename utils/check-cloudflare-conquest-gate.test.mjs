@@ -6,6 +6,7 @@ import {
   conquestFilledDeckAuthorityErrors,
   conquestGateErrors,
   conquestPoolCatalogErrors,
+  conquestProjectionPublicationErrors,
   conquestSettlementAdmissionErrors,
   conquestSettlementSourceParityErrors,
   conquestV2DeliveryBatchErrors,
@@ -964,6 +965,116 @@ test('pins pending Conquest settlement to the source transaction boundary', asyn
       rpcTest.replace(
         '.toEqual({ balance: 2, conquests: 1, in_progress: 0 })',
         '.toEqual({ balance: 1, conquests: 1, in_progress: 0 })'
+      )
+    ).some(error => error.includes('runtime proof'))
+  )
+})
+
+test('withholds Conquest projections until source-atomic match publication', async () => {
+  const [sourceMatches, sourceConquests, publication, repository, rpcTest] =
+    await Promise.all([
+      readFile('api/rpc/matches.go', 'utf8'),
+      readFile('api/rpc/conquests.go', 'utf8'),
+      readFile(
+        'game-server-cloudflare/src/completion-publication.ts',
+        'utf8'
+      ),
+      readFile('cloudflare/src/conquest.ts', 'utf8'),
+      readFile('cloudflare/test/conquest-rpc.test.ts', 'utf8')
+    ])
+  const errors = (
+    sourceMatchMutation = sourceMatches,
+    sourceConquestMutation = sourceConquests,
+    publicationMutation = publication,
+    repositoryMutation = repository,
+    testMutation = rpcTest
+  ) =>
+    conquestProjectionPublicationErrors(
+      sourceMatchMutation,
+      sourceConquestMutation,
+      publicationMutation,
+      repositoryMutation,
+      testMutation
+    )
+
+  assert.deepEqual(errors(), [])
+  assert.ok(
+    errors(sourceMatches.replaceAll('tx.Save(match)', 'tx.Skip(match)')).some(
+      error => error.includes('publication transaction')
+    )
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests.replace(
+        'repo.Conquests().FindInProgress(accountID)',
+        'repo.Conquests().FindLatest(accountID)'
+      )
+    ).some(error => error.includes('ConquestStatus'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests.replaceAll(
+        'jsonb_object_keys(match_progress)',
+        'jsonb_keys(match_progress)'
+      )
+    ).some(error => error.includes('ConquestStats'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication.replace("SET status = 'ended'", "SET status = 'active'")
+    ).some(error => error.includes('publication barrier'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication,
+      repository.replace("WHERE status <> 'ended'", "WHERE status = 'ended'")
+    ).some(error => error.includes('unpublished-match lookup'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication,
+      repository.replace(
+        "conquest.status = 'IN_PROGRESS'\n             OR EXISTS (",
+        "conquest.status = 'IN_PROGRESS'\n             AND EXISTS ("
+      )
+    ).some(error => error.includes('ConquestStatus publication'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication,
+      repository.replace(
+        ".filter(([matchId]) => !unpublishedMatchIds.has(matchId))",
+        '.filter(() => true)'
+      )
+    ).some(error => error.includes('progress filter'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication,
+      repository.replaceAll(' && !progress.withheld', '')
+    ).some(error => error.includes('terminal rewards'))
+  )
+  assert.ok(
+    errors(
+      sourceMatches,
+      sourceConquests,
+      publication,
+      repository,
+      rpcTest.replace(
+        'constructedMatchesPlayed: 1',
+        'constructedMatchesPlayed: 2'
       )
     ).some(error => error.includes('runtime proof'))
   )
