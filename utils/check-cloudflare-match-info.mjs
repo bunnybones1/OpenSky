@@ -32,12 +32,17 @@ export const matchInfoErrors = ({
   sourceMessages,
   sourceGameServerInfo,
   sourceProto,
+  sourceServer,
+  sourceMatchCollection,
+  sourceMatch,
   sourceBrowserWorker,
   sourceInProgressHook,
   sharedGameMessages,
   sharedMatchmakerMessages,
+  sharedMatchModes,
   gameWorker,
   gameRuntimeTest,
+  gameModeTest,
   workerGateway,
   workerRuntimeTest,
   rootPackage
@@ -253,6 +258,11 @@ export const matchInfoErrors = ({
       'JSON.stringify(info)'
     ]
   )
+  requireOrdered(errors, 'Source pending-match mode caller', sourceServer, [
+    'this.registry.registerMatch(matchID, replayID, player1.gameMode, [',
+    'player1,',
+    'player2'
+  ])
 
   const sourceDisconnectTimeout = bodyBetween(
     sourceMatchTracker,
@@ -333,6 +343,56 @@ export const matchInfoErrors = ({
       'global.setInterval('
     ]
   )
+  requireOrdered(
+    errors,
+    'Source ready-match mode caller',
+    sourceMatchCollection,
+    [
+      'this.matchRegistry.registerMatch(',
+      'p1.id!,',
+      'p2.id!,',
+      'data.matchID,',
+      'data.replayID,',
+      'p1.mode'
+    ]
+  )
+
+  const sourceMatchMode = bodyBetween(
+    sourceMatch,
+    '    this.gameMode =',
+    '\n\n    this.quests ='
+  )
+  requireOrdered(
+    errors,
+    'Source game-server match-wide mode',
+    sourceMatchMode,
+    [
+      'player1context.mode === player2context.mode',
+      '? player1context.mode',
+      ': GameMode.UNKNOWN'
+    ]
+  )
+  const sourceRecentSave = bodyBetween(
+    sourceMatch,
+    '  private saveRecentMatch = async',
+    '\n  private end = async'
+  )
+  requireOrdered(errors, 'Source stored recent-match mode', sourceRecentSave, [
+    'const recentMatch: StoredRecentMatchInfo = {',
+    'gameMode: this.gameMode'
+  ])
+
+  requireOrdered(
+    errors,
+    'Shared source game-server mode authority',
+    sharedMatchModes,
+    [
+      'export const sourceGameServerMode = ([',
+      'player1Mode,',
+      'player2Mode',
+      'player1Mode === player2Mode ? player1Mode : GameMode.UNKNOWN'
+    ]
+  )
 
   const sourceConnect = bodyBetween(
     sourceBrowserWorker,
@@ -398,6 +458,7 @@ export const matchInfoErrors = ({
       "pendingAddress.protocol === 'https:' ? 'wss:' : 'ws:'",
       'serverAddress = pendingAddress.href',
       'const disconnectTimeout = await matchDisconnectTimeout(env, row, principal)',
+      'mode: modes[0]',
       'serverLocationKey: `match:${row.proposal_id}`',
       'initialized\n        },'
     ]
@@ -415,6 +476,31 @@ export const matchInfoErrors = ({
     workerGateway,
     'const validRecentMatchInfo = (',
     '\nconst matchInfo = async ('
+  )
+  const gameRecentProjection = bodyBetween(
+    gameWorker,
+    '  private async recentMatchInfo(request: Request)',
+    '\n  private async replayIndex'
+  )
+  requireOrdered(
+    errors,
+    'Game Worker stored recent-match mode projection',
+    gameRecentProjection,
+    [
+      'gameMode: sourceGameServerMode([',
+      'metadata.match.player1.gameMode,',
+      'metadata.match.player2.gameMode'
+    ]
+  )
+  requireOrdered(
+    errors,
+    'Game Worker replay-init mode projection',
+    gameWorker,
+    [
+      'gameMode: sourceGameServerMode([',
+      'input.match.player1.gameMode,',
+      'input.match.player2.gameMode'
+    ]
   )
   requireOrdered(
     errors,
@@ -488,6 +574,32 @@ export const matchInfoErrors = ({
     "it('returns a participant recent match for 24 hours without leaking it to spectators'",
     "it('suppresses no-load results and stale results after a newer match attempt'"
   )
+  const mixedRuntimeTest = bodyBetween(
+    workerRuntimeTest,
+    `it("returns player one's source registry mode for both mixed-match participants"`,
+    "it('returns a participant recent match for 24 hours without leaking it to spectators'"
+  )
+  if (
+    (
+      mixedRuntimeTest.match(
+        /toMatchObject\(\{ matchInfo: \{ mode: GameMode\.PRACTICE_PVP \} \}\)/g
+      ) ?? []
+    ).length !== 2
+  ) {
+    errors.push(
+      'Worker mixed-match regression does not require player-one mode for both participants'
+    )
+  }
+  requireOrdered(errors, 'Game-server mixed-mode regression', gameModeTest, [
+    "describe('source game-server mode'",
+    "it('retains equal modes and maps either mixed ordering to UNKNOWN'",
+    'sourceGameServerMode([',
+    'GameMode.PRACTICE_PVP,',
+    'GameMode.RANKED_CONSTRUCTED'
+  ])
+  if ((gameModeTest.match(/\.toBe\(GameMode\.UNKNOWN\)/g) ?? []).length !== 2) {
+    errors.push('Game-server regression does not cover both mixed orderings')
+  }
   requireOrdered(
     errors,
     'Worker public recent-match runtime regression',
@@ -584,12 +696,17 @@ const main = async () => {
     sourceMessages,
     sourceGameServerInfo,
     sourceProto,
+    sourceServer,
+    sourceMatchCollection,
+    sourceMatch,
     sourceBrowserWorker,
     sourceInProgressHook,
     sharedGameMessages,
     sharedMatchmakerMessages,
+    sharedMatchModes,
     gameWorker,
     gameRuntimeTest,
+    gameModeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage
@@ -608,6 +725,12 @@ const main = async () => {
       'utf8'
     ),
     readFile(path.join(root, 'api/proto/api.gen.go'), 'utf8'),
+    readFile(path.join(root, 'server/src/Server.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'server/src/worker/match/MatchCollection.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'server/src/worker/match/Match.ts'), 'utf8'),
     readFile(
       path.join(root, 'game/src/state/worker/multiplayerWorkerState.ts'),
       'utf8'
@@ -627,6 +750,7 @@ const main = async () => {
       path.join(root, 'lib/shared/src/matchmaker-message-types.ts'),
       'utf8'
     ),
+    readFile(path.join(root, 'lib/shared/src/match-modes.ts'), 'utf8'),
     readFile(
       path.join(root, 'game-server-cloudflare/src/game-match.ts'),
       'utf8'
@@ -636,6 +760,10 @@ const main = async () => {
         root,
         'game-server-cloudflare/test-cloudflare/game-match.test.ts'
       ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare/test/match-modes.test.ts'),
       'utf8'
     ),
     readFile(path.join(root, 'cloudflare/src/multiplayer-gateway.ts'), 'utf8'),
@@ -651,12 +779,17 @@ const main = async () => {
     sourceMessages,
     sourceGameServerInfo,
     sourceProto,
+    sourceServer,
+    sourceMatchCollection,
+    sourceMatch,
     sourceBrowserWorker,
     sourceInProgressHook,
     sharedGameMessages,
     sharedMatchmakerMessages,
+    sharedMatchModes,
     gameWorker,
     gameRuntimeTest,
+    gameModeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage

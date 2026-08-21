@@ -12,7 +12,8 @@ import { ReplayAnalyticsMessage } from '@opensky/shared/gameAnalytics'
 import { prismsToDeckClass } from '@opensky/shared/helpers'
 import {
   conquestMatchMode,
-  isRankedMatchModes
+  isRankedMatchModes,
+  sourceGameServerMode
 } from '@opensky/shared/match-modes'
 import { HeroSkinLibrary } from '@opensky/shared/cosmetics'
 import { WEBSOCKET_FORCED_CLOSE_CODE } from '@opensky/shared/constants'
@@ -716,10 +717,10 @@ export class GameMatch implements DurableObject {
         ),
         rootProof: replay.rootProof,
         secrets: replay.secrets,
-        gameMode:
-          input.match.player1.gameMode === input.match.player2.gameMode
-            ? input.match.player1.gameMode
-            : GameMode.UNKNOWN,
+        gameMode: sourceGameServerMode([
+          input.match.player1.gameMode,
+          input.match.player2.gameMode
+        ]),
         timestamp: new Date().toISOString()
       }
     ])
@@ -866,7 +867,10 @@ export class GameMatch implements DurableObject {
     const info: StoredRecentMatchInfo = {
       type: 'recent_match_info',
       playerID: principal,
-      gameMode: participant.gameMode,
+      gameMode: sourceGameServerMode([
+        metadata.match.player1.gameMode,
+        metadata.match.player2.gameMode
+      ]),
       matchID: metadata.match.matchID,
       replayID: metadata.match.replayID,
       accounts: [

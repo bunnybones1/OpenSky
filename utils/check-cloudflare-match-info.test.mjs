@@ -11,12 +11,17 @@ const fixtures = async () => {
     sourceMessages,
     sourceGameServerInfo,
     sourceProto,
+    sourceServer,
+    sourceMatchCollection,
+    sourceMatch,
     sourceBrowserWorker,
     sourceInProgressHook,
     sharedGameMessages,
     sharedMatchmakerMessages,
+    sharedMatchModes,
     gameWorker,
     gameRuntimeTest,
+    gameModeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage
@@ -29,6 +34,9 @@ const fixtures = async () => {
     readFile('matchmaker/lib/messages/messages.go', 'utf8'),
     readFile('matchmaker/lib/gameservers/game_server_info.go', 'utf8'),
     readFile('api/proto/api.gen.go', 'utf8'),
+    readFile('server/src/Server.ts', 'utf8'),
+    readFile('server/src/worker/match/MatchCollection.ts', 'utf8'),
+    readFile('server/src/worker/match/Match.ts', 'utf8'),
     readFile('game/src/state/worker/multiplayerWorkerState.ts', 'utf8'),
     readFile(
       'webapp/src/AppLayout/Widgets/MatchMakerWidget/hooks/useHandleInProgressMatch.tsx',
@@ -36,11 +44,13 @@ const fixtures = async () => {
     ),
     readFile('lib/shared/src/game-server-message-types.ts', 'utf8'),
     readFile('lib/shared/src/matchmaker-message-types.ts', 'utf8'),
+    readFile('lib/shared/src/match-modes.ts', 'utf8'),
     readFile('game-server-cloudflare/src/game-match.ts', 'utf8'),
     readFile(
       'game-server-cloudflare/test-cloudflare/game-match.test.ts',
       'utf8'
     ),
+    readFile('game-server-cloudflare/test/match-modes.test.ts', 'utf8'),
     readFile('cloudflare/src/multiplayer-gateway.ts', 'utf8'),
     readFile('cloudflare/test/multiplayer-gateway.test.ts', 'utf8'),
     readFile('package.json', 'utf8').then(JSON.parse)
@@ -51,12 +61,17 @@ const fixtures = async () => {
     sourceMessages,
     sourceGameServerInfo,
     sourceProto,
+    sourceServer,
+    sourceMatchCollection,
+    sourceMatch,
     sourceBrowserWorker,
     sourceInProgressHook,
     sharedGameMessages,
     sharedMatchmakerMessages,
+    sharedMatchModes,
     gameWorker,
     gameRuntimeTest,
+    gameModeTest,
     workerGateway,
     workerRuntimeTest,
     rootPackage
@@ -114,6 +129,31 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
         'var ConquestStatus_name = map[',
         '0: "UNKNOWN"',
         '0: "NONE"'
+      )
+    },
+    {
+      ...value,
+      sourceServer: value.sourceServer.replace(
+        'this.registry.registerMatch(matchID, replayID, player1.gameMode, [',
+        'this.registry.registerMatch(matchID, replayID, player2.gameMode, ['
+      )
+    },
+    {
+      ...value,
+      sourceMatch: replaceAfter(
+        value.sourceMatch,
+        '    this.gameMode =',
+        ': GameMode.UNKNOWN',
+        ': player1context.mode'
+      )
+    },
+    {
+      ...value,
+      sharedMatchModes: replaceAfter(
+        value.sharedMatchModes,
+        'export const sourceGameServerMode = ([',
+        'GameMode.UNKNOWN',
+        'player2Mode'
       )
     },
     {
@@ -206,6 +246,38 @@ test('rejects weakened source, Worker, runtime-test, and build requirements', as
       workerGateway: value.workerGateway.replace(
         "WHERE (status = 'creating'",
         "WHERE (status = 'active'"
+      )
+    },
+    {
+      ...value,
+      workerGateway: value.workerGateway.replace(
+        'mode: modes[0]',
+        'mode: modes[1]'
+      )
+    },
+    {
+      ...value,
+      gameWorker: replaceAfter(
+        value.gameWorker,
+        '  private async recentMatchInfo(request: Request)',
+        'gameMode: sourceGameServerMode([',
+        'gameMode: participant.gameMode || (['
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: replaceAfter(
+        value.workerRuntimeTest,
+        `it("returns player one's source registry mode for both mixed-match participants"`,
+        'GameMode.PRACTICE_PVP',
+        'GameMode.RANKED_CONSTRUCTED'
+      )
+    },
+    {
+      ...value,
+      gameModeTest: value.gameModeTest.replace(
+        '.toBe(GameMode.UNKNOWN)',
+        '.toBe(GameMode.PRACTICE_PVP)'
       )
     },
     {

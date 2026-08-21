@@ -65,6 +65,14 @@ export const conquestMatchMode = ([player1Mode, player2Mode]: MatchGameModes):
   return undefined
 }
 
+// The source TypeScript game server records one match-wide mode. Mixed
+// Practice-PvP/Ranked-Constructed matches deliberately use UNKNOWN.
+export const sourceGameServerMode = ([
+  player1Mode,
+  player2Mode
+]: MatchGameModes) =>
+  player1Mode === player2Mode ? player1Mode : GameMode.UNKNOWN
+
 // The original schema had only one mode. Keep that compatibility projection
 // ranked for the source's mixed Practice-PvP/Ranked-Constructed pairing.
 export const legacyMatchMode = (modes: MatchGameModes) =>

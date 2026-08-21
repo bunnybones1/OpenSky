@@ -398,10 +398,9 @@ const matchInfo = async (
         type: 'in_progress_match_info',
         matchInfo: {
           id: row.id,
-          mode:
-            row.player1_principal.toLowerCase() === principal.toLowerCase()
-              ? modes[0]
-              : modes[1],
+          // The source registry writes player 1's mode into the same public
+          // MatchInfo object for both participants, including mixed matches.
+          mode: modes[0],
           playerIDs,
           serverLocationKey: `match:${row.proposal_id}`,
           version: releaseVersion,

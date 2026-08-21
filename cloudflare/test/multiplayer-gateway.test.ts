@@ -401,7 +401,7 @@ describe('same-origin multiplayer gateway', () => {
     })
   })
 
-  it('returns the requesting participant mode for a mixed ranked match', async () => {
+  it("returns player one's source registry mode for both mixed-match participants", async () => {
     const principal = await deriveGamePrincipal(USER_ID)
     const opponentId = '33333333-3333-4333-8333-333333333333'
     const opponent = await deriveGamePrincipal(opponentId)
@@ -463,7 +463,7 @@ describe('same-origin multiplayer gateway', () => {
           headers
         )
       ).json()
-    ).toMatchObject({ matchInfo: { mode: GameMode.RANKED_CONSTRUCTED } })
+    ).toMatchObject({ matchInfo: { mode: GameMode.PRACTICE_PVP } })
   })
 
   it('returns a participant recent match for 24 hours without leaking it to spectators', async () => {
