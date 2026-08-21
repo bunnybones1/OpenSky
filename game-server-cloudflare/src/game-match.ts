@@ -39,6 +39,7 @@ import {
   applyConquestProgress,
   applyMatchExperience,
   applyMatchProgression,
+  applyPublishedGrandweavers,
   applyWarmUpProgress,
   warmUpProgressPlayer
 } from './progression'
@@ -112,6 +113,7 @@ interface MatchMetadata {
   result?: MatchResult
   expiredBeforeLoad?: boolean
   completionRecorded?: boolean
+  grandweaverRecalculationPending?: boolean
   analyticsEnqueuedAt?: string
   // Source ThreadPlayerContext.realDeckString values, captured once from the
   // first materialized WASM state's secret.filledDeck values.
@@ -572,6 +574,11 @@ export class GameMatch implements DurableObject {
               await this.questProgress()
             )
           }
+        } else if (metadata.grandweaverRecalculationPending) {
+          await this.retryGrandweaverRecalculationWithRetry(
+            metadata,
+            Date.now()
+          )
         } else if (
           !metadata.expiredBeforeLoad &&
           !metadata.analyticsEnqueuedAt
@@ -1743,6 +1750,23 @@ export class GameMatch implements DurableObject {
             isLeavePenaltyMode(gameModes[loser])
         }
       })
+      try {
+        metadata.grandweaverRecalculationPending =
+          (await applyPublishedGrandweavers(
+            this.env.AUTH_DB,
+            metadata.proposalId,
+            endedAt
+          )) === 'waiting'
+      } catch (error) {
+        // The source promote-grandweavers task is asynchronous. A transient
+        // task failure must not delay terminal rewards or socket completion.
+        metadata.grandweaverRecalculationPending = true
+        console.error(
+          'grandweaver recalculation failed',
+          metadata.proposalId,
+          error
+        )
+      }
       // The source does not send rewards or its terminal client signal until
       // InternalMatchEnd returns. Persist this retry boundary first so a
       // reconnect can safely replay both messages after an interrupted send.
@@ -1756,10 +1780,40 @@ export class GameMatch implements DurableObject {
         })
       }
       this.finishMatchSockets()
-      await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
+      if (metadata.grandweaverRecalculationPending) {
+        await this.state.storage.setAlarm(now + 10_000)
+      } else {
+        await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
+      }
     } catch (error) {
       console.error(
         'match completion recording failed',
+        metadata.proposalId,
+        error
+      )
+      await this.state.storage.setAlarm(now + 10_000)
+    }
+  }
+
+  private async retryGrandweaverRecalculationWithRetry(
+    metadata: MatchMetadata,
+    now: number
+  ) {
+    try {
+      const result = await applyPublishedGrandweavers(
+        this.env.AUTH_DB,
+        metadata.proposalId
+      )
+      metadata.grandweaverRecalculationPending = result === 'waiting'
+      await this.state.storage.put(METADATA_KEY, metadata)
+      if (metadata.grandweaverRecalculationPending) {
+        await this.state.storage.setAlarm(now + 10_000)
+      } else {
+        await this.archiveAndEnqueueAnalyticsWithRetry(metadata, now)
+      }
+    } catch (error) {
+      console.error(
+        'grandweaver recalculation retry failed',
         metadata.proposalId,
         error
       )
@@ -1774,7 +1828,8 @@ export class GameMatch implements DurableObject {
     if (
       metadata.analyticsEnqueuedAt ||
       metadata.expiredBeforeLoad ||
-      !metadata.completionRecorded
+      !metadata.completionRecorded ||
+      metadata.grandweaverRecalculationPending
     ) {
       return
     }

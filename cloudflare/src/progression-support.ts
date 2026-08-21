@@ -2,7 +2,13 @@ import type { GameMode, PlayerRank, PlayerRankStage } from '@opensky/proto'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
 
 import { invalidArgument, notFound } from './errors'
+import { noUnpublishedMatchExperienceSQL } from './experience-publication'
 import { seasonFromDate } from './legacy-seasons'
+import {
+  noUnpublishedAccountStatsInScopeSQL,
+  noUnpublishedAccountStatsSQL,
+  publishedAccountStatsCTESQL
+} from './rank-publication'
 
 const RANKED_MODES = ['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'] as const
 const RP_MODES = new Set<GameMode>([
@@ -22,8 +28,7 @@ const MAX_CLOUDFLARE_LEVEL_IN_TOTAL_EXPERIENCE =
   MAX_SOURCE_LEVEL_IN_TOTAL_EXPERIENCE + CLOUDFLARE_LEVEL_OFFSET
 const MINIMUM_CLOUDFLARE_LEVEL_FOR_RP =
   MINIMUM_SOURCE_LEVEL_FOR_RP + CLOUDFLARE_LEVEL_OFFSET
-export const STAFF_PROGRESSION_OPERATION_HEADER =
-  'x-cloud-weasel-operation-key'
+export const STAFF_PROGRESSION_OPERATION_HEADER = 'x-cloud-weasel-operation-key'
 const OPERATION_KEY_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -127,16 +132,24 @@ export class ProgressionSupportRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_account_stats
              (user_id, game_mode, season, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`
+           SELECT ?, ?, ?, ?, ?
+           WHERE ${noUnpublishedMatchExperienceSQL('?')}
+             AND ${noUnpublishedAccountStatsSQL('?')}
+             AND ${noUnpublishedAccountStatsInScopeSQL(String(season))}`
         )
-        .bind(userId, mode, season, now, now),
+        .bind(userId, mode, season, now, now, userId, userId),
       this.database
         .prepare(
           `UPDATE player_account_stats
            SET player_rank = 'WANDERER', player_rank_stage = 'STAGE_I',
                score = 0, player_rank_state = ?, updated_at = ?
            WHERE user_id = ? AND game_mode = ? AND season = ?
-             AND player_rank = 'UNRANKED'`
+             AND player_rank = 'UNRANKED'
+             AND ${noUnpublishedMatchExperienceSQL(
+               'player_account_stats.user_id'
+             )}
+             AND ${noUnpublishedAccountStatsSQL('player_account_stats.user_id')}
+             AND ${noUnpublishedAccountStatsInScopeSQL(String(season))}`
         )
         .bind(INITIAL_RANK_STATE_JSON, now, userId, mode, season)
     ])
@@ -150,8 +163,7 @@ export class ProgressionSupportRepository {
     season: number,
     now: string
   ): D1PreparedStatement[] {
-    const availableLevels =
-      `MAX(0, ${MAX_CLOUDFLARE_LEVEL_IN_TOTAL_EXPERIENCE} - profile.level)`
+    const availableLevels = `MAX(0, ${MAX_CLOUDFLARE_LEVEL_IN_TOTAL_EXPERIENCE} - profile.level)`
     const grantedLevels = `MIN(?, ${availableLevels})`
     const pendingOperation =
       `operation_key = ? AND actor_user_id = ? AND target_user_id = ? ` +
@@ -197,7 +209,9 @@ export class ProgressionSupportRepository {
              ON stickers.user_id = invite.inviter_user_id
             AND stickers.item_type = 'SW_STICKER_POINTS'
             AND stickers.token_id = 0
-           WHERE profile.user_id = ?`
+           WHERE profile.user_id = ?
+             AND ${noUnpublishedMatchExperienceSQL('profile.user_id')}
+             AND ${noUnpublishedAccountStatsSQL('profile.user_id')}`
         )
         .bind(
           operationKey,
@@ -347,13 +361,7 @@ export class ProgressionSupportRepository {
            DO UPDATE SET levels = player_friend_points.levels + excluded.levels,
                          updated_at = excluded.updated_at`
         )
-        .bind(
-          now,
-          operationKey,
-          actorUserId,
-          targetUserId,
-          requestedLevels
-        ),
+        .bind(now, operationKey, actorUserId, targetUserId, requestedLevels),
       this.database
         .prepare(
           `INSERT INTO player_items
@@ -405,26 +413,14 @@ export class ProgressionSupportRepository {
              ON progression.user_id = profile.user_id
            WHERE ${pendingOperation}`
         )
-        .bind(
-          now,
-          operationKey,
-          actorUserId,
-          targetUserId,
-          requestedLevels
-        ),
+        .bind(now, operationKey, actorUserId, targetUserId, requestedLevels),
       this.database
         .prepare(
           `UPDATE staff_progression_operations
            SET status = 'APPLIED', completed_at = ?
            WHERE ${pendingOperation}`
         )
-        .bind(
-          now,
-          operationKey,
-          actorUserId,
-          targetUserId,
-          requestedLevels
-        )
+        .bind(now, operationKey, actorUserId, targetUserId, requestedLevels)
     ]
   }
 
@@ -436,6 +432,10 @@ export class ProgressionSupportRepository {
   ): D1PreparedStatement[] {
     if (target.level >= minimumLevel) return []
     const statements: D1PreparedStatement[] = []
+    const sourceTransactionGuard = (userIdExpression: string) =>
+      `${noUnpublishedMatchExperienceSQL(userIdExpression)}
+       AND ${noUnpublishedAccountStatsSQL(userIdExpression)}
+       AND ${noUnpublishedAccountStatsInScopeSQL(String(season))}`
     if (target.inviter_user_id) {
       // Calculate the difference inside the same D1 transaction as the level
       // floor. A concurrent identical override therefore cannot double-credit
@@ -447,7 +447,9 @@ export class ProgressionSupportRepository {
                (invitee_user_id, inviter_user_id, season, levels,
                 points_carried, points_spent, updated_at)
              SELECT ?, ?, ?, ? - level, 0, 0, ?
-             FROM player_profiles WHERE user_id = ? AND level < ?
+             FROM player_profiles profile
+             WHERE profile.user_id = ? AND profile.level < ?
+               AND ${sourceTransactionGuard('profile.user_id')}
              ON CONFLICT(invitee_user_id, inviter_user_id, season)
              DO UPDATE SET levels = player_friend_points.levels + excluded.levels,
                            updated_at = excluded.updated_at`
@@ -468,7 +470,9 @@ export class ProgressionSupportRepository {
                 created_at, updated_at)
              SELECT ?, 'SW_STICKER_POINTS', 0, ? - level, 0,
                     'friend-level', ?, ?
-             FROM player_profiles WHERE user_id = ? AND level < ?
+             FROM player_profiles profile
+             WHERE profile.user_id = ? AND profile.level < ?
+               AND ${sourceTransactionGuard('profile.user_id')}
              ON CONFLICT(user_id, item_type, token_id)
              DO UPDATE SET balance = player_items.balance + excluded.balance,
                            updated_at = excluded.updated_at`
@@ -489,7 +493,11 @@ export class ProgressionSupportRepository {
           `INSERT INTO player_skypass_season_stats
              (user_id, season, has_premium, created_at, updated_at,
               initial_account_level, achieved_account_level)
-           VALUES (?, ?, 0, ?, ?, MAX(0, ? - 1), MAX(0, ? - 1))
+           SELECT profile.user_id, ?, 0, ?, ?,
+                  MAX(0, profile.level - 1), MAX(0, ? - 1)
+           FROM player_profiles profile
+           WHERE profile.user_id = ?
+             AND ${sourceTransactionGuard('profile.user_id')}
            ON CONFLICT(user_id, season) DO UPDATE SET
              achieved_account_level = MAX(
                player_skypass_season_stats.achieved_account_level,
@@ -497,12 +505,13 @@ export class ProgressionSupportRepository {
              ),
              updated_at = excluded.updated_at`
         )
-        .bind(target.user_id, season, now, now, target.level, minimumLevel),
+        .bind(season, now, now, minimumLevel, target.user_id),
       this.database
         .prepare(
           `UPDATE player_profiles
            SET level = MAX(level, ?), next_level_xp = 200, updated_at = ?
-           WHERE user_id = ?`
+           WHERE user_id = ?
+             AND ${sourceTransactionGuard('player_profiles.user_id')}`
         )
         .bind(minimumLevel, now, target.user_id),
       this.database
@@ -513,7 +522,8 @@ export class ProgressionSupportRepository {
                  (SELECT level FROM player_profiles WHERE user_id = ?)
                ),
                basic_skypass_next_xp = 200, updated_at = ?
-           WHERE user_id = ?`
+           WHERE user_id = ?
+             AND ${sourceTransactionGuard('player_progression.user_id')}`
         )
         .bind(target.user_id, now, target.user_id),
       ...this.promotionStatements(target.user_id, season, now)
@@ -528,9 +538,10 @@ export class ProgressionSupportRepository {
   ): Promise<StatRow | null> {
     return this.database
       .prepare(
-        `SELECT game_mode, score, player_rank, player_rank_stage,
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT game_mode, score, player_rank, player_rank_stage,
                 player_rank_state
-         FROM player_account_stats
+         FROM source_visible_account_stats
          WHERE user_id = ? AND game_mode = ? AND season = ?`
       )
       .bind(userId, mode, season)
@@ -546,8 +557,11 @@ export class ProgressionSupportRepository {
     if (!operationKey || !OPERATION_KEY_PATTERN.test(operationKey)) {
       throw invalidArgument('valid Cloud Weasel operation key missing')
     }
-    if (!Number.isSafeInteger(value) || (value as number) < 0 ||
-        (value as number) > MAX_UINT16) {
+    if (
+      !Number.isSafeInteger(value) ||
+      (value as number) < 0 ||
+      (value as number) > MAX_UINT16
+    ) {
       throw invalidArgument('levels must be an unsigned 16-bit integer')
     }
     const requestedLevels = value as number
@@ -577,10 +591,14 @@ export class ProgressionSupportRepository {
       .bind(operationKey)
       .first<ProgressionOperationRow>()
     if (existing) {
-      if (existing.actor_user_id !== actorUserId ||
-          existing.target_user_id !== target.user_id ||
-          existing.requested_levels !== requestedLevels) {
-        throw invalidArgument('operation key belongs to a different level grant')
+      if (
+        existing.actor_user_id !== actorUserId ||
+        existing.target_user_id !== target.user_id ||
+        existing.requested_levels !== requestedLevels
+      ) {
+        throw invalidArgument(
+          'operation key belongs to a different level grant'
+        )
       }
       if (existing.status === 'APPLIED') return true
     }
@@ -607,9 +625,11 @@ export class ProgressionSupportRepository {
     if (!operation || operation.status !== 'APPLIED') {
       throw new Error('staff level grant did not complete')
     }
-    if (operation.actor_user_id !== actorUserId ||
-        operation.target_user_id !== target.user_id ||
-        operation.requested_levels !== requestedLevels) {
+    if (
+      operation.actor_user_id !== actorUserId ||
+      operation.target_user_id !== target.user_id ||
+      operation.requested_levels !== requestedLevels
+    ) {
       throw invalidArgument('operation key belongs to a different level grant')
     }
     return true
@@ -623,6 +643,7 @@ export class ProgressionSupportRepository {
            SET player_rank = 'MASTER', updated_at = updated_at
            WHERE game_mode = ? AND season = ?
              AND player_rank IN ('MASTER', 'GRANDWEAVER')
+             AND ${noUnpublishedAccountStatsInScopeSQL(String(season))}
              AND user_id IN (
                SELECT user_id FROM player_account_settings
                WHERE account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')
@@ -643,7 +664,8 @@ export class ProgressionSupportRepository {
              ORDER BY stats.score DESC, stats.updated_at ASC,
                       stats.user_id ASC
              LIMIT 100
-           )`
+           )
+           AND ${noUnpublishedAccountStatsInScopeSQL(String(season))}`
         )
         .bind(mode, season)
     ])
@@ -661,8 +683,11 @@ export class ProgressionSupportRepository {
     if (!RP_MODES.has(mode)) {
       throw invalidArgument('can only set elo for ranked & conquest game modes')
     }
-    if (!Number.isSafeInteger(value) || (value as number) < MINIMUM_RP ||
-        (value as number) > 2_147_483_647) {
+    if (
+      !Number.isSafeInteger(value) ||
+      (value as number) < MINIMUM_RP ||
+      (value as number) > 2_147_483_647
+    ) {
       throw invalidArgument('invalid rank points - must be 200 and above')
     }
     const rankPoints = value as number
@@ -672,6 +697,12 @@ export class ProgressionSupportRepository {
     const now = new Date().toISOString()
     const rank = rankForRP(rankPoints)
     const state = JSON.stringify([1, 1750, 350, rankPoints])
+    const targetPublicationGuard = (userIdExpression: string) =>
+      `${noUnpublishedMatchExperienceSQL(userIdExpression)}
+       AND ${noUnpublishedAccountStatsSQL(userIdExpression)}`
+    const scopePublicationGuard = noUnpublishedAccountStatsInScopeSQL(
+      String(season)
+    )
     const before = {
       mode,
       requestedRankPoints: rankPoints,
@@ -691,9 +722,19 @@ export class ProgressionSupportRepository {
         .prepare(
           `INSERT OR IGNORE INTO player_account_stats
              (user_id, game_mode, season, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`
+           SELECT ?, ?, ?, ?, ?
+           WHERE ${targetPublicationGuard('?')}
+             AND ${scopePublicationGuard}`
         )
-        .bind(target.user_id, mode, season, now, now),
+        .bind(
+          target.user_id,
+          mode,
+          season,
+          now,
+          now,
+          target.user_id,
+          target.user_id
+        ),
       this.database
         .prepare(
           `UPDATE player_account_stats
@@ -703,7 +744,9 @@ export class ProgressionSupportRepository {
                END,
                player_rank = ?, player_rank_stage = ?,
                player_rank_state = ?, updated_at = ?
-           WHERE user_id = ? AND game_mode = ? AND season = ?`
+           WHERE user_id = ? AND game_mode = ? AND season = ?
+             AND ${targetPublicationGuard('player_account_stats.user_id')}
+             AND ${scopePublicationGuard}`
         )
         .bind(
           rankPoints,
@@ -739,7 +782,9 @@ export class ProgressionSupportRepository {
            JOIN player_account_stats stats
              ON stats.user_id = profile.user_id AND stats.game_mode = ?
             AND stats.season = ?
-           WHERE profile.user_id = ?`
+           WHERE profile.user_id = ?
+             AND ${targetPublicationGuard('profile.user_id')}
+             AND ${scopePublicationGuard}`
         )
         .bind(
           target.user_id,
@@ -753,7 +798,10 @@ export class ProgressionSupportRepository {
           target.user_id
         )
     ]
-    await this.database.batch(statements)
+    const results = await this.database.batch(statements)
+    if ((results.at(-1)?.meta.changes ?? 0) !== 1) {
+      throw new Error('rank points are waiting for match publication')
+    }
     return true
   }
 }

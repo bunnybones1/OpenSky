@@ -9,6 +9,10 @@ import {
 } from '../src/leaderboard-reward-policy'
 import { seasonStart } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
+import {
+  publishPendingAccountStat,
+  stagePendingAccountStat
+} from './helpers/rank-publication'
 
 const SEASON = 20
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -82,7 +86,7 @@ const makeCycle = async (week: number) => {
     Date.parse(scheduledAt) + (scheduleVersion - 500) * 1000
   ).toISOString()
   await env.AUTH_DB.prepare(
-     `INSERT INTO leaderboard_reward_schedule_versions
+    `INSERT INTO leaderboard_reward_schedule_versions
        (version, enabled, weekday_utc, hour_utc, minute_utc, first_run_at,
         starts_at, reason, created_at)
      VALUES (?, 1, ?, ?, ?, ?, ?, 'rank reset test', ?)`
@@ -125,14 +129,7 @@ const makeCycle = async (week: number) => {
         attempt_count, started_at)
      VALUES (?, ?, ?, ?, ?, 'PREPARING', 0, ?)`
   )
-    .bind(
-      scheduleVersion,
-      scheduledAt,
-      SEASON,
-      week,
-      crypto.randomUUID(),
-      now
-    )
+    .bind(scheduleVersion, scheduledAt, SEASON, week, crypto.randomUUID(), now)
     .run()
   const cycleId = Number(result.meta.last_row_id)
   const statements = [
@@ -441,6 +438,50 @@ describe('source leaderboard rank resets', () => {
         state: '[1,1750]'
       })
     ).rejects.toThrow('player rank state must be empty or four numbers')
+  })
+
+  it('waits for staged match stats before mutating a leaderboard season', async () => {
+    const userId = 'reset-match-publication'
+    const proposalId = `reset-publication-${crypto.randomUUID()}`
+    await setupPlayer(userId)
+    await addStat(userId, {
+      score: 1_250,
+      rank: 'MASTER',
+      stage: 'STAGE_NONE',
+      state: [-1, 1_750, 100, 1_250]
+    })
+    const cycleId = await makeCycle(2)
+    await stagePendingAccountStat(env.AUTH_DB, {
+      proposalId,
+      userId,
+      season: SEASON
+    })
+
+    expect(await applyLeaderboardRankReset(env.AUTH_DB, cycleId)).toBe(
+      'waiting_for_match_publication'
+    )
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT score, week2_score FROM player_account_stats
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      )
+        .bind(userId, SEASON)
+        .first()
+    ).toEqual({ score: 1_250, week2_score: null })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM leaderboard_rank_reset_receipts
+         WHERE cycle_id = ?`
+      )
+        .bind(cycleId)
+        .first('count')
+    ).toBe(0)
+
+    await publishPendingAccountStat(env.AUTH_DB, proposalId)
+    expect(await applyLeaderboardRankReset(env.AUTH_DB, cycleId)).toBe(
+      'applied'
+    )
   })
 
   it('does not reset a cycle before reward delivery reaches the reset boundary', async () => {

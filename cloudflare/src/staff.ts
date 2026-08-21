@@ -15,6 +15,7 @@ import { isConquestQueueReady } from './conquest-readiness'
 import type { ConquestRewardPoolOperation } from './conquest-reward-pool-operations'
 import type { ConquestV2RewardScheduleOperation } from './conquest-v2-reward-schedule-operations'
 import type { LeaderboardRewardScheduleOperation } from './leaderboard-reward-schedule-operations'
+import { publishedAccountStatsCTESQL } from './rank-publication'
 import type { ReferralStickerScheduleOperation } from './referral-sticker-schedule-operations'
 
 interface StatusCountRow {
@@ -1271,7 +1272,7 @@ export class StaffRepository {
       bindings.push(new Date(value).toISOString())
     }
     const conquestExpression = `EXISTS (
-      SELECT 1 FROM player_account_stats stats
+      SELECT 1 FROM source_visible_account_stats stats
       WHERE stats.user_id = users.id
         AND stats.player_rank IN (
           'WANDERER', 'TRAINEE', 'APPRENTICE',
@@ -1327,7 +1328,8 @@ export class StaffRepository {
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
     const result = await this.database
       .prepare(
-        `SELECT settings.user_id, game.id AS account_id,
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT settings.user_id, game.id AS account_id,
                 settings.name AS account_name, users.created_at,
                 ${conquestExpression} AS conquests_unlocked
          FROM player_account_settings settings

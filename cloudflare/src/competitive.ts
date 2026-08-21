@@ -40,6 +40,10 @@ import { leaderboardRewardsForRank } from './leaderboard-rewards'
 import { seasonFromDate } from './legacy-seasons'
 import { sourceGMMatchListWire, sourceMatchWire } from './match-wire'
 import { identityReferenceFor } from './rpc-principal'
+import {
+  noUnpublishedAccountStatsSQL,
+  publishedAccountStatsCTESQL
+} from './rank-publication'
 import { publishedWarmUpsSQL, sourceVisibleWarmUps } from './warmup-publication'
 
 const RANKED_MODES = new Set<GameMode>([
@@ -605,6 +609,7 @@ const statFromRow = (
 }
 
 const accountStatRowsQuery = (where: string): string => `
+  WITH ${publishedAccountStatsCTESQL()}
   SELECT stats.*,
          ${publishedAccountLevelSQL('stats.user_id', 'profile.level')} AS level,
          ${publishedAccountXpSQL('stats.user_id', 'profile.xp')} AS xp,
@@ -614,7 +619,7 @@ const accountStatRowsQuery = (where: string): string => `
            ) THEN NULL
            ELSE (
              SELECT COUNT(*)
-             FROM player_account_stats above
+             FROM source_visible_account_stats above
              LEFT JOIN player_account_settings above_settings
                ON above_settings.user_id = above.user_id
              LEFT JOIN game_accounts above_account
@@ -651,7 +656,7 @@ const accountStatRowsQuery = (where: string): string => `
          END AS rank_position,
          (
            SELECT COUNT(*)
-           FROM player_account_stats peers
+           FROM source_visible_account_stats peers
            LEFT JOIN player_account_settings peer_settings
              ON peer_settings.user_id = peers.user_id
            WHERE peers.game_mode = stats.game_mode
@@ -661,7 +666,7 @@ const accountStatRowsQuery = (where: string): string => `
                'BANNED', 'SUSPENDED', 'DELETED'
              )
          ) AS rank_count
-  FROM player_account_stats stats
+  FROM source_visible_account_stats stats
   JOIN player_profiles profile ON profile.user_id = stats.user_id
   LEFT JOIN player_account_settings settings ON settings.user_id = stats.user_id
   LEFT JOIN game_accounts target_account ON target_account.user_id = stats.user_id
@@ -940,9 +945,11 @@ export class CompetitiveRepository {
           .prepare(
             `INSERT OR IGNORE INTO player_account_stats
                (user_id, game_mode, season, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)`
+             SELECT ?, ?, ?, ?, ?
+             WHERE ${noUnpublishedMatchExperienceSQL('?')}
+               AND ${noUnpublishedAccountStatsSQL('?', '?', '?')}`
           )
-          .bind(userId, mode, season, now, now)
+          .bind(userId, mode, season, now, now, userId, userId, mode, season)
       ),
       this.database
         .prepare(
@@ -958,6 +965,9 @@ export class CompetitiveRepository {
              )
              AND ${noUnpublishedMatchExperienceSQL(
                'player_account_stats.user_id'
+             )}
+             AND ${noUnpublishedAccountStatsSQL(
+               'player_account_stats.user_id'
              )}`
         )
         .bind(INITIAL_RANK_STATE_JSON, now, userId, season)
@@ -970,21 +980,44 @@ export class CompetitiveRepository {
   }> {
     await this.ensureCurrentStats(userId)
     const season = seasonFromDate()
-    const rows = await this.database
-      .prepare(
-        accountStatRowsQuery(
-          `stats.user_id = ? AND stats.season = ?
-           AND stats.game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
+    const [rows, profile] = await Promise.all([
+      this.database
+        .prepare(
+          accountStatRowsQuery(
+            `stats.user_id = ? AND stats.season = ?
+             AND stats.game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
+          )
         )
-      )
-      .bind(userId, season)
-      .all<StatRow>()
+        .bind(userId, season)
+        .all<StatRow>(),
+      this.database
+        .prepare(
+          `SELECT ${publishedAccountLevelSQL(
+            'profile.user_id',
+            'profile.level'
+          )} AS level,
+                  ${publishedAccountXpSQL(
+                    'profile.user_id',
+                    'profile.xp'
+                  )} AS xp
+           FROM player_profiles profile WHERE profile.user_id = ?`
+        )
+        .bind(userId)
+        .first<{ level: number; xp: number }>()
+    ])
+    if (!profile) throw new Error('player profile is missing')
+    const visibleLevel = sourceVisibleAccountLevel(profile.level)
+    const visibleXp = sourceVisibleExperienceXp(profile.xp)
     const byMode = new Map(rows.results.map(row => [row.game_mode, row]))
+    const statFor = (mode: GameMode) => {
+      const row = byMode.get(mode)
+      return row
+        ? statFromRow(row)
+        : syntheticStat(mode, season, visibleLevel, visibleXp)
+    }
     return {
-      rankedConstructed: statFromRow(
-        byMode.get('RANKED_CONSTRUCTED' as GameMode)!
-      ),
-      rankedDiscovery: statFromRow(byMode.get('RANKED_DISCOVERY' as GameMode)!)
+      rankedConstructed: statFor('RANKED_CONSTRUCTED' as GameMode),
+      rankedDiscovery: statFor('RANKED_DISCOVERY' as GameMode)
     }
   }
 
@@ -1074,7 +1107,8 @@ export class CompetitiveRepository {
     }
     const result = await this.database
       .prepare(
-        `SELECT stats.*, game.id AS account_id,
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT stats.*, game.id AS account_id,
                 account.name, account.locale, account.region,
                 account.tag_art_id, account.title_id,
                 ${sourceCrystalIDSQL('stats.user_id')} AS crystal_id,
@@ -1093,7 +1127,7 @@ export class CompetitiveRepository {
                   'stats.user_id',
                   'account.warm_ups'
                 )} AS warm_ups
-         FROM player_account_stats stats
+         FROM source_visible_account_stats stats
          JOIN users ON users.id = stats.user_id
          JOIN player_profiles profile ON profile.user_id = stats.user_id
          JOIN player_account_settings account ON account.user_id = stats.user_id

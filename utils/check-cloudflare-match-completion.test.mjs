@@ -6,6 +6,7 @@ import {
   experiencePublicationErrors,
   matchCompletionErrors,
   questPublicationErrors,
+  rankPublicationErrors,
   warmUpPublicationErrors
 } from './check-cloudflare-match-completion.mjs'
 
@@ -230,6 +231,44 @@ const experienceErrorsFor = value =>
     value.skypassAutoClaimTest,
     value.referralStickerRewardsTest
   )
+
+const rankFixtures = async () => {
+  const entries = await Promise.all(
+    Object.entries({
+      sourceMatches: 'api/rpc/matches.go',
+      sourceRankUpper: 'api/lib/rankup/match_player_rank_upper.go',
+      sourceGrandweaverTask: 'api/lib/jobqueue/promote_grandmasters_runner.go',
+      sourceLeveller: 'api/lib/levels/xp/leveller.go',
+      gameMatch: 'game-server-cloudflare/src/game-match.ts',
+      progression: 'game-server-cloudflare/src/progression.ts',
+      deckRanks: 'game-server-cloudflare/src/deck-ranks.ts',
+      migration:
+        'cloudflare/migrations/0118_match_account_stat_publication.sql',
+      rankPublication: 'cloudflare/src/rank-publication.ts',
+      competitive: 'cloudflare/src/competitive.ts',
+      conquest: 'cloudflare/src/conquest.ts',
+      playerRpc: 'cloudflare/src/player-rpc.ts',
+      progressionSupport: 'cloudflare/src/progression-support.ts',
+      leaderboardReward: 'cloudflare/src/leaderboard-reward-worker.ts',
+      leaderboardReset: 'cloudflare/src/leaderboard-rank-reset.ts',
+      staff: 'cloudflare/src/staff.ts',
+      matchRepository: 'match-service-cloudflare/src/repository.ts',
+      registeredBot: 'match-service-cloudflare/src/registered-bot.ts',
+      playerRpcTest: 'cloudflare/test/player-rpc.test.ts',
+      gameServerTest:
+        'game-server-cloudflare/test-cloudflare/game-match.test.ts',
+      deckRanksTest:
+        'game-server-cloudflare/test-cloudflare/deck-ranks.test.ts',
+      matchServiceTest:
+        'match-service-cloudflare/test-cloudflare/worker.test.ts',
+      staffTest: 'cloudflare/test/staff-rpc.test.ts',
+      leaderboardRewardTest:
+        'cloudflare/test/leaderboard-reward-worker.test.ts',
+      leaderboardResetTest: 'cloudflare/test/leaderboard-rank-reset.test.ts'
+    }).map(async ([key, file]) => [key, await readFile(file, 'utf8')])
+  )
+  return Object.fromEntries(entries)
+}
 
 test('pins source transaction semantics and the Worker publication barrier', async () => {
   const value = await fixtures()
@@ -658,7 +697,7 @@ test('rejects weakened Warm Up projections or runtime proof', async () => {
     },
     {
       ...value,
-      competitive: value.competitive.replace(
+      competitive: value.competitive.replaceAll(
         'sourceVisibleWarmUps(row.warm_ups)',
         'row.warm_ups'
       )
@@ -875,6 +914,142 @@ test('rejects weakened XP snapshots, projections, guards, or runtime proof', asy
       experienceErrorsFor(mutation),
       [],
       `XP publication mutation ${index + 1} was not detected`
+    )
+  }
+})
+
+test('pins source-transactional multiplayer rank publication', async () => {
+  assert.deepEqual(rankPublicationErrors(await rankFixtures()), [])
+})
+
+test('rejects weakened rank receipts, projections, writers, or runtime proof', async () => {
+  const value = await rankFixtures()
+  const mutations = [
+    {
+      ...value,
+      sourceMatches: value.sourceMatches.replace(
+        'UpdatePlayerStatsAndRanks(ctx, tx, match)',
+        'UpdatePlayerStatsAfterCommit(ctx, tx, match)'
+      )
+    },
+    {
+      ...value,
+      sourceRankUpper: value.sourceRankUpper.replace(
+        'repo.Tasks(sess).EnqueueTask(jobqueue.PromoteGrandmastersWorkGroup',
+        'repo.Tasks(sess).SkipTask(jobqueue.PromoteGrandmastersWorkGroup'
+      )
+    },
+    {
+      ...value,
+      sourceGrandweaverTask: value.sourceGrandweaverTask.replace(
+        'PromoteGrandmastersMaxRetries = 5',
+        'PromoteGrandmastersMaxRetries = 0'
+      )
+    },
+    {
+      ...value,
+      migration: value.migration.replace(
+        "'$.match.matchSettings.season'",
+        "'$.matchSettings.season'"
+      )
+    },
+    {
+      ...value,
+      migration: value.migration.replace(
+        'multiplayer_match_stats_publication_guard',
+        'removed_match_stats_publication_guard'
+      )
+    },
+    {
+      ...value,
+      rankPublication: value.rankPublication.replaceAll(
+        "pending_match.status <> 'ended'",
+        "pending_match.status <> 'failed'"
+      )
+    },
+    {
+      ...value,
+      progression: value.progression.replaceAll(
+        'accountStatSnapshotStatement(',
+        'skipAccountStatSnapshot('
+      )
+    },
+    {
+      ...value,
+      deckRanks: value.deckRanks.replace(
+        "{ error: 'waiting_for_match_publication' },\n            { status: 409 }",
+        "{ error: 'waiting_for_match_publication' },\n            { status: 200 }"
+      )
+    },
+    {
+      ...value,
+      progression: value.progression.replace(
+        'INSERT OR IGNORE INTO multiplayer_grandweaver_jobs',
+        'INSERT OR IGNORE INTO skipped_grandweaver_jobs'
+      )
+    },
+    {
+      ...value,
+      gameMatch: value.gameMatch.replace(
+        'metadata.grandweaverRecalculationPending = true',
+        'metadata.grandweaverRecalculationPending = false'
+      )
+    },
+    {
+      ...value,
+      competitive: value.competitive.replaceAll(
+        'publishedAccountStatsCTESQL()',
+        'rawAccountStatsCTESQL()'
+      )
+    },
+    {
+      ...value,
+      conquest: value.conquest.replaceAll(
+        'publishedAccountStatsCTESQL()',
+        'rawAccountStatsCTESQL()'
+      )
+    },
+    {
+      ...value,
+      playerRpc: value.playerRpc.replace(
+        'noUnpublishedAccountStatsSQL(',
+        'allowUnpublishedAccountStatsSQL('
+      )
+    },
+    {
+      ...value,
+      progressionSupport: value.progressionSupport.replaceAll(
+        'noUnpublishedAccountStatsInScopeSQL(',
+        'allowUnpublishedAccountStatsInScopeSQL('
+      )
+    },
+    {
+      ...value,
+      leaderboardReward: value.leaderboardReward.replace(
+        'noUnpublishedAccountStatsInScopeSQL(',
+        'allowUnpublishedAccountStatsInScopeSQL('
+      )
+    },
+    {
+      ...value,
+      registeredBot: value.registeredBot.replaceAll(
+        'publishedAccountStatsCTESQL()',
+        'rawAccountStatsCTESQL()'
+      )
+    },
+    {
+      ...value,
+      staffTest: value.staffTest.replace(
+        'does not interleave staff progression with staged match stats',
+        'updates staff progression immediately'
+      )
+    }
+  ]
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notDeepEqual(
+      rankPublicationErrors(mutation),
+      [],
+      `rank publication mutation ${index + 1} was not detected`
     )
   }
 })

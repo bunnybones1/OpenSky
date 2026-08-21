@@ -338,7 +338,7 @@ export const applyLeaderboardRankReset = async (
   database: D1Database,
   cycleId: number,
   now = new Date()
-): Promise<'applied' | 'already_applied'> => {
+): Promise<'applied' | 'already_applied' | 'waiting_for_match_publication'> => {
   const cycle = await database
     .prepare(
       `SELECT id, season, week, status FROM leaderboard_reward_cycles
@@ -362,6 +362,9 @@ export const applyLeaderboardRankReset = async (
   const resetKind: ResetKind = cycle.week === 4 ? 'HARD' : 'SOFT'
   const claimToken = crypto.randomUUID()
   const appliedAt = now.toISOString()
+  const publicationGuard = noUnpublishedAccountStatsInScopeSQL(
+    String(cycle.season)
+  )
   const mutations =
     resetKind === 'SOFT'
       ? softResetStatements(
@@ -385,7 +388,8 @@ export const applyLeaderboardRankReset = async (
            (cycle_id, reset_kind, season, week, claim_token, applied_at)
          SELECT id, ?, season, week, ?, ?
          FROM leaderboard_reward_cycles
-         WHERE id = ? AND status = 'DELIVERING'`
+         WHERE id = ? AND status = 'DELIVERING'
+           AND ${publicationGuard}`
       )
       .bind(resetKind, claimToken, appliedAt, cycle.id),
     ...mutations,
@@ -405,5 +409,10 @@ export const applyLeaderboardRankReset = async (
     )
     .bind(cycle.id, claimToken)
     .first()
-  return applied ? 'applied' : 'already_applied'
+  if (applied) return 'applied'
+  const pendingMatch = await database
+    .prepare(`SELECT 1 WHERE NOT (${publicationGuard})`)
+    .first()
+  return pendingMatch ? 'waiting_for_match_publication' : 'already_applied'
 }
+import { noUnpublishedAccountStatsInScopeSQL } from './rank-publication'

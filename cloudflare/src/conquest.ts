@@ -12,12 +12,10 @@ import { getGoldID } from '@opensky/shared/assetsIDs'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 import { conquestV2TreasureProgress } from '@opensky/shared/conquest-v2-treasure'
 
-import {
-  sourceConquestWire,
-  sourceWeeklyGoldsListWire
-} from './conquest-wire'
+import { sourceConquestWire, sourceWeeklyGoldsListWire } from './conquest-wire'
 import { invalidArgument } from './errors'
 import { goFloat32Percentage } from './go-numbers'
+import { publishedAccountStatsCTESQL } from './rank-publication'
 
 const HERO_DECK_CLASS: Partial<Record<Hero, DeckClass>> = {
   [Hero.ADA]: DeckClass.STR,
@@ -56,9 +54,7 @@ export const sourceConquestHeroArgument = (
   if (typeof value !== 'string') {
     throw invalidArgument('failed to unmarshal request data')
   }
-  return SOURCE_HERO_VALUES.has(value as Hero)
-    ? (value as Hero)
-    : Hero.UNKNOWN
+  return SOURCE_HERO_VALUES.has(value as Hero) ? (value as Hero) : Hero.UNKNOWN
 }
 
 export const LEGACY_CONQUEST_EVENT_ID = 1
@@ -233,7 +229,8 @@ export class ConquestRepository {
     const [rank, ticket, nonce] = await Promise.all([
       this.database
         .prepare(
-          `SELECT 1 FROM player_account_stats
+          `WITH ${publishedAccountStatsCTESQL()}
+           SELECT 1 FROM source_visible_account_stats
            WHERE user_id = ?
              AND player_rank IN (
                'TRAINEE', 'APPRENTICE', 'EXPERT', 'MASTER', 'GRANDWEAVER'
@@ -269,7 +266,8 @@ export class ConquestRepository {
     await this.database.batch([
       this.database
         .prepare(
-          `INSERT OR IGNORE INTO player_conquests
+          `WITH ${publishedAccountStatsCTESQL()}
+           INSERT OR IGNORE INTO player_conquests
              (entry_key, user_id, status, nonce, mode, hero, deck_class,
               match_progress, created_at, reward_pool_version)
            SELECT ?, ?, 'IN_PROGRESS', ?, 'CONQUEST_CONSTRUCTED', ?, ?, '{}',
@@ -279,7 +277,7 @@ export class ConquestRepository {
              ON approved.version = verified.pool_version
            WHERE verified.starts_at <= ? AND verified.ends_at >= ?
              AND EXISTS (
-             SELECT 1 FROM player_account_stats
+             SELECT 1 FROM source_visible_account_stats
              WHERE user_id = ?
                AND player_rank IN (
                  'TRAINEE', 'APPRENTICE', 'EXPERT', 'MASTER', 'GRANDWEAVER'

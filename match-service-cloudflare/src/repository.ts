@@ -29,6 +29,10 @@ import {
 } from '../../cloudflare/src/experience-publication'
 import { refreshPrivateSpectateCode } from '../../cloudflare/src/spectate-code'
 import {
+  noUnpublishedAccountStatsSQL,
+  publishedAccountStatsCTESQL
+} from '../../cloudflare/src/rank-publication'
+import {
   publishedWarmUpsSQL,
   sourceVisibleWarmUps
 } from '../../cloudflare/src/warmup-publication'
@@ -389,8 +393,9 @@ export class MatchRepository {
       statsMode
         ? this.database
             .prepare(
-              `SELECT score, player_rank, loss_streak
-               FROM player_account_stats
+              `WITH ${publishedAccountStatsCTESQL()}
+               SELECT score, player_rank, loss_streak
+               FROM source_visible_account_stats
                WHERE user_id = ? AND game_mode = ? AND season = ?`
             )
             .bind(userId, statsMode, currentSeason)
@@ -398,8 +403,9 @@ export class MatchRepository {
         : Promise.resolve(null),
       this.database
         .prepare(
-          `SELECT game_mode, player_rank
-             FROM player_account_stats
+          `WITH ${publishedAccountStatsCTESQL()}
+           SELECT game_mode, player_rank
+             FROM source_visible_account_stats
              WHERE user_id = ? AND season = ?
                AND game_mode IN ('RANKED_CONSTRUCTED', 'RANKED_DISCOVERY')`
         )
@@ -555,9 +561,21 @@ export class MatchRepository {
           .prepare(
             `INSERT OR IGNORE INTO player_account_stats
                (user_id, game_mode, season, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)`
+             SELECT ?, ?, ?, ?, ?
+             WHERE ${noUnpublishedMatchExperienceSQL('?')}
+               AND ${noUnpublishedAccountStatsSQL('?', '?', '?')}`
           )
-          .bind(userId, mode, currentSeason, now, now)
+          .bind(
+            userId,
+            mode,
+            currentSeason,
+            now,
+            now,
+            userId,
+            userId,
+            mode,
+            currentSeason
+          )
       ),
       this.database
         .prepare(
@@ -572,6 +590,9 @@ export class MatchRepository {
                  AND ((MAX(profile.level, 1) - 1) * 200 + profile.xp) >= 200
              )
              AND ${noUnpublishedMatchExperienceSQL(
+               'player_account_stats.user_id'
+             )}
+             AND ${noUnpublishedAccountStatsSQL(
                'player_account_stats.user_id'
              )}`
         )
@@ -655,11 +676,12 @@ export class MatchRepository {
         .all<ActiveQuestRow>(),
       this.database
         .prepare(
-          `SELECT game_mode, season, win_count, loss_count, tie_count,
+          `WITH ${publishedAccountStatsCTESQL()}
+           SELECT game_mode, season, win_count, loss_count, tie_count,
                   forfeit_count, abandon_count, score, player_rank,
                   player_rank_stage, player_rank_state, win_streak,
                   loss_streak, created_at
-           FROM player_account_stats
+           FROM source_visible_account_stats
            WHERE user_id = ? AND season = ?`
         )
         .bind(userId, currentSeason)

@@ -47,6 +47,7 @@ import {
   permissionDenied
 } from './errors'
 import {
+  noUnpublishedMatchExperienceSQL,
   publishedAccountLevelSQL,
   publishedAccountXpSQL,
   publishedProfileUpdatedAtSQL,
@@ -77,6 +78,10 @@ import {
   projectUnpublishedQuestProgress,
   unpublishedQuestProgress
 } from './quest-publication'
+import {
+  noUnpublishedAccountStatsSQL,
+  publishedAccountStatsCTESQL
+} from './rank-publication'
 import { identityReferenceFor } from './rpc-principal'
 import { refreshPrivateSpectateCode } from './spectate-code'
 import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
@@ -3049,11 +3054,12 @@ export class PlayerRpcRepository {
     const statements: D1PreparedStatement[] = [
       this.database
         .prepare(
-          `INSERT INTO player_quest_claim_batches
+          `WITH ${publishedAccountStatsCTESQL()}
+           INSERT INTO player_quest_claim_batches
              (claim_token, user_id, assignment_count, status,
               ranked_constructed_before, claimed_at)
            SELECT ?, ?, ?, 'PREPARING', COALESCE((
-             SELECT player_rank FROM player_account_stats
+             SELECT player_rank FROM source_visible_account_stats
              WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
                AND season = ?
            ), 'UNRANKED'), ?
@@ -3062,7 +3068,9 @@ export class PlayerRpcRepository {
              WHERE user_id = ? AND rowid IN (${claimPlaceholders})
                AND status = 'complete'
            ) = ?
-             AND ${noUnpublishedQuestProgressForRowsSQL(claimPlaceholders)}`
+             AND ${noUnpublishedQuestProgressForRowsSQL(claimPlaceholders)}
+             AND ${noUnpublishedMatchExperienceSQL('?')}
+             AND ${noUnpublishedAccountStatsSQL('?')}`
         )
         .bind(
           claimToken,
@@ -3076,7 +3084,9 @@ export class PlayerRpcRepository {
           assignments.length,
           userId,
           userId,
-          ...assignments.map(assignment => assignment.row_id)
+          ...assignments.map(assignment => assignment.row_id),
+          userId,
+          userId
         )
     ]
 

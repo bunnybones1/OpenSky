@@ -18,6 +18,10 @@ import {
 import { seasonStart } from '../src/legacy-seasons'
 import { PlayerRepository } from '../src/player'
 import { PlayerRpcRepository } from '../src/player-rpc'
+import {
+  publishPendingAccountStat,
+  stagePendingAccountStat
+} from './helpers/rank-publication'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
@@ -325,15 +329,52 @@ describe('weekly leaderboard reward worker', () => {
       )
         .bind('0'.repeat(64))
         .run()
-    ).rejects.toThrow(
-      'leaderboard reward cycle policy receipts are immutable'
-    )
+    ).rejects.toThrow('leaderboard reward cycle policy receipts are immutable')
   })
 
   it('pins the approved policy to the source curve and generated card pool', async () => {
     expect(await calculatedLeaderboardRewardPolicyHash()).toBe(
       LEADERBOARD_REWARD_POLICY_HASH
     )
+  })
+
+  it('keeps a due cycle preparing until staged match stats publish', async () => {
+    const userId = 'reward-match-publication'
+    const proposalId = `reward-publication-${crypto.randomUUID()}`
+    await setupPlayer(userId, 1_500, NOW.toISOString())
+    await enableSchedule()
+    await stagePendingAccountStat(env.AUTH_DB, {
+      proposalId,
+      userId,
+      season: SEASON
+    })
+
+    const waiting = await runDueLeaderboardRewards(env.AUTH_DB, NOW)
+    expect(waiting).toMatchObject({ status: 'in_progress', delivered: 0 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status, attempt_count,
+                (SELECT COUNT(*) FROM leaderboard_reward_entries
+                 WHERE cycle_id = cycles.id) AS entries,
+                (SELECT COUNT(*)
+                 FROM leaderboard_reward_cycle_policy_receipts
+                 WHERE cycle_id = cycles.id) AS policies
+         FROM leaderboard_reward_cycles cycles WHERE id = ?`
+      )
+        .bind(waiting.cycleId)
+        .first()
+    ).toEqual({
+      status: 'PREPARING',
+      attempt_count: 0,
+      entries: 0,
+      policies: 0
+    })
+
+    await publishPendingAccountStat(env.AUTH_DB, proposalId)
+    expect(await runDueLeaderboardRewards(env.AUTH_DB, NOW)).toMatchObject({
+      status: 'completed',
+      cycleId: waiting.cycleId
+    })
   })
 
   it('rejects caller-selected cycle season, week, and unreceipted delivery', async () => {

@@ -29,6 +29,7 @@ const baseCards = (cards: number[]) =>
 const payload = (left = deck1, right = deck2) =>
   JSON.stringify({
     match: {
+      matchSettings: { season: 126 },
       player1: { privateSeed: { cards: left, prisms: ['str'] } },
       player2: { privateSeed: { cards: right, prisms: ['str'] } }
     }
@@ -399,11 +400,33 @@ describe('source ranked-constructed deck aggregates', () => {
           processedAt: NOW
         })
       })
+    const proposalIds = [
+      'deck-rank-concurrent-one',
+      'deck-rank-concurrent-two'
+    ] as const
     const responses = await Promise.all([
       apply('deck-rank-concurrent-one'),
       apply('deck-rank-concurrent-two')
     ])
-    expect(responses.map(response => response.status)).toEqual([200, 200])
+    expect(responses.map(response => response.status).sort()).toEqual([
+      200, 409
+    ])
+    const waitingIndex = responses.findIndex(
+      response => response.status === 409
+    )
+    expect(waitingIndex).toBeGreaterThanOrEqual(0)
+    await expect(responses[waitingIndex].json()).resolves.toEqual({
+      error: 'waiting_for_match_publication'
+    })
+    const publishedProposalId = proposalIds[waitingIndex === 0 ? 1 : 0]
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', updated_at = ?
+       WHERE proposal_id = ?`
+    )
+      .bind(NOW, publishedProposalId)
+      .run()
+    const retry = await apply(proposalIds[waitingIndex])
+    expect(retry.status).toBe(200)
     const stats = await env.AUTH_DB.prepare(
       `SELECT user_id, win_count, loss_count, tie_count
        FROM player_account_stats

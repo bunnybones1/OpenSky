@@ -1829,6 +1829,13 @@ describe('Cloud Weasel accepted-match service', () => {
          VALUES (?, 126, 0, ?, ?, 1, 3)`
       ).bind(USER_ID, beforeAt, beforeAt),
       env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, 'RANKED_DISCOVERY', 126, 0, 'WANDERER', 'STAGE_I',
+                 '[1,1750,350,0]', ?, ?)`
+      ).bind(USER_ID, beforeAt, beforeAt),
+      env.AUTH_DB.prepare(
         `INSERT INTO multiplayer_matches
            (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
             player1_principal, player2_principal, player1_user_id,
@@ -1854,14 +1861,15 @@ describe('Cloud Weasel accepted-match service', () => {
             season_initial_account_level_before,
             season_achieved_account_level_before,
             profile_updated_at_before, after_level, after_xp,
-            ranked_constructed_before, inviter_user_id,
+            ranked_constructed_before, ranked_discovery_before,
+            inviter_user_id,
             inviter_levels_before, inviter_sticker_points_before,
             inviter_sticker_points_existed_before,
             inviter_sticker_points_created_at_before,
             inviter_sticker_points_updated_at_before, rewards_json,
             processed_at)
          VALUES (?, 0, ?, 126, ?, 50, 4, 180, 4, 180, 1, 1, 3, ?,
-                 5, 30, 'EXPERT', NULL, 0, 0, 0, '', '', '[]', ?)`
+                 5, 30, 'EXPERT', 'WANDERER', NULL, 0, 0, 0, '', '', '[]', ?)`
       ).bind(proposalId, USER_ID, settlementToken, beforeAt, stagedAt),
       env.AUTH_DB.prepare(
         `UPDATE player_profiles
@@ -1920,6 +1928,125 @@ describe('Cloud Weasel accepted-match service', () => {
       level: 5,
       account: { level: 5, experience: 30, seasonLevel: 3 }
     })
+  })
+
+  it('projects ranked stats before terminal publication for matchmaking and match accounts', async () => {
+    const proposalId = `pending-rank-account-${crypto.randomUUID()}`
+    const beforeAt = '2026-08-21T16:02:00.000Z'
+    const stagedAt = '2026-08-21T16:02:01.000Z'
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_profiles SET level = 2, updated_at = ?
+         WHERE user_id = ?`
+      ).bind(beforeAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET win_count = 4, loss_count = 2, score = 1700,
+             player_rank = 'EXPERT', player_rank_stage = 'STAGE_II',
+             player_rank_state = '[1,1750,350,1700]', win_streak = 0,
+             loss_streak = 1, created_at = ?, updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = 126`
+      ).bind(beforeAt, beforeAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'RANKED_CONSTRUCTED', 'RANKED_CONSTRUCTED',
+                 'RANKED_CONSTRUCTED', 'rank-publication-test', ?, ?, ?, NULL,
+                 '{"match":{"matchSettings":{"season":126}}}', 'active', ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        PRINCIPAL,
+        BOT_PLACEHOLDER,
+        USER_ID,
+        stagedAt,
+        stagedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_account_stat_snapshots
+           (proposal_id, phase, player_index, user_id, game_mode, season,
+            stat_existed_before, before_win_count, before_loss_count,
+            before_tie_count, before_forfeit_count, before_abandon_count,
+            before_score, before_player_rank, before_player_rank_stage,
+            before_player_rank_state, before_win_streak, before_loss_streak,
+            before_created_at, before_updated_at)
+         VALUES (?, 'RANKED_STATS', 0, ?, 'RANKED_CONSTRUCTED', 126, 1,
+                 4, 2, 0, 0, 0, 1700, 'EXPERT', 'STAGE_II',
+                 '[1,1750,350,1700]', 0, 1, ?, ?)`
+      ).bind(proposalId, USER_ID, beforeAt, beforeAt),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET win_count = 5, score = 1740,
+             player_rank_state = '[1,1750,350,1740]', win_streak = 1,
+             loss_streak = 0, updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = 126`
+      ).bind(stagedAt, USER_ID),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_account_stat_outcomes
+           (proposal_id, phase, player_index, user_id, game_mode, season,
+            after_win_count, after_loss_count, after_tie_count,
+            after_forfeit_count, after_abandon_count, after_score,
+            after_player_rank, after_player_rank_stage,
+            after_player_rank_state, after_win_streak, after_loss_streak,
+            after_created_at, after_updated_at)
+         VALUES (?, 'RANKED_STATS', 0, ?, 'RANKED_CONSTRUCTED', 126,
+                 5, 2, 0, 0, 0, 1740, 'EXPERT', 'STAGE_II',
+                 '[1,1750,350,1740]', 1, 0, ?, ?)`
+      ).bind(proposalId, USER_ID, beforeAt, stagedAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_stats_applied
+           (proposal_id, player1_rewards_json, player2_rewards_json,
+            processed_at)
+         VALUES (?, '[]', '[]', ?)`
+      ).bind(proposalId, stagedAt)
+    ])
+
+    const repository = new MatchRepository(env.AUTH_DB)
+    const expectVisible = async (
+      score: number,
+      winCount: number,
+      lossStreak: number,
+      queueScore: number
+    ) => {
+      const matchmaking = await repository.matchmakingProfile(
+        USER_ID,
+        PRINCIPAL,
+        GameMode.RANKED_CONSTRUCTED,
+        126,
+        'rank-publication-test'
+      )
+      expect(matchmaking).toMatchObject({
+        score: queueScore,
+        rank: 'EXPERT'
+      })
+      const account = await repository.humanAccount(
+        USER_ID,
+        PRINCIPAL,
+        ['str'],
+        126,
+        GameMode.RANKED_CONSTRUCTED,
+        'PLAYER'
+      )
+      expect(account.account.stats!.rankedConstructed).toMatchObject({
+        score,
+        winCount,
+        lossStreak
+      })
+    }
+
+    await expectVisible(1700, 4, 1, 1600)
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(stagedAt, stagedAt, proposalId)
+      .run()
+    await expectVisible(1740, 5, 0, 1600)
   })
 
   it('rejects proposal reuse with a different accepted dispatch', async () => {

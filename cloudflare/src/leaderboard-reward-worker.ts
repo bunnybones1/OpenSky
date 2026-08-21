@@ -6,6 +6,7 @@ import {
 } from './leaderboard-reward-policy'
 import { applyLeaderboardRankReset } from './leaderboard-rank-reset'
 import { seasonStart, seasonWeekFromDate } from './legacy-seasons'
+import { noUnpublishedAccountStatsInScopeSQL } from './rank-publication'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -255,6 +256,9 @@ const snapshotCycle = async (
   cycle: CycleRow,
   now: Date
 ): Promise<void> => {
+  const publicationGuard = noUnpublishedAccountStatsInScopeSQL(
+    String(cycle.season)
+  )
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
@@ -263,7 +267,8 @@ const snapshotCycle = async (
             eligible_card_ids_json, created_at)
          SELECT id, schedule_version, ?, ?, ?, started_at
          FROM leaderboard_reward_cycles
-         WHERE id = ? AND status = 'PREPARING'`
+         WHERE id = ? AND status = 'PREPARING'
+           AND ${publicationGuard}`
       )
       .bind(
         LEADERBOARD_REWARD_POLICY_VERSION,
@@ -300,9 +305,20 @@ const snapshotCycle = async (
            WHERE EXISTS (
              SELECT 1 FROM leaderboard_reward_cycles
              WHERE id = ? AND status = 'PREPARING'
+           ) AND EXISTS (
+             SELECT 1 FROM leaderboard_reward_cycle_policy_receipts policy
+             WHERE policy.cycle_id = ?
            )`
         )
-        .bind(cycle.id, mode, now.toISOString(), mode, cycle.season, cycle.id)
+        .bind(
+          cycle.id,
+          mode,
+          now.toISOString(),
+          mode,
+          cycle.season,
+          cycle.id,
+          cycle.id
+        )
     )
   }
   statements.push(
@@ -310,7 +326,11 @@ const snapshotCycle = async (
       .prepare(
         `UPDATE leaderboard_reward_cycles
          SET status = 'DELIVERING'
-         WHERE id = ? AND status = 'PREPARING'`
+         WHERE id = ? AND status = 'PREPARING'
+           AND EXISTS (
+             SELECT 1 FROM leaderboard_reward_cycle_policy_receipts policy
+             WHERE policy.cycle_id = leaderboard_reward_cycles.id
+           )`
       )
       .bind(cycle.id)
   )
@@ -566,12 +586,7 @@ const deliverPlayer = async (
            WHERE award.award_key = ? AND award.delivery_key = ?
              AND award.application_status = 'PREPARING'`
         )
-        .bind(
-          payload.ticketAmount,
-          payload.ticketAmount,
-          awardKey,
-          deliveryKey
-        )
+        .bind(payload.ticketAmount, payload.ticketAmount, awardKey, deliveryKey)
     )
     statements.push(
       database
@@ -783,6 +798,9 @@ export const runDueLeaderboardRewards = async (
         schedule.version,
         scheduledAt.toISOString()
       ))!
+      if (cycle.status === 'PREPARING') {
+        return { status: 'in_progress', cycleId: cycle.id, delivered: 0 }
+      }
     }
     const delivered = await deliverCycle(database, cycle, now)
     if (await cycleDeliveryComplete(database, cycle.id)) {

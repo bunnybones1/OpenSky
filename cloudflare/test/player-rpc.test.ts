@@ -22,6 +22,10 @@ import {
   clearTestSkypassPolicies,
   createTestSkypassPolicy
 } from './helpers/skypass-policy'
+import {
+  publishPendingAccountStat,
+  stagePendingAccountStat
+} from './helpers/rank-publication'
 
 const testEnv = env as unknown as Env
 const userId = 'rpc-player-user-id'
@@ -560,14 +564,15 @@ describe('legacy player RPC compatibility', () => {
             season_initial_account_level_before,
             season_achieved_account_level_before,
             profile_updated_at_before, after_level, after_xp,
-            ranked_constructed_before, inviter_user_id,
+            ranked_constructed_before, ranked_discovery_before,
+            inviter_user_id,
             inviter_levels_before, inviter_sticker_points_before,
             inviter_sticker_points_existed_before,
             inviter_sticker_points_created_at_before,
             inviter_sticker_points_updated_at_before, rewards_json,
             processed_at)
          VALUES (?, 0, ?, ?, ?, 50, 4, 180, 4, 180, 1, 1, 3, ?,
-                 5, 30, 'WANDERER', ?, 2, 10, 1, ?, ?, '[]', ?)`
+                 5, 30, 'WANDERER', 'WANDERER', ?, 2, 10, 1, ?, ?, '[]', ?)`
       ).bind(
         proposalId,
         userId,
@@ -904,6 +909,126 @@ describe('legacy player RPC compatibility', () => {
       region: 'CA',
       tagArtID: 'bg-fire-01'
     })
+  })
+
+  it('publishes ranked account stats only with the terminal match ledger', async () => {
+    const season = seasonFromDate()
+    const proposalId = `rank-publication-${crypto.randomUUID()}`
+    const beforeAt = '2026-08-21T16:00:00.000Z'
+    const stagedAt = '2026-08-21T16:00:01.000Z'
+    const principal = await deriveGamePrincipal(userId)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET win_count = 2, loss_count = 1, tie_count = 0,
+             forfeit_count = 0, abandon_count = 0, score = 650,
+             player_rank = 'APPRENTICE', player_rank_stage = 'STAGE_I',
+             player_rank_state = '[1,1750,350,650]', win_streak = 2,
+             loss_streak = 0, created_at = ?, updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      ).bind(beforeAt, beforeAt, userId, season),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at,
+            updated_at)
+         VALUES (?, ?, 'RANKED_CONSTRUCTED', 'RANKED_CONSTRUCTED',
+                 'RANKED_CONSTRUCTED', 'rank-publication-test', ?, ?, ?, NULL,
+                 ?, 'active', ?, ?)`
+      ).bind(
+        proposalId,
+        `${proposalId}-replay`,
+        principal,
+        `identity:bot:${proposalId}`,
+        userId,
+        JSON.stringify({ match: { matchSettings: { season } } }),
+        stagedAt,
+        stagedAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_account_stat_snapshots
+           (proposal_id, phase, player_index, user_id, game_mode, season,
+            stat_existed_before, before_win_count, before_loss_count,
+            before_tie_count, before_forfeit_count, before_abandon_count,
+            before_score, before_player_rank, before_player_rank_stage,
+            before_player_rank_state, before_win_streak, before_loss_streak,
+            before_created_at, before_updated_at)
+         VALUES (?, 'RANKED_STATS', 0, ?, 'RANKED_CONSTRUCTED', ?, 1,
+                 2, 1, 0, 0, 0, 650, 'APPRENTICE', 'STAGE_I',
+                 '[1,1750,350,650]', 2, 0, ?, ?)`
+      ).bind(proposalId, userId, season, beforeAt, beforeAt),
+      env.AUTH_DB.prepare(
+        `UPDATE player_account_stats
+         SET win_count = 3, score = 670,
+             player_rank_state = '[1,1750,350,670]', win_streak = 3,
+             updated_at = ?
+         WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+           AND season = ?`
+      ).bind(stagedAt, userId, season),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_account_stat_outcomes
+           (proposal_id, phase, player_index, user_id, game_mode, season,
+            after_win_count, after_loss_count, after_tie_count,
+            after_forfeit_count, after_abandon_count, after_score,
+            after_player_rank, after_player_rank_stage,
+            after_player_rank_state, after_win_streak, after_loss_streak,
+            after_created_at, after_updated_at)
+         VALUES (?, 'RANKED_STATS', 0, ?, 'RANKED_CONSTRUCTED', ?,
+                 3, 1, 0, 0, 0, 670, 'APPRENTICE', 'STAGE_I',
+                 '[1,1750,350,670]', 3, 0, ?, ?)`
+      ).bind(proposalId, userId, season, beforeAt, stagedAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO multiplayer_match_stats_applied
+           (proposal_id, player1_rewards_json, player2_rewards_json,
+            processed_at)
+         VALUES (?, '[]', '[]', ?)`
+      ).bind(proposalId, stagedAt)
+    ])
+
+    const raw = await env.AUTH_DB.prepare(
+      `SELECT score, win_count FROM player_account_stats
+       WHERE user_id = ? AND game_mode = 'RANKED_CONSTRUCTED'
+         AND season = ?`
+    )
+      .bind(userId, season)
+      .first<{ score: number; win_count: number }>()
+    expect(raw).toEqual({ score: 670, win_count: 3 })
+
+    const expectVisible = async (score: number, winCount: number) => {
+      const account = await rpc('GetAccount', { address: identityReference })
+      expect(account.status).toBe(200)
+      expect(await account.json()).toMatchObject({
+        account: {
+          stats: {
+            rankedConstructed: { score, winCount }
+          }
+        }
+      })
+      const leaderboard = await rpc(
+        'ListLeaderboard',
+        {
+          page: { pageSize: 10 },
+          req: { gameMode: 'RANKED_CONSTRUCTED', season }
+        },
+        false
+      )
+      expect(leaderboard.status).toBe(200)
+      const body = await leaderboard.json<{
+        res: Array<{ accountStat: { score: number } }>
+      }>()
+      expect(body.res[0]?.accountStat.score).toBe(score)
+    }
+
+    await expectVisible(650, 2)
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(stagedAt, stagedAt, proposalId)
+      .run()
+    await expectVisible(670, 3)
   })
 
   it('ports write-once invite attribution and source friend-point reads', async () => {
@@ -4035,6 +4160,27 @@ describe('legacy player RPC compatibility', () => {
       }>()
     ).quests.find(quest => quest.questType === 'WelcomeOpenSky')
     expect(welcome).toMatchObject({ isClaimable: true })
+
+    const proposalId = `quest-rank-publication-${crypto.randomUUID()}`
+    await stagePendingAccountStat(env.AUTH_DB, {
+      proposalId,
+      userId,
+      season: seasonFromDate()
+    })
+    expect(
+      (await rpc('ClaimQuestRewards', { ids: [welcome!.id] })).status
+    ).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT profile.level,
+                (SELECT COUNT(*) FROM player_quest_claim_batches
+                 WHERE user_id = profile.user_id) AS claim_batches
+         FROM player_profiles profile WHERE profile.user_id = ?`
+      )
+        .bind(userId)
+        .first()
+    ).toEqual({ level: 1, claim_batches: 0 })
+    await publishPendingAccountStat(env.AUTH_DB, proposalId)
 
     const claimed = await rpc('ClaimQuestRewards', { ids: [welcome!.id] })
     expect(claimed.status).toBe(200)

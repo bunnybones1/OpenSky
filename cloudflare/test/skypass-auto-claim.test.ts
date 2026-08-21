@@ -56,6 +56,14 @@ const stageUnpublishedExperience = async (userId: string) => {
            basic_skypass_next_xp = 200, updated_at = ?
        WHERE user_id = ?`
     ).bind(beforeAt, userId),
+    ...['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_account_stats
+           (user_id, game_mode, season, score, player_rank,
+            player_rank_stage, player_rank_state, created_at, updated_at)
+         VALUES (?, ?, ?, 0, 'WANDERER', 'STAGE_I', '[1,1750,350,0]', ?, ?)`
+      ).bind(userId, mode, SEASON, beforeAt, beforeAt)
+    ),
     env.AUTH_DB.prepare(
       `INSERT INTO multiplayer_matches
          (proposal_id, replay_id, mode, player1_mode, player2_mode, version,
@@ -79,13 +87,14 @@ const stageUnpublishedExperience = async (userId: string) => {
           before_skypass_xp, season_stats_existed_before,
           season_initial_account_level_before,
           season_achieved_account_level_before, profile_updated_at_before,
-          after_level, after_xp, ranked_constructed_before, inviter_user_id,
+          after_level, after_xp, ranked_constructed_before,
+          ranked_discovery_before, inviter_user_id,
           inviter_levels_before, inviter_sticker_points_before,
           inviter_sticker_points_existed_before,
           inviter_sticker_points_created_at_before,
           inviter_sticker_points_updated_at_before, rewards_json, processed_at)
        VALUES (?, 0, ?, ?, ?, 50, 1, 170, 1, 170, 1, 0, 0, ?,
-               2, 20, 'UNRANKED', NULL, 0, 0, 0, '', '', '[]', ?)`
+               2, 20, 'WANDERER', 'WANDERER', NULL, 0, 0, 0, '', '', '[]', ?)`
     ).bind(proposalId, userId, SEASON, settlementToken, beforeAt, stagedAt),
     env.AUTH_DB.prepare(
       `UPDATE player_profiles
@@ -103,14 +112,6 @@ const stageUnpublishedExperience = async (userId: string) => {
        SET achieved_account_level = 1, updated_at = ?
        WHERE user_id = ? AND season = ?`
     ).bind(stagedAt, userId, SEASON),
-    ...['RANKED_CONSTRUCTED', 'RANKED_DISCOVERY'].map(mode =>
-      env.AUTH_DB.prepare(
-        `INSERT INTO player_account_stats
-           (user_id, game_mode, season, score, player_rank,
-            player_rank_stage, player_rank_state, created_at, updated_at)
-         VALUES (?, ?, ?, 0, 'WANDERER', 'STAGE_I', '[1,1750,350,0]', ?, ?)`
-      ).bind(userId, mode, SEASON, stagedAt, stagedAt)
-    ),
     env.AUTH_DB.prepare(
       `INSERT INTO multiplayer_match_experience
          (proposal_id, player1_rewards_json, player2_rewards_json,

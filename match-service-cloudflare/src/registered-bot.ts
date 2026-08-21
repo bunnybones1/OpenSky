@@ -22,6 +22,7 @@ import {
   decodeDeckString,
   encodeDeckString
 } from '../../cloudflare/src/deck-codec'
+import { publishedAccountStatsCTESQL } from '../../cloudflare/src/rank-publication'
 
 const SUPPORTED_MODES = new Set<GameMode>([
   GameMode.PRACTICE_PVP,
@@ -324,10 +325,11 @@ export const selectRegisteredBot = async (
   const [bots, decks] = await Promise.all([
     database
       .prepare(
-        `SELECT bot.user_id, bot.source_index, bot.source_name,
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT bot.user_id, bot.source_index, bot.source_name,
                 stats.score, stats.player_rank
          FROM registered_matchmaker_bots bot
-         LEFT JOIN player_account_stats stats
+         LEFT JOIN source_visible_account_stats stats
            ON stats.user_id = bot.user_id AND stats.game_mode = ?
           AND stats.season = ?
          WHERE bot.enabled = 1
@@ -451,13 +453,14 @@ const botAccount = async (
       .first<RegisteredBotAccountRow>(),
     database
       .prepare(
-        `SELECT stats.game_mode, stats.season, stats.win_count,
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT stats.game_mode, stats.season, stats.win_count,
                 stats.loss_count, stats.tie_count, stats.forfeit_count,
                 stats.abandon_count, stats.score, stats.player_rank,
                 stats.player_rank_stage, stats.player_rank_state,
                 stats.win_streak, stats.loss_streak,
                 stats.created_at AS stats_created_at
-         FROM player_account_stats stats
+         FROM source_visible_account_stats stats
          WHERE stats.user_id = ? AND stats.season = ?
          ORDER BY stats.game_mode ASC`
       )

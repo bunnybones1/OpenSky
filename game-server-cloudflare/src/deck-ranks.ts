@@ -18,7 +18,11 @@ import {
   type RankState,
   type RankingOutcome
 } from './ranking'
-import { applyMatchStats, type MatchStatsReceipt } from './progression'
+import {
+  applyMatchStats,
+  RankPublicationPendingError,
+  type MatchStatsReceipt
+} from './progression'
 import { applyConquestScores } from './conquest-score'
 
 const LIBRARY_REVISION = cardLibrary.sourceSha256
@@ -475,14 +479,25 @@ export class DeckRankCoordinator implements DurableObject {
       // Player and deck ratings both depend on their immediately preceding
       // Glicko state. Keep them under one global coordinator lock and preserve
       // the source order: player stats first, then deck ranks.
-      const stats = await applyMatchStats(
-        this.env.AUTH_DB,
-        body.proposalId,
-        body.season,
-        body.winner as 0 | 1 | undefined,
-        body.status as MatchStatus,
-        body.processedAt
-      )
+      let stats: MatchStatsReceipt
+      try {
+        stats = await applyMatchStats(
+          this.env.AUTH_DB,
+          body.proposalId,
+          body.season,
+          body.winner as 0 | 1 | undefined,
+          body.status as MatchStatus,
+          body.processedAt
+        )
+      } catch (error) {
+        if (error instanceof RankPublicationPendingError) {
+          return Response.json(
+            { error: 'waiting_for_match_publication' },
+            { status: 409 }
+          )
+        }
+        throw error
+      }
       const deckRanks = await applyDeckRanks(
         this.env.AUTH_DB,
         body.proposalId,

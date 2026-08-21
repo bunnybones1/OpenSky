@@ -260,7 +260,16 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'season_stats_existed_before',
     'profile_updated_at_before',
     'multiplayer_match_experience_player_publication_state_guard',
-    'multiplayer_match_experience_publication_complete_guard'
+    'multiplayer_match_experience_publication_complete_guard',
+    'ranked_discovery_before',
+    'multiplayer_match_account_stat_snapshots',
+    'multiplayer_match_account_stat_outcomes',
+    'multiplayer_grandweaver_jobs',
+    'multiplayer_match_account_stat_snapshot_guard',
+    'multiplayer_match_stats_publication_guard',
+    'multiplayer_match_ranked_unlock_publication_guard',
+    'multiplayer_grandweaver_job_update_guard',
+    '$.match.matchSettings.season'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -323,7 +332,11 @@ test('accepts only one successful complete read-only schema row', () => {
     registered_bot_guards_present: 2,
     registered_bot_allocation_guard_present: 1,
     experience_publication_columns_present: 8,
-    experience_publication_guards_present: 2
+    experience_publication_guards_present: 2,
+    account_stat_publication_columns_present: 1,
+    account_stat_publication_tables_present: 3,
+    account_stat_publication_guards_present: 12,
+    account_stat_payload_guard_present: 1
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -360,6 +373,30 @@ test('accepts only one successful complete read-only schema row', () => {
     JSON.stringify([
       {
         results: [{ ...complete, experience_publication_guards_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_stat_publication_columns_present: 0 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_stat_publication_tables_present: 2 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_stat_publication_guards_present: 11 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_stat_payload_guard_present: 0 }],
         success: true
       }
     ]),

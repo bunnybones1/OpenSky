@@ -17,6 +17,7 @@ import { gameStateParse } from '@opensky/shared/gameStateSerializer'
 import type { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import * as StateBindings from '@skyweaver/state-browser-sys'
 import type { PlayerSecret, SkyWeaver } from '@skyweaver/state-metadata'
+import { publishedAccountStatsCTESQL } from '../../cloudflare/src/rank-publication'
 
 import {
   archiveReplayRecords,
@@ -37,6 +38,7 @@ import {
   applyMatchExperience,
   applyMatchProgression,
   applyMatchStats,
+  applyPublishedGrandweavers,
   applyWarmUpProgress
 } from '../src/progression'
 import { initializeStateWasm } from '../src/state-runtime'
@@ -96,7 +98,7 @@ const insertActiveLedgerRow = async (
         player2_principal, player1_user_id, player2_user_id,
         match_payload_json, server_address, status, created_at, updated_at)
      VALUES (?, ?, 'RANKED_CONSTRUCTED', 'test-release', ?, ?, ?, ?,
-             '{}', ?, 'active', ?, ?)`
+             '{"match":{"matchSettings":{"season":126}}}', ?, 'active', ?, ?)`
   )
     .bind(
       ledgerProposalId,
@@ -752,6 +754,7 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       (
         await env.AUTH_DB.prepare(
           `SELECT user_id, before_skypass_xp,
+                  ranked_constructed_before, ranked_discovery_before,
                   season_stats_existed_before,
                   season_initial_account_level_before,
                   season_achieved_account_level_before,
@@ -769,6 +772,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       {
         user_id: USER_ID_1,
         before_skypass_xp: 170,
+        ranked_constructed_before: 'UNRANKED',
+        ranked_discovery_before: 'UNRANKED',
         season_stats_existed_before: 0,
         season_initial_account_level_before: -1,
         season_achieved_account_level_before: -1,
@@ -780,6 +785,8 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       {
         user_id: USER_ID_2,
         before_skypass_xp: 0,
+        ranked_constructed_before: 'UNRANKED',
+        ranked_discovery_before: 'UNRANKED',
         season_stats_existed_before: 0,
         season_initial_account_level_before: -1,
         season_achieved_account_level_before: -1,
@@ -848,6 +855,61 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         player_rank_stage: 'STAGE_I'
       }
     ])
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT snapshot.phase, snapshot.game_mode,
+                  snapshot.stat_existed_before, outcome.after_player_rank
+           FROM multiplayer_match_account_stat_snapshots snapshot
+           JOIN multiplayer_match_account_stat_outcomes outcome
+             ON outcome.proposal_id = snapshot.proposal_id
+            AND outcome.phase = snapshot.phase
+            AND outcome.player_index = snapshot.player_index
+            AND outcome.game_mode = snapshot.game_mode
+           WHERE snapshot.proposal_id = ?
+           ORDER BY snapshot.game_mode`
+        )
+          .bind(proposalId)
+          .all()
+      ).results
+    ).toEqual([
+      {
+        phase: 'EXPERIENCE_UNLOCK',
+        game_mode: 'RANKED_CONSTRUCTED',
+        stat_existed_before: 0,
+        after_player_rank: 'WANDERER'
+      },
+      {
+        phase: 'EXPERIENCE_UNLOCK',
+        game_mode: 'RANKED_DISCOVERY',
+        stat_existed_before: 0,
+        after_player_rank: 'WANDERER'
+      }
+    ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT COUNT(*) AS count FROM source_visible_account_stats
+         WHERE user_id = ? AND season = 126`
+      )
+        .bind(USER_ID_1)
+        .first('count')
+    ).toBe(0)
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(processedAt, processedAt, proposalId)
+      .run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `WITH ${publishedAccountStatsCTESQL()}
+         SELECT COUNT(*) AS count FROM source_visible_account_stats
+         WHERE user_id = ? AND season = 126`
+      )
+        .bind(USER_ID_1)
+        .first('count')
+    ).toBe(2)
 
     const retry = await applyMatchExperience(
       env.AUTH_DB,
@@ -1132,6 +1194,20 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         })
       })
     ])
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_account_stat_snapshots snapshot
+         JOIN multiplayer_match_account_stat_outcomes outcome
+           ON outcome.proposal_id = snapshot.proposal_id
+          AND outcome.phase = snapshot.phase
+          AND outcome.player_index = snapshot.player_index
+          AND outcome.game_mode = snapshot.game_mode
+         WHERE snapshot.proposal_id = ? AND snapshot.phase = 'RANKED_STATS'`
+      )
+        .bind(proposalId)
+        .first('count')
+    ).toBe(2)
 
     const experience = await applyMatchExperience(
       env.AUTH_DB,
@@ -1176,6 +1252,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         new Date(Date.now() + 1_000).toISOString()
       )
     ).toMatchObject({ applied: false, rewards: stats.rewards })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(processedAt, processedAt, proposalId)
+      .run()
 
     const secondProposalId = `${proposalId}-rank-reentry`
     await insertActiveLedgerRow(secondProposalId, [USER_ID_1, USER_ID_2])
@@ -1374,7 +1457,71 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
       )
         .bind(USER_ID_1)
         .first('player_rank')
+    ).toBe('MASTER')
+    expect(await applyPublishedGrandweavers(env.AUTH_DB, proposalId)).toBe(
+      'waiting'
+    )
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(processedAt, processedAt, proposalId)
+      .run()
+    const blockingProposalId = `${proposalId}-pending-grandweaver`
+    await insertActiveLedgerRow(blockingProposalId, ['grandweaver-0', null])
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_match_account_stat_snapshots
+         (proposal_id, phase, player_index, user_id, game_mode, season,
+          stat_existed_before, before_win_count, before_loss_count,
+          before_tie_count, before_forfeit_count, before_abandon_count,
+          before_score, before_player_rank, before_player_rank_stage,
+          before_player_rank_state, before_win_streak, before_loss_streak,
+          before_created_at, before_updated_at)
+       SELECT ?, 'RANKED_STATS', 0, user_id, game_mode, season, 1,
+              win_count, loss_count, tie_count, forfeit_count, abandon_count,
+              score, player_rank, player_rank_stage, player_rank_state,
+              win_streak, loss_streak, created_at, updated_at
+       FROM player_account_stats
+       WHERE user_id = 'grandweaver-0'
+         AND game_mode = 'RANKED_CONSTRUCTED' AND season = 126`
+    )
+      .bind(blockingProposalId)
+      .run()
+    expect(
+      await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)
+    ).toBe('waiting')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM multiplayer_grandweaver_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('status')
+    ).toBe('PENDING')
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(processedAt, processedAt, blockingProposalId)
+      .run()
+    expect(
+      await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)
+    ).toBe('applied')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
+      )
+        .bind(USER_ID_1)
+        .first('player_rank')
     ).toBe('GRANDWEAVER')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM multiplayer_grandweaver_jobs
+         WHERE proposal_id = ?`
+      )
+        .bind(proposalId)
+        .first('status')
+    ).toBe('APPLIED')
     expect(
       await env.AUTH_DB.prepare(
         `SELECT player_rank FROM player_account_stats WHERE user_id = ?`
@@ -1620,6 +1767,13 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         new Date(Date.parse(processedAt) + 1_000).toISOString()
       )
     ).toMatchObject({ applied: false })
+
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET status = 'ended', ended_at = ?,
+       updated_at = ? WHERE proposal_id = ?`
+    )
+      .bind(processedAt, processedAt, proposalId)
+      .run()
 
     const forfeitProposalId = `${proposalId}-forfeit`
     await insertActiveLedgerRow(forfeitProposalId, [USER_ID_1, USER_ID_2])

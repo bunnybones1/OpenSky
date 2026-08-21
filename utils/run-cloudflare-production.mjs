@@ -11,7 +11,7 @@ export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0117_match_experience_publication_state.sql'
+  '0118_match_account_stat_publication.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -49,7 +49,37 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
     WHERE type = 'trigger' AND name IN (
       'multiplayer_match_experience_player_publication_state_guard',
       'multiplayer_match_experience_publication_complete_guard'
-    )) AS experience_publication_guards_present;`
+    )) AS experience_publication_guards_present,
+  (SELECT COUNT(*)
+     FROM pragma_table_info('multiplayer_match_experience_players')
+     WHERE name = 'ranked_discovery_before')
+    AS account_stat_publication_columns_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'multiplayer_match_account_stat_snapshots',
+      'multiplayer_match_account_stat_outcomes',
+      'multiplayer_grandweaver_jobs'
+    )) AS account_stat_publication_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'multiplayer_match_account_stat_snapshot_guard',
+      'multiplayer_match_experience_rank_snapshot_guard',
+      'multiplayer_match_account_stat_snapshot_no_update',
+      'multiplayer_match_account_stat_snapshot_no_delete',
+      'multiplayer_match_account_stat_outcome_guard',
+      'multiplayer_match_account_stat_outcome_no_update',
+      'multiplayer_match_account_stat_outcome_no_delete',
+      'multiplayer_match_stats_publication_guard',
+      'multiplayer_match_ranked_unlock_publication_guard',
+      'multiplayer_grandweaver_job_guard',
+      'multiplayer_grandweaver_job_update_guard',
+      'multiplayer_grandweaver_job_no_delete'
+    )) AS account_stat_publication_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'multiplayer_match_account_stat_snapshot_guard'
+      AND instr(sql, '$.match.matchSettings.season') > 0)
+    AS account_stat_payload_guard_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -321,7 +351,11 @@ export const productionSchemaRow = output => {
     row?.registered_bot_guards_present !== 2 ||
     row?.registered_bot_allocation_guard_present !== 1 ||
     row?.experience_publication_columns_present !== 8 ||
-    row?.experience_publication_guards_present !== 2
+    row?.experience_publication_guards_present !== 2 ||
+    row?.account_stat_publication_columns_present !== 1 ||
+    row?.account_stat_publication_tables_present !== 3 ||
+    row?.account_stat_publication_guards_present !== 12 ||
+    row?.account_stat_payload_guard_present !== 1
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

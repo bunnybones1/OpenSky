@@ -22,6 +22,10 @@ import {
   clearTestSkypassPolicies,
   createTestSkypassPolicy
 } from './helpers/skypass-policy'
+import {
+  publishPendingAccountStat,
+  stagePendingAccountStat
+} from './helpers/rank-publication'
 
 const testEnv = env as unknown as Env
 const ADMIN = 'staff-admin'
@@ -938,11 +942,13 @@ describe('fail-closed Google identity staff authorization', () => {
         balance: number
         unlock_source: string
       }>()
-    expect(inventory.results.map(item => ({
-      itemType: item.item_type,
-      tokenId: item.token_id,
-      balance: item.balance
-    }))).toEqual([
+    expect(
+      inventory.results.map(item => ({
+        itemType: item.item_type,
+        tokenId: item.token_id,
+        balance: item.balance
+      }))
+    ).toEqual([
       { itemType: 'SW_BASE_CARDS', tokenId: 65000, balance: 1 },
       { itemType: 'SW_CONQUEST_TICKET', tokenId: 2, balance: 2 },
       { itemType: 'SW_STICKER_POINTS', tokenId: 1, balance: 25 },
@@ -976,8 +982,7 @@ describe('fail-closed Google identity staff authorization', () => {
     expect(
       evidence.results.every(
         item =>
-          item.before_balance === 0 &&
-          item.after_balance === item.quantity
+          item.before_balance === 0 && item.after_balance === item.quantity
       )
     ).toBe(true)
 
@@ -1008,24 +1013,30 @@ describe('fail-closed Google identity staff authorization', () => {
     ).toEqual({ receipts: 1, grants: 4 })
 
     expect(
-      (await rpcAs(ADMIN, 'GMGrantItems', {
-        ...request,
-        tokens: { SW_TITLES: { 2: 4 } }
-      })).status
+      (
+        await rpcAs(ADMIN, 'GMGrantItems', {
+          ...request,
+          tokens: { SW_TITLES: { 2: 4 } }
+        })
+      ).status
     ).toBe(409)
     expect(
-      (await rpcAs(ADMIN, 'GMGrantItems', {
-        ...request,
-        requestKey: 'operator-items-usdc-1',
-        tokens: { USDC: { 0: 1 } }
-      })).status
+      (
+        await rpcAs(ADMIN, 'GMGrantItems', {
+          ...request,
+          requestKey: 'operator-items-usdc-1',
+          tokens: { USDC: { 0: 1 } }
+        })
+      ).status
     ).toBe(400)
     expect(
-      (await rpcAs(ADMIN, 'GMGrantItems', {
-        ...request,
-        requestKey: 'operator-items-string-qty',
-        tokens: { SW_TITLES: { 3: '2' } }
-      })).status
+      (
+        await rpcAs(ADMIN, 'GMGrantItems', {
+          ...request,
+          requestKey: 'operator-items-string-qty',
+          tokens: { SW_TITLES: { 3: '2' } }
+        })
+      ).status
     ).toBe(400)
 
     const concurrentRequest = {
@@ -1330,6 +1341,104 @@ describe('fail-closed Google identity staff authorization', () => {
     ).toEqual({ present: 1 })
   })
 
+  it('does not interleave staff progression with staged match stats', async () => {
+    const pendingPlayer = `staff-publication-player-${crypto.randomUUID()}`
+    const createdAt = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at)
+       VALUES (?, 'Publication Player', ?, ?, ?)`
+    )
+      .bind(pendingPlayer, `${pendingPlayer}@example.com`, createdAt, createdAt)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(pendingPlayer)
+    await grantAdmin()
+    await grantProgressionWrite()
+    const season = seasonFromDate()
+    const levelProposal = `staff-level-publication-${crypto.randomUUID()}`
+    const operationKey = crypto.randomUUID()
+    await stagePendingAccountStat(env.AUTH_DB, {
+      proposalId: levelProposal,
+      userId: pendingPlayer,
+      season
+    })
+
+    expect(
+      (
+        await rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          { accountAddress: `identity:${pendingPlayer}`, levels: 1 },
+          true,
+          levelGrantHeaders(operationKey)
+        )
+      ).status
+    ).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT level FROM player_profiles WHERE user_id = ?`
+      )
+        .bind(pendingPlayer)
+        .first()
+    ).toEqual({ level: 1 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_progression_operations
+         WHERE operation_key = ?`
+      )
+        .bind(operationKey)
+        .first('count')
+    ).toBe(0)
+
+    await publishPendingAccountStat(env.AUTH_DB, levelProposal)
+    expect(
+      (
+        await rpcAs(
+          ADMIN,
+          'GMGiveLevels',
+          { accountAddress: `identity:${pendingPlayer}`, levels: 1 },
+          true,
+          levelGrantHeaders(operationKey)
+        )
+      ).status
+    ).toBe(200)
+
+    const rpProposal = `staff-rp-publication-${crypto.randomUUID()}`
+    await stagePendingAccountStat(env.AUTH_DB, {
+      proposalId: rpProposal,
+      userId: pendingPlayer,
+      season
+    })
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetRP', {
+          accountAddress: `identity:${pendingPlayer}`,
+          mode: 'RANKED_CONSTRUCTED',
+          rankPoints: 340
+        })
+      ).status
+    ).toBe(500)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM staff_progression_audit
+         WHERE target_user_id = ? AND operation = 'SET_RP'`
+      )
+        .bind(pendingPlayer)
+        .first('count')
+    ).toBe(0)
+
+    await publishPendingAccountStat(env.AUTH_DB, rpProposal)
+    expect(
+      (
+        await rpcAs(ADMIN, 'GMSetRP', {
+          accountAddress: `identity:${pendingPlayer}`,
+          mode: 'RANKED_CONSTRUCTED',
+          rankPoints: 340
+        })
+      ).status
+    ).toBe(200)
+  })
+
   it('ports guarded level grants with source SkyPass and referral effects', async () => {
     const inviter = 'staff-progression-inviter'
     const now = new Date().toISOString()
@@ -1368,10 +1477,16 @@ describe('fail-closed Google identity staff authorization', () => {
     for (const levels of [-1, 65_536, 1.5]) {
       expect(
         (
-          await rpcAs(ADMIN, 'GMGiveLevels', {
-            accountAddress: `identity:${PLAYER}`,
-            levels
-          }, true, levelGrantHeaders())
+          await rpcAs(
+            ADMIN,
+            'GMGiveLevels',
+            {
+              accountAddress: `identity:${PLAYER}`,
+              levels
+            },
+            true,
+            levelGrantHeaders()
+          )
         ).status
       ).toBe(400)
     }
@@ -1629,8 +1744,7 @@ describe('fail-closed Google identity staff authorization', () => {
        BEGIN
          SELECT RAISE(ABORT, 'injected staff progression completion failure');
        END`
-    )
-      .run()
+    ).run()
     const failed = await rpcAs(
       ADMIN,
       'GMGiveLevels',

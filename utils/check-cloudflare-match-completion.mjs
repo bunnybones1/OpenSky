@@ -1021,6 +1021,300 @@ export const experiencePublicationErrors = (
   return errors
 }
 
+export const rankPublicationErrors = value => {
+  const {
+    sourceMatches,
+    sourceRankUpper,
+    sourceGrandweaverTask,
+    sourceLeveller,
+    gameMatch,
+    progression,
+    deckRanks,
+    migration,
+    rankPublication,
+    competitive,
+    conquest,
+    playerRpc,
+    progressionSupport,
+    leaderboardReward,
+    leaderboardReset,
+    staff,
+    matchRepository,
+    registeredBot,
+    playerRpcTest,
+    gameServerTest,
+    deckRanksTest,
+    matchServiceTest,
+    staffTest,
+    leaderboardRewardTest,
+    leaderboardResetTest
+  } = value
+  const errors = []
+
+  const sourceEndMatch = bodyBetween(
+    sourceMatches,
+    'func (s *Server) endMatch(',
+    'func updateWarmUpCounter('
+  )
+  requireOrdered(errors, 'Source ranked-stat transaction', sourceEndMatch, [
+    'repo.TxContext(ctx, func(tx db.Session) error',
+    'UpdatePlayerStatsAndRanks(ctx, tx, match)',
+    'MatchXPUpdater.UpdateFromMatch(tx, match',
+    'tx.Save(match)',
+    'DeckRankUpdater.UpdateFromMatch(tx, match'
+  ])
+  requireOrdered(
+    errors,
+    'Source ranked-stat update and promotion task',
+    sourceRankUpper,
+    [
+      'FindOrCreateByAccountIDAndMode(match.Player1ID',
+      'FindOrCreateByAccountIDAndMode(match.Player2ID',
+      'sess.Save(p1Stats)',
+      'sess.Save(p2Stats)',
+      'if enqueuePromotionTask {',
+      'repo.Tasks(sess).EnqueueTask(jobqueue.PromoteGrandmastersWorkGroup'
+    ]
+  )
+  for (const token of [
+    'PromoteGrandmastersRetryDelay = 15',
+    'PromoteGrandmastersMaxRetries = 5',
+    'func (r *PromoteGrandmastersRunner) MaxBatchSize() int',
+    'return 1',
+    'grandmastersUpdater.Update(sess, payload.GameMode, payload.Season)'
+  ]) {
+    if (!sourceGrandweaverTask.includes(token)) {
+      errors.push(`Source Grandweaver task changed: ${token}`)
+    }
+  }
+  for (const token of [
+    'proto.GameMode_RANKED_CONSTRUCTED',
+    'proto.GameMode_RANKED_DISCOVERY',
+    'sess.Save(stats)',
+    'if gameMode == proto.GameMode_RANKED_CONSTRUCTED'
+  ]) {
+    if (!sourceRankUpper.includes(token)) {
+      errors.push(`Source ranked unlock changed: ${token}`)
+    }
+  }
+  if (!sourceLeveller.includes('l.promoter.PromoteUnranked(')) {
+    errors.push('Source level-up no longer promotes ranked modes')
+  }
+
+  const compactMigration = migration.replace(/\s+/g, ' ')
+  for (const token of [
+    'ADD COLUMN ranked_discovery_before',
+    'CREATE TABLE multiplayer_match_account_stat_snapshots',
+    'CREATE TABLE multiplayer_match_account_stat_outcomes',
+    'CREATE TABLE multiplayer_grandweaver_jobs',
+    'multiplayer_match_account_stat_snapshot_guard',
+    "'$.match.matchSettings.season'",
+    'multiplayer_match_experience_rank_snapshot_guard',
+    'multiplayer_match_account_stat_outcome_guard',
+    'multiplayer_match_stats_publication_guard',
+    'multiplayer_match_ranked_unlock_publication_guard',
+    'multiplayer_grandweaver_job_guard',
+    'multiplayer_grandweaver_job_update_guard',
+    'multiplayer_grandweaver_job_no_delete',
+    "match.status = 'active'",
+    "ledger.status = 'ended'",
+    "pending_match.status <> 'ended'",
+    "RAISE(ABORT, 'match account-stat publication is incomplete')",
+    "RAISE(ABORT, 'match ranked-unlock publication is incomplete')"
+  ]) {
+    if (!compactMigration.includes(token)) {
+      errors.push(`rank publication migration is missing: ${token}`)
+    }
+  }
+
+  const compactProgression = progression.replace(/\s+/g, ' ')
+  for (const token of [
+    "type AccountStatPublicationPhase = 'RANKED_STATS' | 'EXPERIENCE_UNLOCK'",
+    'accountStatSnapshotStatement(',
+    'accountStatOutcomeStatement(',
+    'multiplayer_match_account_stat_snapshots pending',
+    "pending_match.status <> 'ended'",
+    'ranked_constructed_before, ranked_discovery_before',
+    "'RANKED_STATS'",
+    "'EXPERIENCE_UNLOCK'",
+    'INSERT INTO multiplayer_match_stats_applied',
+    'INSERT OR IGNORE INTO multiplayer_grandweaver_jobs',
+    "job.status = 'PENDING'",
+    "SET status = 'APPLIED', applied_at = ?"
+  ]) {
+    if (!compactProgression.includes(token)) {
+      errors.push(`rank receipt coordinator is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'RankPublicationPendingError',
+    "super('waiting_for_match_publication')",
+    'conflictingRankPublication(',
+    "pending_match.status <> 'ended'"
+  ]) {
+    if (!progression.includes(token)) {
+      errors.push(`rank publication retry boundary is missing: ${token}`)
+    }
+  }
+  for (const token of [
+    'error instanceof RankPublicationPendingError',
+    "{ error: 'waiting_for_match_publication' }",
+    '{ status: 409 }'
+  ]) {
+    if (!deckRanks.includes(token)) {
+      errors.push(`deck-rank publication retry is missing: ${token}`)
+    }
+  }
+  requireOrdered(
+    errors,
+    'Worker ranked-stat receipt publication',
+    compactProgression,
+    [
+      "'RANKED_STATS'",
+      'UPDATE player_account_stats',
+      'accountStatOutcomeStatement(',
+      'INSERT INTO multiplayer_match_stats_applied',
+      'INSERT OR IGNORE INTO multiplayer_grandweaver_jobs'
+    ]
+  )
+
+  const workerCompletion = bodyBetween(
+    gameMatch,
+    'private async recordCompletionWithRetry(',
+    'private async retryGrandweaverRecalculationWithRetry('
+  )
+  requireOrdered(
+    errors,
+    'Worker rank publication and terminal response',
+    workerCompletion,
+    [
+      'await publishMatchCompletion(this.env.AUTH_DB, {',
+      'await applyPublishedGrandweavers(',
+      'metadata.completionRecorded = true',
+      'this.finishMatchSockets()'
+    ]
+  )
+  for (const token of [
+    'metadata.grandweaverRecalculationPending = true',
+    'retryGrandweaverRecalculationWithRetry(',
+    'metadata.grandweaverRecalculationPending',
+    'await this.state.storage.setAlarm(now + 10_000)'
+  ]) {
+    if (!gameMatch.includes(token)) {
+      errors.push(`asynchronous Grandweaver retry is missing: ${token}`)
+    }
+  }
+
+  const compactProjection = rankPublication.replace(/\s+/g, ' ')
+  for (const token of [
+    'pending_account_stat_snapshots AS',
+    'source_visible_account_stats AS',
+    "pending_match.status <> 'ended'",
+    "'$.match.matchSettings.season'",
+    'ROW_NUMBER() OVER',
+    'ORDER BY snapshot.rowid ASC',
+    'pending.stat_existed_before = 1',
+    'noUnpublishedAccountStatsSQL',
+    'noUnpublishedAccountStatsInScopeSQL'
+  ]) {
+    if (!compactProjection.includes(token)) {
+      errors.push(`rank publication projection is missing: ${token}`)
+    }
+  }
+
+  for (const [label, source, token] of [
+    ['competitive reads', competitive, 'publishedAccountStatsCTESQL()'],
+    ['Conquest admission', conquest, 'publishedAccountStatsCTESQL()'],
+    ['quest claim', playerRpc, 'noUnpublishedAccountStatsSQL('],
+    ['staff rank reads', staff, 'publishedAccountStatsCTESQL()'],
+    ['match-service reads', matchRepository, 'publishedAccountStatsCTESQL()'],
+    ['registered bot reads', registeredBot, 'publishedAccountStatsCTESQL()'],
+    ['staff progression', progressionSupport, 'noUnpublishedAccountStatsSQL('],
+    [
+      'leaderboard reward snapshot',
+      leaderboardReward,
+      'noUnpublishedAccountStatsInScopeSQL('
+    ],
+    [
+      'leaderboard rank reset',
+      leaderboardReset,
+      'noUnpublishedAccountStatsInScopeSQL('
+    ]
+  ]) {
+    if (!source.includes(token)) {
+      errors.push(`${label} does not enforce rank publication: ${token}`)
+    }
+  }
+  const compactDeckRanksTest = deckRanksTest.replace(/\s+/g, ' ')
+  for (const token of [
+    "it('serializes concurrent completions through the coordinator'",
+    'toEqual([ 200, 409 ])',
+    "error: 'waiting_for_match_publication'",
+    "SET status = 'ended'",
+    'expect(retry.status).toBe(200)'
+  ]) {
+    if (!compactDeckRanksTest.includes(token)) {
+      errors.push(`deck-rank publication retry regression is missing: ${token}`)
+    }
+  }
+  if (
+    (competitive.match(/noUnpublishedAccountStatsSQL\(/g)?.length ?? 0) < 2 ||
+    (matchRepository.match(/noUnpublishedAccountStatsSQL\(/g)?.length ?? 0) < 2
+  ) {
+    errors.push('rank row initializers and promotions are not both guarded')
+  }
+  if (
+    (progressionSupport.match(/noUnpublishedAccountStatsInScopeSQL\(/g)
+      ?.length ?? 0) < 4
+  ) {
+    errors.push('global staff rank mutations are not publication-gated')
+  }
+
+  for (const [label, source, token] of [
+    [
+      'player-facing rank projection',
+      playerRpcTest,
+      "it('publishes ranked account stats only with the terminal match ledger'"
+    ],
+    ['quest mutation barrier', playerRpcTest, 'quest-rank-publication-'],
+    [
+      'game-server rank receipts',
+      gameServerTest,
+      'multiplayer_match_account_stat_outcomes'
+    ],
+    [
+      'asynchronous Grandweaver job',
+      gameServerTest,
+      'await applyPublishedGrandweavers(env.AUTH_DB, proposalId, processedAt)'
+    ],
+    [
+      'match-service rank projection',
+      matchServiceTest,
+      "it('projects ranked stats before terminal publication for matchmaking and match accounts'"
+    ],
+    [
+      'staff mutation barrier',
+      staffTest,
+      "it('does not interleave staff progression with staged match stats'"
+    ],
+    [
+      'leaderboard reward barrier',
+      leaderboardRewardTest,
+      "it('keeps a due cycle preparing until staged match stats publish'"
+    ],
+    [
+      'leaderboard reset barrier',
+      leaderboardResetTest,
+      "it('waits for staged match stats before mutating a leaderboard season'"
+    ]
+  ]) {
+    if (!source.includes(token)) {
+      errors.push(`${label} regression is missing: ${token}`)
+    }
+  }
+  return errors
+}
+
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const [
@@ -1167,6 +1461,99 @@ const main = async () => {
       'utf8'
     )
   ])
+  const [
+    sourceRankUpper,
+    sourceGrandweaverTask,
+    deckRanks,
+    deckRanksTest,
+    rankMigration,
+    rankPublication,
+    conquest,
+    progressionSupport,
+    leaderboardReward,
+    leaderboardReset,
+    staff,
+    registeredBot,
+    staffTest,
+    leaderboardRewardTest,
+    leaderboardResetTest
+  ] = await Promise.all([
+    readFile(
+      path.join(root, 'api', 'lib', 'rankup', 'match_player_rank_upper.go'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'api',
+        'lib',
+        'jobqueue',
+        'promote_grandmasters_runner.go'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'game-server-cloudflare', 'src', 'deck-ranks.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'game-server-cloudflare',
+        'test-cloudflare',
+        'deck-ranks.test.ts'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'migrations',
+        '0118_match_account_stat_publication.sql'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'rank-publication.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'conquest.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'progression-support.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'leaderboard-reward-worker.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'src', 'leaderboard-rank-reset.ts'),
+      'utf8'
+    ),
+    readFile(path.join(root, 'cloudflare', 'src', 'staff.ts'), 'utf8'),
+    readFile(
+      path.join(root, 'match-service-cloudflare', 'src', 'registered-bot.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'staff-rpc.test.ts'),
+      'utf8'
+    ),
+    readFile(
+      path.join(
+        root,
+        'cloudflare',
+        'test',
+        'leaderboard-reward-worker.test.ts'
+      ),
+      'utf8'
+    ),
+    readFile(
+      path.join(root, 'cloudflare', 'test', 'leaderboard-rank-reset.test.ts'),
+      'utf8'
+    )
+  ])
   const errors = [
     ...matchCompletionErrors(
       sourceMatches,
@@ -1220,14 +1607,41 @@ const main = async () => {
       matchServiceTest,
       skypassAutoClaimTest,
       referralStickerRewardsTest
-    )
+    ),
+    ...rankPublicationErrors({
+      sourceMatches,
+      sourceRankUpper,
+      sourceGrandweaverTask,
+      sourceLeveller,
+      gameMatch,
+      progression,
+      deckRanks,
+      migration: rankMigration,
+      rankPublication,
+      competitive,
+      conquest,
+      playerRpc,
+      progressionSupport,
+      leaderboardReward,
+      leaderboardReset,
+      staff,
+      matchRepository,
+      registeredBot,
+      playerRpcTest,
+      gameServerTest,
+      deckRanksTest,
+      matchServiceTest,
+      staffTest,
+      leaderboardRewardTest,
+      leaderboardResetTest
+    })
   ]
   if (errors.length > 0) {
     console.error(errors.join('\n'))
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare match completion preserves transactional, quest, Warm Up, and XP publication safety'
+      'Cloudflare match completion preserves transactional quest, Warm Up, XP, and rank publication safety'
     )
   }
 }

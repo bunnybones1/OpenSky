@@ -17,6 +17,10 @@ import {
 } from '@opensky/shared/match-modes'
 import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
 import { INITIAL_RANK_STATE_JSON } from '@opensky/shared/ranked-progression'
+import {
+  noUnpublishedAccountStatsInScopeSQL,
+  publishedAccountStatsCTESQL
+} from '../../cloudflare/src/rank-publication'
 
 import {
   awardMatchExperience,
@@ -72,10 +76,18 @@ interface MatchExperienceRow extends MatchPlayersRow {
 interface AccountStatsRow {
   user_id: string
   account_id: number | null
+  win_count: number
+  loss_count: number
+  tie_count: number
+  forfeit_count: number
+  abandon_count: number
   score: number
   player_rank: PlayerRank
   player_rank_stage: PlayerRankStage
   player_rank_state: string
+  win_streak: number
+  loss_streak: number
+  created_at: string
   level: number | null
   xp: number | null
   season_level: number | null
@@ -877,6 +889,12 @@ export const applyMatchExperience = async (
                         AND stats.game_mode = 'RANKED_CONSTRUCTED'
                         AND stats.season = ?
                     ), 'UNRANKED') AS ranked_constructed_before,
+                    COALESCE((
+                      SELECT stats.player_rank FROM player_account_stats stats
+                      WHERE stats.user_id = profile.user_id
+                        AND stats.game_mode = 'RANKED_DISCOVERY'
+                        AND stats.season = ?
+                    ), 'UNRANKED') AS ranked_discovery_before,
                     invite.inviter_user_id,
                     COALESCE((
                       SELECT points.levels FROM player_friend_points points
@@ -931,6 +949,7 @@ export const applyMatchExperience = async (
               season_achieved_account_level_before,
               profile_updated_at_before,
               after_level, after_xp, ranked_constructed_before,
+              ranked_discovery_before,
               inviter_user_id, inviter_levels_before,
               inviter_sticker_points_before,
               inviter_sticker_points_existed_before,
@@ -944,7 +963,8 @@ export const applyMatchExperience = async (
                   season_achieved_account_level_before,
                   profile_updated_at_before,
                   after_level, after_xp,
-                  ranked_constructed_before, inviter_user_id,
+                  ranked_constructed_before, ranked_discovery_before,
+                  inviter_user_id,
                   inviter_levels_before, inviter_sticker_points_before,
                   inviter_sticker_points_existed_before,
                   inviter_sticker_points_created_at_before,
@@ -964,6 +984,7 @@ export const applyMatchExperience = async (
           matchExperienceGain,
           suppressedAtLevel,
           JSON.stringify(rewards[player]),
+          season,
           season,
           season,
           season,
@@ -1113,15 +1134,29 @@ export const applyMatchExperience = async (
       GameMode.RANKED_CONSTRUCTED,
       GameMode.RANKED_DISCOVERY
     ]) {
+      const rankedBeforeColumn =
+        mode === GameMode.RANKED_CONSTRUCTED
+          ? 'ranked_constructed_before'
+          : 'ranked_discovery_before'
       const unlockGuard = `EXISTS (
         SELECT 1 FROM multiplayer_match_experience_players receipt
         WHERE receipt.proposal_id = ? AND receipt.player_index = ?
           AND receipt.settlement_token = ?
           AND ((receipt.before_level - 1) * 200 + receipt.before_xp) < 200
           AND ((receipt.after_level - 1) * 200 + receipt.after_xp) >= 200
-          AND receipt.ranked_constructed_before = 'UNRANKED'
+          AND receipt.${rankedBeforeColumn} = 'UNRANKED'
       )`
       statements.push(
+        accountStatSnapshotStatement(
+          database,
+          proposalId,
+          'EXPERIENCE_UNLOCK',
+          player,
+          userId,
+          mode,
+          season,
+          settlementToken
+        ),
         database
           .prepare(
             `INSERT OR IGNORE INTO player_account_stats
@@ -1155,7 +1190,17 @@ export const applyMatchExperience = async (
             proposalId,
             player,
             settlementToken
-          )
+          ),
+        accountStatOutcomeStatement(
+          database,
+          proposalId,
+          'EXPERIENCE_UNLOCK',
+          player,
+          userId,
+          mode,
+          season,
+          settlementToken
+        )
       )
     }
   }
@@ -1220,6 +1265,186 @@ const MASTER_POINTS = 1_200
 const GRANDWEAVER_COUNT = 100
 const MISSING_ACCOUNT_SORT_ID = Number.MAX_SAFE_INTEGER
 
+type AccountStatPublicationPhase = 'RANKED_STATS' | 'EXPERIENCE_UNLOCK'
+
+export class RankPublicationPendingError extends Error {
+  constructor() {
+    super('waiting_for_match_publication')
+    this.name = 'RankPublicationPendingError'
+  }
+}
+
+const conflictingRankPublication = async (
+  database: D1Database,
+  proposalId: string,
+  participants: ReadonlyArray<{
+    userId: string
+    gameMode: GameMode
+  }>,
+  season: number
+) => {
+  if (participants.length === 0) return false
+  const participantSQL = participants
+    .map(() => '(pending.user_id = ? AND pending.game_mode = ?)')
+    .join(' OR ')
+  const conflict = await database
+    .prepare(
+      `SELECT 1
+       FROM multiplayer_match_account_stat_snapshots pending
+       JOIN multiplayer_matches pending_match
+         ON pending_match.proposal_id = pending.proposal_id
+       WHERE pending.proposal_id <> ? AND pending.season = ?
+         AND pending_match.status <> 'ended'
+         AND (${participantSQL})
+       LIMIT 1`
+    )
+    .bind(
+      proposalId,
+      season,
+      ...participants.flatMap(participant => [
+        participant.userId,
+        participant.gameMode
+      ])
+    )
+    .first()
+  return conflict !== null
+}
+
+const accountStatSnapshotStatement = (
+  database: D1Database,
+  proposalId: string,
+  phase: AccountStatPublicationPhase,
+  player: 0 | 1,
+  userId: string,
+  gameMode: GameMode,
+  season: number,
+  experienceSettlementToken?: string
+) => {
+  const experienceRankColumn =
+    gameMode === GameMode.RANKED_CONSTRUCTED
+      ? 'ranked_constructed_before'
+      : 'ranked_discovery_before'
+  return database
+    .prepare(
+      `INSERT OR IGNORE INTO multiplayer_match_account_stat_snapshots
+         (proposal_id, phase, player_index, user_id, game_mode, season,
+          stat_existed_before, before_win_count, before_loss_count,
+          before_tie_count, before_forfeit_count, before_abandon_count,
+          before_score, before_player_rank, before_player_rank_stage,
+          before_player_rank_state, before_win_streak, before_loss_streak,
+          before_created_at, before_updated_at)
+       SELECT ?, ?, ?, account.id, ?, ?,
+              CASE WHEN stats.user_id IS NULL THEN 0 ELSE 1 END,
+              COALESCE(stats.win_count, 0), COALESCE(stats.loss_count, 0),
+              COALESCE(stats.tie_count, 0), COALESCE(stats.forfeit_count, 0),
+              COALESCE(stats.abandon_count, 0), COALESCE(stats.score, 0),
+              COALESCE(stats.player_rank, 'UNRANKED'),
+              COALESCE(stats.player_rank_stage, 'STAGE_NONE'),
+              COALESCE(stats.player_rank_state, ''),
+              COALESCE(stats.win_streak, 0),
+              COALESCE(stats.loss_streak, 0),
+              COALESCE(stats.created_at, ''), COALESCE(stats.updated_at, '')
+       FROM users account
+       LEFT JOIN player_account_stats stats
+         ON stats.user_id = account.id AND stats.game_mode = ?
+        AND stats.season = ?
+       WHERE account.id = ?
+         ${
+           experienceSettlementToken
+             ? `AND EXISTS (
+           SELECT 1 FROM multiplayer_match_experience_players receipt
+           WHERE receipt.proposal_id = ? AND receipt.player_index = ?
+             AND receipt.settlement_token = ?
+             AND ((receipt.before_level - 1) * 200 + receipt.before_xp) < 200
+             AND ((receipt.after_level - 1) * 200 + receipt.after_xp) >= 200
+             AND receipt.${experienceRankColumn} = 'UNRANKED'
+         )`
+             : ''
+         }
+         AND NOT EXISTS (
+           SELECT 1
+           FROM multiplayer_match_account_stat_snapshots pending
+           JOIN multiplayer_matches pending_match
+             ON pending_match.proposal_id = pending.proposal_id
+           WHERE pending.user_id = account.id
+             AND pending.game_mode = ? AND pending.season = ?
+             AND pending.proposal_id <> ?
+             AND pending_match.status <> 'ended'
+         )`
+    )
+    .bind(
+      proposalId,
+      phase,
+      player,
+      gameMode,
+      season,
+      gameMode,
+      season,
+      userId,
+      ...(experienceSettlementToken
+        ? [proposalId, player, experienceSettlementToken]
+        : []),
+      gameMode,
+      season,
+      proposalId
+    )
+}
+
+const accountStatOutcomeStatement = (
+  database: D1Database,
+  proposalId: string,
+  phase: AccountStatPublicationPhase,
+  player: 0 | 1,
+  userId: string,
+  gameMode: GameMode,
+  season: number,
+  experienceSettlementToken?: string
+) =>
+  database
+    .prepare(
+      `INSERT INTO multiplayer_match_account_stat_outcomes
+         (proposal_id, phase, player_index, user_id, game_mode, season,
+          after_win_count, after_loss_count, after_tie_count,
+          after_forfeit_count, after_abandon_count, after_score,
+          after_player_rank, after_player_rank_stage,
+          after_player_rank_state, after_win_streak, after_loss_streak,
+          after_created_at, after_updated_at)
+       SELECT snapshot.proposal_id, snapshot.phase, snapshot.player_index,
+              stats.user_id, stats.game_mode, stats.season,
+              stats.win_count, stats.loss_count, stats.tie_count,
+              stats.forfeit_count, stats.abandon_count, stats.score,
+              stats.player_rank, stats.player_rank_stage,
+              stats.player_rank_state, stats.win_streak, stats.loss_streak,
+              stats.created_at, stats.updated_at
+       FROM multiplayer_match_account_stat_snapshots snapshot
+       JOIN player_account_stats stats
+         ON stats.user_id = snapshot.user_id
+        AND stats.game_mode = snapshot.game_mode
+        AND stats.season = snapshot.season
+       WHERE snapshot.proposal_id = ? AND snapshot.phase = ?
+         AND snapshot.player_index = ? AND snapshot.user_id = ?
+         AND snapshot.game_mode = ? AND snapshot.season = ?
+         ${
+           experienceSettlementToken
+             ? `AND EXISTS (
+           SELECT 1 FROM multiplayer_match_experience_players receipt
+           WHERE receipt.proposal_id = snapshot.proposal_id
+             AND receipt.player_index = snapshot.player_index
+             AND receipt.settlement_token = ?
+         )`
+             : ''
+         }`
+    )
+    .bind(
+      proposalId,
+      phase,
+      player,
+      userId,
+      gameMode,
+      season,
+      ...(experienceSettlementToken ? [experienceSettlementToken] : [])
+    )
+
 const rankContext = async (
   database: D1Database,
   gameMode: GameMode,
@@ -1239,7 +1464,8 @@ const rankContext = async (
   ])
   const row = await database
     .prepare(
-      `WITH overrides(user_id, score, player_rank, updated_at) AS (
+      `WITH ${publishedAccountStatsCTESQL()},
+       overrides(user_id, score, player_rank, updated_at) AS (
          ${overrideValues}
        ),
        standings AS (
@@ -1250,7 +1476,7 @@ const rankContext = async (
                 COALESCE(overrides.player_rank, stats.player_rank)
                   AS player_rank,
                 COALESCE(overrides.updated_at, stats.updated_at) AS updated_at
-         FROM player_account_stats stats
+         FROM source_visible_account_stats stats
          LEFT JOIN overrides ON overrides.user_id = stats.user_id
          LEFT JOIN game_accounts account ON account.user_id = stats.user_id
          LEFT JOIN player_account_settings settings
@@ -1411,9 +1637,13 @@ const grandweaverStatements = (
            WHERE settings.user_id = player_account_stats.user_id
              AND settings.account_status IN ('BANNED', 'SUSPENDED', 'DELETED')
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM multiplayer_match_stats_applied
-           WHERE proposal_id = ?
+         AND ${noUnpublishedAccountStatsInScopeSQL(
+           String(season),
+           `'${gameMode}'`
+         )}
+         AND EXISTS (
+           SELECT 1 FROM multiplayer_grandweaver_jobs job
+           WHERE job.proposal_id = ? AND job.status = 'PENDING'
          )`
     )
     .bind(gameMode, season, proposalId),
@@ -1435,13 +1665,73 @@ const grandweaverStatements = (
                   stats.user_id ASC
          LIMIT ${GRANDWEAVER_COUNT}
        )
-       AND NOT EXISTS (
-         SELECT 1 FROM multiplayer_match_stats_applied
-         WHERE proposal_id = ?
+       AND ${noUnpublishedAccountStatsInScopeSQL(
+         String(season),
+         `'${gameMode}'`
+       )}
+       AND EXISTS (
+         SELECT 1 FROM multiplayer_grandweaver_jobs job
+         WHERE job.proposal_id = ? AND job.status = 'PENDING'
        )`
     )
     .bind(gameMode, season, proposalId)
 ]
+
+/**
+ * The source enqueues global Master/Grandweaver membership recalculation only
+ * after the match transaction commits. Keep it outside the pre-publication
+ * ranked-stat batch so unrelated leaderboard rows never expose partial state.
+ */
+export type PublishedGrandweaverResult = 'not_required' | 'waiting' | 'applied'
+
+export const applyPublishedGrandweavers = async (
+  database: D1Database,
+  proposalId: string,
+  appliedAt = new Date().toISOString()
+): Promise<PublishedGrandweaverResult> => {
+  const job = await database
+    .prepare(
+      `SELECT job.game_mode, job.season, job.status, match.status AS match_status
+       FROM multiplayer_grandweaver_jobs job
+       JOIN multiplayer_matches match ON match.proposal_id = job.proposal_id
+       WHERE job.proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<{
+      game_mode: GameMode
+      season: number
+      status: 'PENDING' | 'APPLIED'
+      match_status: string
+    }>()
+  if (!job) return 'not_required'
+  if (job.status === 'APPLIED') return 'applied'
+  if (job.match_status !== 'ended') return 'waiting'
+  const scopeReady = noUnpublishedAccountStatsInScopeSQL(
+    String(job.season),
+    `'${job.game_mode}'`
+  )
+  await database.batch([
+    database.prepare(
+      `SELECT CASE WHEN ${scopeReady} THEN 1 ELSE 0 END AS ready`
+    ),
+    ...grandweaverStatements(database, proposalId, job.game_mode, job.season),
+    database
+      .prepare(
+        `UPDATE multiplayer_grandweaver_jobs
+         SET status = 'APPLIED', applied_at = ?
+         WHERE proposal_id = ? AND status = 'PENDING'
+           AND ${scopeReady}`
+      )
+      .bind(appliedAt, proposalId)
+  ])
+  const applied = await database
+    .prepare(
+      `SELECT status FROM multiplayer_grandweaver_jobs WHERE proposal_id = ?`
+    )
+    .bind(proposalId)
+    .first<{ status: 'PENDING' | 'APPLIED' }>()
+  return applied?.status === 'APPLIED' ? 'applied' : 'waiting'
+}
 
 /**
  * Applies ranked counters and the source Glicko/RP transition exactly once.
@@ -1477,18 +1767,72 @@ export const applyMatchStats = async (
   const existing = await statsReceipt(database, proposalId, false)
   if (existing) return existing
 
-  const initializers = userIds.flatMap((userId, player) =>
+  const rankedParticipants = userIds.flatMap((userId, player) =>
     userId && isRankedGameMode(modes[player])
-      ? [
-          database
-            .prepare(
-              `INSERT OR IGNORE INTO player_account_stats
-                 (user_id, game_mode, season, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)`
-            )
-            .bind(userId, modes[player], season, processedAt, processedAt)
-        ]
+      ? [{ userId, player: player as 0 | 1, gameMode: modes[player] }]
       : []
+  )
+  if (rankedParticipants.length > 0) {
+    if (
+      await conflictingRankPublication(
+        database,
+        proposalId,
+        rankedParticipants,
+        season
+      )
+    ) {
+      throw new RankPublicationPendingError()
+    }
+    await database.batch(
+      rankedParticipants.map(participant =>
+        accountStatSnapshotStatement(
+          database,
+          proposalId,
+          'RANKED_STATS',
+          participant.player,
+          participant.userId,
+          participant.gameMode,
+          season
+        )
+      )
+    )
+    const snapshotCount = await database
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM multiplayer_match_account_stat_snapshots
+         WHERE proposal_id = ? AND phase = 'RANKED_STATS'`
+      )
+      .bind(proposalId)
+      .first<{ count: number }>()
+    if (snapshotCount?.count !== rankedParticipants.length) {
+      if (
+        await conflictingRankPublication(
+          database,
+          proposalId,
+          rankedParticipants,
+          season
+        )
+      ) {
+        throw new RankPublicationPendingError()
+      }
+      throw new Error('ranked account-stat snapshot is incomplete')
+    }
+  }
+
+  const initializers = rankedParticipants.map(participant =>
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO player_account_stats
+           (user_id, game_mode, season, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(
+        participant.userId,
+        participant.gameMode,
+        season,
+        processedAt,
+        processedAt
+      )
   )
   if (initializers.length > 0) await database.batch(initializers)
 
@@ -1498,9 +1842,12 @@ export const applyMatchStats = async (
         ? isRankedGameMode(modes[player])
           ? database
               .prepare(
-                `SELECT stats.user_id, account.id AS account_id, stats.score,
+                `SELECT stats.user_id, account.id AS account_id,
+                      stats.win_count, stats.loss_count, stats.tie_count,
+                      stats.forfeit_count, stats.abandon_count, stats.score,
                       stats.player_rank, stats.player_rank_stage,
-                      stats.player_rank_state, stats.updated_at,
+                      stats.player_rank_state, stats.win_streak,
+                      stats.loss_streak, stats.created_at, stats.updated_at,
                       profile.level, profile.xp,
                       CASE WHEN progression.user_id IS NULL THEN NULL
                         ELSE COALESCE(MAX(
@@ -1524,6 +1871,11 @@ export const applyMatchStats = async (
           : Promise.resolve({
               user_id: userId,
               account_id: null,
+              win_count: 0,
+              loss_count: 0,
+              tie_count: 0,
+              forfeit_count: 0,
+              abandon_count: 0,
               score: 0,
               player_rank: PlayerRank.UNKNOWN,
               player_rank_stage: PlayerRankStage.STAGE_NONE,
@@ -1531,6 +1883,9 @@ export const applyMatchStats = async (
               // AccountStat for Practice. It still participates in the ordered
               // Glicko calculation, but mayPersistStats prevents saving it.
               player_rank_state: '[-1,0,0,0]',
+              win_streak: 0,
+              loss_streak: 0,
+              created_at: processedAt,
               level: null,
               xp: null,
               season_level: null,
@@ -1696,7 +2051,16 @@ export const applyMatchStats = async (
           modes[player],
           season,
           proposalId
-        )
+        ),
+      accountStatOutcomeStatement(
+        database,
+        proposalId,
+        'RANKED_STATS',
+        player,
+        userId,
+        modes[player],
+        season
+      )
     )
   }
 
@@ -1714,8 +2078,6 @@ export const applyMatchStats = async (
       } satisfies RankProjection
     ]
   })
-  const grandweaverModes = new Set<GameMode>()
-
   for (const player of [0, 1] as const) {
     const stats = accountStats[player]
     const transition = transitions[player]
@@ -1774,16 +2136,18 @@ export const applyMatchStats = async (
         }
       })
     )
-    if (winner !== undefined && transition.score >= MASTER_POINTS) {
-      grandweaverModes.add(modes[player])
-    }
   }
-
-  for (const mode of grandweaverModes) {
-    statements.push(
-      ...grandweaverStatements(database, proposalId, mode, season)
+  const grandweaverMode = modes.find(isRankedGameMode)
+  const requiresGrandweaverJob = rewards
+    .flat()
+    .some(
+      reward =>
+        reward.type === RewardType.RANK &&
+        reward.rank?.afterMatch !== undefined &&
+        [PlayerRank.MASTER, PlayerRank.GRANDWEAVER].includes(
+          reward.rank.afterMatch.rank
+        )
     )
-  }
   statements.push(
     database
       .prepare(
@@ -1802,6 +2166,21 @@ export const applyMatchStats = async (
         proposalId
       )
   )
+  if (requiresGrandweaverJob && grandweaverMode) {
+    statements.push(
+      database
+        .prepare(
+          `INSERT OR IGNORE INTO multiplayer_grandweaver_jobs
+             (proposal_id, game_mode, season, status, created_at, applied_at)
+           SELECT ?, ?, ?, 'PENDING', ?, NULL
+           WHERE EXISTS (
+             SELECT 1 FROM multiplayer_match_stats_applied
+             WHERE proposal_id = ?
+           )`
+        )
+        .bind(proposalId, grandweaverMode, season, processedAt, proposalId)
+    )
+  }
   await database.batch(statements)
   const stored = await statsReceipt(database, proposalId, true)
   if (!stored) throw new Error('ranked match receipt was not persisted')
