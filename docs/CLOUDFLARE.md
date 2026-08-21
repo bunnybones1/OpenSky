@@ -2206,6 +2206,40 @@ artifact validation. The assembled entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker Conquest minimum-rank parity — 2026-08-20
+
+Milestone `4674f714` restores the Conquest validator that Go runs before its
+active-run, run-status, locked-deck, game-mode, reconnect, pending-match,
+penalty, and queue checks. The source reads both Ranked Constructed and Ranked
+Discovery account stats and rejects only when both are below the configured
+minimum; reaching the threshold on either ladder is sufficient.
+
+The match-service profile now projects both current-season ladder ranks from
+D1, defaulting a missing row to `UNKNOWN`. The matchmaker validates both enums
+at the service boundary and evaluates the source predicate before inspecting
+the Conquest run. The source numeric rank setting is mapped in exact protobuf
+ordinal order. An absent value preserves Go's zero-value default, while a
+malformed or out-of-range Cloudflare variable fails Durable Object
+construction instead of silently turning the policy off.
+
+Production and the checked-in Go profiles explicitly retain rank zero, so the
+currently disabled Conquest queues gain parity without an eligibility-policy
+change. Workers tests use `APPRENTICE` to prove low ranks cannot create a
+ticket; unit tests prove either ladder can qualify. The mutation-tested
+`check:cloudflare:matchmaker-conquest` gate covers the Go oracle, D1
+projection, TypeScript boundary and validation order, direct regressions,
+production/test configuration, both affected deployment commands, and
+non-deploying CI wiring.
+
+The exact complete local contract passed at `4674f714`: 510 main-Worker tests,
+34 game-server unit and 117 Workers tests, 33 match-service tests, 57
+matchmaker unit and 61 Workers tests, 30 browser-game tests, nine analytics
+tests, all typechecks and source/off-chain gates, both builds, and 594-file
+artifact validation. The assembled entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Suggested next slice
 
 The dormant, separately authorized readiness orchestrator is deployed and

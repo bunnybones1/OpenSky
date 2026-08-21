@@ -144,13 +144,28 @@ mode-specific overrides inherit that default for rolling compatibility. The
 mutation-tested `check:cloudflare:matchmaker-relaxation` gate protects the Go
 oracle, TypeScript selection, explicit policy, tests, and release wiring.
 
+The source Conquest validator next checks both ranked ladders before active-run,
+status, locked-deck, game-mode, reconnect, pending-match, penalty, or queue
+behavior. A player qualifies when either Ranked Constructed or Ranked Discovery
+meets `min_rank_to_play_conquest`. The match service projects both
+current-season ranks from D1, and the Worker validates those enums before
+applying the same predicate. Production explicitly retains the source value
+zero; Workers tests use `APPRENTICE` to exercise rejection without changing
+production eligibility. Missing configuration preserves the Go zero value,
+while malformed or out-of-range Worker configuration fails closed. The
+mutation-tested `check:cloudflare:matchmaker-conquest` gate protects the Go
+oracle, D1 projection, validation order, policies, tests, and both affected
+deployment paths.
+
 ## Deployment gates
 
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker typecheck`
 - `corepack pnpm --filter @opensky/cloudflare-matchmaker test`
 - `pnpm check:cloudflare:matchmaker-deck`
 - `pnpm check:cloudflare:matchmaker-relaxation`
+- `pnpm check:cloudflare:matchmaker-conquest`
 - `pnpm check:cloudflare:release`
+- `go test ./matchmaker/lib/frontend/findmatch/validators/...`
 - `go test ./matchmaker/lib/matchmaker/matching/matchers/...`
 - Set the same long `INTERNAL_AUTH_SECRET` on the gateway and matchmaker.
 - Do not enable production queue routing until `MATCH_SERVICE` is bound. Fully

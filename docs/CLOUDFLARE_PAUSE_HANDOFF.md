@@ -11,10 +11,10 @@ without a new user request.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `13b72c31`
-  (`Preserve source per-mode match relaxation`)
-- Latest tested runtime commit: `13b72c31`
-  (`Preserve source per-mode match relaxation`)
+- Last code/test checkpoint: `4674f714`
+  (`Preserve source Conquest rank admission`)
+- Latest tested runtime commit: `4674f714`
+  (`Preserve source Conquest rank admission`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -23,7 +23,7 @@ without a new user request.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `13b72c31` are committed and
+- The runtime changes from `38386294` through `4674f714` are committed and
   tested but are **not deployed**. The exact local build produced web entry
   `/assets/index-1eddfd33.js` and game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`.
@@ -138,8 +138,11 @@ orphaned-queue checkpoint and its handoff at exact pushed head `d10cd71b`. Run
 empty-IP checkpoint and its handoff at exact pushed head `eb1a556d`. Run
 <https://github.com/bunnybones1/OpenSky/actions/runs/32442312407> passed the
 deck-admission checkpoint and its handoff at exact pushed head `703e4de8` in
-10m48s. The newer `13b72c31` relaxation checkpoint and this refreshed handoff
-must receive exact-head CI before any production mutation.
+10m48s. Run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32443783609> passed the
+per-mode relaxation checkpoint and its handoff at exact pushed head `740d2ea7`
+in 10m46s. The newer `4674f714` Conquest-rank checkpoint and this refreshed
+handoff must receive exact-head CI before any production mutation.
 
 ## Cloud Weasel original-game chrome milestone
 
@@ -922,6 +925,45 @@ artifact validation. The assembled web and game entries are
 `/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
 provisioning, activation, live match, or production mutation was performed.
 
+## Source matchmaker Conquest minimum-rank milestone
+
+Commit `4674f714` restores the original Conquest validator's ranked-ladder
+admission boundary:
+
+- before inspecting an active Conquest run, its status, locked deck, game-mode
+  status, reconnect, pending match, penalty, or queue state, Go rejects a
+  player only when both Ranked Constructed and Ranked Discovery are below the
+  configured minimum;
+- the match service now projects both current-season ranked-ladder values from
+  authoritative D1 state for every matchmaking profile, using `UNKNOWN` when a
+  ladder row does not exist;
+- the matchmaker validates both service-provided enums and applies the same
+  either-ladder predicate before any Conquest run or deck behavior; and
+- the source numeric rank configuration is mapped in ordinal order. A missing
+  value preserves Go's zero-value default, while malformed or out-of-range
+  Cloudflare policy stops Durable Object construction instead of silently
+  disabling the restriction.
+
+Production explicitly remains at source rank zero, so this milestone does not
+change who can enter the currently disabled Conquest queues. The Workers test
+profile deliberately requires `APPRENTICE` and proves that a player with both
+ladders below it receives no ticket. Unit tests separately prove that either
+ladder at or above the threshold is sufficient. The mutation-tested
+`check:cloudflare:matchmaker-conquest` gate derives the Go configuration,
+validator order and dual-ladder rule; D1 projection; Worker configuration,
+profile validation and admission order; direct tests; explicit production/test
+policies; both affected deployment paths; and complete-build CI wiring.
+
+The exact complete local release contract passed at committed runtime head
+`4674f714` with 510 main-Worker tests, 34 game-server unit tests, 117
+game-server Workers tests, 33 match-service tests, 57 matchmaker unit tests, 61
+matchmaker Workers tests, 30 browser-game tests, nine analytics tests, every
+source/off-chain gate, all typechecks, both production builds, and 594-file
+artifact validation. The assembled web and game entries are
+`/assets/index-1eddfd33.js` and
+`/game/cloudflare/assets/index-ccb53c4b.js`. No deployment, migration,
+provisioning, activation, live match, or production mutation was performed.
+
 ## Storage safety milestone
 
 Commit `50605dd0` pins the only reviewed production storage topology:
@@ -1026,7 +1068,7 @@ not and must precede both the tested game-server runtime and analytics Worker.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `13b72c31`. Keep
+- Deploy and verify the tested runtime changes through `4674f714`. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
