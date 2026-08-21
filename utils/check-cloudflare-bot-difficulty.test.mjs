@@ -80,6 +80,13 @@ test('rejects weakened source, Worker, regression, deployment, and CI wiring', a
     },
     {
       ...value,
+      workerMatchBuilder: value.workerMatchBuilder.replace(
+        'participant.registeredBot !== undefined',
+        'false'
+      )
+    },
+    {
+      ...value,
       workerTest: value.workerTest.replace(
         "account: { name: 'Mecha Gygax' }",
         "account: { name: 'Majordomo' }"

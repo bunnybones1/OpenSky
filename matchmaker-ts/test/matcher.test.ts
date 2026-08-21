@@ -1,4 +1,4 @@
-import { GameMode } from '@opensky/proto'
+import { DeckClass, GameMode, PlayerRank } from '@opensky/proto'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,6 +6,7 @@ import {
   createBotForPlayer,
   createBotPlayer,
   createPlayer,
+  createRegisteredBotForPlayer,
   MatchProposalStatus,
   processCombinations
 } from '../src'
@@ -24,6 +25,33 @@ describe('Go player combinator and proposal compatibility', () => {
       mode: GameMode.PRACTICE_BOT,
       clientVersionHash: 'release-1',
       initTimestampMs: now - 25_000
+    })
+  })
+
+  it('keeps registered account identity separate from bot status', () => {
+    const player = createPlayer({
+      address: '0x1111111111111111111111111111111111111111',
+      mode: GameMode.RANKED_CONSTRUCTED,
+      clientVersionHash: 'release-1'
+    })
+    expect(
+      createRegisteredBotForPlayer(player, {
+        userId: 'system:bot:0003',
+        principal: '0x9999999999999999999999999999999999999999',
+        name: 'darkwidow',
+        score: 700,
+        rank: PlayerRank.APPRENTICE,
+        deckClass: DeckClass.STR,
+        prism: 'str',
+        deckString: 'SWxSTR02fixture',
+        cardIds: Array.from({ length: 30 }, (_, index) => index + 1)
+      })
+    ).toMatchObject({
+      address: '0x9999999999999999999999999999999999999999',
+      mode: GameMode.RANKED_CONSTRUCTED,
+      playerSessionId: '',
+      clientVersionHash: 'release-1',
+      registeredBot: { userId: 'system:bot:0003', name: 'darkwidow' }
     })
   })
 
@@ -57,7 +85,7 @@ describe('Go player combinator and proposal compatibility', () => {
     ])
   })
 
-  it('forms proposals oldest-first and chooses the lowest-quality candidate', () => {
+  it('forms proposals oldest-first and chooses the lowest-quality candidate', async () => {
     const oldest = createPlayer({ address: '0x01', initTimestampMs: now - 20_000 })
     const worse = createPlayer({ address: '0x02', initTimestampMs: now - 10_000 })
     const best = createPlayer({ address: '0x03', initTimestampMs: now - 1_000 })
@@ -67,7 +95,7 @@ describe('Go player combinator and proposal compatibility', () => {
       [() => true],
       () => now
     )
-    const proposals = processCombinations(
+    const proposals = await processCombinations(
       combinations,
       { createRegistered: () => createBotPlayer(GameMode.RANKED_CONSTRUCTED) },
       () => 'proposal-1',
@@ -88,7 +116,7 @@ describe('Go player combinator and proposal compatibility', () => {
     expect(proposals[0].playersCount()).toBe(2)
   })
 
-  it('uses the bot-only validator and replaces a catch-all bot', () => {
+  it('uses the bot-only validator and replaces a catch-all bot', async () => {
     const player = createPlayer({ address: '0x01' })
     const catchAllBot = createBotPlayer(GameMode.RANKED_CONSTRUCTED)
     const registeredBot = createPlayer({ address: '0xbot' })
@@ -98,11 +126,28 @@ describe('Go player combinator and proposal compatibility', () => {
       [() => false],
       () => now
     )
-    const proposals = processCombinations(
+    const proposals = await processCombinations(
       combinations,
       { createRegistered: () => registeredBot },
       () => 'proposal-bot'
     )
     expect(proposals[0].players).toEqual([player, registeredBot])
+  })
+
+  it('continues without a proposal when registered bot selection fails', async () => {
+    const player = createPlayer({ address: '0x01' })
+    const combinations = combinePlayers(
+      [player, createBotPlayer(GameMode.RANKED_CONSTRUCTED)],
+      () => true,
+      [],
+      () => now
+    )
+    expect(
+      await processCombinations(combinations, {
+        createRegistered: async () => {
+          throw new Error('no source bot account')
+        }
+      })
+    ).toEqual([])
   })
 })

@@ -1,4 +1,4 @@
-import { GameMode } from '@opensky/proto'
+import { GameMode, PlayerRank } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { MatchmakerStartMatchMessage } from '@opensky/shared/matchmaker-message-types'
 import { legacyMatchMode } from '@opensky/shared/match-modes'
@@ -17,6 +17,10 @@ import {
   MatchRepository
 } from './repository'
 import { createReadinessMatch, ReadinessMatchError } from './readiness-match'
+import {
+  selectRegisteredBot,
+  validateRegisteredBotSelection
+} from './registered-bot'
 import { AccountActionsRepository } from '../../cloudflare/src/account-actions'
 import { ConquestRepository } from '../../cloudflare/src/conquest'
 import {
@@ -224,6 +228,69 @@ const matchmakingProfile = async (
   }
 }
 
+const registeredBotSelection = async (
+  request: Request,
+  env: MatchServiceEnv
+) => {
+  if (!explicitlyEnabled(env.ENABLE_RANKED_BOTS)) {
+    return json({ error: 'not found' }, 404)
+  }
+  const declaredLength = Number(request.headers.get('content-length') ?? 0)
+  if (declaredLength > 4 * 1024) return json({ error: 'request too large' }, 413)
+  let body: unknown
+  try {
+    const text = await request.text()
+    if (new TextEncoder().encode(text).byteLength > 4 * 1024) {
+      return json({ error: 'request too large' }, 413)
+    }
+    body = JSON.parse(text)
+  } catch {
+    return json({ error: 'invalid registered bot request JSON' }, 400)
+  }
+  if (
+    !record(body) ||
+    typeof body.userId !== 'string' ||
+    body.userId.length < 1 ||
+    body.userId.length > 256 ||
+    typeof body.principal !== 'string' ||
+    !/^0x[0-9a-f]{40}$/.test(body.principal) ||
+    ![
+      GameMode.PRACTICE_PVP,
+      GameMode.RANKED_CONSTRUCTED,
+      GameMode.RANKED_DISCOVERY
+    ].includes(body.mode as GameMode) ||
+    !Number.isSafeInteger(body.score) ||
+    Math.abs(body.score as number) > 2_147_483_647 ||
+    !Object.values(PlayerRank).includes(body.rank as PlayerRank)
+  ) {
+    return json({ error: 'invalid registered bot request' }, 400)
+  }
+  try {
+    await new AccountActionsRepository(env.AUTH_DB).enforcePlayerAccess(
+      body.userId
+    )
+    return json({
+      bot: await selectRegisteredBot(
+        env.AUTH_DB,
+        {
+          userId: body.userId,
+          principal: body.principal,
+          mode: body.mode as GameMode,
+          score: body.score as number,
+          rank: body.rank as PlayerRank
+        },
+        season(env.CURRENT_SEASON)
+      )
+    })
+  } catch (error) {
+    if (error instanceof RpcError && error.status === 403) {
+      return json({ error: error.message }, 403)
+    }
+    console.error('registered bot selection failed', error)
+    return json({ error: 'registered bot selection failed' }, 409)
+  }
+}
+
 const dispatchToGame = async (
   request: CreateMatchRequest,
   env: MatchServiceEnv
@@ -283,6 +350,13 @@ export default {
     ) {
       if (!authorized(request, env)) return json({ error: 'not found' }, 404)
       return matchmakingProfile(request, env)
+    }
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/internal/matchmaker/registered-bot'
+    ) {
+      if (!authorized(request, env)) return json({ error: 'not found' }, 404)
+      return registeredBotSelection(request, env)
     }
     if (
       request.method === 'POST' &&
@@ -386,8 +460,12 @@ export default {
       version: dispatch.participants[0].player.clientVersionHash,
       player1Principal: dispatch.participants[0].player.address,
       player2Principal: dispatch.participants[1].player.address,
-      player1UserId: dispatch.participants[0].identity?.userId,
-      player2UserId: dispatch.participants[1].identity?.userId,
+      player1UserId:
+        dispatch.participants[0].identity?.userId ??
+        dispatch.participants[0].registeredBot?.userId,
+      player2UserId:
+        dispatch.participants[1].identity?.userId ??
+        dispatch.participants[1].registeredBot?.userId,
       createdAt: new Date(dispatch.createdAtMs).toISOString(),
       dispatchFingerprint: await acceptedMatchFingerprint(dispatch)
     }
@@ -429,9 +507,32 @@ export default {
             await access.enforcePlayerAccess(identity.userId)
           })
       )
+      const human = dispatch.participants.find(
+        participant => participant.identity !== undefined
+      )
+      for (const participant of dispatch.participants) {
+        if (!participant.registeredBot) continue
+        if (!human?.identity) {
+          throw new RpcError(
+            403,
+            'webrpc.permission_denied',
+            'registered bot opponent is missing'
+          )
+        }
+        await validateRegisteredBotSelection(
+          env.AUTH_DB,
+          participant.registeredBot,
+          human.identity.userId,
+          participant.player.mode,
+          dispatch.proposalId
+        )
+      }
     } catch (error) {
       if (error instanceof RpcError && error.status === 403) {
         return json({ error: error.message }, 403)
+      }
+      if (error instanceof Error && error.message.startsWith('registered bot')) {
+        return json({ error: error.message, reason: 'INVALID_ACCOUNT' }, 409)
       }
       throw error
     }

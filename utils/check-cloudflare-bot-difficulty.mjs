@@ -74,8 +74,10 @@ export const botDifficultyErrors = value => {
     value.workerMatchBuilder.indexOf('export const buildMatch = async (')
   )
   requireOrdered(errors, 'Worker match bot setting', workerMatch, [
-    'const botParticipant = dispatch.participants.find(',
-    'participant => participant.player.address === BOT_PLACEHOLDER',
+    'const isBot = (participant: AcceptedMatchParticipant) =>',
+    'participant.player.address === BOT_PLACEHOLDER ||',
+    'participant.registeredBot !== undefined',
+    'const botParticipant = dispatch.participants.find(isBot)',
     'botDifficulty: botDifficultyForPlayer(',
     'botParticipant.player.mode,',
     'humanLevel'

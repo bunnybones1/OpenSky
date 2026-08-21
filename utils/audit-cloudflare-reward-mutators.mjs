@@ -336,6 +336,24 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       'SkyPass season progress cannot decrease',
       'database.batch'
     ]
+  },
+  'match-service-cloudflare/src/registered-bot.ts': {
+    count: 2,
+    disposition: 'deterministic-system-bot-bootstrap',
+    evidenceFiles: [
+      'cloudflare/migrations/0116_registered_matchmaker_bots.sql',
+      'match-service-cloudflare/test-cloudflare/worker.test.ts'
+    ],
+    evidence: [
+      'registered_matchmaker_bots',
+      "VALUES (?, ?, ?, NULL, ?, ?, 'SYSTEM')",
+      'VALUES (?, ?, \'en\', 3, \'ACTIVE\', 0, ?, ?)',
+      'INSERT OR IGNORE INTO player_profiles',
+      'INSERT OR IGNORE INTO player_progression',
+      'keeps Practice registered bots free of invented ranked stats',
+      'keeps registry identity immutable and disabled bots out of allocations',
+      'database.batch'
+    ]
   }
 }
 

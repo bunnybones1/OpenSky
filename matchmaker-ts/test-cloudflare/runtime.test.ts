@@ -463,6 +463,66 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
+  it('replaces the catch-all with the selected registered bot before proposing', async () => {
+    const stub = isolatedPool(`registered-bot-${crypto.randomUUID()}`)
+    await runInDurableObject(stub, async instance => {
+      ;(
+        instance as unknown as {
+          config: { enableRankedBots: boolean }
+        }
+      ).config.enableRankedBots = true
+    })
+    const [player] = track(
+      await connectDirectlyToPool(stub, PRINCIPAL_1, '192.0.2.1')
+    )
+    player.send(JSON.stringify(findCommand(GameMode.RANKED_CONSTRUCTED)))
+    await expect
+      .poll(() =>
+        runInDurableObject(stub, async (_instance, state) =>
+          state.storage.get(`ticket:${PRINCIPAL_1}`)
+        )
+      )
+      .toBeDefined()
+
+    const found = nextMessage(player)
+    await forceFindMatchCycle(GameMode.RANKED_CONSTRUCTED, stub)
+    expect(await found).toMatchObject({
+      type: 'match_found',
+      mode: GameMode.RANKED_CONSTRUCTED,
+      playerIDs: [
+        PRINCIPAL_1,
+        '0x9999999999999999999999999999999999999999'
+      ]
+    })
+    await runInDurableObject(stub, async (_instance, state) => {
+      const proposals = await state.storage.list<{
+        participants: Array<{
+          player: {
+            address: string
+            registeredBot?: {
+              userId: string
+              name: string
+              deckString: string
+              cardIds: number[]
+            }
+          }
+        }>
+      }>({ prefix: 'proposal:' })
+      const registered = [...proposals.values()][0].participants.find(
+        participant => participant.player.registeredBot !== undefined
+      )!
+      expect(registered.player).toMatchObject({
+        address: '0x9999999999999999999999999999999999999999',
+        registeredBot: {
+          userId: 'system:bot:0003',
+          name: 'darkwidow',
+          deckString: 'SWxSTR02registered-bot-fixture',
+          cardIds: expect.arrayContaining([1, 30])
+        }
+      })
+    })
+  })
+
   it('does not invent a Conquest Discovery director runner', async () => {
     const [player] = track(await connect(PRINCIPAL_7, '192.0.2.7'))
     player.send(JSON.stringify(findCommand(GameMode.CONQUEST_CONSTRUCTED)))

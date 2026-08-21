@@ -21,6 +21,10 @@ const SYSTEM_OPPONENT_USER_ID = 'system:replay-contract-test:opponent'
 const SYSTEM_MATCH_ID = 900002
 const SYSTEM_REPLAY_ID = '99999999-8888-4888-8888-888888888888'
 const SYSTEM_PROPOSAL_ID = 'readiness-drill-match-replay-contract-test'
+const REGISTERED_BOT_USER_ID = 'system:bot:0001'
+const REGISTERED_BOT_MATCH_ID = 900003
+const REGISTERED_BOT_REPLAY_ID = 'aaaaaaaa-8888-4888-8888-888888888888'
+const REGISTERED_BOT_PROPOSAL_ID = 'registered-bot-replay-contract-test'
 const ADMIN_USER_ID = '99999999-9999-4999-8999-999999999999'
 const FINAL_PLAYER1_DECK = encodeDeckString(STARTER_CARD_IDS, DeckClass.STR)
 const FINAL_PLAYER2_DECK = encodeDeckString(
@@ -332,5 +336,62 @@ describe('source replay archive contract', () => {
       testEnv
     )
     expect(authorizedRecord.status).toBe(200)
+  })
+
+  it('keeps registry-backed bot matches player-visible and source-addressed', async () => {
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+         (id, display_name, primary_email, created_at, updated_at, user_kind)
+       VALUES (?, 'BlazeHunter', 'bot-0001@cloud-weasel.invalid',
+               ?, ?, 'SYSTEM')`
+    )
+      .bind(REGISTERED_BOT_USER_ID, now, now)
+      .run()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (id, proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, server_address, status, winner_player,
+          result_json, ended_at, created_at, updated_at)
+       SELECT ?, ?, ?, mode, version, player1_principal, player2_principal,
+              player1_user_id, ?,
+              json_set(match_payload_json, '$.match.player2.botSubkey', ?),
+              ?, status,
+              winner_player, result_json, ended_at, created_at, updated_at
+       FROM multiplayer_matches WHERE id = ?`
+    )
+      .bind(
+        REGISTERED_BOT_MATCH_ID,
+        REGISTERED_BOT_PROPOSAL_ID,
+        REGISTERED_BOT_REPLAY_ID,
+        REGISTERED_BOT_USER_ID,
+        `0x${'11'.repeat(32)}`,
+        `wss://opensky.example/api/game/matches/${REGISTERED_BOT_PROPOSAL_ID}`,
+        MATCH_ID
+      )
+      .run()
+
+    const response = await rpc({
+      matchID: REGISTERED_BOT_MATCH_ID,
+      replayID: REGISTERED_BOT_REPLAY_ID
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json<{
+      match: { player2: { address: string; isBot: boolean } }
+      recordURIs: string[]
+    }>()
+    expect(body.match.player2).toMatchObject({
+      address: '0x2222222222222222222222222222222222222222',
+      isBot: true
+    })
+    expect(body.recordURIs[0]).toContain(
+      `/api/replays/${REGISTERED_BOT_MATCH_ID}/${REGISTERED_BOT_REPLAY_ID}/`
+    )
+    const replay = await handleReplayRequest(
+      new Request(body.recordURIs[0]),
+      testEnv
+    )
+    expect(replay.status).toBe(200)
   })
 })

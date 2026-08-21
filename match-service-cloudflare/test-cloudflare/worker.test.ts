@@ -1,17 +1,19 @@
-import { DeckClass, GameMode } from '@opensky/proto'
+import { DeckClass, GameMode, PlayerRank } from '@opensky/proto'
 import { deriveGamePrincipal } from '@opensky/shared/game-principal'
 import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { hexToBytes } from '../src/encoding'
 import { selectSourceBotDeck, sourceBotDecksForLevel } from '../src/bot'
+import { selectRegisteredBot } from '../src/registered-bot'
 import {
   BOT_PLACEHOLDER,
   INTERNAL_AUTH_HEADER,
   parseAcceptedMatchDispatch
 } from '../src/protocol'
 import { MatchRepository } from '../src/repository'
-import {
+import matchServiceWorker, {
+  type MatchServiceEnv,
   currentEnabledGameModes,
   currentMatchmakerGameModes
 } from '../src/worker'
@@ -145,6 +147,44 @@ const profile = async (
       },
       body: JSON.stringify({ userId, principal, mode, versionHash })
     }
+  )
+
+const rankedBotsEnv = () =>
+  ({
+    ...env,
+    INTERNAL_AUTH_SECRET: 'match-service-test-secret',
+    CURRENT_SEASON: '126',
+    TURN_TIMER_ENABLED: 'true',
+    ENABLE_RANKED_BOTS: 'true',
+    ENABLED_GAME_MODES:
+      'PRACTICE_BOT,WARM_UP,PRACTICE_PVP,RANKED_CONSTRUCTED,' +
+      'RANKED_DISCOVERY,CHALLENGE_CONSTRUCTED,CHALLENGE_DISCOVERY'
+  }) as unknown as MatchServiceEnv
+
+const selectBot = (
+  mode = GameMode.RANKED_CONSTRUCTED,
+  score = 650,
+  rank = PlayerRank.EXPERT
+) =>
+  matchServiceWorker.fetch(
+    new Request(
+      'https://match-service.example/internal/matchmaker/registered-bot',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          [INTERNAL_AUTH_HEADER]: 'match-service-test-secret'
+        },
+        body: JSON.stringify({
+          userId: USER_ID,
+          principal: PRINCIPAL,
+          mode,
+          score,
+          rank
+        })
+      }
+    ),
+    rankedBotsEnv()
   )
 
 const provisionSecondPlayer = async (level = 2) => {
@@ -534,6 +574,313 @@ const enableConstructedConquest = (at: string) =>
   ).bind(at)
 
 describe('Cloud Weasel accepted-match service', () => {
+  it('installs the exact dormant source bot registry without creating login users', async () => {
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count,
+                (SELECT source_name FROM registered_matchmaker_bots
+                 WHERE source_index = 1) AS first_name,
+                (SELECT source_name FROM registered_matchmaker_bots
+                 WHERE source_index = 308) AS last_name
+         FROM registered_matchmaker_bots`
+      ).first()
+    ).toEqual({
+      count: 308,
+      first_name: 'BlazeHunter',
+      last_name: 'wizardswit_'
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM users WHERE id LIKE 'system:bot:%'`
+      ).first()
+    ).toEqual({ count: 0 })
+  })
+
+  it('keeps registry identity immutable and disabled bots out of allocations', async () => {
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE registered_matchmaker_bots SET source_name = 'rewritten'
+         WHERE source_index = 1`
+      ).run()
+    ).rejects.toThrow('registered bot identity is immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `DELETE FROM registered_matchmaker_bots WHERE source_index = 1`
+      ).run()
+    ).rejects.toThrow('registered bot registry is immutable')
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES ('system:bot:0001', 'BlazeHunter',
+                 'bot-0001@cloud-weasel.invalid', ?, ?, 'SYSTEM')`
+      ).bind(now, now),
+      env.AUTH_DB.prepare(
+        `UPDATE registered_matchmaker_bots SET enabled = 0
+         WHERE source_index = 1`
+      )
+    ])
+    try {
+      await expect(
+        env.AUTH_DB.prepare(
+          `INSERT INTO multiplayer_matches
+             (proposal_id, replay_id, mode, version, player1_principal,
+              player2_principal, player1_user_id, player2_user_id,
+              match_payload_json, status, created_at, updated_at)
+           VALUES ('disabled-registered-bot', 'disabled-registered-bot-replay',
+                   'PRACTICE_PVP', 'release-1', ?, ?, ?,
+                   'system:bot:0001', '{}', 'creating', ?, ?)`
+        )
+          .bind(
+            PRINCIPAL,
+            await deriveGamePrincipal('system:bot:0001'),
+            USER_ID,
+            now,
+            now
+          )
+          .run()
+      ).rejects.toThrow('match participant class does not match allocation path')
+    } finally {
+      await env.AUTH_DB.prepare(
+        `UPDATE registered_matchmaker_bots SET enabled = 1
+         WHERE source_index = 1`
+      ).run()
+    }
+  })
+
+  it('keeps the registered bot selector hidden while the production flag is off', async () => {
+    const response = await SELF.fetch(
+      'https://match-service.example/internal/matchmaker/registered-bot',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          [INTERNAL_AUTH_HEADER]: 'match-service-test-secret'
+        },
+        body: JSON.stringify({
+          userId: USER_ID,
+          principal: PRINCIPAL,
+          mode: GameMode.RANKED_CONSTRUCTED,
+          score: 650,
+          rank: PlayerRank.EXPERT
+        })
+      }
+    )
+    expect(response.status).toBe(404)
+    await response.json()
+  })
+
+  it('selects, provisions, and excludes source-compatible registered bots', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    const selected = await selectBot()
+    expect(selected.status).toBe(200)
+    const body = await selected.json<{
+      bot: {
+        userId: string
+        principal: string
+        name: string
+        score: number
+        rank: PlayerRank
+        deckClass: DeckClass
+        prism: string
+        deckString: string
+        cardIds: number[]
+      }
+    }>()
+    expect(body.bot).toMatchObject({
+      userId: 'system:bot:0003',
+      principal: await deriveGamePrincipal('system:bot:0003'),
+      name: 'darkwidow',
+      score: 700,
+      rank: PlayerRank.APPRENTICE,
+      deckClass: DeckClass.STR,
+      prism: 'str',
+      cardIds: STARTER_CARD_IDS
+    })
+    expect(body.bot.deckString).toBe(STARTER_DECKS[0].deckString)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT user.user_kind, profile.level, account.warm_ups,
+                account.leaderboard_eligible,
+                (SELECT COUNT(*) FROM player_account_stats stats
+                 WHERE stats.user_id = user.id AND stats.season = 126) stats
+         FROM users user
+         JOIN player_profiles profile ON profile.user_id = user.id
+         JOIN player_account_settings account ON account.user_id = user.id
+         WHERE user.id = ?`
+      )
+        .bind(body.bot.userId)
+        .first()
+    ).toEqual({
+      user_kind: 'SYSTEM',
+      level: 30,
+      warm_ups: 3,
+      leaderboard_eligible: 0,
+      stats: 1
+    })
+
+    const now = new Date().toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO multiplayer_matches
+         (proposal_id, replay_id, mode, version, player1_principal,
+          player2_principal, player1_user_id, player2_user_id,
+          match_payload_json, status, created_at, updated_at)
+       VALUES ('active-source-bot', 'active-source-bot-replay',
+               'RANKED_CONSTRUCTED', 'release-1', ?, ?, ?, ?, '{}',
+               'active', ?, ?)`
+    )
+      .bind(PRINCIPAL, body.bot.principal, USER_ID, body.bot.userId, now, now)
+      .run()
+    const replacement = await selectBot()
+    expect(replacement.status).toBe(200)
+    expect((await replacement.json<{ bot: { userId: string } }>()).bot.userId)
+      .toBe('system:bot:0008')
+  })
+
+  it('uses an unlocked starter class but an empty deck for registered discovery bots', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    const selected = await selectBot(GameMode.RANKED_DISCOVERY)
+    expect(selected.status).toBe(200)
+    const body = await selected.json<{
+      bot: { deckClass: DeckClass; deckString: string; cardIds: number[] }
+    }>()
+    expect(body.bot).toMatchObject({
+      deckClass: DeckClass.STR,
+      deckString: 'SWxSTR02',
+      cardIds: []
+    })
+  })
+
+  it('keeps Practice registered bots free of invented ranked stats', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    const selected = await selectBot(GameMode.PRACTICE_PVP)
+    expect(selected.status).toBe(200)
+    const { bot } = await selected.json<{ bot: { userId: string } }>()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS count FROM player_account_stats WHERE user_id = ?`
+      )
+        .bind(bot.userId)
+        .first<{ count: number }>()
+    ).toEqual({ count: 0 })
+  })
+
+  it('fails closed when a registered bot selector returns an invalid index', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    await expect(
+      selectRegisteredBot(
+        env.AUTH_DB,
+        {
+          userId: USER_ID,
+          principal: PRINCIPAL,
+          mode: GameMode.RANKED_CONSTRUCTED,
+          score: 650,
+          rank: PlayerRank.EXPERT
+        },
+        126,
+        () => -1
+      )
+    ).rejects.toThrow('registered bot selector returned an invalid index')
+  })
+
+  it('rejects inconsistent unlocked starter snapshots', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_decks SET card_ids = json_array(
+         1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+         11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+         21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+       ) WHERE user_id = ? AND deck_type = 'UNLOCKED_STARTER'`
+    )
+      .bind(USER_ID)
+      .run()
+    const response = await selectBot()
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'registered bot selection failed'
+    })
+  })
+
+  it('allocates a registered bot snapshot only through the enabled internal contract', async () => {
+    await new PlayerRepository(env.AUTH_DB).bootstrap(USER_ID)
+    await env.AUTH_DB.prepare(
+      `UPDATE player_profiles SET level = 2 WHERE user_id = ?`
+    )
+      .bind(USER_ID)
+      .run()
+    const selectionResponse = await selectBot()
+    const selection = (await selectionResponse.json<{
+      bot: Record<string, unknown>
+    }>()).bot
+    const accepted = dispatch()
+    accepted.participants[0].player.mode = GameMode.RANKED_CONSTRUCTED
+    accepted.participants[0].request!.mode = GameMode.RANKED_CONSTRUCTED
+    const registeredParticipant = {
+      player: {
+        address: selection.principal as string,
+        mode: GameMode.RANKED_CONSTRUCTED,
+        sessionId: '',
+        playerSessionId: '',
+        clientVersionHash: 'release-1',
+        registeredBot: selection
+      }
+    }
+    accepted.participants[1] = registeredParticipant
+    expect(() => parseAcceptedMatchDispatch(accepted)).toThrow(
+      'registered bots are disabled'
+    )
+
+    const response = await matchServiceWorker.fetch(
+      new Request('https://match-service.example/internal/matches', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': accepted.proposalId,
+          [INTERNAL_AUTH_HEADER]: 'match-service-test-secret'
+        },
+        body: JSON.stringify(accepted)
+      }),
+      rankedBotsEnv()
+    )
+    expect(response.status).toBe(200)
+    const ledger = await env.AUTH_DB.prepare(
+      `SELECT player2_principal, player2_user_id, match_payload_json, status
+       FROM multiplayer_matches WHERE proposal_id = ?`
+    )
+      .bind(accepted.proposalId)
+      .first<{
+        player2_principal: string
+        player2_user_id: string
+        match_payload_json: string
+        status: string
+      }>()
+    expect(ledger).toMatchObject({
+      player2_principal: selection.principal,
+      player2_user_id: selection.userId,
+      status: 'active'
+    })
+    const payload = JSON.parse(ledger!.match_payload_json)
+    expect(payload.match.player2).toMatchObject({
+      gameMode: GameMode.RANKED_CONSTRUCTED,
+      account: {
+        address: selection.principal,
+        name: selection.name,
+        level: 30,
+        warmUps: 3
+      },
+      botSubkey: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+      quests: []
+    })
+    expect(payload.match.player2.privateSeed).toMatchObject({
+      player: hexToBytes(selection.principal as string),
+      prisms: ['str'],
+      cards: STARTER_CARD_IDS.map(String)
+    })
+    expect(payload.match.player2.privateSeed).not.toHaveProperty('heroAbility')
+  })
+
   it('reports the authoritative deployment mode switches only to trusted services', async () => {
     const response = await SELF.fetch(
       'https://match-service.example/internal/game-modes',

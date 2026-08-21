@@ -14,6 +14,18 @@ export interface PlayerMatchStat {
   opponentId: string
 }
 
+export interface RegisteredBotSelection {
+  userId: string
+  principal: string
+  name: string
+  score: number
+  rank: PlayerRank
+  deckClass: DeckClass
+  prism: string
+  deckString: string
+  cardIds: number[]
+}
+
 export interface MatchmakerPlayer {
   address: string
   mode: GameMode
@@ -31,6 +43,7 @@ export interface MatchmakerPlayer {
   recentMatches: PlayerMatchStat[]
   shadowBannedUntilMs?: number
   matchProposalId?: string
+  registeredBot?: RegisteredBotSelection
 }
 
 export const createPlayer = (
@@ -72,8 +85,25 @@ export const createBotForPlayer = (
     ...overrides
   })
 
+// Mirrors Factory.CreateRegistered after the source API has selected the bot
+// account and one of the human opponent's unlocked starter decks. The private
+// seed remains a bot, while Address() becomes the registered account principal.
+export const createRegisteredBotForPlayer = (
+  player: MatchmakerPlayer,
+  selection: RegisteredBotSelection
+) =>
+  createBotForPlayer(player, {
+    address: selection.principal,
+    prisms: [selection.prism.toUpperCase() as CardClass],
+    playerSessionId: '',
+    score: selection.score,
+    rank: selection.rank,
+    cards: new Map(selection.cardIds.map(cardId => [cardId, 'base' as const])),
+    registeredBot: selection
+  })
+
 export const isBot = (player: MatchmakerPlayer) =>
-  player.address === BOT_PLAYER_ADDRESS
+  player.address === BOT_PLAYER_ADDRESS || player.registeredBot !== undefined
 
 export const waitTimeMs = (player: MatchmakerPlayer, nowMs = Date.now()) =>
   player.initTimestampMs > 0 ? Math.max(0, nowMs - player.initTimestampMs) : 0

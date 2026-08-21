@@ -70,6 +70,11 @@ export const cloudflareBuildScriptErrors = rootPackage => {
       'Cloudflare build must include the matchmaker cadence source gate'
     )
   }
+  if (!build.includes('pnpm check:cloudflare:registered-bots')) {
+    errors.push(
+      'Cloudflare build must include the registered ranked/PvP bot source gate'
+    )
+  }
   if (!build.includes('pnpm check:cloudflare:matchmaker-relaxation')) {
     errors.push(
       'Cloudflare build must include the matchmaker relaxation source gate'

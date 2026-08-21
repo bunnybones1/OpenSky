@@ -321,7 +321,7 @@ const rarityFor = (
 }
 
 export class MatchRepository {
-  constructor(private readonly database: D1Database) {}
+  constructor(readonly database: D1Database) {}
 
   async userHasKind(userId: string, expectedUserKind: UserKind) {
     const row = await this.database

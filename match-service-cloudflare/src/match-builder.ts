@@ -8,6 +8,7 @@ import { prismsToDeckClass } from '@opensky/shared/helpers'
 import { BaseCard, CardLibrary, PrivateSeed } from '@skyweaver/state-metadata'
 
 import { botDifficultyForPlayer, createBotParticipant } from './bot'
+import { createRegisteredBotParticipant } from './registered-bot'
 import { hexToBytes, validByteArray } from './encoding'
 import {
   AcceptedMatchDispatch,
@@ -152,24 +153,37 @@ export const buildMatch = async (
   turnTimer: boolean,
   repository: MatchRepository
 ): Promise<BuiltMatch> => {
+  const isBot = (participant: AcceptedMatchParticipant) =>
+    participant.player.address === BOT_PLACEHOLDER ||
+    participant.registeredBot !== undefined
   const humans = await Promise.all(
     dispatch.participants.map(participant =>
-      participant.player.address === BOT_PLACEHOLDER
+      isBot(participant)
         ? undefined
         : humanParticipant(participant, repository, season)
     )
   )
   const humanLevel = humans.find(human => human)?.level ?? 0
-  const infos = dispatch.participants.map((participant, index) =>
-    participant.player.address === BOT_PLACEHOLDER
-      ? createBotParticipant(participant.player.mode, humanLevel)
-      : humans[index]!.info
-  ) as [MatchStartPlayerInfo, MatchStartPlayerInfo]
-  const botParticipant = dispatch.participants.find(
-    participant => participant.player.address === BOT_PLACEHOLDER
-  )
+  const infos = (await Promise.all(
+    dispatch.participants.map((participant, index) =>
+      participant.registeredBot
+        ? createRegisteredBotParticipant(
+            repository.database,
+            participant.registeredBot,
+            participant.player.mode,
+            season
+          )
+        : participant.player.address === BOT_PLACEHOLDER
+          ? createBotParticipant(participant.player.mode, humanLevel)
+          : humans[index]!.info
+    )
+  )) as [MatchStartPlayerInfo, MatchStartPlayerInfo]
+  const botParticipant = dispatch.participants.find(isBot)
   return {
-    userIds: [humans[0]?.userId, humans[1]?.userId],
+    userIds: [
+      humans[0]?.userId ?? dispatch.participants[0].registeredBot?.userId,
+      humans[1]?.userId ?? dispatch.participants[1].registeredBot?.userId
+    ],
     match: {
       type: 'start_match',
       matchID: matchId,

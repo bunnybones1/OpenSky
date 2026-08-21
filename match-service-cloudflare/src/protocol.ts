@@ -1,6 +1,8 @@
-import { GameMode } from '@opensky/proto'
+import { DeckClass, GameMode, PlayerRank } from '@opensky/proto'
 import { areMatchModesCompatible } from '@opensky/shared/match-modes'
 import { normalizeGoogleUUID } from '@opensky/shared/uuid'
+
+import type { RegisteredBotSelection } from './registered-bot'
 
 export const INTERNAL_AUTH_HEADER = 'x-cloud-weasel-internal-auth'
 export const BOT_PLACEHOLDER = '0x0000000000000000000000000000000000000000'
@@ -33,6 +35,7 @@ export interface AcceptedMatchParticipant {
   player: AcceptedMatchPlayer
   request?: AcceptedMatchRequest
   identity?: AcceptedMatchIdentity
+  registeredBot?: RegisteredBotSelection
 }
 
 export interface AcceptedMatchDispatch {
@@ -51,6 +54,9 @@ const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const gameModes = new Set(Object.values(GameMode))
+const playerRanks = new Set(Object.values(PlayerRank))
+const deckClasses = new Set(Object.values(DeckClass))
+const botPrisms = new Set(['str', 'hrt', 'agy', 'int', 'wis'])
 
 const canonicalJson = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -81,6 +87,37 @@ export const acceptedMatchFingerprint = async (
     .join('')
 }
 
+const parseRegisteredBot = (value: unknown): RegisteredBotSelection => {
+  if (
+    !record(value) ||
+    typeof value.userId !== 'string' ||
+    !/^system:bot:[0-9]{4}$/.test(value.userId) ||
+    typeof value.principal !== 'string' ||
+    !/^0x[0-9a-f]{40}$/.test(value.principal) ||
+    typeof value.name !== 'string' ||
+    value.name.length < 1 ||
+    value.name.length > 64 ||
+    !Number.isSafeInteger(value.score) ||
+    Math.abs(value.score as number) > 2_147_483_647 ||
+    !playerRanks.has(value.rank as PlayerRank) ||
+    !deckClasses.has(value.deckClass as DeckClass) ||
+    value.deckClass === DeckClass.UNKNOWN_CLASS ||
+    typeof value.prism !== 'string' ||
+    !botPrisms.has(value.prism) ||
+    typeof value.deckString !== 'string' ||
+    value.deckString.length < 8 ||
+    value.deckString.length > 2_048 ||
+    !Array.isArray(value.cardIds) ||
+    ![0, 30].includes(value.cardIds.length) ||
+    value.cardIds.some(
+      card => !Number.isSafeInteger(card) || (card as number) <= 0
+    )
+  ) {
+    throw new DispatchProtocolError('invalid registered bot participant')
+  }
+  return value as unknown as RegisteredBotSelection
+}
+
 export const parseAcceptedMatchDispatch = (
   value: unknown,
   policy: AcceptedMatchDispatchPolicy = {}
@@ -105,6 +142,19 @@ export const parseAcceptedMatchDispatch = (
       throw new DispatchProtocolError('invalid participant')
     }
     const player = raw.player
+    const registeredBot =
+      player.registeredBot === undefined
+        ? undefined
+        : parseRegisteredBot(player.registeredBot)
+    const isBot =
+      player.address === BOT_PLACEHOLDER || registeredBot !== undefined
+    if (
+      registeredBot &&
+      (player.address === BOT_PLACEHOLDER ||
+        registeredBot.principal !== player.address)
+    ) {
+      throw new DispatchProtocolError('registered bot identity mismatch')
+    }
     const playerSessionId = normalizeGoogleUUID(player.playerSessionId)
     if (
       !/^0x[0-9a-f]{40}$/.test(String(player.address ?? '')) ||
@@ -118,7 +168,7 @@ export const parseAcceptedMatchDispatch = (
       throw new DispatchProtocolError('invalid matchmaker player')
     }
     if (
-      player.address === BOT_PLACEHOLDER
+      isBot
         ? player.playerSessionId !== ''
         : !playerSessionId
     ) {
@@ -131,13 +181,29 @@ export const parseAcceptedMatchDispatch = (
       playerSessionId: playerSessionId ?? '',
       clientVersionHash: player.clientVersionHash as string
     }
-    if (player.address === BOT_PLACEHOLDER) {
+    if (isBot) {
       if (raw.request !== undefined || raw.identity !== undefined) {
         throw new DispatchProtocolError(
           'bot participant contains human identity'
         )
       }
-      return { player: normalizedPlayer }
+      if (
+        registeredBot &&
+        (!policy.enableRankedBots ||
+          ![
+            GameMode.PRACTICE_PVP,
+            GameMode.RANKED_CONSTRUCTED,
+            GameMode.RANKED_DISCOVERY
+          ].includes(player.mode as GameMode))
+      ) {
+        throw new DispatchProtocolError(
+          'registered bots are disabled for this game mode'
+        )
+      }
+      return {
+        player: normalizedPlayer,
+        ...(registeredBot ? { registeredBot } : {})
+      }
     }
     if (!record(raw.request) || !record(raw.identity)) {
       throw new DispatchProtocolError(
@@ -183,12 +249,13 @@ export const parseAcceptedMatchDispatch = (
   ) {
     throw new DispatchProtocolError('participants use incompatible game modes')
   }
-  const botParticipant = participants.find(
-    participant => participant.player.address === BOT_PLACEHOLDER
-  )
+  const isBotParticipant = (participant: AcceptedMatchParticipant) =>
+    participant.player.address === BOT_PLACEHOLDER ||
+    participant.registeredBot !== undefined
+  const botParticipant = participants.find(isBotParticipant)
   if (botParticipant) {
     const humanParticipant = participants.find(
-      participant => participant.player.address !== BOT_PLACEHOLDER
+      participant => !isBotParticipant(participant)
     )
     const alwaysBotModes = new Set<GameMode>([
       GameMode.PRACTICE_BOT,
@@ -236,17 +303,10 @@ export const parseAcceptedMatchDispatch = (
   ) {
     throw new DispatchProtocolError('challenge session is required')
   }
-  if (
-    participants[0].player.address !== BOT_PLACEHOLDER &&
-    participants[0].player.address === participants[1].player.address
-  ) {
+  if (participants[0].player.address === participants[1].player.address) {
     throw new DispatchProtocolError('duplicate participant')
   }
-  if (
-    participants.every(
-      participant => participant.player.address === BOT_PLACEHOLDER
-    )
-  ) {
+  if (participants.every(isBotParticipant)) {
     throw new DispatchProtocolError('bot-only matches are not supported')
   }
 

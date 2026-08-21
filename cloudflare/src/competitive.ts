@@ -800,9 +800,10 @@ const matchPlayer = (
   ) {
     throw new Error('authoritative match deck is incomplete')
   }
+  const registeredBot = userId?.startsWith('system:bot:') === true
   return {
     id: Number.isSafeInteger(account.id) ? account.id! : 0,
-    address: userId
+    address: userId && !registeredBot
       ? identityReferenceFor(userId)
       : typeof account.address === 'string'
         ? account.address
@@ -1550,9 +1551,10 @@ export class CompetitiveRepository {
     if (userIds.length === 0) return false
     const system = await this.database
       .prepare(
-        `SELECT 1 FROM users
-         WHERE user_kind = 'SYSTEM'
-           AND id IN (${userIds.map(() => '?').join(',')})
+        `SELECT 1 FROM users account
+         LEFT JOIN registered_matchmaker_bots bot ON bot.user_id = account.id
+         WHERE account.user_kind = 'SYSTEM' AND bot.user_id IS NULL
+           AND account.id IN (${userIds.map(() => '?').join(',')})
          LIMIT 1`
       )
       .bind(...userIds)

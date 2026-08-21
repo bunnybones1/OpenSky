@@ -195,6 +195,48 @@ export default defineConfig({
                 }
               })
             }
+            if (url.pathname === '/internal/matchmaker/registered-bot') {
+              if (
+                request.method !== 'POST' ||
+                request.headers.get('x-cloud-weasel-internal-auth') !==
+                  'matchmaker-test-secret'
+              ) {
+                return new Response('invalid registered bot request', {
+                  status: 400
+                })
+              }
+              const body = (await request.json()) as {
+                userId?: unknown
+                principal?: unknown
+                mode?: unknown
+                score?: unknown
+                rank?: unknown
+              }
+              if (
+                typeof body.userId !== 'string' ||
+                typeof body.principal !== 'string' ||
+                typeof body.mode !== 'string' ||
+                !Number.isSafeInteger(body.score) ||
+                typeof body.rank !== 'string'
+              ) {
+                return new Response('invalid registered bot body', {
+                  status: 400
+                })
+              }
+              return Response.json({
+                bot: {
+                  userId: 'system:bot:0003',
+                  principal: '0x9999999999999999999999999999999999999999',
+                  name: 'darkwidow',
+                  score: 700,
+                  rank: 'APPRENTICE',
+                  deckClass: 'STR',
+                  prism: 'str',
+                  deckString: 'SWxSTR02registered-bot-fixture',
+                  cardIds: Array.from({ length: 30 }, (_, index) => index + 1)
+                }
+              })
+            }
             if (
               request.method !== 'POST' ||
               !request.headers.get('idempotency-key') ||

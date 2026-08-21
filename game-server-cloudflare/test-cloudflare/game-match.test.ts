@@ -57,6 +57,7 @@ const internalHeaders = {
 }
 const USER_ID_1 = '11111111-1111-4111-8111-111111111111'
 const USER_ID_2 = '22222222-2222-4222-8222-222222222222'
+const REGISTERED_BOT_USER_ID = 'system:bot:0001'
 const SPECTATOR_USER_ID = '33333333-3333-4333-8333-333333333333'
 const PRIVATE_SPECTATOR_USER_ID = '44444444-4444-4444-8444-444444444444'
 const SPECTATOR_PRINCIPAL = '0x3333333333333333333333333333333333333333'
@@ -1389,6 +1390,69 @@ describe('Cloudflare authoritative game Match Durable Object', () => {
         .bind(USER_ID_2)
         .first()
     ).toEqual({ win_count: 0, loss_count: 1 })
+  })
+
+  it('persists registered bot ranked stats without changing account isolation', async () => {
+    const processedAt = new Date().toISOString()
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES (?, 'Player One', 'one@example.com', ?, ?, 'PLAYER')`
+      ).bind(USER_ID_1, processedAt, processedAt),
+      env.AUTH_DB.prepare(
+        `INSERT INTO users
+           (id, display_name, primary_email, created_at, updated_at, user_kind)
+         VALUES (?, 'BlazeHunter', 'bot-0001@cloud-weasel.invalid',
+                 ?, ?, 'SYSTEM')`
+      ).bind(REGISTERED_BOT_USER_ID, processedAt, processedAt),
+      ...[USER_ID_1, REGISTERED_BOT_USER_ID].map(userId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_account_stats
+             (user_id, game_mode, season, score, player_rank,
+              player_rank_stage, player_rank_state, created_at, updated_at)
+           VALUES (?, 'RANKED_CONSTRUCTED', 126, 100, 'WANDERER',
+                   'STAGE_II', '[1,1750,350,100]', ?, ?)`
+        ).bind(userId, processedAt, processedAt)
+      )
+    ])
+    await insertActiveLedgerRow(proposalId, [USER_ID_1, REGISTERED_BOT_USER_ID])
+
+    expect(
+      await applyMatchStats(
+        env.AUTH_DB,
+        proposalId,
+        126,
+        0,
+        MatchStatus.COMPLETED,
+        processedAt
+      )
+    ).toMatchObject({ applied: true })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT stats.user_id, stats.win_count, stats.loss_count,
+                  user.user_kind
+           FROM player_account_stats stats
+           JOIN users user ON user.id = stats.user_id
+           WHERE stats.game_mode = 'RANKED_CONSTRUCTED' AND stats.season = 126
+           ORDER BY stats.user_id`
+        ).all()
+      ).results
+    ).toEqual([
+      {
+        user_id: USER_ID_1,
+        win_count: 1,
+        loss_count: 0,
+        user_kind: 'PLAYER'
+      },
+      {
+        user_id: REGISTERED_BOT_USER_ID,
+        win_count: 0,
+        loss_count: 1,
+        user_kind: 'SYSTEM'
+      }
+    ])
   })
 
   it('tracks source loser abandon and forfeit counters exactly once', async () => {

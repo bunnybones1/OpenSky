@@ -43,15 +43,16 @@ import {
   type MatchRunnerSpec
 } from './match-cadence'
 import {
-  BOT_PLAYER_ADDRESS,
   createBotForPlayer,
   createBotPlayer,
   createPlayer,
+  createRegisteredBotForPlayer,
   isBot,
   isChallengeMatch,
   isConquestMatch,
   MatchmakerPlayer,
   prismsToDeckClass,
+  RegisteredBotSelection,
   Rarity
 } from './model'
 import { PenaltyTracker, readPenaltyConfig } from './penalties'
@@ -212,6 +213,7 @@ const deckClasses = new Set(Object.values(DeckClass))
 const heroes = new Set(Object.values(Hero))
 const conquestResults = new Set(Object.values(ConquestMatchResult))
 const rarities = new Set<Rarity>(['base', 'silver', 'gold'])
+const botPrisms = new Set(['str', 'hrt', 'agy', 'int', 'wis'])
 
 // frontend/client_connection.go resets this hard-coded read deadline before
 // every blocking websocket read. The preserved browser sends PING every three
@@ -907,6 +909,81 @@ export class MatchmakerPool implements DurableObject {
     }
   }
 
+  private async loadRegisteredBot(
+    player: MatchmakerPlayer,
+    byAddress: Map<string, StoredTicket>
+  ) {
+    if (!this.env.MATCH_SERVICE || !this.config.enableRankedBots) {
+      throw new Error('registered bots are disabled')
+    }
+    const ticket = byAddress.get(player.address)
+    if (!ticket) throw new Error('registered bot opponent ticket is missing')
+    let response: Response
+    try {
+      response = await this.env.MATCH_SERVICE.fetch(
+        new Request(
+          'https://cloud-weasel-match/internal/matchmaker/registered-bot',
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              [INTERNAL_AUTH_HEADER]: this.env.INTERNAL_AUTH_SECRET
+            },
+            body: JSON.stringify({
+              userId: ticket.identity.userId,
+              principal: player.address,
+              mode: player.mode,
+              score: player.score,
+              rank: player.rank
+            })
+          }
+        )
+      )
+    } catch {
+      throw new Error('registered bot selection failed')
+    }
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      throw new Error('registered bot selection returned invalid JSON')
+    }
+    if (!response.ok || !isRecord(body) || !isRecord(body.bot)) {
+      throw new Error('registered bot selection failed')
+    }
+    const bot = body.bot
+    if (
+      typeof bot.userId !== 'string' ||
+      !/^system:bot:[0-9]{4}$/.test(bot.userId) ||
+      typeof bot.principal !== 'string' ||
+      !/^0x[0-9a-f]{40}$/.test(bot.principal) ||
+      typeof bot.name !== 'string' ||
+      bot.name.length < 1 ||
+      bot.name.length > 64 ||
+      !Number.isSafeInteger(bot.score) ||
+      Math.abs(bot.score as number) > 2_147_483_647 ||
+      !playerRanks.has(bot.rank as PlayerRank) ||
+      !deckClasses.has(bot.deckClass as DeckClass) ||
+      bot.deckClass === DeckClass.UNKNOWN_CLASS ||
+      typeof bot.prism !== 'string' ||
+      !botPrisms.has(bot.prism) ||
+      typeof bot.deckString !== 'string' ||
+      bot.deckString.length < 8 ||
+      bot.deckString.length > 2_048 ||
+      !Array.isArray(bot.cardIds) ||
+      ![0, 30].includes(bot.cardIds.length) ||
+      bot.cardIds.some(
+        card => !Number.isSafeInteger(card) || (card as number) <= 0
+      )
+    ) {
+      throw new Error('registered bot selection is invalid')
+    }
+    return createRegisteredBotForPlayer(
+      player,
+      bot as unknown as RegisteredBotSelection
+    )
+  }
+
   private async acceptMatch(principal: string) {
     const pendingProposal = await this.pendingProposalReference(principal)
     if (!pendingProposal) {
@@ -1288,8 +1365,8 @@ export class MatchmakerPool implements DurableObject {
       ],
       () => now
     )
-    const proposals = processCombinations(combinations, {
-      createRegistered: player => createBotForPlayer(player)
+    const proposals = await processCombinations(combinations, {
+      createRegistered: player => this.loadRegisteredBot(player, byAddress)
     })
     for (const proposal of proposals) {
       await this.createProposal(proposal.players, byAddress, now)
@@ -1407,10 +1484,14 @@ export class MatchmakerPool implements DurableObject {
       if (
         proposal.status === 'FOUND' &&
         proposal.botAcceptAtMs !== undefined &&
-        proposal.botAcceptAtMs <= now &&
-        !proposal.accepted.includes(BOT_PLAYER_ADDRESS)
+        proposal.botAcceptAtMs <= now
       ) {
-        await this.recordAcceptance(proposal, BOT_PLAYER_ADDRESS)
+        const bot = proposal.participants.find(participant =>
+          isBot(deserializePlayer(participant.player))
+        )
+        if (bot && !proposal.accepted.includes(bot.player.address)) {
+          await this.recordAcceptance(proposal, bot.player.address)
+        }
       }
       if (proposal.status === 'FOUND' && proposal.expiresAtMs <= now) {
         await this.expireProposal(proposal)

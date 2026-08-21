@@ -66,3 +66,15 @@ test('rejects a chain effect beside an off-chain reward mutation', () => {
     )
   )
 })
+
+test('requires registered bot progression writes to remain system-only', () => {
+  const input = reviewedInput()
+  input.evidenceSources['match-service-cloudflare/src/registered-bot.ts'] =
+    input.evidenceSources['match-service-cloudflare/src/registered-bot.ts']
+      .replace("VALUES (?, ?, ?, NULL, ?, ?, 'SYSTEM')", '')
+  assert.ok(
+    rewardMutatorAuditErrors(input).some(error =>
+      error.includes('deterministic-system-bot-bootstrap')
+    )
+  )
+})

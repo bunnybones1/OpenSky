@@ -170,15 +170,17 @@ export class MatchProposal {
 }
 
 export interface BotFactory {
-  createRegistered(player: MatchmakerPlayer): MatchmakerPlayer
+  createRegistered(
+    player: MatchmakerPlayer
+  ): MatchmakerPlayer | Promise<MatchmakerPlayer>
 }
 
-export const processCombinations = (
+export const processCombinations = async (
   combinations: PlayerCombinationMap,
   botFactory: BotFactory,
   idGenerator: () => string = () => crypto.randomUUID(),
   qualitySorter = sortByMatchQuality
-): MatchProposal[] => {
+): Promise<MatchProposal[]> => {
   const proposals: MatchProposal[] = []
   for (;;) {
     const matchedPlayers = combinations.players()
@@ -193,7 +195,7 @@ export const processCombinations = (
       combinations.remove(player2)
       if (isBot(player2)) {
         try {
-          player2 = botFactory.createRegistered(player1)
+          player2 = await botFactory.createRegistered(player1)
         } catch {
           continue
         }

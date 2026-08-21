@@ -122,6 +122,19 @@ test('requires generated wire and browser lifecycle gates in the complete build'
       scripts: {
         ...rootPackage.scripts,
         'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
+          'pnpm check:cloudflare:registered-bots && ',
+          ''
+        )
+      }
+    })[0],
+    /registered ranked\/PvP bot/
+  )
+  assert.match(
+    cloudflareBuildScriptErrors({
+      ...rootPackage,
+      scripts: {
+        ...rootPackage.scripts,
+        'build:cloudflare': rootPackage.scripts['build:cloudflare'].replace(
           'pnpm check:cloudflare:matchmaker-relaxation && ',
           ''
         )
