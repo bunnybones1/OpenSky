@@ -10,6 +10,8 @@ const fixtures = async () => {
     sourceAcceptHandler,
     sourceDeclineHandler,
     sourcePendingMatchValidator,
+    sourceIPAddressValidator,
+    sourceApp,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -37,6 +39,11 @@ const fixtures = async () => {
       'matchmaker/lib/frontend/findmatch/validators/pending_match.go',
       'utf8'
     ),
+    readFile(
+      'matchmaker/lib/frontend/findmatch/validators/ip_address.go',
+      'utf8'
+    ),
+    readFile('matchmaker/app.go', 'utf8'),
     readFile(
       'matchmaker/lib/matchmaker/custommatchmaker/frontend_service.go',
       'utf8'
@@ -74,6 +81,8 @@ const fixtures = async () => {
     sourceAcceptHandler,
     sourceDeclineHandler,
     sourcePendingMatchValidator,
+    sourceIPAddressValidator,
+    sourceApp,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -102,6 +111,8 @@ const errorsFor = value =>
     value.sourceAcceptHandler,
     value.sourceDeclineHandler,
     value.sourcePendingMatchValidator,
+    value.sourceIPAddressValidator,
+    value.sourceApp,
     value.sourceFrontendService,
     value.sourceAcceptTimeouter,
     value.sourceDecliner,
@@ -163,6 +174,34 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       sourcePendingMatchValidator: value.sourcePendingMatchValidator.replace(
         'if has {',
         'if v.pendingMatchChecker.Load(client.Player().Address()) != nil {'
+      )
+    },
+    {
+      ...value,
+      sourceIPAddressValidator: value.sourceIPAddressValidator.replace(
+        'if v.allowSameIPMatch {',
+        'if false {'
+      )
+    },
+    {
+      ...value,
+      sourceIPAddressValidator: value.sourceIPAddressValidator.replace(
+        'if len(client.Player().IPAddress) == 0 {',
+        'if len(client.Player().IPAddress) > 0 {'
+      )
+    },
+    {
+      ...value,
+      sourceApp: value.sourceApp.replace(
+        'validators.NewIPAddressValidatorValidator(cfg),',
+        'validators.NewDeckValidator(openskyAPI),'
+      )
+    },
+    {
+      ...value,
+      sourceHandler: value.sourceHandler.replace(
+        'if !isValid {\n\t\t\treturn nil',
+        'if !isValid {\n\t\t\tcontinue'
       )
     },
     {
@@ -573,6 +612,20 @@ test('rejects weakened source, Worker, browser, and release requirements', async
     {
       ...value,
       worker: value.worker.replace(
+        'attachment.clientIp.length === 0',
+        'attachment.clientIp.length > 0'
+      )
+    },
+    {
+      ...value,
+      workerWrangler: value.workerWrangler.replace(
+        '"ALLOW_SAME_IP_MATCH": "false"',
+        '"ALLOW_SAME_IP_MATCH": "true"'
+      )
+    },
+    {
+      ...value,
+      worker: value.worker.replace(
         "case 'accept_match':\n          if (attachment.subscribed === false) {",
         "case 'accept_match':\n          if (false) {"
       )
@@ -824,6 +877,13 @@ test('rejects weakened source, Worker, browser, and release requirements', async
       workerRuntimeTest: value.workerRuntimeTest.replace(
         'removes an orphaned queue ticket before source matching',
         'keeps an orphaned queue ticket forever'
+      )
+    },
+    {
+      ...value,
+      workerRuntimeTest: value.workerRuntimeTest.replace(
+        'silently rejects a missing client IP before captcha and profile hydration',
+        'hydrates a player with no client IP'
       )
     },
     {

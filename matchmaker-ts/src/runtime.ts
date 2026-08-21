@@ -493,6 +493,13 @@ export class MatchmakerPool implements DurableObject {
       throw new ProtocolError('OUTDATED_CLIENT', 'OUTDATED_CLIENT')
     }
 
+    // Source oracle: frontend/findmatch/validators/ip_address.go runs directly
+    // after version validation. When same-IP matching is disabled, an empty
+    // address is a silent validation miss: do not hydrate, queue, or establish
+    // the player channel, and let the normal authentication deadline remain.
+    if (!this.config.allowSameIpMatch && attachment.clientIp.length === 0)
+      return
+
     command = normalizePrivateSeedForIdentity(command, attachment.principal)
     validateGameModeDataConsistency(command)
 

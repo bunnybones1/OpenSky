@@ -453,6 +453,37 @@ describe('Cloudflare matchmaker Worker', () => {
     )
   })
 
+  it('silently rejects a missing client IP before captcha and profile hydration', async () => {
+    const missingIpPool = isolatedPool('missing-client-ip')
+    const [player] = track(
+      await connectDirectlyToPool(missingIpPool, PRINCIPAL_3, '')
+    )
+
+    // PRINCIPAL_3 has an active match in the profile fixture. Reaching profile
+    // hydration would therefore emit match_made and match_ready_to_start.
+    player.send(JSON.stringify(findCommand(GameMode.PRACTICE_BOT)))
+    await expectNoMessage(player)
+
+    const status = await missingIpPool.fetch(
+      'https://pool.example/internal/status',
+      { headers: { [INTERNAL_AUTH_HEADER]: 'matchmaker-test-secret' } }
+    )
+    expect(await status.json()).toMatchObject({
+      queuedPlayers: 0,
+      activeProposals: 0,
+      connectedSockets: 1
+    })
+    await runInDurableObject(missingIpPool, async (_instance, state) => {
+      const sockets = state.getWebSockets(PRINCIPAL_3)
+      expect(sockets).toHaveLength(1)
+      expect(sockets[0]?.deserializeAttachment()).toMatchObject({
+        clientIp: '',
+        subscribed: false
+      })
+      expect(await state.storage.get(`ticket:${PRINCIPAL_3}`)).toBeUndefined()
+    })
+  })
+
   it('sends the source generic error and closes when find-match handling fails', async () => {
     const [player] = track(await connect(PRINCIPAL_1, '192.0.2.1'))
     const error = nextMessage(player)

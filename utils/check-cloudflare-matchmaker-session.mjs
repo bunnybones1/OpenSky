@@ -31,6 +31,8 @@ export const matchmakerSessionErrors = (
   sourceAcceptHandler,
   sourceDeclineHandler,
   sourcePendingMatchValidator,
+  sourceIPAddressValidator,
+  sourceApp,
   sourceFrontendService,
   sourceAcceptTimeouter,
   sourceDecliner,
@@ -110,6 +112,42 @@ export const matchmakerSessionErrors = (
   if (sourcePendingMatch.includes('.Load(')) {
     errors.push('Source pending-match validator now depends on proposal state')
   }
+
+  const sourceIPAddress = sourceIPAddressValidator
+  requireOrdered(
+    errors,
+    'Source empty-IP admission validator',
+    sourceIPAddress,
+    [
+      'if v.allowSameIPMatch {',
+      'return true, nil',
+      'if len(client.Player().IPAddress) == 0 {',
+      'return false, nil',
+      'return true, nil'
+    ]
+  )
+  const sourceFindSetup = bodyBetween(
+    sourceApp,
+    'findMatchHandler := findmatch.NewHandler(',
+    'websocketHandler := frontend.NewWebsocketHandler('
+  )
+  requireOrdered(errors, 'Source find-match admission order', sourceFindSetup, [
+    'validators.NewVersionValidator(cfg)',
+    'validators.NewIPAddressValidatorValidator(cfg)',
+    'validators.NewAuthValidator(cfg)',
+    'validators.NewCaptchaValidator('
+  ])
+  const sourceValidationLoop = bodyBetween(
+    sourceHandle,
+    'for i := 0; i < len(h.validators); i++ {',
+    'h.mu.Lock()'
+  )
+  requireOrdered(
+    errors,
+    'Source silent validator rejection',
+    sourceValidationLoop,
+    ['if !isValid {', 'return nil']
+  )
 
   const sourceAcceptMatch = bodyBetween(
     sourceFrontendService,
@@ -597,6 +635,9 @@ export const matchmakerSessionErrors = (
   requireOrdered(errors, 'Worker find-match channel lifecycle', workerFind, [
     'if (attachment.subscribed) return',
     'command.versionHash !== this.config.expectedReleaseVersion',
+    '!this.config.allowSameIpMatch &&',
+    'attachment.clientIp.length === 0',
+    'return',
     'normalizePrivateSeedForIdentity(',
     'validateGameModeDataConsistency(command)',
     'this.captcha.validate(',
@@ -609,6 +650,16 @@ export const matchmakerSessionErrors = (
     'webSocket.serializeAttachment(attachment)',
     'this.state.storage.put(ticketKey(attachment.principal), ticket)'
   ])
+  for (const [label, wrangler] of [
+    ['production', workerWrangler],
+    ['test', workerTestWrangler]
+  ]) {
+    if (!/^\s*"ALLOW_SAME_IP_MATCH":\s*"false",?\s*$/m.test(wrangler)) {
+      errors.push(
+        `Worker ${label} configuration no longer activates the source empty-IP validator`
+      )
+    }
+  }
   requireOrdered(
     errors,
     'Worker independent pending-match validation',
@@ -1001,6 +1052,30 @@ export const matchmakerSessionErrors = (
     "it('sends the source generic error and closes when find-match handling fails'",
     "it('rejects a chosen deck from discovery before queueing'"
   )
+  const missingIPAddressTest = bodyBetween(
+    workerRuntimeTest,
+    "it('silently rejects a missing client IP before captcha and profile hydration'",
+    "it('sends the source generic error and closes when find-match handling fails'"
+  )
+  requireOrdered(
+    errors,
+    'Worker empty-IP admission regression',
+    missingIPAddressTest,
+    [
+      "isolatedPool('missing-client-ip')",
+      "connectDirectlyToPool(missingIpPool, PRINCIPAL_3, '')",
+      'findCommand(GameMode.PRACTICE_BOT)',
+      'await expectNoMessage(player)',
+      'queuedPlayers: 0',
+      'activeProposals: 0',
+      'connectedSockets: 1',
+      'state.getWebSockets(PRINCIPAL_3)',
+      "clientIp: ''",
+      'subscribed: false',
+      'state.storage.get(`ticket:${PRINCIPAL_3}`)',
+      'toBeUndefined()'
+    ]
+  )
   requireOrdered(
     errors,
     'Worker fatal find-match regression',
@@ -1303,6 +1378,8 @@ const main = async () => {
     sourceAcceptHandler,
     sourceDeclineHandler,
     sourcePendingMatchValidator,
+    sourceIPAddressValidator,
+    sourceApp,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -1342,6 +1419,14 @@ const main = async () => {
       ),
       'utf8'
     ),
+    readFile(
+      path.join(
+        root,
+        'matchmaker/lib/frontend/findmatch/validators/ip_address.go'
+      ),
+      'utf8'
+    ),
+    readFile(path.join(root, 'matchmaker/app.go'), 'utf8'),
     readFile(
       path.join(
         root,
@@ -1418,6 +1503,8 @@ const main = async () => {
     sourceAcceptHandler,
     sourceDeclineHandler,
     sourcePendingMatchValidator,
+    sourceIPAddressValidator,
+    sourceApp,
     sourceFrontendService,
     sourceAcceptTimeouter,
     sourceDecliner,
@@ -1443,7 +1530,7 @@ const main = async () => {
     process.exitCode = 1
   } else {
     console.log(
-      'Cloudflare matchmaker session lifecycle matches the source subscriber, orphaned-queue, command-error, independent pending-match, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
+      'Cloudflare matchmaker session lifecycle matches the source subscriber, empty-IP admission, orphaned-queue, command-error, independent pending-match, expired-accept, status-independent decline, authentication-timeout, and read-timeout contracts'
     )
   }
 }
