@@ -15,26 +15,28 @@ uncommitted source-style Conquest `0121` attempt lifecycle was discarded;
 migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. The latest exact-head
-release and draft-PR CI passed at `43ae47d8` in GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32533363968>; complete
-release validation and exact-head PR CI for the delayed-Gold milestone remain
-outstanding. A
+release and draft-PR CI passed at `d7f8e12f` in GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>; complete
+release validation and exact-head PR CI for the newer external-push milestone
+remain outstanding. A
 distinct, minimal `0121_conquest_v2_workflow_handoffs.sql` protects the
 Conquest Workflow/Queue boundary, and `0122_leaderboard_reward_workflow_handoffs.sql`
 protects the equivalent leaderboard business responsibility. Neither
 recreates the discarded attempt runner. Migration
 `0123_conquest_gold_queue_delivery.sql` protects the delayed-Gold Queue/D1
-boundary without a copied attempt runner. The production mutation pause
-remains in force.
+boundary without a copied attempt runner, and
+`0124_push_notification_queue_delivery.sql` replaces direct cron/provider
+sends and the five-attempt terminal state with a D1 outbox plus Queue. The
+production mutation pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `4816f37a`
-  (`Drive readiness through Gold Queue consumer`)
-- Latest tested runtime commit: `339d7f9d`
-  (`Scope pending Gold reads to wire authority`)
+- Last code/test checkpoint: `e8f552c4`
+  (`Deliver external push notifications through Queues`)
+- Latest tested runtime commit: `e8f552c4`
+  (`Deliver external push notifications through Queues`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -43,12 +45,12 @@ remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `339d7f9d` are committed and
+- The runtime changes from `38386294` through `e8f552c4` are committed and
   tested but are **not deployed**. The prior complete release and exact-head
-  draft-PR CI passed at `43ae47d8`. It produced web entry
+  draft-PR CI passed at `d7f8e12f`. It produced web entry
   `/assets/index-fd3d9163.js`, game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact. A
-  complete build and exact-head PR CI of the current delayed-Gold head remain
+  complete build and exact-head PR CI of the current external-push head remain
   required.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
@@ -58,8 +60,9 @@ remains in force.
   `0120_grandweaver_task_attempts.sql`, plus
   `0121_conquest_v2_workflow_handoffs.sql`, plus
   `0122_leaderboard_reward_workflow_handoffs.sql`, plus
-  `0123_conquest_gold_queue_delivery.sql`, are committed but have **not** been
-  applied to production. No Worker from `90ebe652` or later may be
+  `0123_conquest_gold_queue_delivery.sql`, plus
+  `0124_push_notification_queue_delivery.sql`, are committed but have **not**
+  been applied to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
   may be deployed until `0118` exists. No Worker from `36498a51` or later may
@@ -70,7 +73,9 @@ remains in force.
   exist. No Worker from `e555f930` or later may be deployed until `0122` and
   the exact reviewed leaderboard Workflow/Queue/DLQ topology also exist.
   No Worker from `e4ec21f5` or later may be deployed until `0123` and the exact
-  reviewed delayed-Gold Queue producer/consumer/DLQ topology also exist. Apply
+  reviewed delayed-Gold Queue producer/consumer/DLQ topology also exist. No
+  Worker from `e8f552c4` or later may be deployed until `0124` and the exact
+  reviewed external-push Queue producer/consumer/DLQ topology also exist. Apply
   the migrations in order while match allocation is quiescent as described
   below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
@@ -109,6 +114,13 @@ The delayed Conquest Gold Queue/D1 boundary selected in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md)
 is implemented at `e4ec21f5`. Its Queue, DLQ, bindings, and migration `0123`
 also remain unprovisioned, unapplied, undeployed, and dormant.
+
+The external push Queue/D1 boundary selected in
+[`CLOUDFLARE_PUSH_NOTIFICATION_DELIVERY.md`](./CLOUDFLARE_PUSH_NOTIFICATION_DELIVERY.md)
+is implemented at `e8f552c4`. Its Queue, DLQ, binding, and migration `0124`
+also remain unprovisioned, unapplied, undeployed, and dormant. The optional
+OneSignal credentials remain independent of Google login, WalletConnect, and
+authoritative in-app reward publication.
 
 Follow-up `339d7f9d` removes unused `card_ids_json` authority from the
 player-facing pending-card query and scopes that wire gate to the exact
@@ -238,6 +250,33 @@ chain through `0123` plus the exact production schema query. A complete release
 and exact-head PR CI remain required for the current documentation head. No
 remote preflight, Queue or DLQ provisioning, migration, deployment, activation,
 or live drill was performed.
+
+## External push Queue milestone
+
+Commit `e8f552c4` replaces direct cron-owned OneSignal calls with a
+Cloudflare-native Queue/D1 outbox while preserving the source-visible alert:
+
+- Leaderboard and Conquest V2 reward application still publish inventory,
+  feed, award receipt, and the authoritative in-app notification atomically;
+- after that commit, reward consumers may publish only `{kind, version,
+notificationId}` and isolate any Queue failure from reward acknowledgement;
+- due-only cron discovery closes the D1-to-Queue gap and rotates across stale
+  pending receipts in Cloudflare's 100-message transport pages;
+- the consumer re-reads Google identity, type, exact text, validity window,
+  enablement, and stable provider idempotency key from D1;
+- duplicate, reordered, ambiguous-success, poison, disabled, expired, and
+  tampered messages preserve the reviewed outcomes; six provider failures stay
+  pending and a later recovery sends once; and
+- migration `0124` preserves every successful `0067` provider receipt, reopens
+  old pending/`DEAD` rows, removes attempt-shaped authority, and appends
+  immutable per-message failure evidence.
+
+Validation passes the focused Queue suite 7/7, mutation and representative
+schema migration gate 4/4, production preflight suite 12/12, all 85 main
+Worker files and 538 tests, and a fresh isolated D1 chain plus exact schema
+query through `0124`. No remote preflight, Queue/DLQ provisioning, migration,
+credential change, deployment, or production mutation was performed. A full
+exact-head release and draft-PR CI remain required.
 
 ## Multiplayer XP publication milestone
 
@@ -2475,7 +2514,7 @@ production gate after any later commit.
    retention policy is approved; do not invent successful-object expiry. Decide
    the separate private client-feedback retention policy before storing feedback.
 4. Complete the quiescent migration `0115` transition, then apply `0116`,
-   `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, and `0123` in order while
+   `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and `0124` in order while
    allocations remain stopped; provision the exact reviewed dormant reward
    Workflows, Queues, and DLQs; and then deploy/verify the exact tested game
    server without analytics producer bindings, as described under Production
@@ -2487,7 +2526,8 @@ production gate after any later commit.
    plus the reviewed Conquest Workflow/Queue/DLQ topology, and the main Worker
    from `e555f930` assumes `0122` plus the reviewed leaderboard
    Workflow/Queue/DLQ topology. The game and main Workers from `e4ec21f5`
-   assume `0123` plus the reviewed delayed-Gold Queue producer/consumer/DLQ
+   assume `0123` plus the reviewed delayed-Gold Queue topology, and the main
+   Worker from `e8f552c4` assumes `0124` plus the reviewed external-push Queue
    topology. No current deploy command may run against an older database or
    incomplete topology.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
@@ -2534,15 +2574,17 @@ production migration state. Migrations
 `0120_grandweaver_task_attempts.sql`, and
 `0121_conquest_v2_workflow_handoffs.sql`, and
 `0122_leaderboard_reward_workflow_handoffs.sql`, and
-`0123_conquest_gold_queue_delivery.sql` are not: apply `0115` first at
-its quiescent game-server boundary, then `0116` through `0123` before deploying
+`0123_conquest_gold_queue_delivery.sql` and
+`0124_push_notification_queue_delivery.sql` are not: apply `0115` first at
+its quiescent game-server boundary, then `0116` through `0124` before deploying
 the current Workers. Keep both ranked-bot flags false and both reward schedules
 disabled throughout that baseline rollout. Every checked-in deploy command now
 performs the read-only schema preflight and refuses to spawn Wrangler unless
 the prior invariants, corrected `0119`/`0120` responsibility contracts,
-`0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards, both exact
+`0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards, the `0124`
+external-push outbox guards, both exact
 reviewed Workflow/Queue/DLQ topologies, and the exact delayed-Gold
-producer/consumer/DLQ topology are present.
+and external-push producer/consumer/DLQ topologies are present.
 
 ## Other outstanding work
 
@@ -2550,7 +2592,7 @@ producer/consumer/DLQ topology are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `e4ec21f5` only after a
+- Deploy and verify the tested runtime changes through `e8f552c4` only after a
   later documentation head passes the full release contract and exact-head PR
   CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.
@@ -2561,8 +2603,8 @@ producer/consumer/DLQ topology are present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`
-  through `0123`; provision the exact dormant reward topologies, deploy the
-  exact tested game-server runtime immediately,
+  through `0124`; provision the exact dormant reward and external-push
+  topologies, deploy the exact tested game-server runtime immediately,
   verify protocol health, and only then restore the previously enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
@@ -2622,19 +2664,19 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116` through `0123`, deployment, and activation remain
+  but migrations `0116` through `0124`, deployment, and activation remain
   paused;
 - every production deploy command now fails closed until the remote D1 proves
-  the `0115` through `0123` invariants and exact reviewed reward topologies;
+  the `0115` through `0124` invariants and exact reviewed reward/push topologies;
   the migration command remains the only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;
 - Conquest was implemented but intentionally gated, not an unported service.
 
-The separately queued PromoteGrandmasters retry/failure and delayed Conquest
-Gold audits are complete. No known dormant matchmaker, non-RPC route, or active
-source-worker disposition remains. The next safe local slice should come from
+The separately queued PromoteGrandmasters retry/failure, delayed Conquest Gold,
+and external-push audits are complete. No known dormant matchmaker, non-RPC
+route, or active source-worker disposition remains. The next safe local slice should come from
 a fresh effect/recovery audit of one remaining main-Worker responsibility or
 from original-interface player-flow evidence; the main known remaining work is
 controlled production provisioning, activation, and evidence—not a broad

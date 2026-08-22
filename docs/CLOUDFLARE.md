@@ -199,13 +199,13 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migrations through `0123`, including authoritative decks, registered
+requires migrations through `0124`, including authoritative decks, registered
 bots, atomic XP/account-stat publication, recoverable post-match
 responsibilities, Conquest and leaderboard Workflow/Queue handoff receipts,
-and delayed-Gold Queue effect guards. It refuses to spawn the deploy process on
-a missing, malformed, unsuccessful, duplicate, or unexpected result. The
-migration command is intentionally exempt so it can bring the schema forward
-before a deploy.
+delayed-Gold Queue effect guards, and external-push outbox/Queue guards. It
+refuses to spawn the deploy process on a missing, malformed, unsuccessful,
+duplicate, or unexpected result. The migration command is intentionally exempt
+so it can bring the schema forward before a deploy.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
@@ -1155,10 +1155,11 @@ and progress are not migrated.
   D1 inventory and never require a mint or reward-transfer transaction.
 - Optional OneSignal device push is ported as a projection of reward inbox
   notifications. Browser subscriptions are associated with the Google identity
-  ID rather than a wallet address; the scheduled sender uses stable provider
-  idempotency keys, five bounded attempts, and a dead-letter receipt. Missing or
-  partial configuration sends nothing, and provider failure can never roll back
-  a reward or suppress its authoritative in-app notification.
+  ID rather than a wallet address. Each D1 notification owns one stable
+  provider idempotency key; Queue/DLQ exhaustion leaves it pending and
+  re-drivable instead of imposing the source five-attempt ceiling. Missing or
+  partial configuration sends nothing, and provider failure can never roll
+  back a reward or suppress its authoritative in-app notification.
 - Seasonal invite-sticker redemption is ported to delayed D1 inventory with
   source thresholds, top-five friend attribution, and retry-safe receipts. It
   remains inactive until a versioned current-season sticker schedule is
@@ -3096,20 +3097,39 @@ player-facing pending-card query and scopes its mutation-tested wire gate to
 that exact projection. Queue delivery still re-reads the full entitlement only
 inside the independent consumer boundary.
 
+## Effect-faithful external push delivery — 2026-08-21
+
+Commit `e8f552c4` makes each eligible, authoritative reward inbox row the D1
+outbox for one narrow external-push Queue responsibility. Leaderboard and
+Conquest V2 reward consumers attempt the handoff only after their atomic D1
+publication and acknowledge the reward even if push publication fails. Due-only
+cron discovery closes that handoff gap without calling OneSignal directly.
+
+The Queue consumer trusts only the notification ID, then re-reads the Google
+identity, source text, validity, enablement, and stable provider idempotency key
+from D1. Duplicate or ambiguous delivery therefore converges on one provider
+result. Provider and transport failures append immutable evidence and remain
+re-drivable beyond Queue/DLQ exhaustion; they cannot change an in-app
+notification or reward. Migration `0124` preserves successful deployed `0067`
+receipts, reopens old pending/terminal failures, and removes the copied
+five-attempt business ceiling. The Queue, DLQ, binding, migration, runtime, and
+credentials remain local, unprovisioned, unapplied, and undeployed.
+
 ## Suggested next slice
 
-The Conquest, post-match, matchmaker-cadence, leaderboard, and delayed-Gold
-orchestration corrections are complete locally. Continue with one remaining
-main-Worker cron responsibility at a time, beginning each with an
-effect/recovery audit rather than a topology rewrite. No next responsibility
-has been selected yet.
+The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold, and
+external-push orchestration corrections are complete locally. Continue with
+one remaining main-Worker cron responsibility at a time, beginning each with
+an effect/recovery audit rather than a topology rewrite. No later
+responsibility has been selected yet.
 Player-facing parity remains separate and must continue using the original
 interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, and `0123` at the
-documented quiescent boundary, provision both exact reviewed reward
-Workflow/Queue/DLQ topologies plus the delayed-Gold Queue/DLQ, deploy the exact
+then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and
+`0124` at the documented quiescent boundary, provision both exact reviewed
+reward Workflow/Queue/DLQ topologies plus the delayed-Gold and external-push
+Queues/DLQs, deploy the exact
 tested Workers with both bot flags still false and both reward schedules
 disabled, and only consider a bounded ranked/PvP-bot soak after ordinary
 multiplayer and analytics paths are healthy. This remains unauthorized while

@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: architecture selected from observable effects. This decision does not
-authorize a migration, Queue or DLQ provisioning, credential changes,
-deployment, or any production mutation.
+Status: architecture selected from observable effects and implemented locally
+at `e8f552c4`. This milestone does not authorize migration `0124`, Queue or DLQ
+provisioning, credential changes, deployment, or any production mutation.
 
 ## Decision
 
@@ -141,6 +141,11 @@ mutation-tested release gate must prove:
 - exact production topology, fresh D1 migrations, full local release, and
   exact-head draft-PR CI pass.
 
-Even after all evidence passes, the Queue, DLQ, migration, credentials, and
-runtime remain unprovisioned and undeployed until the user explicitly
-authorizes production work.
+The focused Queue suite passes 7/7 tests, the mutation and representative
+deployed-schema migration gate passes 4/4, the production preflight suite
+passes 12/12, and the full main Worker passes 85 files and 538 tests. A fresh
+isolated D1 accepts every migration through `0124`, and the exact read-only
+production schema query returns every expected guard. The Queue, DLQ,
+migration, credentials, and runtime remain unprovisioned and undeployed until
+the user explicitly authorizes production work. Full exact-head release and
+draft-PR CI remain mandatory.

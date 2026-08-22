@@ -8,9 +8,9 @@ authorize runtime changes, migration, deployment, or feature activation.
 
 ## Scope and method
 
-The current `build:cloudflare` command requires 84 named
+The current `build:cloudflare` command requires 85 named
 `check:cloudflare:*` gates before assembling the webapp and browser game. This
-audit classifies every one of those 84 gates by the effect it should protect.
+audit classifies every one of those 85 gates by the effect it should protect.
 
 The classification asks four questions:
 
@@ -23,8 +23,8 @@ The classification asks four questions:
    fidelity or safety?
 
 The four groups below are disjoint and complete: 15 release/operational gates,
-42 client/player-contract gates, 23 runtime-effect gates, and four mixed gates
-tracked through effect-level conversion. The total is 84; no build gate is
+42 client/player-contract gates, 24 runtime-effect gates, and four mixed gates
+tracked through effect-level conversion. The total is 85; no build gate is
 omitted or counted twice.
 
 ## 1. Release and operational safety: keep
@@ -110,7 +110,7 @@ repository calls, or statement order are not.
 
 ## 3. Runtime effects and safety: keep, narrow where noted
 
-These 23 gates protect game/reward outcomes, authorization, mutation
+These 24 gates protect game/reward outcomes, authorization, mutation
 boundaries, or operational safety:
 
 - `float32`
@@ -127,6 +127,7 @@ boundaries, or operational safety:
 - `system-player-gate`
 - `conquest-operator`
 - `conquest-gold-gate`
+- `push-notification-gate`
 - `leaderboard-gate`
 - `referral-sticker-gate`
 - `offchain`
@@ -172,6 +173,10 @@ beyond the source ceiling, and guarded completion evidence. The new
 `conquest-gold-gate` added at `e4ec21f5` protects the exact delayed D1 effect,
 narrow Queue authority, atomic publication, moderation, and indefinite
 re-drive while rejecting direct cron grants and copied attempt ceilings.
+`push-notification-gate` added at `e8f552c4` protects the independent in-app
+notification outbox, narrow Queue authority, stable provider idempotency,
+validity and Google-identity targeting, indefinite D1 re-drive, and reward
+failure isolation while rejecting direct cron sends and terminal retry limits.
 
 ### `worker-runners`
 

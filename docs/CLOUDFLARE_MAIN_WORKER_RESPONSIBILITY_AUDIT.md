@@ -3,9 +3,9 @@
 Status date: 2026-08-21
 
 Status: leaderboard implemented locally at `e555f930`; delayed Conquest Gold
-implemented locally at `e4ec21f5`. This audit and milestone do not authorize
-provisioning, migration, activation, deployment, a live drill, or any
-production mutation.
+implemented locally at `e4ec21f5`; external push delivery implemented locally
+at `e8f552c4`. This audit and these milestones do not authorize provisioning,
+migration, activation, deployment, a live drill, or any production mutation.
 
 ## Decision
 
@@ -35,17 +35,17 @@ it does not need a Workflow or a copied task runner.
 even though the responsibilities have different authorities, timing, scale,
 and recovery needs.
 
-| Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                             |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `dispatchDueConquestGoldDeliveries`     | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Completed at `e4ec21f5`                                                                 |
-| `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress                      |
-| `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                                 |
-| `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                                 |
-| `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per season/cycle plus Queue per prepared user or award batch                   | Later reward slice                                                                      |
-| `runDueSkypassAutoClaims`               | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Later reward slice; remove copied ten-player/five-reward/five-attempt topology          |
-| `runPushNotifications`                  | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Boundary selected in `CLOUDFLARE_PUSH_NOTIFICATION_DELIVERY.md`; implementation pending |
-| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request                                                           | Later privacy slice; retain cancellation deadline and auditable partial recovery        |
-| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges         |
+| Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `dispatchDueConquestGoldDeliveries`     | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Completed at `e4ec21f5`                                                          |
+| `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress               |
+| `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                          |
+| `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                          |
+| `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per season/cycle plus Queue per prepared user or award batch                   | Later reward slice                                                               |
+| `runDueSkypassAutoClaims`               | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Later reward slice; remove copied ten-player/five-reward/five-attempt topology   |
+| `dispatchDuePushNotifications`          | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                                          |
+| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request                                                           | Later privacy slice; retain cancellation deadline and auditable partial recovery |
+| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges  |
 
 These boundaries are independent. Converting one does not authorize changing
 the others or weakening their existing fail-closed gates.
@@ -234,3 +234,15 @@ preflight tests, and a fresh migration/schema check through `0123`. The Queue,
 DLQ, binding, migration, and code remain unprovisioned and undeployed; a full
 exact-head release, exact-head PR CI, and explicit user authorization are still
 required.
+
+The external push runtime and migration `0124` are implemented locally at
+`e8f552c4`. Reward publication creates the authoritative in-app notification
+atomically; an immediate best-effort Queue handoff and due-only D1 re-drive are
+independent of that reward boundary. The consumer re-reads identity, type,
+content, validity, and the stable provider idempotency key from D1. Immutable
+failure observations replace the copied five-attempt terminal state. Focused
+validation passes 7/7 Queue tests, the mutation/migration gate passes 4/4, all
+85 main Worker files and 538 tests pass, and a fresh local migration/schema
+check passes through `0124`. The Queue, DLQ, binding, migration, and code remain
+unprovisioned and undeployed; full exact-head release, exact-head PR CI, and
+explicit user authorization remain mandatory.

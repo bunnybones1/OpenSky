@@ -7,8 +7,8 @@
 - Matchmaker Worker: `cloud-weasel-matchmaker` (`063eeb90-21e3-48e5-b877-57fea7ad57ef`)
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
-- Paused branch checkpoint: runtime hardening commit `339d7f9d` is tested but not
-  deployed. Migrations
+- Paused branch checkpoint: external-push runtime commit `e8f552c4` is tested
+  but not deployed. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
   `0117_match_experience_publication_state.sql`,
@@ -17,22 +17,24 @@
   `0120_grandweaver_task_attempts.sql`,
   `0121_conquest_v2_workflow_handoffs.sql`, and
   `0122_leaderboard_reward_workflow_handoffs.sql`, and
-  `0123_conquest_gold_queue_delivery.sql`, are intentionally not applied.
+  `0123_conquest_gold_queue_delivery.sql`, and
+  `0124_push_notification_queue_delivery.sql`, are intentionally not applied.
   Apply them in that order at the documented quiescent boundary before
   deploying the current Workers. The Conquest V2 and leaderboard Workflows,
-  their delivery Queues/DLQs, and the delayed-Gold Queue/DLQ are also not
-  provisioned. No Worker from `339d7f9d` or later may be deployed until all
-  nine migrations and all three exact reviewed topologies exist. Every
-  checked-in deploy command now
+  their delivery Queues/DLQs, the delayed-Gold Queue/DLQ, and the external-push
+  Queue/DLQ are also not provisioned. No Worker from `e8f552c4` or later may
+  be deployed until all ten migrations and all four exact reviewed Queue
+  topologies exist. Every checked-in deploy command now
   performs a fail-closed, account-pinned, read-only D1 schema preflight first;
   the migration command is intentionally exempt so it can advance the schema.
-  The delayed-Gold milestone passed 22 focused main-Worker tests, 25 focused
-  game-server Workers tests, all 536 main-Worker tests, all 43 game-server unit
-  and 136 Workers tests, TypeScript validation, mutation-tested Gold and
-  production-topology gates, and a fresh local application of every D1
-  migration through `0123` plus the exact production schema query. The latest
-  complete exact-head release and draft-PR CI passed at `43ae47d8` in GitHub
-  Actions run <https://github.com/bunnybones1/OpenSky/actions/runs/32533363968>.
+  The delayed-Gold milestone passed its 22 focused main-Worker and 25 focused
+  game-server Workers tests. The later external-push milestone passes 7/7
+  focused Queue tests, its 4/4 mutation/migration gate, 12/12 production
+  preflight tests, all 85 main-Worker files and 538 tests, and a fresh local
+  application of every D1 migration through `0124` plus the exact production
+  schema query. The latest
+  complete exact-head release and draft-PR CI passed at `d7f8e12f` in GitHub
+  Actions run <https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>.
   Complete release validation and exact-head CI for the current documentation
   head remain required.
   This checkpoint also preserves the source API and matchmaker `/ping`
