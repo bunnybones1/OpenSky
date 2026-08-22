@@ -255,6 +255,26 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
       'database.batch'
     ]
   },
+  'cloudflare/src/skypass-auto-claim.ts': {
+    count: 1,
+    disposition: 'receipt-backed-skypass-auto-claim-completion',
+    evidenceFiles: [
+      'cloudflare/migrations/0083_skypass_claim_fulfillment_receipts.sql',
+      'cloudflare/migrations/0125_skypass_season_close_workflow_handoffs.sql'
+    ],
+    evidence: [
+      'claimSkypassRewards',
+      'player_skypass_claims',
+      "application_status = 'APPLIED'",
+      'player_skypass_auto_claims',
+      'skypass_auto_claim_deliveries',
+      'autoclaimed = 1',
+      'SkyPass auto-claim receipt is invalid',
+      'SkyPass auto-claim notification is invalid',
+      'SkyPass auto-claimed flag transition is invalid',
+      'database.batch'
+    ]
+  },
   'cloudflare/src/skypass-support.ts': {
     count: 3,
     disposition: 'receipt-backed-skypass-support',
@@ -347,7 +367,7 @@ export const EXPECTED_REWARD_MUTATOR_FILES = {
     evidence: [
       'registered_matchmaker_bots',
       "VALUES (?, ?, ?, NULL, ?, ?, 'SYSTEM')",
-      'VALUES (?, ?, \'en\', 3, \'ACTIVE\', 0, ?, ?)',
+      "VALUES (?, ?, 'en', 3, 'ACTIVE', 0, ?, ?)",
       'INSERT OR IGNORE INTO player_profiles',
       'INSERT OR IGNORE INTO player_progression',
       'keeps Practice registered bots free of invented ranked stats',
@@ -414,17 +434,19 @@ export const rewardMutatorAuditErrors = ({ sources, evidenceSources }) => {
     }
   }
 
-  for (const [file, review] of Object.entries(
-    EXPECTED_REWARD_MUTATOR_FILES
-  )) {
+  for (const [file, review] of Object.entries(EXPECTED_REWARD_MUTATOR_FILES)) {
     if (!actual.some(([actualFile]) => actualFile === file)) {
-      errors.push(`reviewed TypeScript reward-mutator file disappeared: ${file}`)
+      errors.push(
+        `reviewed TypeScript reward-mutator file disappeared: ${file}`
+      )
       continue
     }
     const evidence = evidenceSources[file] ?? ''
     for (const token of review.evidence) {
       if (!evidence.includes(token)) {
-        errors.push(`${file} is missing ${review.disposition} evidence: ${token}`)
+        errors.push(
+          `${file} is missing ${review.disposition} evidence: ${token}`
+        )
       }
     }
   }
@@ -449,7 +471,10 @@ const isSourceTypeScript = file =>
   !file.endsWith('.d.ts')
 
 const main = async () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const root = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..'
+  )
   const sourceDirectories = [
     'cloudflare/src',
     'game-server-cloudflare/src',
@@ -457,7 +482,9 @@ const main = async () => {
   ]
   const files = (
     await Promise.all(
-      sourceDirectories.map(directory => sourceFiles(path.join(root, directory)))
+      sourceDirectories.map(directory =>
+        sourceFiles(path.join(root, directory))
+      )
     )
   )
     .flat()
@@ -503,6 +530,9 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main()
 }

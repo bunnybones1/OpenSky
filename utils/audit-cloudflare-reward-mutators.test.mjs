@@ -53,7 +53,9 @@ test('rejects a new mutator, changed count, and missing evidence', () => {
   const errors = rewardMutatorAuditErrors(input)
   assert.ok(errors.some(error => error.includes('unreviewed TypeScript')))
   assert.ok(errors.some(error => error.includes('reviewed count')))
-  assert.ok(errors.some(error => error.includes('deterministic-account-bootstrap')))
+  assert.ok(
+    errors.some(error => error.includes('deterministic-account-bootstrap'))
+  )
 })
 
 test('rejects a chain effect beside an off-chain reward mutation', () => {
@@ -70,11 +72,26 @@ test('rejects a chain effect beside an off-chain reward mutation', () => {
 test('requires registered bot progression writes to remain system-only', () => {
   const input = reviewedInput()
   input.evidenceSources['match-service-cloudflare/src/registered-bot.ts'] =
-    input.evidenceSources['match-service-cloudflare/src/registered-bot.ts']
-      .replace("VALUES (?, ?, ?, NULL, ?, ?, 'SYSTEM')", '')
+    input.evidenceSources[
+      'match-service-cloudflare/src/registered-bot.ts'
+    ].replace("VALUES (?, ?, ?, NULL, ?, ?, 'SYSTEM')", '')
   assert.ok(
     rewardMutatorAuditErrors(input).some(error =>
       error.includes('deterministic-system-bot-bootstrap')
+    )
+  )
+})
+
+test('requires SkyPass auto-claim completion to remain receipt-backed', () => {
+  const input = reviewedInput()
+  input.evidenceSources['cloudflare/src/skypass-auto-claim.ts'] =
+    input.evidenceSources['cloudflare/src/skypass-auto-claim.ts'].replace(
+      'SkyPass auto-claimed flag transition is invalid',
+      ''
+    )
+  assert.ok(
+    rewardMutatorAuditErrors(input).some(error =>
+      error.includes('receipt-backed-skypass-auto-claim-completion')
     )
   )
 })
