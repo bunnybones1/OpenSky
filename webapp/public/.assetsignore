@@ -1,0 +1,3 @@
+**/*.map
+stats.html
+.stats/**

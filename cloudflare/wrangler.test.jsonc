@@ -1,0 +1,46 @@
+{
+  "name": "opensky-cloudflare-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-15",
+  "version_metadata": {
+    "binding": "WORKER_VERSION"
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "opensky-auth-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CLIENT_FEEDBACK",
+      "bucket_name": "cloud-weasel-client-feedback-test"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
+        "queue": "cloud-weasel-conquest-gold-delivery-test"
+      },
+      {
+        "binding": "PUSH_NOTIFICATION_QUEUE",
+        "queue": "cloud-weasel-player-push-delivery-test"
+      },
+      {
+        "binding": "SKYPASS_AUTO_CLAIM_QUEUE",
+        "queue": "cloud-weasel-skypass-auto-claim-delivery-test"
+      },
+      {
+        "binding": "REFERRAL_STICKER_REWARD_QUEUE",
+        "queue": "cloud-weasel-referral-sticker-reward-delivery-test"
+      }
+    ]
+  },
+  "vars": {
+    "SEQUENCE_API_HOST": "https://api.sequence.app",
+    "ALLOWED_ORIGINS": "https://opensky.example"
+  }
+}

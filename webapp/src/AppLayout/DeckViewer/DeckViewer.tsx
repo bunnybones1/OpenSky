@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { ConfirmDeleteDeckDialog } from '~/shared/components/ConfirmDeleteDeckDialog'
 import { DeckCardsList } from '~/shared/components/DeckCardsList/DeckCardsList'
 import { DeckSettingsDialog } from '~/shared/components/DeckSettingsDialog/DeckSettingsDialog'
@@ -41,7 +42,7 @@ import {
 export const DeckViewer = memo(() => {
   const deckToView = useSelector(deckViewerDeckStringSelector)
   const uuid = useSelector(deckViewerIdSelector)
-  const { data: banners } = useBanners()
+  const { data: banners } = useBanners(env.AUTH_MODE !== 'google')
   const dispatch = useDispatch()
   const [isStatsListOpen, setIsStatsListOpen] = useState(false)
   const { isInQueue } = useIsInQueue()

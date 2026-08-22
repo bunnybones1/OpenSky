@@ -58,13 +58,18 @@
   "cardDetails": {
     "artist": "Artay Byay",
     "baseExplanation": "Onnay-adabletray, unlockeday byay evelinglay upay",
+    "baseExplanationOffchain": "Unlockeday roughthay Cloud Weasel ogressionpray anday oredstay inay ouryay inventoryay.",
     "baseNotTradable": "Asebay ardscay areyay otnay adabletray.",
     "enchantNotTradable": "Enchantay ardscay areyay otnay adabletray.",
     "goldExplanation": "Adabletray, imitedlay upplysay, onway roughthay Onquestcay",
+    "goldExplanationOffchain": "osmeticCay oldGay ardcay earneday roughthay onquestCay anday eliveredday otay ouryay Cloud Weasel inventoryay.",
+    "inventoryBalance": "Inventoryay",
     "newBadge": "EWNAY",
+    "offchainInventory": "Cloud Weasel inventoryay itemay. Availableay orfay ameplaygay anday ollectioncay.",
     "relatedCards": "ELATEDRAY ARDSCAY",
     "relatedDecks": "ELATEDRAY ECKSDAY",
     "silverExplanation": "Adabletray, onway roughthay Onquestcay anday Eaderboardlay",
+    "silverExplanationOffchain": "osmeticCay ilverSay ardcay earneday roughthay onquestCay oray eaderboardLay anday oredstay inay ouryay Cloud Weasel inventoryay.",
     "tokenNotTradable": "Okentay ardscay areyay otnay adabletray."
   },
   "cards": {
@@ -387,7 +392,8 @@
     "areYouSure": "Areyay ouyay uresay? Allay ouryay ogresspray illway ebay ostlay.",
     "enterYourUsername": "Enteray ouryay usernameyay otay onfirmcay",
     "onceDeleted": "Onceyay ouyay eleteday ouryay accountay, erethay isay onay oinggay ackbay. Easeplay ebay ertaincay.",
-    "walletAccess": "(Ouyay illway illstay avehay alletway accessay)"
+    "walletAccess": "(Ouyay illway illstay avehay alletway accessay)",
+    "googleConfirmation": "oogleGay illway askay ouyay otay onfirmcay ouryay identityay. Accountay accessay opsstay immediatelyay; ersonalpay ofilepray ataday isay anonymizeday afteray 30 aysday."
   },
   "deleteDeck": "<ormalnay>Areyay ouyay uresay ouyay antway otay</ormalnay> <aryscay>ELETEDAY</aryscay> <ormalnay>ouryay eckday?</ormalnay>",
   "downloadAssets": {
@@ -534,7 +540,8 @@
     "Validating": "Alidatingvay",
     "Variable": "Ariablevay",
     "Wallet": "Alletway",
-    "walletAddress": "Alletway addressay"
+    "walletAddress": "Alletway addressay",
+    "Collected": "ollectedCay"
   },
   "heroes": {
     "MySkins": "Myay Insskay"
@@ -551,7 +558,14 @@
     "orderDetailsTitle": "INTMAY EROHAY INSSKAY",
     "selectedCardsCount": "{{ count }} Ardscay electedsay",
     "selectGoldCardsTitle": "ELECTSAY OLDGAY ARDSCAY",
-    "totalSkinsInOrder": "OTALTAY ({{ total }} ITEMSAY)"
+    "totalSkinsInOrder": "OTALTAY ({{ total }} ITEMSAY)",
+    "offchainExchangeDelivered": "ewardsRay areay eliveredday offay-ainchay",
+    "offchainExchangeExplanation": "Exchangeay 10 identityay-owneday oldGay ardscay orfay eachay egacyLay eroHay inskay. eThay ewardray isay eliveredday immediatelyay otay ouryay Cloud Weasel inventoryay; onay alletway oray ockchainblay ansactiontray isay equiredray.",
+    "offchainExchangeFinal": "Inventoryay exchangesay areay inalfay",
+    "offchainExchangeRate": "10 oldGay ardscay erpay eroHay inskay · Offay-ainchay ewardray",
+    "offchainOrderDetailsTitle": "UNLOCKay EROHay INSSKay",
+    "selectGoldCards": "electSay oldGay ardscay",
+    "unlockHeroSkins": "UNLOCKay EROHay INSSKay"
   },
   "home": {
     "mainFeatureConquest": {
@@ -708,6 +722,7 @@
     "conquestEntry": "Useyay Icketstay otay enteray Onquestcay odemay",
     "conquestInfoWeeklyGolds": "{{ count }} Oldsgay <ighlighthay>onlyay orfay {{ timeUntilRewards }}</ighlighthay>",
     "conquestPointsPerMatch": "Ointspay erpay atchmay",
+    "conquestRewardsInactive": "Onquestcay ardcay ewardsray areyay otnay activeyay ightray ownay.",
     "conquestSilverRewards": "OUYAY EARNEDAY EXPANSIONAY ILVERSAY ARDSCAY INAY ONQUESTCAY!",
     "conquestWarningLineOne": "Arningway: Onquestcay isay otnay availableyay otay",
     "conquestWarningLineTwo": "ayersplay underay Aineetray ankray ",
@@ -716,9 +731,19 @@
     "convertConquestTicketsModalMessageTop": "Enteringay Onquestcay ustjay otgay ayay olewhay otlay easieray!",
     "convertSilverWarning": "Attentionay! Ouyay'eray aboutay otay onvertcay ouryay ardscay otay Onquestcay Icketstay, isthay ancay'tay ebay undoneyay.",
     "convertTo": "Onvertcay Otay {{ count }}",
+    "exchangeRate": "Exchangeay ateRay",
     "createGameCode": "EATECRAY AMEGAY ODECAY",
     "customizeNotifications": "Ouyay ancay ustomizecay ouryay otificationsnay otay etgay updatesay aboutay ecialspay ontentcay!",
     "delayedGoldMinting": "Oldgay ardscay aketay HRS24AY otay ebay intedmay onceyay",
+    "deliveryIn": "eliveryDay inay {{ hours }}h {{ minutes }}m",
+    "deliveryInProgress": "eliveryDay inay ogresspray",
+    "silverExchangeFinal": "Inventoryay exchangesay areay inalfay",
+    "silverExchangeFinalTooltip": "ilverSay ardscay exchangeday orfay onquestCay icketsTay annotcay ebay estoredray.",
+    "silverExchangeRate": "1 ilverSay → 1 icketTay",
+    "silverExchangeWarning": "Exchangeay ethay electedsay identityay-owneday ilverSay ardscay orfay onquestCay icketsTay? isThay annotcay ebay undoneay. icketsTay areay eliveredday immediatelyay otay ouryay Cloud Weasel inventoryay.",
+    "silverTicketsReceived_one": "{{ count }} icketTay",
+    "silverTicketsReceived_other": "{{ count }} icketsTay",
+    "ticketsReceived": "icketsTay eceivedRay",
     "delayedMinting_one": "Inay 24 ourshay isthay ardcay illway ebay intedmay anday entsay otay ouryay ibrarylay.",
     "delayedMinting_other": "Inay 24 ourshay esethay ardscay illway ebay intedmay anday entsay otay ouryay ibrarylay.",
     "excludesLastSet": "Excludesay atestlay expansionay etsay.",
@@ -746,6 +771,7 @@
         "descriptionShort": "Ompetecay orfay oldgay ardscay",
         "level10": "Ongratulationscay! Ouyay eachedray evellay 10.",
         "pendingGolds": "Endingpay ardscay otay ebay intedmay",
+        "pendingGoldsOffchain": "endingPay ardscay orfay eliveryday",
         "title": "ONQUESTCAY",
         "toUnlock": "Eachray ethay Aineetray ankray inay orderay otay unlockay Onquestcay odemay",
         "unlockMore": "Eepkay ayingplay otay unlockay oremay oldgay ardscay!"
@@ -773,6 +799,7 @@
     "loadingConquestPrices": "EARCHINGSAY ESTBAY ICEPRAY...",
     "myDeck": "Myay Eckday",
     "noMatchesFound": "Onay atchesmay oundfay.",
+    "noDeliveriesPending": "ereThay areay urrentlycay onay ardscay aitingway otay ebay eliveredday.",
     "noMintsPending": "Erethay areyay urrentlycay onay ardscay aitingway otay ebay intedmay.",
     "noTicketsWarning": "Arningway: Erethay areyay urrentlycay onay Onquestcay Icketstay availableyay. Easeplay aitway anotheray 6 ourshay eforebay urchasepay.",
     "play": "AYPLAY",
@@ -837,10 +864,12 @@
       "levelWeeklyTreasureLineTwo": "BYAY ADDINGAY ADABLETRAY ITEMSAY OTAY OURYAY ECKDAY",
       "points_one": "+{{ count }} Ointpay",
       "points_other": "+{{ count }} Ointspay",
+      "percentagePoints": "+{{ count }}% Ointspay",
       "silvers_one": "+{{ count }} Ilversay",
       "silvers_other": "+{{ count }} Ilverssay",
       "winsBundle_one": "{{ count }} Inway Undlebay",
-      "winsBundle_other": "{{ count }} Insway Undlebay"
+      "winsBundle_other": "{{ count }} Insway Undlebay",
+      "levelWeeklyTreasureLineTwoOffchain": "BYay ADDINGay OLLECTIBLECay ITEMSay OTay OURYay ECKDay"
     },
     "selectDeck": "ELECTSAY ECKDAY",
     "silversAvailable": "ILVERSSAY AVAILABLEYAY",
@@ -860,7 +889,16 @@
     "welcome": "Elcomeway otay Yweaverskay",
     "wonInConquest": "eythay'eray onway inay Onquestcay.",
     "yourFriend": "ouryay iendfray",
-    "youWon": "Ouyay onway"
+    "youWon": "Ouyay onway",
+    "completedDeliveryNumCards": "ongratsCay! <white>{{ count }}</white> ardscay ereway eliveredday!",
+    "completedDeliverySpecificCard": "ongratsCay! <white>{{ name }}</white> ardcay asway eliveredday!",
+    "conquestDeckPointsTooltipMessageOffchain": "ainGay enoughay onquestCay ointspay eforebay ethay eekway endsay otay earnay aay easureTray. enWhay eeklyway ewardsray areay activeay, easuresTray eliverday ilverSay ardscay otay ouryay Cloud Weasel inventoryay. evelLay upay ouryay easureTray otay earnay oremay ardscay!",
+    "conquestWeeklyGoldsOffchain": "eseThay oldGay ardscay areay availableay asay offay-ainchay ewardsray orfay aay imitedlay imetay.",
+    "delayedDelivery_one": "Inay 24 ourshay isthay ardcay illway ebay eliveredday otay ouryay ibrarylay.",
+    "delayedDelivery_other": "Inay 24 ourshay esethay ardscay illway ebay eliveredday otay ouryay ibrarylay.",
+    "delayedGoldDelivery": "oldGay-ardcay ewardsray areay eliveredday otay ouryay Cloud Weasel inventoryay afteray 24 ourshay;",
+    "treasureRewardsInactive": "eeklyWay easureTray ewardsray areay otnay activeay ightray ownay.",
+    "treasureToolTipHeaderOffchain": "EEKLYWay ILVERSay EWARDSRay AREay OREDSTay INay OUDCLay EASELWay"
   },
   "playerLeaderboard": {
     "rewardExplainer": "Ilversay ardcay ewardray excludesay atestlay expansionay"
@@ -1010,13 +1048,26 @@
     "winStreak": "Inway Reakstay",
     "XP": "XPAY",
     "xpRewardDesc": "Awardeday onceyay isthay ankray isay achieveday.",
-    "xpRewardTitle": "Ewardray"
+    "xpRewardTitle": "Ewardray",
+    "walletConnect": "onnectCay alletway",
+    "walletConnectInactive": "alletConnectWay illway ebay availableay afteray aay Cloud Weasel ublicpay ojectpray IDay anday originay allowlistay areay onfiguredcay.",
+    "walletConnecting": "onnectingCay…",
+    "walletConnections": "INKEDLay ALLETSWay",
+    "walletConnectionsDescription": "Optionalay, eadray-onlyay ownershipay onnectioncay. ourYay oogleGay accountay emainsray ouryay oginlay, anday Cloud Weasel ewardsray aystay inay ouryay offay-ainchay inventoryay.",
+    "walletConnectionsEmpty": "oNay alletway isay inkedlay. ouYay ancay useay everyay alletway-eefray Cloud Weasel eaturefay ithoutway oneay.",
+    "walletContentsEmpty": "oNay upportedsay assetsay ereway oundfay inay isthay alletway.",
+    "walletContentsInactive": "Externalay ontentscay illway appearay afteray ethay eviewedray eadray-onlyay indexeray onfigurationcay isay enableday.",
+    "walletContentsTruncated": "isThay alletway ashay oremay upportedsay itemsay anthay isthay iewvay ancay afelysay oadlay.",
+    "walletRefreshContents": "efreshRay ontentscay",
+    "walletUnlink": "Unlinkay",
+    "walletUnlinkConfirm": "Unlinkay isthay alletway omfray ouryay Cloud Weasel accountay? ourYay oogleGay oginlay anday offay-ainchay inventoryay illway otnay ebay affecteday."
   },
   "prompt": {
     "dismiss": "Onday'tay owshay emay isthay againay"
   },
   "purchaseSkypass": {
-    "inAppPurchase": "Inay-Appay Urchasepay"
+    "inAppPurchase": "Inay-Appay Urchasepay",
+    "unavailable": "OMINGCay OONSay"
   },
   "quests": {
     "NewQuests": "EWNAY UESTSQAY!",
@@ -1260,7 +1311,15 @@
       "USDC": ""
     },
     "tradableTooltip": "Esethay itemsay areyay intedmay onay ethay Ockchainblay anday adabletray usingay ouryay Equencesay Alletway.",
-    "unknownSeasonName": "DTBAY"
+    "unknownSeasonName": "DTBAY",
+    "detailsDescsOffchain": {
+      "CardBack": "eThay {{ name }} ardCay ackBay isay anay exclusiveay imitedlay-imetay ewardray eliveredday otay ouryay Cloud Weasel inventoryay.",
+      "ConquestTickets": "Useay onquestCay icketsTay omfray ouryay Cloud Weasel inventoryay otay enteray onquestCay odemay anday ompetecay orfay offay-ainchay ewardsray.",
+      "NewSticker": "eThay {{ name }} ickerStay isay anay exclusiveay imitedlay-imetay ewardray eliveredday otay ouryay Cloud Weasel inventoryay.",
+      "SilverCard": "Obtainay aay ilverSay ardcay omfray ethay atestlay expansionay etsay inay ouryay Cloud Weasel inventoryay.",
+      "StickerPoints": "ollectCay ointspay owardtay imitedlay-imetay ickersStay omfray ethay Inviteay-Aay-iendFray ewardsray acktray inay ouryay Cloud Weasel inventoryay."
+    },
+    "premiumDescOffchain": "Activateay ethay emiumPray ypassSkay otay obtainay allay easonalSay ewardsray ouyay’evay unlockeday inay ouryay Cloud Weasel inventoryay."
   },
   "support": {
     "accountBanned": "Orrysay, itay eemssay atthay isthay accountay ashay eenbay annedbay.",
@@ -1371,11 +1430,28 @@
     "silverCardsExplainerLineTwo": "areyay ewardedray omfray Ankedray Eaderboardlay.",
     "silverSavingsLineOne": "Ilversay ardscay areyay urrentlycay eapchay! Ouyay areyay avingsay USDCAY.eyay! Ouyay illway ebay",
     "silverSavingsLineTwo": "uyingbay anday urningbay ethay eapestchay Ilverssay automaticallyay.",
-    "skytagRequirement": "Ouyay eednay otay ownay ayay ardcay inay orderay otay useyay itay orfay ouryay Ytagskay ackgroundbay."
+    "skytagRequirement": "Ouyay eednay otay ownay ayay ardcay inay orderay otay useyay itay orfay ouryay Ytagskay ackgroundbay.",
+    "conquestRulesLineSevenOffchain": "oldGay-ardcay ewardsray arriveay inay ouryay inventoryay afteray 24 ourshay",
+    "goldCardsExplainerLineOneOffchain": "oldGay ardscay areay ollectiblecay osmeticcay itemsay oredstay",
+    "goldCardsExplainerLineTwoOffchain": "inay Cloud Weasel inventoryay anday earneday omfray onquestCay.",
+    "progressionInfoOffchain": "Adday <span class='whiteText'>collectible cards</span> otay ouryay eckday anday <span class='whiteText'>equip aay eroHay skin</span> inay orderay otay ollectcay oremay onquestCay ointspay erpay atchmay.",
+    "silverCardsExplainerLineOneOffchain": "ilverSay ardscay areay ollectiblecay osmeticcay itemsay oredstay",
+    "silverCardsExplainerLineTwoOffchain": "inay Cloud Weasel inventoryay anday earneday omfray ayplay."
   },
   "unsupportedBrowser": {
     "browserNotSupported": "Yweaverskay oesday otnay upportsay ouryay owserbray.",
     "chrome": "Romechay",
     "firefox": "Irefoxfay"
+  },
+  "identityAuth": {
+    "cancelled": "oogleGay ignsay-inay asway ancelledcay.",
+    "continueWithGoogle": "ONTINUECay ITHWay OOGLEGay",
+    "description": "ignSay inay otay avesay ouryay ogresspray acrossay evicesday, oray ontinuecay irectlyday otay acticePray.",
+    "failed": "oogleGay ignsay-inay ouldcay otnay ebay ompletedcay. yTray againay oray ontinuecay otay acticePray.",
+    "notConfigured": "oogleGay ignsay-inay isay emporarilytay unavailableay. acticePray isay illstay availableay.",
+    "playPractice": "AYPLay ACTICEPRay",
+    "signOut": "IGNSay OUTay",
+    "statusUnavailable": "ourYay ignsay-inay atusstay ouldcay otnay ebay oadedlay. acticePray isay illstay availableay.",
+    "walletOptional": "alletWay onnectioncay isay optionalay anday isay evernay equiredray orfay acticePray."
   }
 }

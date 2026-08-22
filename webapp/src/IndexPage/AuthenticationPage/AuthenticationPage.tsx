@@ -27,6 +27,7 @@ import {
   AuthenticationPageLogo
 } from './AuthenticationPage.css'
 import { AppleHomescreenDialog } from './components/AppleHomescreenDialog'
+import { GoogleIdentityActions } from './components/GoogleIdentityActions'
 import { LanguageSelect } from './components/LanguageSelect'
 import Logo from './images/auth-logo.webp'
 
@@ -71,10 +72,7 @@ export const AuthenticationPage = memo(() => {
     trackButtonClick('Install Mobile App Button')
 
     if (isIOSDevice) {
-      window.open(
-        'https://apps.apple.com/us/app/opensky/id1469294062?ls=1',
-        '_blank'
-      )
+      window.open('https://apps.apple.com/us/app/opensky/id1469294062?ls=1', '_blank')
 
       return
     }
@@ -138,6 +136,10 @@ export const AuthenticationPage = memo(() => {
     }
   }, [])
 
+  const onLocalPracticeClick = useCallback(() => {
+    window.location.href = `${env.GAME_URL}?mode=LOCAL_BOT&skipAuth`
+  }, [])
+
   return (
     <>
       <div
@@ -190,81 +192,80 @@ export const AuthenticationPage = memo(() => {
               >
                 {t('dashboard.tagline')}
               </Text>
-              {!isDownloadMode && (
-                <div
-                  data-id="newAccount"
-                  className={clsx(
-                    Sprinkles({
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }),
-                    AuthenticationPageButtonWrapper
-                  )}
-                >
-                  <Button
-                    disabled={isLoggingIn}
-                    height="52px"
-                    className={FullWidthButtonStyle}
-                    buttonClassName={FullWidthButtonStyle}
-                    colorType="blue"
-                    frameType="default"
-                    buttonId="new-account"
-                    clickSound={null}
-                    hoverSound={null}
-                    onClick={onCreate}
-                    leftAdornment={isLoggingIn ? { icon: 'spinner' } : undefined}
-                    text={t('general.newAccount')}
-                  />
-                </div>
-              )}
-              <div
-                data-id="existingAccount"
-                className={clsx(
-                  Sprinkles({
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }),
-                  AuthenticationPageButtonWrapper,
-                  { isSecondButton: !isDownloadMode }
-                )}
-              >
-                <Button
-                  disabled={isLoggingIn}
-                  height="52px"
-                  className={FullWidthButtonStyle}
-                  buttonClassName={FullWidthButtonStyle}
-                  buttonId="login"
-                  colorType={isDownloadMode ? 'blue' : 'default'}
-                  frameType="default"
-                  clickSound={null}
-                  hoverSound={null}
-                  leftAdornment={isLoggingIn ? { icon: 'spinner' } : undefined}
-                  onClick={isDownloadMode ? onDownloadClick : onLoginClick}
-                  text={t(
-                    isDownloadMode
-                      ? 'mobileInstallPrompt.download'
-                      : 'dashboard.login'
-                  )}
+              {env.AUTH_MODE === 'google' ? (
+                <GoogleIdentityActions
+                  isPracticeEnabled={env.LOCAL_BOT_ENABLED}
+                  onPractice={onLocalPracticeClick}
                 />
-              </div>
-              {isPWASectionVisible && (
+              ) : (
                 <>
-                  {isIOSDevice && Dialog}
-                  <Text color="white" marginTop="12px" fontSize="14px">
-                    {t('support.or')}
-                  </Text>
+                  {!isDownloadMode && (
+                    <div
+                      data-id="newAccount"
+                      className={clsx(
+                        Sprinkles({
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column'
+                        }),
+                        AuthenticationPageButtonWrapper
+                      )}
+                    >
+                      <Button
+                        disabled={isLoggingIn}
+                        height="52px"
+                        className={FullWidthButtonStyle}
+                        buttonClassName={FullWidthButtonStyle}
+                        colorType="blue"
+                        frameType="default"
+                        buttonId="new-account"
+                        clickSound={null}
+                        hoverSound={null}
+                        onClick={onCreate}
+                        leftAdornment={isLoggingIn ? { icon: 'spinner' } : undefined}
+                        text={t('general.newAccount')}
+                      />
+                    </div>
+                  )}
+                  {env.LOCAL_BOT_ENABLED && (
+                    <div
+                      data-id="localPractice"
+                      className={clsx(
+                        Sprinkles({
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }),
+                        AuthenticationPageButtonWrapper,
+                        'isSecondButton'
+                      )}
+                    >
+                      <Button
+                        disabled={isLoggingIn}
+                        height="52px"
+                        className={FullWidthButtonStyle}
+                        buttonClassName={FullWidthButtonStyle}
+                        buttonId="local-practice"
+                        colorType="orange"
+                        frameType="default"
+                        clickSound={null}
+                        hoverSound={null}
+                        onClick={onLocalPracticeClick}
+                        text={`${t('generic.Play')} ${t('generic.Practice')}`}
+                      />
+                    </div>
+                  )}
                   <div
+                    data-id="existingAccount"
                     className={clsx(
                       Sprinkles({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'
                       }),
-                      'isSecondButton',
-                      AuthenticationPageButtonWrapper
+                      AuthenticationPageButtonWrapper,
+                      { isSecondButton: !isDownloadMode }
                     )}
                   >
                     <Button
@@ -272,17 +273,55 @@ export const AuthenticationPage = memo(() => {
                       height="52px"
                       className={FullWidthButtonStyle}
                       buttonClassName={FullWidthButtonStyle}
-                      colorType="default"
+                      buttonId="login"
+                      colorType={isDownloadMode ? 'blue' : 'default'}
                       frameType="default"
                       clickSound={null}
                       hoverSound={null}
-                      text={t('support.addToHomeScreen')}
-                      onClick={isIOSDevice ? onClickPwaApple : onClickPwaGoogle}
-                      leftAdornment={{
-                        icon: isIOSDevice ? 'share-apple' : 'download'
-                      }}
+                      leftAdornment={isLoggingIn ? { icon: 'spinner' } : undefined}
+                      onClick={isDownloadMode ? onDownloadClick : onLoginClick}
+                      text={t(
+                        isDownloadMode
+                          ? 'mobileInstallPrompt.download'
+                          : 'dashboard.login'
+                      )}
                     />
                   </div>
+                  {isPWASectionVisible && (
+                    <>
+                      {isIOSDevice && Dialog}
+                      <Text color="white" marginTop="12px" fontSize="14px">
+                        {t('support.or')}
+                      </Text>
+                      <div
+                        className={clsx(
+                          Sprinkles({
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }),
+                          'isSecondButton',
+                          AuthenticationPageButtonWrapper
+                        )}
+                      >
+                        <Button
+                          disabled={isLoggingIn}
+                          height="52px"
+                          className={FullWidthButtonStyle}
+                          buttonClassName={FullWidthButtonStyle}
+                          colorType="default"
+                          frameType="default"
+                          clickSound={null}
+                          hoverSound={null}
+                          text={t('support.addToHomeScreen')}
+                          onClick={isIOSDevice ? onClickPwaApple : onClickPwaGoogle}
+                          leftAdornment={{
+                            icon: isIOSDevice ? 'share-apple' : 'download'
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               <LanguageSelect />

@@ -1,0 +1,67 @@
+{
+  "name": "cloud-weasel-game-server",
+  "account_id": "528badc1c29c30196335df252a73c5a6",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GAME_MATCHES",
+        "class_name": "GameMatch"
+      },
+      {
+        "name": "DECK_RANK_COORDINATOR",
+        "class_name": "DeckRankCoordinator"
+      }
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "opensky-auth",
+      "database_id": "2ac6fbbd-359b-407c-9d87-bd62b17a7548",
+      "migrations_dir": "../cloudflare/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "GAME_ANALYTICS",
+      "bucket_name": "cloud-weasel-game-analytics"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
+        "queue": "cloud-weasel-conquest-gold-delivery"
+      },
+      {
+        "binding": "GAME_ANALYTICS_QUEUE",
+        "queue": "cloud-weasel-game-analytics"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GameMatch"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["DeckRankCoordinator"]
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787",
+    "PUBLIC_WS_BASE_URL": "wss://opensky-webapp.dysinski-tomasz.workers.dev/api/game/matches",
+    "TURN_EXPIRY_MS": "60000",
+    "TURN_EXTENSION_MS": "5000",
+    "COMMIT_REVEAL_EXPIRY_MS": "2000",
+    "ABANDON_TIMEOUT_MS": "180000",
+    "ABANDON_PENALTY_WINDOW_MS": "86400000",
+    "ABANDON_PENALTY_SECONDS": "0,0,0,0",
+    "BOT_ACTION_DELAY_MS": "650",
+    "CHAT_ENABLED": "false"
+  }
+}

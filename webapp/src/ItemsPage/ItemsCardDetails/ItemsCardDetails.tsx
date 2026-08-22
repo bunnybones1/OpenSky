@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect } from 'react'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { CardDetailsPage } from '~/shared/components/CardDetailsPage/CardDetailsPage'
 import { makeItemsCardDetailsRoute } from '~/shared/helpers/routes/items-page'
 import { useDispatch, useSelector } from '~/shared/redux/index'
@@ -13,7 +14,9 @@ export const ItemsCardDetails = memo(() => {
 
   const dispatch = useDispatch()
 
-  useEffect(() => window.scrollTo({ top: 0 }), [id])
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [id])
 
   const switchCard = useCallback(
     (id: number) => {
@@ -29,6 +32,7 @@ export const ItemsCardDetails = memo(() => {
       Controls={ItemsCardDetailsControls}
       id={id}
       switchCard={switchCard}
+      inventoryOnly={env.AUTH_MODE === 'google'}
     />
   )
 })

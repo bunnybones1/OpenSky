@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { authenticationState } from '~/shared/state/authentication-state'
 
@@ -19,6 +20,7 @@ import { NavBar } from './NavBar/NavBar'
 import { Widgets } from './Widgets/Widgets'
 
 const renderCookieDisclaimer = !isIOSNativeApp()
+const isIdentityMode = env.AUTH_MODE === 'google'
 
 const AppLayout = memo(() => {
   const { isInitializing } = useSnapshot(authenticationState)
@@ -34,12 +36,12 @@ const AppLayout = memo(() => {
         <>
           <PortraitWarning />
           <LandscapeWarning />
-          <MobileAppPrompt />
-          <NetworkWarning />
+          {!isIdentityMode && <MobileAppPrompt />}
+          {!isIdentityMode && <NetworkWarning />}
           <DeckViewer />
           <NavBar />
-          <Widgets />
-          <UseStateDisclaimerTrigger />
+          <Widgets showWallet={!isIdentityMode} />
+          {!isIdentityMode && <UseStateDisclaimerTrigger />}
           <PageLayout>
             <Outlet />
           </PageLayout>

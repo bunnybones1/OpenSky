@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
 import { Tooltip } from '~/shared/components/Tooltip/Tooltip'
@@ -87,9 +88,12 @@ const TreasureImageTooltip = memo(({ level }: ConquestTreasureImageProps) => {
           color="warm3"
         />
         <Text fontSize="14px" color="purple8" marginLeft="12px">
-          {t('play.treasureToolTipHeader', {
-            expansion: t('sets.HEXBOUND_INVASION')
-          })}
+          {t(
+            env.AUTH_MODE === 'google'
+              ? 'play.treasureToolTipHeaderOffchain'
+              : 'play.treasureToolTipHeader',
+            { expansion: t('sets.HEXBOUND_INVASION') }
+          )}
         </Text>
       </div>
       {!!currentLevelInfo ? (

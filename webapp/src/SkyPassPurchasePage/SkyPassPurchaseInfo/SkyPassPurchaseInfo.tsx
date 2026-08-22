@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import Skeleton from 'react-loading-skeleton'
 
+import env from '~/env'
 import { Text } from '~/shared/components/Text'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { useSeasonInfo } from '~/shared/queries/useSeasonInfo'
@@ -90,7 +91,11 @@ export const SkyPassPurchaseInfo = memo(() => {
           fontWeight="600"
           fontSize={DescFont}
         >
-          {t('skypass.premiumDesc')}
+          {t(
+            env.AUTH_MODE === 'google'
+              ? 'skypass.premiumDescOffchain'
+              : 'skypass.premiumDesc'
+          )}
         </Text>
         <SkyPassPurchaseButtons />
       </div>

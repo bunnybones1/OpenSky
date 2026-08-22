@@ -13,7 +13,7 @@ import { Icon } from '~/shared/components/Icon/Icon'
 import { captureError } from '~/shared/helpers/sentry'
 import { useInProgressMatch } from '~/shared/queries/play/useInProgressMatch'
 import { useStoredMatchInfo } from '~/shared/queries/play/useStoredMatchInfo'
-import { authenticationState } from '~/shared/state/authentication-state'
+import { getAuthenticatedGameAddress } from '~/shared/state/authentication-state'
 import { playState, updatePlayState } from '~/shared/state/play-state'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
@@ -49,10 +49,11 @@ export const MatchMakerWidgetCTA = memo(() => {
   const onClick = useCallback(async () => {
     if (!matchMakerStatus) return
     if (matchMakerStatus === MatchMakerStatus.MATCH_FOUND) {
-      if (!!authenticationState.userAddress) {
+      const playerID = getAuthenticatedGameAddress()
+      if (playerID) {
         MatchMakerClient.ws.send({
           type: 'accept_match',
-          playerID: authenticationState.userAddress
+          playerID
         })
       }
     }
@@ -99,10 +100,11 @@ export const MatchMakerWidgetCTA = memo(() => {
       return
     }
 
-    if (!!authenticationState.userAddress) {
+    const playerID = getAuthenticatedGameAddress()
+    if (playerID) {
       MatchMakerClient.ws.send({
         type: 'decline_match',
-        playerID: authenticationState.userAddress
+        playerID
       })
     }
   }, [acceptOnly])
@@ -159,10 +161,10 @@ export const MatchMakerWidgetCTA = memo(() => {
             matchMakerStatus === MatchMakerStatus.OPPONENT_DECLINED
               ? 'rejoiningCTA'
               : matchMakerStatus === MatchMakerStatus.MATCH_FOUND
-              ? 'joinCTA'
-              : matchMakerStatus === MatchMakerStatus.IN_PROGRESS_MATCH
-              ? 'rejoinCTA'
-              : 'reconnectCTA'
+                ? 'joinCTA'
+                : matchMakerStatus === MatchMakerStatus.IN_PROGRESS_MATCH
+                  ? 'rejoinCTA'
+                  : 'reconnectCTA'
           }`
         )}
       </div>

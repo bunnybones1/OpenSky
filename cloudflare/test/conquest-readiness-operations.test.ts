@@ -1,0 +1,409 @@
+import { env } from 'cloudflare:workers'
+import { describe, expect, it } from 'vitest'
+
+import { handleApiRequest } from '../src/api'
+import { isConquestQueueReady } from '../src/conquest-readiness'
+import type { Env } from '../src/env'
+import {
+  createIdentitySession,
+  IDENTITY_SESSION_COOKIE
+} from '../src/identity-session'
+import { PlayerRepository } from '../src/player'
+import { provisionVerifiedConquestDrill } from './helpers/conquest-readiness'
+
+const testEnv = env as unknown as Env
+
+const rpcAs = async (
+  userId: string,
+  method: string,
+  body: object = {},
+  operationKey?: string,
+  signedIn = true
+) => {
+  const headers = new Headers({ 'content-type': 'application/json' })
+  if (operationKey) headers.set('x-cloud-weasel-operation-key', operationKey)
+  if (signedIn) {
+    const token = await createIdentitySession(
+      userId,
+      testEnv.SESSION_SIGNING_KEY
+    )
+    headers.set('cookie', `${IDENTITY_SESSION_COOKIE}=${token}`)
+  }
+  return handleApiRequest(
+    new Request(`https://opensky.example/api/rpc/SkyWeaverAPI/${method}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    }),
+    testEnv
+  )
+}
+
+const actor = async (label: string) => {
+  const userId = `${label}-${crypto.randomUUID()}`
+  const now = new Date().toISOString()
+  await env.AUTH_DB.prepare(
+    `INSERT INTO users
+       (id, display_name, primary_email, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(userId, label, `${userId}@example.com`, now, now)
+    .run()
+  await new PlayerRepository(env.AUTH_DB).bootstrap(userId)
+  return userId
+}
+
+const grantAdmin = async (userId: string) => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_roles
+       (user_id, role, granted_by_user_id, reason, created_at)
+     VALUES (?, 'ADMIN', NULL, 'test bootstrap', ?)`
+  )
+    .bind(userId, new Date().toISOString())
+    .run()
+}
+
+const grantVerify = async (userId: string) => {
+  await env.AUTH_DB.prepare(
+    `INSERT INTO staff_conquest_readiness_permissions
+       (user_id, permission, granted_by_user_id, reason, created_at)
+     VALUES (?, 'VERIFY', NULL, 'test bootstrap', ?)`
+  )
+    .bind(userId, new Date().toISOString())
+    .run()
+}
+
+describe('Conquest readiness operations', () => {
+  it('wraps real drill receipts in a dormant, idempotent operator decision without enabling queues', async () => {
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*)
+            FROM staff_conquest_readiness_permissions) permissions,
+           (SELECT COUNT(*)
+            FROM staff_conquest_readiness_operations) operations,
+           (SELECT COUNT(*) FROM staff_conquest_readiness_audit) audits,
+           (SELECT COUNT(*) FROM conquest_queue_readiness) readiness`
+      ).first()
+    ).toEqual({ permissions: 0, operations: 0, audits: 0, readiness: 0 })
+
+    const evidence = await provisionVerifiedConquestDrill(env.AUTH_DB)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS matches,
+                COUNT(DISTINCT CASE
+                  WHEN player1_user_id = ? THEN player2_user_id
+                  ELSE player1_user_id
+                END) AS opponents
+         FROM multiplayer_matches
+         WHERE proposal_id LIKE 'readiness-drill-match-%'
+           AND (player1_user_id = ? OR player2_user_id = ?)`
+      )
+        .bind(
+          evidence.drillUserId,
+          evidence.drillUserId,
+          evidence.drillUserId
+        )
+        .first()
+    ).toEqual({ matches: 3, opponents: 3 })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS evidence
+         FROM conquest_verified_drill_receipts WHERE conquest_id = ?`
+      )
+        .bind(evidence.conquestId)
+        .first()
+    ).toEqual({ evidence: 1 })
+    const completedMatch = await env.AUTH_DB.prepare(
+      `SELECT proposal_id, result_json FROM multiplayer_matches
+       WHERE player1_user_id = ? ORDER BY ended_at LIMIT 1`
+    )
+      .bind(evidence.drillUserId)
+      .first<{ proposal_id: string; result_json: string }>()
+    expect(completedMatch).not.toBeNull()
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET result_json = '{"status":"ABANDONED"}'
+       WHERE proposal_id = ?`
+    )
+      .bind(completedMatch!.proposal_id)
+      .run()
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT COUNT(*) AS evidence
+         FROM conquest_verified_drill_receipts WHERE conquest_id = ?`
+      )
+        .bind(evidence.conquestId)
+        .first()
+    ).toEqual({ evidence: 0 })
+    await env.AUTH_DB.prepare(
+      `UPDATE multiplayer_matches SET result_json = ? WHERE proposal_id = ?`
+    )
+      .bind(completedMatch!.result_json, completedMatch!.proposal_id)
+      .run()
+    const firstVerifier = await actor('readiness-verifier-one')
+    const secondVerifier = await actor('readiness-verifier-two')
+    const ordinaryPlayer = await actor('readiness-player')
+    for (const verifier of [firstVerifier, secondVerifier]) {
+      await grantAdmin(verifier)
+      await grantVerify(verifier)
+    }
+
+    const request = {
+      ...evidence,
+      drillReference: `review:conquest-drill:${crypto.randomUUID()}`
+    }
+    delete (request as Partial<typeof request>).drillUserId
+    const operationKey = crypto.randomUUID()
+    expect(
+      (
+        await rpcAs(
+          firstVerifier,
+          'GMVerifyConquestReadiness',
+          request,
+          operationKey,
+          false
+        )
+      ).status
+    ).toBe(401)
+    expect(
+      (
+        await rpcAs(
+          ordinaryPlayer,
+          'GMVerifyConquestReadiness',
+          request,
+          operationKey
+        )
+      ).status
+    ).toBe(403)
+    expect(
+      (await rpcAs(ordinaryPlayer, 'GMListConquestReadiness')).status
+    ).toBe(403)
+
+    const listed = await rpcAs(firstVerifier, 'GMListConquestReadiness', {
+      poolVersion: evidence.poolVersion
+    })
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toMatchObject({
+      evidence: [
+        {
+          poolVersion: evidence.poolVersion,
+          conquestId: evidence.conquestId,
+          settlementKey: evidence.settlementKey,
+          deliveryKey: evidence.deliveryKey,
+          userId: evidence.drillUserId,
+          eligibleNow: true,
+          verification: null
+        }
+      ]
+    })
+
+    await expect(
+      env.AUTH_DB.prepare(
+        `INSERT INTO conquest_queue_readiness
+           (pool_version, conquest_id, settlement_key, delivery_key,
+            verified_by_user_id, drill_reference, verified_at)
+         VALUES (?, ?, ?, ?, ?, 'bare-sql', ?)`
+      )
+        .bind(
+          evidence.poolVersion,
+          evidence.conquestId,
+          evidence.settlementKey,
+          evidence.deliveryKey,
+          firstVerifier,
+          new Date().toISOString()
+        )
+        .run()
+    ).rejects.toThrow('reviewed Conquest readiness operation required')
+    expect(
+      (
+        await rpcAs(
+          firstVerifier,
+          'GMVerifyConquestReadiness',
+          { ...request, deliveryKey: crypto.randomUUID() },
+          crypto.randomUUID()
+        )
+      ).status
+    ).toBe(400)
+
+    const beforeRewards = await env.AUTH_DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM player_items
+          WHERE user_id = ?) inventory,
+         (SELECT COUNT(*) FROM player_conquest_feed_events
+          WHERE user_id = ?) feed`
+    )
+      .bind(evidence.drillUserId, evidence.drillUserId)
+      .first()
+    const verified = await rpcAs(
+      firstVerifier,
+      'GMVerifyConquestReadiness',
+      request,
+      operationKey
+    )
+    expect(verified.status).toBe(200)
+    expect(await verified.json()).toMatchObject({
+      evidence: {
+        poolVersion: evidence.poolVersion,
+        conquestId: evidence.conquestId,
+        eligibleNow: true,
+        verification: {
+          verifiedByUserId: firstVerifier,
+          drillReference: request.drillReference
+        }
+      }
+    })
+    expect(
+      (
+        await rpcAs(
+          firstVerifier,
+          'GMVerifyConquestReadiness',
+          request,
+          operationKey
+        )
+      ).status
+    ).toBe(200)
+    expect(
+      (
+        await rpcAs(
+          firstVerifier,
+          'GMVerifyConquestReadiness',
+          { ...request, drillReference: 'different retry' },
+          operationKey
+        )
+      ).status
+    ).toBe(409)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM player_items
+            WHERE user_id = ?) inventory,
+           (SELECT COUNT(*) FROM player_conquest_feed_events
+            WHERE user_id = ?) feed`
+      )
+        .bind(evidence.drillUserId, evidence.drillUserId)
+        .first()
+    ).toEqual(beforeRewards)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT game_mode, enabled FROM game_mode_status
+         WHERE game_mode IN ('CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY')
+         ORDER BY game_mode`
+      ).all()
+    ).toMatchObject({
+      results: [
+        { game_mode: 'CONQUEST_CONSTRUCTED', enabled: 0 },
+        { game_mode: 'CONQUEST_DISCOVERY', enabled: 0 }
+      ]
+    })
+    expect(
+      (
+        await rpcAs(
+          secondVerifier,
+          'GMVerifyConquestReadiness',
+          request,
+          crypto.randomUUID()
+        )
+      ).status
+    ).toBe(409)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM conquest_queue_readiness
+            WHERE pool_version = ?) readiness,
+           (SELECT COUNT(*) FROM staff_conquest_readiness_operations
+            WHERE pool_version = ? AND status = 'APPLIED') operations,
+           (SELECT COUNT(*) FROM staff_conquest_readiness_audit
+            WHERE pool_version = ?) audits`
+      )
+        .bind(evidence.poolVersion, evidence.poolVersion, evidence.poolVersion)
+        .first()
+    ).toEqual({ readiness: 1, operations: 1, audits: 1 })
+    expect(await isConquestQueueReady(env.AUTH_DB)).toBe(true)
+    await expect(
+      env.AUTH_DB.prepare('DELETE FROM staff_conquest_readiness_audit').run()
+    ).rejects.toThrow('audit rows are immutable')
+    await expect(
+      env.AUTH_DB.prepare(
+        `UPDATE staff_conquest_readiness_operations SET request_json = '{}'`
+      ).run()
+    ).rejects.toThrow('operations are immutable')
+  })
+
+  it('does not present an abandoned PREPARING readiness row as verified', async () => {
+    await env.AUTH_DB.prepare(
+      `UPDATE conquest_reward_pools SET status = 'RETIRED'
+       WHERE status = 'ACTIVE'`
+    ).run()
+    const evidence = await provisionVerifiedConquestDrill(env.AUTH_DB)
+    const verifier = await actor('readiness-preparing-verifier')
+    await grantAdmin(verifier)
+    await grantVerify(verifier)
+    const operationKey = crypto.randomUUID()
+    const drillReference = `review:preparing-drill:${crypto.randomUUID()}`
+    const createdAt = new Date().toISOString()
+    const requestJson = JSON.stringify({
+      poolVersion: evidence.poolVersion,
+      conquestId: evidence.conquestId,
+      settlementKey: evidence.settlementKey,
+      deliveryKey: evidence.deliveryKey,
+      drillReference
+    })
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO staff_conquest_readiness_operations
+           (operation_key, operation, pool_version, conquest_id,
+            actor_user_id, request_json, status, created_at, completed_at)
+         VALUES (?, 'VERIFY', ?, ?, ?, ?, 'PREPARING', ?, NULL)`
+      ).bind(
+        operationKey,
+        evidence.poolVersion,
+        evidence.conquestId,
+        verifier,
+        requestJson,
+        createdAt
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO conquest_queue_readiness
+           (pool_version, conquest_id, settlement_key, delivery_key,
+            verified_by_user_id, drill_reference, verified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        evidence.poolVersion,
+        evidence.conquestId,
+        evidence.settlementKey,
+        evidence.deliveryKey,
+        verifier,
+        drillReference,
+        createdAt
+      )
+    ])
+
+    const listed = await rpcAs(verifier, 'GMListConquestReadiness', {
+      poolVersion: evidence.poolVersion
+    })
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toMatchObject({
+      evidence: [
+        {
+          poolVersion: evidence.poolVersion,
+          conquestId: evidence.conquestId,
+          eligibleNow: true,
+          verification: null
+        }
+      ]
+    })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM conquest_queue_readiness
+            WHERE pool_version = ?) readiness,
+           (SELECT COUNT(*) FROM staff_conquest_readiness_operations
+            WHERE pool_version = ? AND status = 'PREPARING') preparing,
+           (SELECT COUNT(*) FROM conquest_verified_queue_pools
+            WHERE pool_version = ?) admitted`
+      )
+        .bind(evidence.poolVersion, evidence.poolVersion, evidence.poolVersion)
+        .first()
+    ).toEqual({ readiness: 1, preparing: 1, admitted: 0 })
+  })
+})

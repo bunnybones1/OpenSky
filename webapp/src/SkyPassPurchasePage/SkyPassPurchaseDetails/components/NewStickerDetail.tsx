@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { AllStickers } from '~/shared/constants/stickers'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { useSkyPassInfo } from '~/shared/queries/useSkyPassInfo'
@@ -64,7 +65,7 @@ export const NewStickerDetail = memo(() => {
         SkyPassDetail
       )}
     >
-      {!!getAssetUrl && (
+      {!!getAssetUrl && env.AUTH_MODE !== 'google' && (
         <div
           className={clsx(
             Sprinkles({
@@ -112,7 +113,12 @@ export const NewStickerDetail = memo(() => {
             {t('skypass.detailsTitles.NewSticker', { name: stickerToDisplay?.name })}
           </div>
           <div className={SkyPassDetailDesc}>
-            {t('skypass.detailsDescs.NewSticker', { name: stickerToDisplay?.name })}
+            {t(
+              env.AUTH_MODE === 'google'
+                ? 'skypass.detailsDescsOffchain.NewSticker'
+                : 'skypass.detailsDescs.NewSticker',
+              { name: stickerToDisplay?.name }
+            )}
           </div>
         </div>
         {!!stickerToDisplay && !!getAssetUrl && (

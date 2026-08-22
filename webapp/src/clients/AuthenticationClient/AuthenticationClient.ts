@@ -14,6 +14,7 @@ import { getOrCreateSubkey } from '@opensky/shared/subkey'
 import { sequence } from '0xsequence'
 import { ethers } from 'ethers'
 
+import { identityClient } from '~/clients/IdentityClient/IdentityClient'
 import env from '~/env'
 import { APIClient, MobileClient } from '~/shared/clients'
 import { TAG_ART } from '~/shared/constants/tag-art'
@@ -378,20 +379,33 @@ export class _AuthenticationClient_DONT_USE_DIRECTLY {
 
       console.log('Authorizing Sequence wallet with OpenSky.')
 
-      const { JWT, sequenceJWT } = await getOpenSkyAuthFromSequence(sequenceWallet)
+      const { JWT, sequenceJWT, address } =
+        await getOpenSkyAuthFromSequence(sequenceWallet)
 
       console.log('Sequence auth succeeded. Finding account for wallet.')
 
       const session = await APIClient.opensky.getSession(getAuthHeaders(JWT))
+      let account = session.account
 
-      if (!!session.account) {
+      if (!account && env.AUTO_REGISTER_WALLET) {
+        console.log('Creating a Cloudflare account for this wallet.')
+        const registration = await this.createAccount(
+          address,
+          JWT,
+          sequenceJWT,
+          false
+        )
+        if (registration.status) account = registration.account
+      }
+
+      if (account) {
         console.log('Found OpenSky account for wallet! Finishing log in.')
 
         setJWTs({ openskyJWT: JWT, sequenceJWT })
 
         addTrackers()
 
-        this.finalizeAuthedUser(session.account)
+        await this.finalizeAuthedUser(account)
       } else {
         throw new Error('No OpenSky account found for this wallet. Create one first.')
       }
@@ -513,6 +527,15 @@ export class _AuthenticationClient_DONT_USE_DIRECTLY {
 
   public deleteAccount = async (onDelete?: () => void) => {
     try {
+      if (env.AUTH_MODE === 'google') {
+        const account = getAuthedAccount()
+        if (!account) throw new Error('Unable to find the signed-in account.')
+        await identityClient.startAccountDeletion(
+          account.name,
+          `${window.location.pathname}${window.location.search}${window.location.hash}`
+        )
+        return
+      }
       if (!this.wallet) return
 
       if (this.wallet.isBurnerWallet) {

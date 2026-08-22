@@ -114,10 +114,10 @@ abstract class BotOpponent<T, U> {
   validatePlayerAction: ValidatePlayerAction<U>
   afterActionApplied: AfterActionApplied<U>
   playerId: Player
-  player: PlayerState
-  opponent: PlayerState
-  playerHero: LocalCardInstance
-  opponentHero: LocalCardInstance
+  player!: PlayerState
+  opponent!: PlayerState
+  playerHero!: LocalCardInstance
+  opponentHero!: LocalCardInstance
   playerCards: LocalCardInstance[] = []
   opponentCards: LocalCardInstance[] = []
   actions: PlayerAction[] = []

@@ -46,7 +46,7 @@ function parseValues(
     const cc = parseCardClass(clazz)
     const bytes = base58.decode(base58EncodedValues)
     if (isBigEndian) {
-      bytes.swap16()
+      swap16(bytes)
     }
     const numbers = new Uint16Array(
       bytes.buffer,
@@ -62,6 +62,14 @@ function parseValues(
       })
   } catch (e) {
     return null
+  }
+}
+
+function swap16(bytes: Uint8Array): void {
+  for (let index = 0; index < bytes.length; index += 2) {
+    const first = bytes[index]
+    bytes[index] = bytes[index + 1]
+    bytes[index + 1] = first
   }
 }
 

@@ -14,9 +14,10 @@ import { GradeRowGradeImage } from './GradeRowGrade.css'
 
 interface GradeRowGradeProps {
   grade: ItemType.SW_BASE_CARDS | ItemType.SW_GOLD_CARDS | ItemType.SW_SILVER_CARDS
+  inventoryOnly?: boolean
 }
 
-export const GradeRowGrade = memo(({ grade }: GradeRowGradeProps) => {
+export const GradeRowGrade = memo(({ grade, inventoryOnly }: GradeRowGradeProps) => {
   const { getAssetUrl } = useGetAssetContext()
   const { t } = useTranslation()
   const gradeText = useMemo(() => {
@@ -34,7 +35,12 @@ export const GradeRowGrade = memo(({ grade }: GradeRowGradeProps) => {
         paddingLeft: '8px'
       })}
     >
-      <Tooltip placement="top" tooltip={t(`cardDetails.${gradeText}Explanation`)}>
+      <Tooltip
+        placement="top"
+        tooltip={t(
+          `cardDetails.${gradeText}Explanation${inventoryOnly ? 'Offchain' : ''}`
+        )}
+      >
         <Icon type="info" color="purple9" height="14px" />
       </Tooltip>
       {!!getAssetUrl && (

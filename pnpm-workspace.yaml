@@ -1,4 +1,8 @@
 packages:
+  - 'cloudflare'
+  - 'game-server-cloudflare'
+  - 'match-service-cloudflare'
+  - 'matchmaker-ts'
   - 'bot'
   - 'chain'
   - 'cosmetics'

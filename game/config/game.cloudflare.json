@@ -1,0 +1,22 @@
+{
+  "!!": "Phase-one Cloudflare profile: LOCAL_BOT runs entirely in the browser",
+  "API_HOST": "/api",
+  "ASSETS_URL": "https://assets.skyweaver.net",
+  "ASSETS_VERSION_HASH": "",
+  "ASSETS_MANIFEST_GAME_HASH": "26a366fc6ca9e476930e88da5861da25",
+  "MATCHMAKER_URL": "/api/matchmaker/",
+  "ETHEREUM_HOST_PROVIDER": "",
+  "WEBAPP_URL": "/",
+  "GAME_BASE_URL_PATH": "/game/",
+  "GAME_SERVER_WALLET_ADDRESS": "",
+  "LOCAL_WALLET_PROVIDER_KEY": "local",
+  "TURN_TIMER_ENABLED": false,
+  "TURN_TIMER_MAX": "60000",
+  "SKIP_CARD_SELECTION": false,
+  "ANALYTICS": false,
+  "WEBAPP_ANALYTICS_KEY": "",
+  "REMOTE_LOG_URL": "",
+  "DIRECT_BALANCE_FETCH": false,
+  "DEPLOY_ENV": "cloudflare",
+  "AUTH_MODE": "google"
+}

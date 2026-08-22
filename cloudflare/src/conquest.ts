@@ -1,0 +1,521 @@
+import {
+  ConquestMatchResult,
+  ConquestStatus,
+  DeckClass,
+  GameMode,
+  Hero,
+  type Conquest,
+  type ConquestStats,
+  type WeeklyGolds
+} from '@opensky/proto'
+import { getGoldID } from '@opensky/shared/assetsIDs'
+import { parseConquestMatchProgress } from '@opensky/shared/conquest-progress'
+import { conquestV2TreasureProgress } from '@opensky/shared/conquest-v2-treasure'
+
+import { sourceConquestWire, sourceWeeklyGoldsListWire } from './conquest-wire'
+import { invalidArgument } from './errors'
+import { goFloat32Percentage } from './go-numbers'
+import { publishedAccountStatsCTESQL } from './rank-publication'
+
+const HERO_DECK_CLASS: Partial<Record<Hero, DeckClass>> = {
+  [Hero.ADA]: DeckClass.STR,
+  [Hero.SAMYA]: DeckClass.AGY,
+  [Hero.FOX]: DeckClass.STA,
+  [Hero.LOTUS]: DeckClass.WIS,
+  [Hero.TITUS]: DeckClass.STW,
+  [Hero.IRIS]: DeckClass.AGW,
+  [Hero.BOURAN]: DeckClass.HRT,
+  [Hero.HORIK]: DeckClass.STH,
+  [Hero.ZOEY]: DeckClass.HRA,
+  [Hero.AXEL]: DeckClass.HRW,
+  [Hero.ARI]: DeckClass.INT,
+  [Hero.MIRA]: DeckClass.STI,
+  [Hero.MAI]: DeckClass.AGI,
+  [Hero.BANJO]: DeckClass.INW,
+  [Hero.SITTI]: DeckClass.HRI
+}
+
+const SOURCE_HERO_VALUES = new Set<Hero>(Object.values(Hero))
+
+/**
+ * Recreates encoding/json's nullable `*Hero` request field. The generated Go
+ * enum decoder accepts any JSON string and maps an unknown name to the enum's
+ * zero value; only incompatible JSON types fail unmarshalling.
+ */
+export const sourceConquestHeroArgument = (
+  body: unknown
+): Hero | undefined => {
+  if (body === null) return undefined
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+  const value = (body as Record<string, unknown>).hero
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    throw invalidArgument('failed to unmarshal request data')
+  }
+  return SOURCE_HERO_VALUES.has(value as Hero) ? (value as Hero) : Hero.UNKNOWN
+}
+
+export const LEGACY_CONQUEST_EVENT_ID = 1
+export const LEGACY_CONQUEST_POINTS_REQUIRED = 30
+export const CONQUEST_V2_EVENT_ID = 2
+
+interface ConquestRow {
+  id: number
+  user_id: string
+  status: ConquestStatus
+  nonce: number
+  mode: GameMode
+  hero: Hero
+  match_progress: string
+  created_at: string
+  ended_at: string | null
+}
+
+interface WeeklyGoldRow {
+  starts_at: string
+  ends_at: string
+  card_id: number
+  total_supply: number
+}
+
+interface ConquestMatchPublicationRow {
+  match_id: string
+}
+
+const conquest = (row: ConquestRow): Conquest =>
+  sourceConquestWire({
+    id: row.id,
+    status: row.status,
+    nonce: row.nonce,
+    mode: row.mode,
+    hero: row.hero,
+    // The source ConquestStatus RPC never reads a persisted deck class. It
+    // derives the optional projection from the locked hero on every response.
+    deckClass: HERO_DECK_CLASS[row.hero] ?? DeckClass.UNKNOWN_CLASS,
+    matchProgress: parseConquestMatchProgress(row.match_progress),
+    createdAt: row.created_at,
+    endedAt: row.ended_at ?? undefined
+  })
+
+const rewardsForWins = (wins: number) => ({
+  silver: wins === 1 ? 1 : wins === 2 ? 2 : wins === 3 ? 1 : 0,
+  gold: wins === 3 ? 1 : 0
+})
+
+const conquestStatsResults = (
+  value: string,
+  unpublishedMatchIds: ReadonlySet<string>
+): { results: unknown[]; withheld: boolean } => {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error('Conquest match progress is malformed')
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Conquest match progress is malformed')
+  }
+
+  // ConquestStats uses PostgreSQL jsonb_object_keys/jsonb_each directly in
+  // the source. It counts every raw object key and only the exact JSON string
+  // "WIN" as a win; unlike ConquestStatus, it never decodes map[uint64].
+  const entries = Object.entries(parsed)
+  return {
+    results: entries
+      .filter(([matchId]) => !unpublishedMatchIds.has(matchId))
+      .map(([, result]) => result),
+    withheld: entries.some(([matchId]) => unpublishedMatchIds.has(matchId))
+  }
+}
+
+export const conquestTreasureProgress = conquestV2TreasureProgress
+
+export class ConquestRepository {
+  constructor(private readonly database: D1Database) {}
+
+  private async entryStatus(userId: string): Promise<ConquestStatus | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT status FROM player_conquests
+         WHERE user_id = ?
+           AND status IN ('IN_PROGRESS', 'REWARDS_PENDING')
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      .bind(userId)
+      .first<{ status: ConquestStatus }>()
+    return row?.status ?? null
+  }
+
+  private async unpublishedMatchIds(userId: string): Promise<Set<string>> {
+    const rows = await this.database
+      .prepare(
+        `SELECT CAST(id AS TEXT) AS match_id
+         FROM multiplayer_matches
+         WHERE status <> 'ended'
+           AND (player1_user_id = ? OR player2_user_id = ?)`
+      )
+      .bind(userId, userId)
+      .all<ConquestMatchPublicationRow>()
+    return new Set(rows.results.map(row => row.match_id))
+  }
+
+  async isDrainable(userId: string, mode: GameMode): Promise<boolean> {
+    if (
+      mode !== GameMode.CONQUEST_CONSTRUCTED &&
+      mode !== GameMode.CONQUEST_DISCOVERY
+    ) {
+      return false
+    }
+    const row = await this.database
+      .prepare(
+        `SELECT 1
+         FROM player_conquests conquest
+         JOIN conquest_approved_queue_pools pool
+           ON pool.version = conquest.reward_pool_version
+         JOIN game_mode_status mode
+           ON mode.game_mode = conquest.mode AND mode.enabled = 1
+         WHERE conquest.user_id = ?
+           AND conquest.status = 'IN_PROGRESS'
+           AND conquest.mode = ?
+           AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
+               IS conquest.created_at
+           AND pool.starts_at <= conquest.created_at
+           AND pool.ends_at >= conquest.created_at
+         LIMIT 1`
+      )
+      .bind(userId, mode)
+      .first()
+    return Boolean(row)
+  }
+
+  async drainingModes(): Promise<Set<GameMode>> {
+    const rows = await this.database
+      .prepare(
+        `SELECT DISTINCT conquest.mode
+         FROM player_conquests conquest
+         JOIN conquest_approved_queue_pools pool
+           ON pool.version = conquest.reward_pool_version
+         JOIN game_mode_status mode
+           ON mode.game_mode = conquest.mode AND mode.enabled = 1
+         WHERE conquest.status = 'IN_PROGRESS'
+           AND conquest.mode IN (
+             'CONQUEST_CONSTRUCTED', 'CONQUEST_DISCOVERY'
+           )
+           AND strftime('%Y-%m-%dT%H:%M:%fZ', conquest.created_at)
+               IS conquest.created_at
+           AND pool.starts_at <= conquest.created_at
+           AND pool.ends_at >= conquest.created_at`
+      )
+      .all<{ mode: GameMode }>()
+    return new Set(rows.results.map(row => row.mode))
+  }
+
+  async enter(userId: string, hero: Hero, at = new Date()): Promise<boolean> {
+    const deckClass = HERO_DECK_CLASS[hero]
+    if (hero === Hero.UNKNOWN) throw new Error('hero is missing')
+    if (!deckClass) throw invalidArgument('hero is invalid')
+    const entryStatus = await this.entryStatus(userId)
+    if (entryStatus === ConquestStatus.IN_PROGRESS) return true
+    if (entryStatus === ConquestStatus.REWARDS_PENDING) {
+      // The source updates progress and creates rewards in one transaction.
+      // Cloudflare persists those retryable stages separately, so pending
+      // settlement must retain the source's single-run admission boundary.
+      throw new Error('conquest rewards are still settling')
+    }
+
+    const [rank, ticket, nonce] = await Promise.all([
+      this.database
+        .prepare(
+          `WITH ${publishedAccountStatsCTESQL()}
+           SELECT 1 FROM source_visible_account_stats
+           WHERE user_id = ?
+             AND player_rank IN (
+               'TRAINEE', 'APPRENTICE', 'EXPERT', 'MASTER', 'GRANDWEAVER'
+             )
+           LIMIT 1`
+        )
+        .bind(userId)
+        .first(),
+      this.database
+        .prepare(
+          `SELECT balance FROM player_items
+           WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+             AND token_id = 2 AND balance > 0`
+        )
+        .bind(userId)
+        .first<{ balance: number }>(),
+      this.database
+        .prepare(
+          `SELECT COALESCE(MAX(nonce), 0) + 1 AS nonce
+           FROM player_conquests WHERE user_id = ?`
+        )
+        .bind(userId)
+        .first<{ nonce: number }>()
+    ])
+    // EnterConquest intentionally maps state-manager failures to a generic
+    // internal error in the source service. Plain errors preserve that wire
+    // behavior through the shared RPC error boundary.
+    if (!rank) throw new Error('the rank is too low')
+    if (!ticket) throw new Error('not enough conquest tickets')
+
+    const entryKey = crypto.randomUUID()
+    const createdAt = at.toISOString()
+    await this.database.batch([
+      this.database
+        .prepare(
+          `WITH ${publishedAccountStatsCTESQL()}
+           INSERT OR IGNORE INTO player_conquests
+             (entry_key, user_id, status, nonce, mode, hero, deck_class,
+              match_progress, created_at, reward_pool_version)
+           SELECT ?, ?, 'IN_PROGRESS', ?, 'CONQUEST_CONSTRUCTED', ?, ?, '{}',
+                  ?, verified.pool_version
+           FROM conquest_verified_queue_pools verified
+           JOIN conquest_approved_active_reward_pools approved
+             ON approved.version = verified.pool_version
+           WHERE verified.starts_at <= ? AND verified.ends_at >= ?
+             AND EXISTS (
+             SELECT 1 FROM source_visible_account_stats
+             WHERE user_id = ?
+               AND player_rank IN (
+                 'TRAINEE', 'APPRENTICE', 'EXPERT', 'MASTER', 'GRANDWEAVER'
+               )
+           ) AND EXISTS (
+             SELECT 1 FROM player_items
+             WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+               AND token_id = 2 AND balance > 0
+           ) AND EXISTS (
+             SELECT 1 FROM game_mode_status
+             WHERE game_mode = 'CONQUEST_CONSTRUCTED' AND enabled = 1
+           ) AND NOT EXISTS (
+             SELECT 1 FROM player_conquests existing
+             WHERE existing.user_id = ?
+               AND existing.status IN ('IN_PROGRESS', 'REWARDS_PENDING')
+           )
+           ORDER BY verified.starts_at DESC, verified.pool_version DESC
+           LIMIT 1`
+        )
+        .bind(
+          entryKey,
+          userId,
+          nonce?.nonce ?? 1,
+          hero,
+          deckClass,
+          createdAt,
+          createdAt,
+          createdAt,
+          userId,
+          userId,
+          userId
+        ),
+      this.database
+        .prepare(
+          `UPDATE player_items SET balance = balance - 1, updated_at = ?
+           WHERE user_id = ? AND item_type = 'SW_CONQUEST_TICKET'
+             AND token_id = 2 AND balance > 0
+             AND EXISTS (
+               SELECT 1 FROM player_conquests WHERE entry_key = ?
+             )`
+        )
+        .bind(createdAt, userId, entryKey)
+    ])
+    const inserted = await this.database
+      .prepare('SELECT 1 FROM player_conquests WHERE entry_key = ?')
+      .bind(entryKey)
+      .first()
+    if (inserted) return true
+    const concurrentStatus = await this.entryStatus(userId)
+    if (concurrentStatus === ConquestStatus.IN_PROGRESS) return true
+    if (concurrentStatus === ConquestStatus.REWARDS_PENDING) {
+      throw new Error('conquest rewards are still settling')
+    }
+    throw new Error('enter conquest')
+  }
+
+  async status(userId: string): Promise<Conquest | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT id, user_id, status, nonce, mode, hero,
+                match_progress, created_at, ended_at
+         FROM player_conquests conquest
+         WHERE conquest.user_id = ?
+           AND (
+             conquest.status = 'IN_PROGRESS'
+             OR EXISTS (
+               SELECT 1
+               FROM json_each(conquest.match_progress) progress
+               JOIN multiplayer_matches match
+                 ON CAST(match.id AS TEXT) = CAST(progress.key AS TEXT)
+               WHERE match.status <> 'ended'
+                 AND (
+                   match.player1_user_id = conquest.user_id
+                   OR match.player2_user_id = conquest.user_id
+                 )
+             )
+           )
+         ORDER BY conquest.id DESC
+         LIMIT 1`
+      )
+      .bind(userId)
+      .first<ConquestRow>()
+    if (!row) return null
+    const unpublishedMatchIds = await this.unpublishedMatchIds(userId)
+    const matchProgress = parseConquestMatchProgress(row.match_progress)
+    for (const matchId of unpublishedMatchIds) delete matchProgress[matchId]
+    return conquest({
+      ...row,
+      status: ConquestStatus.IN_PROGRESS,
+      match_progress: JSON.stringify(matchProgress),
+      ended_at: null
+    })
+  }
+
+  async stats(userId: string): Promise<
+    Omit<ConquestStats, 'firstConquestMatchPlayed'> & {
+      firstConquestMatchPlayed: string | null
+    }
+  > {
+    const rows = await this.database
+      .prepare(
+        `SELECT id, user_id, status, nonce, mode, hero,
+                match_progress, created_at, ended_at
+         FROM player_conquests WHERE user_id = ?
+         ORDER BY id ASC`
+      )
+      .bind(userId)
+      .all<ConquestRow>()
+    const unpublishedMatchIds = await this.unpublishedMatchIds(userId)
+    const result = {
+      discoveryTicketsUsed: 0,
+      constructedTicketsUsed: 0,
+      discoveryMatchesPlayed: 0,
+      constructedMatchesPlayed: 0,
+      discoveryWinRate: 0,
+      constructedWinRate: 0,
+      discoverySilverCardsWon: 0,
+      constructedSilverCardsWon: 0,
+      discoveryGoldCardsWon: 0,
+      constructedGoldCardsWon: 0,
+      firstConquestMatchPlayed: rows.results[0]?.created_at ?? null
+    }
+    let discoveryWins = 0
+    let constructedWins = 0
+    for (const row of rows.results) {
+      const progress = conquestStatsResults(
+        row.match_progress,
+        unpublishedMatchIds
+      )
+      const wins = progress.results.filter(
+        value => value === ConquestMatchResult.WIN
+      ).length
+      if (row.mode === GameMode.CONQUEST_DISCOVERY) {
+        result.discoveryTicketsUsed++
+        result.discoveryMatchesPlayed += progress.results.length
+        discoveryWins += wins
+        if (row.status === ConquestStatus.COMPLETED && !progress.withheld) {
+          const reward = rewardsForWins(wins)
+          result.discoverySilverCardsWon += reward.silver
+          result.discoveryGoldCardsWon += reward.gold
+        }
+      } else {
+        result.constructedTicketsUsed++
+        result.constructedMatchesPlayed += progress.results.length
+        constructedWins += wins
+        if (row.status === ConquestStatus.COMPLETED && !progress.withheld) {
+          const reward = rewardsForWins(wins)
+          result.constructedSilverCardsWon += reward.silver
+          result.constructedGoldCardsWon += reward.gold
+        }
+      }
+    }
+    if (result.discoveryMatchesPlayed > 0) {
+      result.discoveryWinRate = goFloat32Percentage(
+        discoveryWins,
+        result.discoveryMatchesPlayed
+      )
+    }
+    if (result.constructedMatchesPlayed > 0) {
+      result.constructedWinRate = goFloat32Percentage(
+        constructedWins,
+        result.constructedMatchesPlayed
+      )
+    }
+    return result
+  }
+
+  async points(userId: string, eventId: number, at = new Date()) {
+    // Both source RPCs call FindOrCreateByAddressAndEventID before projecting
+    // zero points. Preserve that state contract instead of synthesizing a
+    // response for a row that does not exist.
+    await this.database
+      .prepare(
+        `INSERT OR IGNORE INTO player_conquest_points
+           (user_id, event_id, current_points, total_points, updated_at)
+         VALUES (?, ?, 0, 0, ?)`
+      )
+      .bind(userId, eventId, at.toISOString())
+      .run()
+    // Go commits the event-2 increment and terminal match together. Worker
+    // stages retain the immutable pre-match values until the ledger publishes.
+    const row = await this.database
+      .prepare(
+        `WITH unpublished AS (
+           SELECT receipt.before_points, receipt.before_total_points
+           FROM multiplayer_match_conquest_point_players receipt
+           JOIN multiplayer_matches match
+             ON match.proposal_id = receipt.proposal_id
+           WHERE receipt.user_id = ? AND ? = 2
+             AND match.status <> 'ended'
+           ORDER BY receipt.processed_at ASC, receipt.proposal_id ASC
+           LIMIT 1
+         )
+         SELECT
+           COALESCE(
+             (SELECT before_points FROM unpublished), points.current_points
+           ) AS current_points,
+           COALESCE(
+             (SELECT before_total_points FROM unpublished), points.total_points
+           ) AS total_points
+         FROM player_conquest_points points
+         WHERE points.user_id = ? AND points.event_id = ?`
+      )
+      .bind(userId, eventId, userId, eventId)
+      .first<{ current_points: number; total_points: number }>()
+    if (!row) throw new Error('Conquest points could not be created')
+    return {
+      current: row.current_points,
+      total: row.total_points
+    }
+  }
+
+  async rewards(at = new Date()): Promise<WeeklyGolds[]> {
+    const timestamp = at.toISOString()
+    const rows = await this.database
+      .prepare(
+        `SELECT pool.starts_at, pool.ends_at, cards.card_id,
+                COALESCE(SUM(items.balance), 0) AS total_supply
+         FROM conquest_approved_active_reward_pools pool
+         JOIN conquest_reward_pool_cards cards
+           ON cards.pool_version = pool.version
+          AND cards.item_type = 'SW_GOLD_CARDS'
+         LEFT JOIN player_items items
+           ON items.item_type = 'SW_GOLD_CARDS'
+          AND items.token_id = cards.card_id AND items.balance > 0
+         WHERE pool.starts_at <= ? AND pool.ends_at >= ?
+         GROUP BY pool.version, pool.starts_at, pool.ends_at, cards.card_id
+         ORDER BY pool.starts_at DESC, pool.version DESC, cards.card_id`
+      )
+      .bind(timestamp, timestamp)
+      .all<WeeklyGoldRow>()
+    return sourceWeeklyGoldsListWire(
+      rows.results.map(row => ({
+        startAt: row.starts_at,
+        endAt: row.ends_at,
+        tokenId: getGoldID(row.card_id),
+        totalSupply: row.total_supply
+      }))
+    )
+  }
+}

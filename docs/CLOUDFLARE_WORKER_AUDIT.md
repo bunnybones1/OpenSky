@@ -1,0 +1,118 @@
+# Cloudflare background-worker audit
+
+Cloud Weasel does not inherit the Go worker queue by assumption. Every active
+runner registered by `api/cmd/opensky-worker/main.go` has an explicit product
+and Cloudflare disposition, enforced by
+`utils/audit-cloudflare-worker-runners.mjs` during the Cloudflare build.
+
+Production migration `0068_conquest_v2_offchain_rewards.sql` and main Worker
+version `062efd07-b279-4707-86cb-0d2549f9fee4` were deployed on 2026-08-12.
+Post-deploy D1 verification found zero Conquest V2 schedules, cycles, awards,
+and failure incidents, as expected for the disabled-by-default rollout. Public
+webapp, Google-provider session, Ping, and the disabled public treasure-info
+projection returned HTTP 200.
+
+Production migration `0093_operator_item_grant_receipts.sql` and main Worker
+version `c83c8deb-ce71-4ae4-b5ef-11dc5cada6e1` were deployed on 2026-08-13 for
+the generic off-chain item-giveaway port. The deployed adapter returned HTTP
+401 to an anonymous `GMGrantItems` request, while the local-bot game entry and
+the original Quests, SkyPass, Practice, and Cache Info routes remained healthy.
+Read-only D1 verification found zero operator grant headers, zero operator
+inventory-grant rows, and zero player-support permission grants; the rollout
+therefore created no reward or production write authority. The release used
+the exact artifact that passed all static gates, 334 main-Worker tests, 216
+multiplayer tests, 6 analytics tests, and 24 browser/game tests.
+
+The central reward rule is: a gameplay reward must be delivered to authoritative
+off-chain inventory. It must not require a wallet, blockchain transaction, or
+mint. WalletConnect remains an optional ownership integration only.
+
+## Current inventory
+
+| Source runner                  | Disposition | Cloud Weasel behavior                                                                                                                                                                                                                                                                                                  |
+| ------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AccountDeletionRunner`        | Ported      | Fresh Google step-up atomically locks the account and records one deterministic Workflow. It sleeps to the exact source deadline, verifies private R2 cleanup, then atomically anonymizes D1 and remains re-drivable without a terminal retry ceiling.                                                                 |
+| `BalanceSyncRunner`            | Superseded  | Authenticated optional-wallet reads project current contents directly from the configured provider. They never synchronize chain balances into D1 inventory or make a wallet the login/reward authority.                                                                                                               |
+| `ConquestV2PoolRunner`         | Ported      | D1 preserves the source float32 pool hysteresis and snapshots its result into immutable weekly cycles; the public USDC surface remains zero-gated.                                                                                                                                                                     |
+| `ConquestV2RewardsRunner`      | Ported      | Explicit, disabled-by-default schedules snapshot weekly points, preserve rollover and delayed delivery, then grant deterministic expansion-only Silver cards to D1 inventory. Legacy USDC calculations are audit-only.                                                                                                 |
+| `CrashedMatchCleanupRunner`    | Superseded  | Authoritative match Durable Objects persist deadlines and recover them with alarms.                                                                                                                                                                                                                                    |
+| `DeckRankUpdateRunner`         | Ported      | Match settlement applies deck rank changes through an idempotent D1 coordinator.                                                                                                                                                                                                                                       |
+| `FixStarterDecksRunner`        | Superseded  | Clean account bootstrap grants the exact unlocked starter cards, while capability-gated `GMResetStarterDecks` repairs any later deck/card drift atomically.                                                                                                                                                            |
+| `GiveawayOffChainTokensRunner` | Superseded  | `GMGrantItems` preserves its operator-supplied token-codec item map through capability-gated D1 grants with one immutable request and before/after receipt per item. The source has no production task producer, and production has no player-support permission grants.                                               |
+| `GrantStickerRewardsRunner`    | Ported      | Referral rewards use idempotent receipts and off-chain `player_items`.                                                                                                                                                                                                                                                 |
+| `LazyMigrationRunner`          | Superseded  | With zero imported users, account bootstrap directly creates the post-migration state: Ada, exact starter decks, and their off-chain Base cards. Versioned D1 migrations handle schema evolution.                                                                                                                      |
+| `LeaderboardRewardsRunner`     | Ported      | Scheduled, receipt-backed off-chain inventory rewards.                                                                                                                                                                                                                                                                 |
+| `MarkNotNewRunner`             | Ported      | Due updates are applied idempotently on inventory reads, so no cron failure can strand the state.                                                                                                                                                                                                                      |
+| `OnChainPaymentEventRunner`    | Superseded  | The same source SkyPass and Conquest-ticket catalog is fulfilled to off-chain inventory by verified Stripe or mobile-store receipts.                                                                                                                                                                                   |
+| `OnChainPaymentListenerRunner` | Superseded  | Provider-signed Stripe/mobile callbacks replace chain-log observation and grant the purchased SkyPass or ticket exactly once.                                                                                                                                                                                          |
+| `PromoteGrandmastersRunner`    | Ported      | Promotion is part of the receipt-backed leaderboard reset cycle.                                                                                                                                                                                                                                                       |
+| `PushNotificationsRunner`      | Ported      | Disabled-by-default OneSignal projection targets Google identity IDs through one Queue responsibility per authoritative in-app notification. A stable provider idempotency key, D1 outbox re-drive, and immutable failures preserve recovery beyond Queue/DLQ exhaustion without affecting in-app delivery or rewards. |
+| `RankPointsHardResetRunner`    | Ported      | Implemented in the leaderboard reset cycle.                                                                                                                                                                                                                                                                            |
+| `RankPointsSoftResetRunner`    | Ported      | Implemented in the leaderboard reset cycle.                                                                                                                                                                                                                                                                            |
+| `SendTxnsRunner`               | Superseded  | Its 13 queues have a separate mechanical audit; every player reward behavior maps to an off-chain item or entitlement, while one producerless treasury-transfer queue is classified as unused infrastructure.                                                                                                          |
+| `SkypassAutoClaimRunner`       | Ported      | One Queue responsibility per eligible player reuses immutable manual-claim receipts and applies the complete remaining active-policy reward set off chain in one D1 transaction. D1 stays pending and re-drivable beyond Queue/DLQ exhaustion.                                                                         |
+| `SkypassEndOfSeasonRunner`     | Ported      | One deterministic Workflow per D1 close becomes due at the source boundary plus ten seconds, pins the exact active policy, waits for match-XP publication, snapshots eligible players, and completes only after every durable player receipt.                                                                          |
+| `StripeEventRunner`            | Ported      | Verified Stripe webhooks fulfill purchases idempotently in D1.                                                                                                                                                                                                                                                         |
+| `TxnStatusRunner`              | Superseded  | Atomic D1 reward receipts and completion guards replace relayer polling and make retry status local, auditable, and exactly once.                                                                                                                                                                                      |
+
+`pnpm check:cloudflare:worker-runners` fails if the Go entrypoint adds or removes
+a runner without review, if mapped implementation evidence disappears, or if a
+commented-out runner is accidentally counted as active. It also rejects
+`retired` as the disposition of any active source runner: the behavior must be
+ported or tied to concrete superseding evidence.
+
+### SendTxnsRunner reward map
+
+| Source queue                      | Cloud Weasel disposition                                                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ExitConquestQueue`               | Source Conquest Silver selection is granted to `player_items` under an immutable settlement receipt.                                                                                        |
+| `MintConquestEntriesQueue`        | A verified Stripe purchase grants `SW_CONQUEST_TICKET` directly in D1; no wallet ticket is minted.                                                                                          |
+| `MintSilverCardRewardsQueue`      | The consolidated leaderboard cycle grants `SW_SILVER_CARDS` under player award receipts.                                                                                                    |
+| `MintTicketRewardsQueue`          | The consolidated leaderboard cycle grants `SW_CONQUEST_TICKET` under the same player award receipt.                                                                                         |
+| `MintStickerRewardsQueue`         | Referral sticker awards grant `SW_STICKERS` with immutable per-token before/after inventory receipts.                                                                                       |
+| `DelayedMintingQueue`             | Delayed Conquest Gold delivery grants `SW_GOLD_CARDS` with one delivery receipt per run.                                                                                                    |
+| `SendConquestExtraRewardQueue`    | Unused infrastructure: this is a treasury asset transfer, not a mint; the source has no production producer and no player earning, purchase, or reward flow. No product feature is retired. |
+| `ConquestV2SendRewardQueue`       | Conquest V2 grants deterministic `SW_SILVER_CARDS`; the source USDC transfer is not represented as inventory or a cash promise.                                                             |
+| `MintLeaderboardRewardsQueue`     | Combined leaderboard Silver and ticket rewards are granted atomically under D1 cycle/player receipts.                                                                                       |
+| `MintCardBackRewardsQueue`        | An earned, active-policy SkyPass claim grants `SW_CARD_BACKS` through immutable per-token before/after receipts.                                                                            |
+| `MintSkypassConquestTicketsQueue` | An earned, active-policy SkyPass claim grants `SW_CONQUEST_TICKET` through an immutable before/after receipt.                                                                               |
+| `MintSkypassSilverCardsQueue`     | An earned, active-policy SkyPass claim grants `SW_SILVER_CARDS` through immutable per-token before/after receipts.                                                                          |
+| `MintSkypassStickersQueue`        | An earned, active-policy SkyPass claim grants `SW_STICKERS` through immutable per-token before/after receipts.                                                                              |
+
+The production mint-queue gate reads the implementation evidence behind every
+row. A queue is not accepted merely because its source producer is absent.
+It rejects retirement for every queue with a producer or player outcome:
+removing minting must preserve that reward through an exact off-chain
+fulfillment path, not remove the player outcome. The sole unused-infrastructure
+classification must remain explicitly producerless and player-outcome-free.
+The separate reward-producer gate also scans upstream Go inventory, XP, hero,
+and starter-deck mutations, so a grant cannot evade review merely because its
+later mint happens in another worker.
+
+The TypeScript reward-mutator gate closes the other side of that boundary. It
+inventories all direct writes to the seven authoritative reward/progression
+ledgers across the main Worker, game server, and match service. The reviewed
+inventory currently contains 20 modules and 71 writes; any count drift or new
+module requires an explicit off-chain safety disposition before release.
+
+SkyPass season close reuses the existing immutable claim receipts and off-chain
+reward delivery paths rather than recreating the source mint queues. External
+device push is strictly optional: without complete OneSignal configuration the
+scheduled pass is a read-only no-op. In-app notifications and their off-chain
+rewards remain authoritative and do not depend on it. Candidate discovery reads
+the durable player/season progress row only when its monotonic achieved source
+account level is greater than its immutable initial source account level. It
+does not infer current-season progress by scanning the player's lifetime
+progression, and match, quest, premium, purchase, and support writers update or
+initialize that row inside their existing atomic receipt boundary.
+
+Conquest V2 settlement is deployed dormant by design: migration `0068` seeds no
+schedule. Enabling it requires an immutable cadence, season/week anchor,
+delivery delay, reward card sets, and a source settings `WeightPerSilverCard`
+that gives even level-one treasure at least one off-chain item. The Worker
+refuses to create a cycle or deduct points if that invariant fails. Once a
+cycle begins, point rollover, award receipts, inventory grants, notifications,
+and feed rows are retry-safe. Failed runs create immutable incident rows and
+remain retryable indefinitely; a cycle cannot terminally strand rolled-over
+points. The source USDC projection is retained only in an
+operator reconciliation column and is never returned as a player reward.

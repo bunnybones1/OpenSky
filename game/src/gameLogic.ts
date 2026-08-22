@@ -47,6 +47,8 @@ import {
   LocalGameMode
 } from './helpers/envGameModeHelpers'
 import { getTimeMarker } from './helpers/timeMarker'
+import { fetchIdentityGamePrincipal } from './identitySession'
+import { PRODUCT_ACCOUNT_NAME, productDocumentTitle } from './productBrand'
 import queryParams from './queryParams'
 import { matchEnded, store } from './state'
 import { statePlayer } from './state/StatePlayer'
@@ -123,21 +125,33 @@ export async function initializeGame() {
   ) {
     // Fetch account if jwt found
     try {
-      if (window.localStorage.getItem(SKYWEAVER_JWT_KEY)) {
+      if (
+        window.localStorage.getItem(SKYWEAVER_JWT_KEY) ||
+        env.AUTH_MODE === 'google'
+      ) {
         const session = await apiClient.getSession()
 
         if (!session.account) {
-          throw new Error('No OpenSky account found for this session.')
+          throw new Error(`No ${PRODUCT_ACCOUNT_NAME} found for this session.`)
         }
 
         account = session.account
+        if (env.AUTH_MODE === 'google') {
+          // Google identity metadata lives on the identity endpoint rather than
+          // the legacy generated RPC contract, which intentionally strips
+          // fields it does not know about.
+          const gamePrincipal = await fetchIdentityGamePrincipal(env.API_HOST)
+          account = { ...account, address: gamePrincipal }
+        }
       } else {
         throw new Error('cannot find opensky JWT')
       }
     } catch (err) {
       if (gameMode !== LocalGameMode.SPECTATE) {
         store.fireClientError(
-          new Error('Failed to load your OpenSky account. Please reload.')
+          new Error(
+            `Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`
+          )
         )
         console.error(err)
         return
@@ -153,7 +167,7 @@ export async function initializeGame() {
     // something wrong
     console.warn('Invalid wallet address')
     store.fireClientError(
-      new Error('Failed to load your OpenSky account. Please reload.')
+      new Error(`Failed to load your ${PRODUCT_ACCOUNT_NAME}. Please reload.`)
     )
     return
   }
@@ -254,7 +268,7 @@ export async function startGame() {
   ) {
     quickLoadFromQueryParams()
   } else if (gameMode === LocalGameMode.LOCAL_BOT) {
-    document.title = 'OpenSky | Local Bot'
+    document.title = productDocumentTitle('Local Bot')
 
     const defaultParams: GameParams = {
       season: 999,
@@ -419,7 +433,7 @@ export async function startGame() {
       }
     )
   } else if (gameMode === LocalGameMode.SANDBOX) {
-    document.title = 'OpenSky | Sandbox'
+    document.title = productDocumentTitle('Sandbox')
     const gameParams: GameParams = {
       season: queryParams.skipAuth
         ? 9999
@@ -530,8 +544,10 @@ export async function startGame() {
     if (!(gameMode in GameMode)) {
       throw new Error(`Invalid game mode ${gameMode}`)
     }
-    const authToken = window.localStorage.getItem(SKYWEAVER_JWT_KEY)
-    if (!authToken) {
+    const authToken =
+      window.localStorage.getItem(SKYWEAVER_JWT_KEY) ??
+      (env.AUTH_MODE === 'google' ? '' : null)
+    if (authToken === null) {
       throw new Error(`Authentication token missing`)
     }
     store.joinMatch(authToken)

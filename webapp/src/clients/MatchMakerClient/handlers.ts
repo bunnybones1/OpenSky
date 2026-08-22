@@ -34,7 +34,8 @@ export const onMatchReady = (data: MatchReadyToStartMessage) => {
 }
 
 export const onPlayerAccepted = (data: AcceptMatchMessage) => {
-  const authedAddress = authenticationState.userAddress
+  const authedAddress =
+    authenticationState.gamePrincipal ?? authenticationState.userAddress
 
   if (data.playerID === authedAddress) {
     updatePlayState('matchMakerStatus', MatchMakerStatus.WAITING_OPPONENT)
@@ -42,7 +43,8 @@ export const onPlayerAccepted = (data: AcceptMatchMessage) => {
 }
 
 export const onPlayerDeclined = (message: DeclineMatchMessage) => {
-  const authedAddress = authenticationState.userAddress
+  const authedAddress =
+    authenticationState.gamePrincipal ?? authenticationState.userAddress
 
   if (message.playerID === authedAddress) {
     resetMatchMakerState()

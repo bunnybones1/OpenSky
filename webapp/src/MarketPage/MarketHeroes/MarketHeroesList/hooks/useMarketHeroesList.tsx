@@ -1,9 +1,11 @@
 /* eslint-disable valtio/state-snapshot-rule */
+import { ItemType } from '@opensky/proto'
 import { useEffect, useMemo } from 'react'
 import { useSnapshot } from 'valtio'
 
 import { useFilteredHeroSkinsList } from '~/shared/hooks/hero-skins/useFilteredHeroSkinsList'
 import { useHeroSkinMintCosts } from '~/shared/queries/hero-skins/useHeroSkinMintCost'
+import { useTokenBalances } from '~/shared/queries/useTokenBalances'
 import { marketHeroesFilterState } from '~/shared/state/market-heroes/market-heroes-filter-state'
 import { updateMarketHeroesState } from '~/shared/state/market-heroes/market-heroes-state'
 import { CARD_SORTING_OPTIONS } from '~/shared/types/cards'
@@ -41,15 +43,32 @@ const getHeroesSortedByPrice = (
   return ids
 }
 
-export const useMarketHeroesList = () => {
+export const useMarketHeroesList = (inventoryOnly = false) => {
   const filters = useSnapshot(marketHeroesFilterState)
 
   const { heroSkinList } = useFilteredHeroSkinsList(filters)
-  const { costs } = useHeroSkinMintCosts()
+  const { costs } = useHeroSkinMintCosts(inventoryOnly)
+  const { data: balances } = useTokenBalances(ItemType.SW_HERO_SKINS)
 
   const marketHeroSkinList = useMemo(() => {
     let ids = heroSkinList?.map(({ id }) => id)
+    if (inventoryOnly) {
+      if (ids === undefined || balances === undefined) return undefined
+
+      const balanceById = new Map(
+        (balances || []).map((balance) => [balance.tokenID, balance.balance])
+      )
+      const direction =
+        filters.sort === CARD_SORTING_OPTIONS.QUANTITY_ASCENDING ? 1 : -1
+
+      ids = [...ids].sort((left, right) => {
+        const quantityDifference =
+          ((balanceById.get(left) || 0) - (balanceById.get(right) || 0)) * direction
+        return quantityDifference || left - right
+      })
+    }
     if (
+      !inventoryOnly &&
       !!ids &&
       !!filters?.sort &&
       (filters.sort === CARD_SORTING_OPTIONS.PRICE_ASCENDING ||
@@ -59,7 +78,7 @@ export const useMarketHeroesList = () => {
     }
 
     return ids?.map((id) => ({ id }))
-  }, [costs, filters.sort, heroSkinList])
+  }, [balances, costs, filters.sort, heroSkinList, inventoryOnly])
 
   useEffect(() => {
     updateMarketHeroesState('numSearchResults', marketHeroSkinList?.length)

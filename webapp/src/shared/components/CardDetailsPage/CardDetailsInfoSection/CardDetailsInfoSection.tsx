@@ -22,10 +22,19 @@ interface CardDetailsInfoSectionProps {
     | ItemType.SW_SILVER_CARDS
   )[]
   switchCard?: (id: number) => void
+  hideTokenInfo?: boolean
+  inventoryOnly?: boolean
 }
 
 export const CardDetailsInfoSection = memo(
-  ({ Controls, id, allowedGrades, switchCard }: CardDetailsInfoSectionProps) => {
+  ({
+    Controls,
+    id,
+    allowedGrades,
+    switchCard,
+    hideTokenInfo,
+    inventoryOnly
+  }: CardDetailsInfoSectionProps) => {
     const isTabletWide = useResponsiveQuery('tabletWide')
 
     return (
@@ -41,11 +50,14 @@ export const CardDetailsInfoSection = memo(
         )}
       >
         {!!Controls && <Controls id={id} />}
-        <TokenInfoSection
-          switchCard={switchCard}
-          allowedGrades={allowedGrades}
-          id={id}
-        />
+        {!hideTokenInfo && (
+          <TokenInfoSection
+            switchCard={switchCard}
+            allowedGrades={allowedGrades}
+            id={id}
+            inventoryOnly={inventoryOnly}
+          />
+        )}
         {!isTabletWide && <FlavorTextSection id={id} />}
         <CardInfoSection id={id} />
         <Keywords id={id} />

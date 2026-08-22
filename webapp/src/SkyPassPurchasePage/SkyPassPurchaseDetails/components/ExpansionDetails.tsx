@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { useGetAssetContext } from '~/shared/hooks/useGetAssetContext'
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
@@ -28,7 +29,7 @@ export const ExpansionDetails = memo(() => {
         SkyPassDetail
       )}
     >
-      {!!getAssetUrl && (
+      {!!getAssetUrl && env.AUTH_MODE !== 'google' && (
         <div
           className={clsx(
             Sprinkles({

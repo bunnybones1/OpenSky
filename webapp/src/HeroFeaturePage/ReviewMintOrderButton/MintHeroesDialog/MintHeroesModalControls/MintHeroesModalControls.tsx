@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
-import { resetHeroFeatureState } from '~/HeroFeaturePage/shared/state'
+import env from '~/env'
+import {
+  derivedHeroFeatureState,
+  resetHeroFeatureState
+} from '~/HeroFeaturePage/shared/state'
 import { FlexBox, Text } from '~/shared/components/Base'
 import { Button } from '~/shared/components/Button'
 import { Icon } from '~/shared/components/Icon/Icon'
@@ -29,6 +33,7 @@ export const MintHeroesModalControls = memo(() => {
   const dispatch = useDispatch()
   const { t } = useTranslation()
   const { selectedCards } = useSnapshot(selectGoldsState)
+  const { totalSkinsInOrder } = useSnapshot(derivedHeroFeatureState)
   const store = useReduxStore()
   const { getAssetUrl } = useGetAssetContext()
 
@@ -47,6 +52,13 @@ export const MintHeroesModalControls = memo(() => {
   }, [dispatch, store])
 
   const isButtonDisabled = useMemo(() => {
+    if (env.AUTH_MODE === 'google') {
+      const selectedGolds = selectedCards.reduce(
+        (totalSelected, card) => totalSelected + card.amount,
+        0
+      )
+      return !totalSkinsInOrder || selectedGolds !== totalSkinsInOrder * 10
+    }
     // eslint-disable-next-line valtio/state-snapshot-rule
     if (!!selectedCards.length && totalGoldReduction.loading) return true
     if (!balances || !total) return true
@@ -59,11 +71,12 @@ export const MintHeroesModalControls = memo(() => {
 
     return balances.USDCBalance < formattedTotal
   }, [
-    selectedCards.length,
+    selectedCards,
     totalGoldReduction.loading,
     totalGoldReduction.value,
     balances,
-    total
+    total,
+    totalSkinsInOrder
   ])
 
   const { confirmHeroMintOrder, isConfirming } = useConfirmHeroMintOrder()
@@ -85,8 +98,12 @@ export const MintHeroesModalControls = memo(() => {
           frameType="default"
           colorType="default"
           onClick={onGoldCardButtonClick}
-          disabled={isButtonDisabled || isConfirming}
-          text={t('heroFeature.goldCardsButton')}
+          disabled={isConfirming}
+          text={
+            env.AUTH_MODE === 'google'
+              ? t('heroFeature.selectGoldCards')
+              : t('heroFeature.goldCardsButton')
+          }
           leftAdornment={
             !!getAssetUrl
               ? {
@@ -101,7 +118,13 @@ export const MintHeroesModalControls = memo(() => {
         colorType="blue"
         onClick={confirmHeroMintOrder}
         disabled={isButtonDisabled || isConfirming}
-        text={isConfirming ? undefined : t('shop.confirmBuy')}
+        text={
+          isConfirming
+            ? undefined
+            : env.AUTH_MODE === 'google'
+              ? t('heroFeature.unlockHeroSkins')
+              : t('shop.confirmBuy')
+        }
         leftAdornment={{ icon: isConfirming ? 'spinner' : undefined }}
       />
     </>

@@ -2,6 +2,7 @@ import { CODE_PRISMS, PrismClass } from '@opensky/shared/constants'
 import { useMemo } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Deck, DeckType } from '~/lib/proto'
 import { DECK_SORTING_OPTIONS } from '~/shared/constants/decks'
 import {
@@ -104,6 +105,8 @@ export const useItemsDecksList = () => {
       )
       .map((deck) => ({ id: deck.uuid }))
 
-    return [{ id: CREATE_DECK_BUTTON_ID }, ...deckIds, { id: BUY_DECKS_BUTTON_ID }]
+    return env.AUTH_MODE === 'google'
+      ? [{ id: CREATE_DECK_BUTTON_ID }, ...deckIds]
+      : [{ id: CREATE_DECK_BUTTON_ID }, ...deckIds, { id: BUY_DECKS_BUTTON_ID }]
   }, [prism, search, sort, unlockLevels, userDecks])
 }

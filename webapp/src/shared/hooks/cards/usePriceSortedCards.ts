@@ -10,6 +10,7 @@ interface UsePriceSortedCardsParams {
   sort?: CardSearchParams['sort']
   grade: ItemType.SW_GOLD_CARDS | ItemType.SW_SILVER_CARDS
   mode: MarketMode
+  disabled?: boolean
   onUpdate?: (numResults?: number) => void
 }
 
@@ -18,9 +19,10 @@ export const usePriceSortedCards = ({
   sort,
   mode,
   grade,
+  disabled,
   onUpdate
 }: UsePriceSortedCardsParams) => {
-  const { data: cardsSortedByPrice } = useTokensSortedByPrice(mode, grade)
+  const { data: cardsSortedByPrice } = useTokensSortedByPrice(mode, grade, disabled)
 
   const sortedCards = useMemo(() => {
     if (cardsSortedByPrice === undefined || !cards) return undefined

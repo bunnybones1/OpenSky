@@ -1,5 +1,4 @@
-import { MatchData } from 'Match'
-import { writeFileSync } from 'fs'
+import { MatchData } from './Match'
 
 export type FlatMatchData = {
   generalMatchData: string
@@ -63,19 +62,6 @@ export function processToCSV(m: MatchData): FlatMatchData {
     moveData: moveDataHeadings.concat(moveData)
   }
 }
-export function saveCSVFiles(matchCSVData: FlatMatchData) {
-  try {
-    // create 3 CSV files for the match data
-    writeFileSync('./match-data.csv', matchCSVData.generalMatchData)
-
-    writeFileSync('./game-state-data.csv', matchCSVData.gameStateData)
-
-    writeFileSync('./move-data.csv', matchCSVData.moveData)
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 function formatDate(date: Date): string {
   return date.toISOString().replace('T', ' ').substring(0, 23)
 }

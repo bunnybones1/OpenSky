@@ -1,0 +1,6 @@
+# The web/API gateway and matchmaker Worker must use the same value.
+INTERNAL_AUTH_SECRET=replace-with-a-long-random-value
+
+# Keep HCAPTCHA_DISABLED=true in wrangler.jsonc until these are configured.
+HCAPTCHA_SITE_KEY=replace-with-hcaptcha-site-key
+HCAPTCHA_SECRET=replace-with-hcaptcha-secret

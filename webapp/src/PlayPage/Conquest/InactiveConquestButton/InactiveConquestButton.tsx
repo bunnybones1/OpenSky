@@ -27,6 +27,7 @@ interface PurchaseTicketsButtonProps {
   isInQueue: boolean
   isPendingRewards: boolean
   isConquestLocked: boolean
+  isConquestAvailable: boolean
   tradeableTickets: number | undefined
   untradeableTickets: number | undefined
 }
@@ -37,6 +38,7 @@ export const InactiveConquestButton = memo(
     untradeableTickets,
     isInQueue,
     isConquestLocked,
+    isConquestAvailable,
     isPendingRewards
   }: PurchaseTicketsButtonProps) => {
     const isTabletWide = useResponsiveQuery('tabletWide')
@@ -53,6 +55,7 @@ export const InactiveConquestButton = memo(
     const isTicketHolder = !!tradeableTickets || !!untradeableTickets
 
     const isDisabled =
+      !isConquestAvailable ||
       isConquestLocked ||
       (!selectedConquestDeck && isTicketHolder) ||
       hasConvertedConquestTicket ||
@@ -128,15 +131,15 @@ export const InactiveConquestButton = memo(
           onClick={onClick}
           buttonId="playButton"
           text={
-            isConquestLocked
+            !isConquestAvailable || isConquestLocked
               ? t('generic.LOCKED')
               : !isTicketHolder
-              ? ALLOW_TICKET_SALES
-                ? t('play.getTickets')
-                : t('generic.LOCKED')
-              : isPendingRewards
-              ? t('play.exitConquest')
-              : t('play.startConquest')
+                ? ALLOW_TICKET_SALES
+                  ? t('play.getTickets')
+                  : t('generic.LOCKED')
+                : isPendingRewards
+                  ? t('play.exitConquest')
+                  : t('play.startConquest')
           }
         />
       </>

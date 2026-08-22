@@ -19,6 +19,7 @@ import { ethers } from 'ethers'
 import env from '~/env'
 import { AuthenticationClient } from '~/shared/clients'
 import { captureError } from '~/shared/helpers/sentry'
+import { authenticationState } from '~/shared/state/authentication-state'
 import { updatePlayState } from '~/shared/state/play-state'
 
 import { WebSocketClient } from '../WebsocketClient'
@@ -43,6 +44,11 @@ export class _MatchMakerClient_DONT_USE_DIRECTLY {
     if (!('type' in data)) {
       return
     }
+
+    // Message type only: useful at the WebSocket/UI boundary without logging
+    // match seeds, account data, or credentials.
+    // eslint-disable-next-line no-console
+    console.log('MatchMakerClient received', data.type)
 
     const message = data as MatchmakerMessage
 
@@ -111,6 +117,21 @@ export class _MatchMakerClient_DONT_USE_DIRECTLY {
   }
 
   generateSubkeyCertification = async (): Promise<SubkeyCertification> => {
+    if (env.AUTH_MODE === 'google') {
+      const principal = authenticationState.gamePrincipal
+      if (!principal || !/^0x[0-9a-f]{40}$/.test(principal)) {
+        throw new Error('invalid game principal')
+      }
+      const subkey = getOrCreateSubkey()
+      return {
+        player: Array.from(ethers.utils.arrayify(principal)),
+        subkey: Array.from(ethers.utils.arrayify(subkey.address)),
+        // Identity comes from the HttpOnly session at the edge. The game
+        // server binds this root subkey to that trusted principal.
+        signature: Array(65).fill(0)
+      }
+    }
+
     const provider = AuthenticationClient.wallet?.provider
     const wallet = ethers.Wallet.createRandom()
     const realWalletAddress = AuthenticationClient.wallet?.address

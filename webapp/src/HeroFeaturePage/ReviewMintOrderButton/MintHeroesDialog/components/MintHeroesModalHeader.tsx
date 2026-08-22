@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { Text } from '~/shared/components/Text'
 import { TitleDetail } from '~/shared/components/TitleDetail'
@@ -8,7 +9,7 @@ import { useConquestAndUSDCBalances } from '~/shared/queries/useConquestAndUSDCB
 import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
 export const MintHeroesModalHeader = memo(() => {
-  const { data: balances } = useConquestAndUSDCBalances(true)
+  const { data: balances } = useConquestAndUSDCBalances(env.AUTH_MODE !== 'google')
   const { t } = useTranslation()
 
   return (
@@ -24,7 +25,11 @@ export const MintHeroesModalHeader = memo(() => {
         left="40px"
         mobileLeft="40px"
         rightDisabled
-        title={t('heroFeature.orderDetailsTitle')}
+        title={t(
+          env.AUTH_MODE === 'google'
+            ? 'heroFeature.offchainOrderDetailsTitle'
+            : 'heroFeature.orderDetailsTitle'
+        )}
       />
       <div
         className={Sprinkles({
@@ -38,24 +43,38 @@ export const MintHeroesModalHeader = memo(() => {
           paddingRight: { base: '60px', tablet: '36px' }
         })}
       >
-        <Text className={Sprinkles({ paddingLeft: '4px' })} color="white">
-          {t('shop.currentBalanceWithArg', {
-            usdcBalance: !!balances ? balances.USDCBalance : '...'
-          })}
-        </Text>
-        <Text
-          className={Sprinkles({
-            display: 'flex',
-            alignItems: 'center',
-            paddingLeft: '4px',
-            marginRight: '16px'
-          })}
-          color="purple8"
-          fontSize="12px"
-        >
-          (<Icon type="network" color="purple8" height="10px" />
-          {t('generic.polygon')})
-        </Text>
+        {env.AUTH_MODE === 'google' ? (
+          <Text
+            className={Sprinkles({
+              paddingLeft: '4px',
+              marginRight: '16px'
+            })}
+            color="purple8"
+          >
+            {t('heroFeature.offchainExchangeRate')}
+          </Text>
+        ) : (
+          <>
+            <Text className={Sprinkles({ paddingLeft: '4px' })} color="white">
+              {t('shop.currentBalanceWithArg', {
+                usdcBalance: !!balances ? balances.USDCBalance : '...'
+              })}
+            </Text>
+            <Text
+              className={Sprinkles({
+                display: 'flex',
+                alignItems: 'center',
+                paddingLeft: '4px',
+                marginRight: '16px'
+              })}
+              color="purple8"
+              fontSize="12px"
+            >
+              (<Icon type="network" color="purple8" height="10px" />
+              {t('generic.polygon')})
+            </Text>
+          </>
+        )}
       </div>
     </div>
   )

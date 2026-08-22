@@ -12,6 +12,7 @@ import {
   LocalGameMode
 } from '~/helpers/envGameModeHelpers'
 import { Pin, ReadonlyPin } from '~/helpers/LayoutHelpers'
+import { productVersionLabel } from '~/productBrand'
 import queryParams from '~/queryParams'
 import { arenaReady } from '~/scenes/arena'
 import { appStore } from '~/state/stores/AppStore'
@@ -53,7 +54,7 @@ export default class HUDContainer extends UIContainer {
     let cursorX = marginX
 
     const versionString = new UITextMesh(
-      `OpenSky v${env.GITCOMMIT.slice(0, 10)}`,
+      productVersionLabel(env.GITCOMMIT),
       {
         ...textOptions.generic,
         vAlign: 'top',

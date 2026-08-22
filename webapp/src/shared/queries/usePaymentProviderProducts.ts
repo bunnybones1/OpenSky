@@ -9,7 +9,8 @@ import { authenticationState } from '../state/authentication-state'
 
 export const usePaymentProviderProducts = (
   provider: PaymentProvider,
-  itemType: ItemType
+  itemType: ItemType,
+  isEnabled = true
 ) => {
   const { userAddress } = useSnapshot(authenticationState)
   return useQuery(
@@ -26,7 +27,7 @@ export const usePaymentProviderProducts = (
       }
     },
     {
-      enabled: !!userAddress
+      enabled: isEnabled && !!userAddress
     }
   )
 }

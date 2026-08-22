@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { usePrevious } from 'react-use'
 
+import env from '~/env'
 import { mockClaimReward } from '~/HomePage/NotificationsDialog/mock/data'
 import {
   CardSet,
@@ -24,6 +25,7 @@ import {
   getTokenBalancesKey,
   getUserDecksKey
 } from '~/shared/constants/react-query-keys'
+import { IS_PREMIUM_SKYPASS_AVAILABLE } from '~/shared/constants/skypass'
 import {
   CONVERT_TO_SEQUENCE_WALLET_DIALOG,
   DEFAULT_LIST
@@ -117,11 +119,14 @@ export const SkyPassClaimReward = memo(
     const claimSkypassRewards = useClaimSkypassReward()
     const isSmallScreen = !isTablet
     const selectedReward = useSelectedSkypassReward()
+    const premiumUpgradeAvailable = IS_PREMIUM_SKYPASS_AVAILABLE
 
     const [dialogRewards, setDialogRewards] = useState<Reward[]>([])
     const [areDialogRewardsNew, setAreDialogRewardsNew] = useState(false)
 
     const onDialogClose = useCallback(() => {
+      if (env.AUTH_MODE === 'google') return
+
       const account = getAuthedAccount()
 
       if (
@@ -234,8 +239,9 @@ export const SkyPassClaimReward = memo(
           if (isItemTypeACard(selectedReward.itemType) && !postClaimURL) {
             handleOpenModal(response.rewards)
           } else if (
-            selectedReward.itemType === ItemType.SW_CARD_BACKS ||
-            selectedReward.itemType === ItemType.SW_STICKERS
+            env.AUTH_MODE !== 'google' &&
+            (selectedReward.itemType === ItemType.SW_CARD_BACKS ||
+              selectedReward.itemType === ItemType.SW_STICKERS)
           ) {
             if (!!shouldSeeConversionDialog()) {
               openConversionDialog()
@@ -298,7 +304,9 @@ export const SkyPassClaimReward = memo(
       if (!selectedReward) return ''
       if (selectedReward.level > userLevel || !isEarned) {
         if (selectedReward.tier === SkypassTier.PREMIUM && !hasPremium) {
-          return t('skypass.goPremium')
+          return premiumUpgradeAvailable
+            ? t('skypass.goPremium')
+            : t('skypass.premium')
         }
         return t('skypass.reachLevel', { level: selectedReward.level })
       } else if (loadingClaimingReward === selectedReward.id) {
@@ -310,7 +318,9 @@ export const SkyPassClaimReward = memo(
       ) {
         return t('skypass.rewardClaimed')
       } else if (selectedReward.tier === SkypassTier.PREMIUM && !hasPremium) {
-        return t('skypass.goPremiumToUnlock')
+        return premiumUpgradeAvailable
+          ? t('skypass.goPremiumToUnlock')
+          : t('skypass.premium')
       }
       return t('skypass.claimReward')
     }, [
@@ -320,11 +330,19 @@ export const SkyPassClaimReward = memo(
       loadingClaimingReward,
       isIdClaimed,
       hasPremium,
+      premiumUpgradeAvailable,
       t
     ])
 
     const isButtonDisabled = useMemo(() => {
       if (!selectedReward) return true
+      if (
+        selectedReward.tier === SkypassTier.PREMIUM &&
+        !hasPremium &&
+        !premiumUpgradeAvailable
+      ) {
+        return true
+      }
       if (
         selectedReward.tier === SkypassTier.PREMIUM &&
         !hasPremium &&
@@ -346,6 +364,7 @@ export const SkyPassClaimReward = memo(
     }, [
       selectedReward,
       hasPremium,
+      premiumUpgradeAvailable,
       isIdClaimed,
       loadingClaimingReward,
       isEarned,
@@ -541,6 +560,7 @@ export const SkyPassClaimReward = memo(
               unlockedDecks={unlockedDecks}
               onClick={() => {
                 if (
+                  premiumUpgradeAvailable &&
                   selectedReward.tier === SkypassTier.PREMIUM &&
                   !selectedReward.claimable
                 )

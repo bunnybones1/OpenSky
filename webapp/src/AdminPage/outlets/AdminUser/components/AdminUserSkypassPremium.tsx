@@ -57,7 +57,10 @@ const AdminUserSkypassPremium = memo(
               onClick={async () => {
                 const address = account.address
                 try {
-                  await APIClient.opensky.gMToggleSkypassPremium({ address })
+                  await APIClient.opensky.gMToggleSkypassPremium(
+                    { address },
+                    { 'x-cloud-weasel-operation-key': crypto.randomUUID() }
+                  )
                   setSaved(true)
                   onSetPremium?.()
                 } catch (err) {

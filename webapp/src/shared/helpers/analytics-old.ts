@@ -12,6 +12,11 @@ export const COOKIE_POLICY_ALL: CookiePolicy = COOKIES.reduce<CookiePolicy>(
   {}
 )
 
+export const IDENTITY_COOKIE_POLICY_ALL: CookiePolicy = {
+  AUTHENTICATION: true,
+  PRODUCT_ANALYTICS: true
+}
+
 export const saveAllCookieConsent = (policy: CookiePolicy) => {
   window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify({ policy }))
 }

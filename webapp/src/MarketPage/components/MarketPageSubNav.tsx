@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { SubNavButton } from '~/shared/components/SubNav/exported/SubNavButton'
 import { SubNav } from '~/shared/components/SubNav/SubNav'
 import { makeMarketHeroSkinsRoute } from '~/shared/helpers/routes/market-page'
@@ -23,6 +24,50 @@ export const MarketPageSubNav = memo(() => {
   const cardBackDetailsId = useSelector(marketCardBackFeatureIdSelector)
 
   if (!!cardDetailsId || !!stickerDetailsId || !!cardBackDetailsId) return null
+
+  if (env.AUTH_MODE === 'google') {
+    return (
+      <SubNav>
+        {[
+          <SubNavButton
+            key="cards"
+            to={makeMarketCardsRoute()}
+            text={t('shop.subNavCards')}
+            icon="cards"
+            id="cards"
+          />,
+          <SubNavButton
+            key="decks"
+            to={makeNavigateToMarketDecksRoute()}
+            text={t('shop.subNavDecks')}
+            icon="deck"
+            id="decks"
+          />,
+          <SubNavButton
+            key="heroes"
+            to={makeMarketHeroSkinsRoute()}
+            text={t('shop.subNavHeroes')}
+            icon="heroes"
+            id="heroes"
+          />,
+          <SubNavButton
+            key="stickers"
+            to={makeMarketStickersRoute()}
+            text={t('shop.subNavStickers')}
+            icon="stickers"
+            id="stickers"
+          />,
+          <SubNavButton
+            key="card-backs"
+            to={makeMarketCardBacksRoute()}
+            text={t('shop.subNavCardBacks')}
+            icon="card-back"
+            id="card-backs"
+          />
+        ]}
+      </SubNav>
+    )
+  }
 
   return (
     <SubNav>

@@ -25,10 +25,12 @@ const ConquestSection = memo(() => {
           </ConquestSectionHeaderTitle>
         </FlexBox>
 
-        <ConquestFirstPlayed style={{ alignItems: 'center', marginRight: '12px' }}>
-          {t('profile.playedConquestForFirstTimeOn')}{' '}
-          {firstConquestDate ? firstConquestDate.split('T')[0] : 'N/A'}
-        </ConquestFirstPlayed>
+        {firstConquestDate && (
+          <ConquestFirstPlayed style={{ alignItems: 'center', marginRight: '12px' }}>
+            {t('profile.playedConquestForFirstTimeOn')}{' '}
+            {firstConquestDate.split('T')[0]}
+          </ConquestFirstPlayed>
+        )}
       </ConquestSectionHeader>
 
       <Box

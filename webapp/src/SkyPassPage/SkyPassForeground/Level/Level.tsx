@@ -38,6 +38,7 @@ export const Level = memo(
     const navigate = useNavigate()
     const isTabletWide = useResponsiveQuery('tabletWide')
     const isSmallScreen = !isTabletWide
+    const premiumSkyPassVisible = IS_PREMIUM_SKYPASS_AVAILABLE
 
     return (
       <FlexBox
@@ -129,7 +130,7 @@ export const Level = memo(
             </FlexBox>
             <SeasonXPBar experience={experience} levelUpXP={levelUpXP} />
           </FlexBox>
-          {!hasPremium && IS_PREMIUM_SKYPASS_AVAILABLE && (
+          {!hasPremium && premiumSkyPassVisible && (
             <Button
               frameType="default"
               colorType="orange"

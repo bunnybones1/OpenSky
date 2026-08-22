@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo, useCallback } from 'react'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { Card } from '~/shared/components/Card/Card'
 import { CardType } from '~/shared/constants/cards'
 import { makeMarketCardDetailsRoute } from '~/shared/helpers/routes/market-page'
@@ -21,11 +22,12 @@ export interface MarketCardProps {
 }
 
 export const MarketCard = memo(({ id }: MarketCardProps) => {
+  const isIdentityMarket = env.AUTH_MODE === 'google'
   const dispatch = useDispatch()
   const mode = useMarketCardsShopMode()
   const { getAssetUrl } = useGetAssetContext()
 
-  const { data: cartItem } = useCartItem(id, mode)
+  const { data: cartItem } = useCartItem(id, mode, !isIdentityMarket)
 
   const onCardClick = useCallback(
     (card: CardType) => {
@@ -48,7 +50,7 @@ export const MarketCard = memo(({ id }: MarketCardProps) => {
         BalanceAndPriceInfo={MarketCardBalance}
         overlayPadding={OverlayPadding}
       />
-      {!!getAssetUrl && (
+      {!!getAssetUrl && !isIdentityMarket && (
         <div
           className={clsx(
             Sprinkles({ position: 'absolute', opacity: 0 }),

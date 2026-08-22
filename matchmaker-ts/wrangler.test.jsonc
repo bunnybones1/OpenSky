@@ -1,0 +1,46 @@
+{
+  "name": "cloud-weasel-matchmaker-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-15",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MATCHMAKER_POOLS",
+        "class_name": "MatchmakerPool"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MatchmakerPool"]
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://opensky.example",
+    "INTERNAL_AUTH_SECRET": "matchmaker-test-secret",
+    "AUTHENTICATION_TIMEOUT_MS": "10000",
+    "MATCH_ACCEPTANCE_TIMEOUT_MS": "30000",
+    "MATCH_ACCEPTANCE_PENALTY_MS": "20000",
+    "MATCH_REFUSAL_WINDOW_MS": "86400000",
+    "MATCH_REFUSAL_PENALTY_SECONDS": "2,4,8",
+    "MATCH_INTERVAL_PRACTICE_BOT_MS": "5000",
+    "MATCH_INTERVAL_PRACTICE_PVP_MS": "5000",
+    "MATCH_INTERVAL_CONQUEST_CONSTRUCTED_MS": "2000",
+    "MATCH_INTERVAL_CHALLENGE_CONSTRUCTED_MS": "2000",
+    "MATCH_INTERVAL_CHALLENGE_DISCOVERY_MS": "2000",
+    "MATCH_INTERVAL_MAKE_MATCH_MS": "2000",
+    "MIN_RANK_TO_PLAY_CONQUEST": "4",
+    "RELAX_MATCHING_INTERVAL_MS": "30000",
+    "RELAX_MATCHING_RANKED_CONSTRUCTED_INTERVAL_MS": "30000",
+    "RELAX_MATCHING_RANKED_DISCOVERY_INTERVAL_MS": "30000",
+    "RELAX_MATCHING_CONQUEST_CONSTRUCTED_INTERVAL_MS": "30000",
+    "RELAX_MATCHING_CONQUEST_DISCOVERY_INTERVAL_MS": "30000",
+    "MATCH_DISPATCH_MAX_ATTEMPTS": "2",
+    "GAME_MODE_STATUS_CACHE_TTL_MS": "10",
+    "EXPECTED_RELEASE_VERSION": "release-1",
+    "ENABLE_RANKED_BOTS": "false",
+    "ALLOW_SAME_IP_MATCH": "false",
+    "STRICT_CONQUEST_MATCHING": "false"
+  }
+}

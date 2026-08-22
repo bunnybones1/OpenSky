@@ -5,12 +5,18 @@ import { useResponsiveQuery } from '~/shared/hooks/ui/useResponsiveQuery'
 import { useBanners } from '~/shared/queries/useBanners'
 import { TOP_OFFSET_KEY } from '~/shared/style/constants'
 
-export const useUpdatePageOffsets = () => {
+interface UpdatePageOffsetOptions {
+  includeBanners?: boolean
+}
+
+export const useUpdatePageOffsets = ({
+  includeBanners = true
+}: UpdatePageOffsetOptions = {}) => {
   const isTabletWide = useResponsiveQuery('tabletWide')
-  const { data: banners } = useBanners()
+  const { data: banners } = useBanners(includeBanners)
 
   useLayoutEffect(() => {
-    const hasActiveBanner = banners && banners.length > 0
+    const hasActiveBanner = includeBanners && banners && banners.length > 0
 
     let offset = 0
 
@@ -21,5 +27,5 @@ export const useUpdatePageOffsets = () => {
     }
 
     document.documentElement.style.setProperty(TOP_OFFSET_KEY, `${offset}px`)
-  }, [isTabletWide, banners])
+  }, [banners, includeBanners, isTabletWide])
 }

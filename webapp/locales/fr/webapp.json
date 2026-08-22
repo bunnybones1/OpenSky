@@ -4,7 +4,13 @@
   "cache": {},
   "cardBack": {},
   "cardBacks": {},
-  "cardDetails": {},
+  "cardDetails": {
+    "baseExplanationOffchain": "Débloquée grâce à la progression Cloud Weasel et conservée dans votre inventaire.",
+    "goldExplanationOffchain": "Carte Or cosmétique gagnée en Conquête et livrée dans votre inventaire Cloud Weasel.",
+    "inventoryBalance": "Inventaire",
+    "offchainInventory": "Objet de l’inventaire Cloud Weasel. Disponible pour jouer et collectionner.",
+    "silverExplanationOffchain": "Carte Argent cosmétique gagnée en Conquête ou au Classement et conservée dans votre inventaire Cloud Weasel."
+  },
   "cards": {
     "effects": {},
     "elements": {},
@@ -48,14 +54,26 @@
   "decks": {
     "sorts": {}
   },
-  "deleteAccount": {},
+  "deleteAccount": {
+    "googleConfirmation": "Google vous demandera de confirmer votre identité. L’accès au compte est immédiatement interrompu ; les données personnelles du profil sont anonymisées après 30 jours."
+  },
   "downloadAssets": {},
   "feed": {},
   "gameMode": {},
   "general": {},
-  "generic": {},
+  "generic": {
+    "Collected": "Collectionné"
+  },
   "heroes": {},
-  "heroFeature": {},
+  "heroFeature": {
+    "offchainExchangeDelivered": "Les récompenses sont livrées hors chaîne",
+    "offchainExchangeExplanation": "Échangez 10 cartes Or appartenant à votre compte contre chaque apparence de Héros Héritage. La récompense est immédiatement livrée dans votre inventaire Cloud Weasel ; aucun portefeuille ni aucune transaction blockchain n’est requis.",
+    "offchainExchangeFinal": "Les échanges d’inventaire sont définitifs",
+    "offchainExchangeRate": "10 cartes Or par apparence de Héros · Récompense hors chaîne",
+    "offchainOrderDetailsTitle": "DÉBLOQUER DES APPARENCES DE HÉROS",
+    "selectGoldCards": "Sélectionner des cartes Or",
+    "unlockHeroSkins": "DÉBLOQUER DES APPARENCES DE HÉROS"
+  },
   "home": {
     "mainFeatureConquest": {},
     "mainFeatureSkypass": {}
@@ -83,7 +101,9 @@
   "pagination": {},
   "play": {
     "gameModes": {
-      "CONQUEST": {},
+      "CONQUEST": {
+        "pendingGoldsOffchain": "Cartes en attente de livraison"
+      },
       "header": {}
     },
     "premadeDecks": {
@@ -103,7 +123,31 @@
       "STW": {},
       "WIS": {}
     },
-    "rewards": {}
+    "rewards": {
+      "levelWeeklyTreasureLineTwoOffchain": "EN AJOUTANT DES OBJETS DE COLLECTION À VOTRE DECK",
+      "percentagePoints": "+{{ count }} % de points"
+    },
+    "completedDeliveryNumCards": "Félicitations ! <white>{{ count }}</white> cartes ont été livrées !",
+    "completedDeliverySpecificCard": "Félicitations ! La carte <white>{{ name }}</white> a été livrée !",
+    "conquestDeckPointsTooltipMessageOffchain": "Obtenez suffisamment de points de Conquête avant la fin de la semaine pour gagner un Trésor. Lorsque les récompenses hebdomadaires sont actives, les Trésors livrent des cartes Argent dans votre inventaire Cloud Weasel. Améliorez votre Trésor pour gagner davantage de cartes !",
+    "conquestRewardsInactive": "Les récompenses de cartes de Conquête ne sont pas actives pour le moment.",
+    "conquestWeeklyGoldsOffchain": "Ces cartes Or sont disponibles comme récompenses hors chaîne pendant une durée limitée.",
+    "delayedDelivery_one": "Dans 24 heures, cette carte sera livrée dans votre bibliothèque.",
+    "delayedDelivery_other": "Dans 24 heures, ces cartes seront livrées dans votre bibliothèque.",
+    "delayedGoldDelivery": "Les récompenses de cartes Or sont livrées dans votre inventaire Cloud Weasel après 24 heures ;",
+    "deliveryIn": "Livraison dans {{ hours }} h {{ minutes }} min",
+    "deliveryInProgress": "Livraison en cours",
+    "exchangeRate": "Taux d’échange",
+    "noDeliveriesPending": "Aucune carte n’est actuellement en attente de livraison.",
+    "silverExchangeFinal": "Les échanges d’inventaire sont définitifs",
+    "silverExchangeFinalTooltip": "Les cartes Argent échangées contre des Tickets de Conquête ne peuvent pas être récupérées.",
+    "silverExchangeRate": "1 Argent → 1 Ticket",
+    "silverExchangeWarning": "Échanger les cartes Argent sélectionnées appartenant à votre compte contre des Tickets de Conquête ? Cette action est irréversible. Les Tickets sont immédiatement livrés dans votre inventaire Cloud Weasel.",
+    "silverTicketsReceived_one": "{{ count }} Ticket",
+    "silverTicketsReceived_other": "{{ count }} Tickets",
+    "ticketsReceived": "Tickets reçus",
+    "treasureRewardsInactive": "Les récompenses du Trésor hebdomadaire ne sont pas actives actuellement.",
+    "treasureToolTipHeaderOffchain": "LES RÉCOMPENSES ARGENT HEBDOMADAIRES SONT CONSERVÉES DANS CLOUD WEASEL"
   },
   "playerLeaderboard": {},
   "playPage": {
@@ -122,10 +166,24 @@
     "TUTORIAL": {}
   },
   "profile": {
-    "spectate": {}
+    "spectate": {},
+    "walletConnect": "Connecter un portefeuille",
+    "walletConnectInactive": "WalletConnect sera disponible après la configuration d’un identifiant de projet public Cloud Weasel et de la liste des origines autorisées.",
+    "walletConnecting": "Connexion…",
+    "walletConnections": "PORTEFEUILLES LIÉS",
+    "walletConnectionsDescription": "Connexion de propriété facultative et en lecture seule. Votre compte Google reste votre moyen de connexion et les récompenses Cloud Weasel restent dans votre inventaire hors chaîne.",
+    "walletConnectionsEmpty": "Aucun portefeuille n’est lié. Vous pouvez utiliser toutes les fonctionnalités Cloud Weasel sans portefeuille.",
+    "walletContentsEmpty": "Aucun actif pris en charge n’a été trouvé dans ce portefeuille.",
+    "walletContentsInactive": "Le contenu externe apparaîtra après l’activation de la configuration vérifiée de l’indexeur en lecture seule.",
+    "walletContentsTruncated": "Ce portefeuille contient plus d’objets pris en charge que cette vue ne peut en charger en toute sécurité.",
+    "walletRefreshContents": "Actualiser le contenu",
+    "walletUnlink": "Dissocier",
+    "walletUnlinkConfirm": "Dissocier ce portefeuille de votre compte Cloud Weasel ? Votre connexion Google et votre inventaire hors chaîne ne seront pas affectés."
   },
   "prompt": {},
-  "purchaseSkypass": {},
+  "purchaseSkypass": {
+    "unavailable": "BIENTÔT DISPONIBLE"
+  },
   "quests": {},
   "ranks": {},
   "search": {
@@ -144,7 +202,15 @@
     "stickerPointsTooltip": {},
     "thumbs": {},
     "titleLabels": {},
-    "titles": {}
+    "titles": {},
+    "detailsDescsOffchain": {
+      "CardBack": "Le dos de carte {{ name }} est une récompense exclusive à durée limitée livrée dans votre inventaire Cloud Weasel.",
+      "ConquestTickets": "Utilisez les Tickets de Conquête de votre inventaire Cloud Weasel pour accéder au mode Conquête et gagner des récompenses hors chaîne.",
+      "NewSticker": "L’autocollant {{ name }} est une récompense exclusive à durée limitée livrée dans votre inventaire Cloud Weasel.",
+      "SilverCard": "Obtenez une carte Argent de la dernière extension dans votre inventaire Cloud Weasel.",
+      "StickerPoints": "Cumulez des points pour obtenir des autocollants à durée limitée de la piste de récompenses Parrainer un ami dans votre inventaire Cloud Weasel."
+    },
+    "premiumDescOffchain": "Activez le Skypass Premium pour recevoir toutes les récompenses saisonnières débloquées dans votre inventaire Cloud Weasel."
   },
   "support": {
     "cookies": {},
@@ -152,6 +218,24 @@
     "USconfirm": {}
   },
   "time": {},
-  "tooltip": {},
-  "unsupportedBrowser": {}
+  "tooltip": {
+    "conquestRulesLineSevenOffchain": "Les récompenses de cartes Or arrivent dans votre inventaire après 24 heures",
+    "goldCardsExplainerLineOneOffchain": "Les cartes Or sont des objets cosmétiques de collection conservés",
+    "goldCardsExplainerLineTwoOffchain": "dans l’inventaire Cloud Weasel et gagnés en Conquête.",
+    "progressionInfoOffchain": "Ajoutez des <span class='whiteText'>cartes de collection</span> à votre deck et <span class='whiteText'>équipez une apparence de Héros</span> pour gagner davantage de points de Conquête par match.",
+    "silverCardsExplainerLineOneOffchain": "Les cartes Argent sont des objets cosmétiques de collection conservés",
+    "silverCardsExplainerLineTwoOffchain": "dans l’inventaire Cloud Weasel et gagnés en jouant."
+  },
+  "unsupportedBrowser": {},
+  "identityAuth": {
+    "cancelled": "La connexion avec Google a été annulée.",
+    "continueWithGoogle": "CONTINUER AVEC GOOGLE",
+    "description": "Connectez-vous pour enregistrer votre progression sur tous vos appareils, ou accédez directement au mode Entraînement.",
+    "failed": "La connexion avec Google n’a pas pu aboutir. Réessayez ou accédez au mode Entraînement.",
+    "notConfigured": "La connexion avec Google est temporairement indisponible. Le mode Entraînement reste accessible.",
+    "playPractice": "JOUER EN ENTRAÎNEMENT",
+    "signOut": "SE DÉCONNECTER",
+    "statusUnavailable": "Votre état de connexion n’a pas pu être chargé. Le mode Entraînement reste accessible.",
+    "walletOptional": "La connexion d’un portefeuille est facultative et n’est jamais requise pour le mode Entraînement."
+  }
 }

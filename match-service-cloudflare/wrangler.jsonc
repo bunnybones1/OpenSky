@@ -1,0 +1,26 @@
+{
+  "name": "cloud-weasel-match-service",
+  "account_id": "528badc1c29c30196335df252a73c5a6",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": false,
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "opensky-auth",
+      "database_id": "2ac6fbbd-359b-407c-9d87-bd62b17a7548",
+      "migrations_dir": "../cloudflare/migrations"
+    }
+  ],
+  "services": [
+    {
+      "binding": "GAME_SERVICE",
+      "service": "cloud-weasel-game-server"
+    }
+  ],
+  "vars": {
+    "TURN_TIMER_ENABLED": "true",
+    "ENABLE_RANKED_BOTS": "false",
+    "ENABLED_GAME_MODES": "PRACTICE_BOT,WARM_UP,PRACTICE_PVP,RANKED_CONSTRUCTED,RANKED_DISCOVERY,CHALLENGE_CONSTRUCTED,CHALLENGE_DISCOVERY"
+  }
+}

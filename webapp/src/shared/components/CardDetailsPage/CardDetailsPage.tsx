@@ -24,10 +24,19 @@ interface CardDetailsPageProps {
     | ItemType.SW_SILVER_CARDS
   )[]
   switchCard?: (id: number) => void
+  hideTokenInfo?: boolean
+  inventoryOnly?: boolean
 }
 
 export const CardDetailsPage = memo(
-  ({ id, Controls, switchCard, allowedGrades }: CardDetailsPageProps) => {
+  ({
+    id,
+    Controls,
+    switchCard,
+    allowedGrades,
+    hideTokenInfo,
+    inventoryOnly
+  }: CardDetailsPageProps) => {
     const card = useMemo(() => Cards.get(id), [id])
 
     const cardTexts = useCardTexts(card?.baseId)
@@ -79,6 +88,8 @@ export const CardDetailsPage = memo(
             id={id}
             Controls={Controls}
             allowedGrades={allowedGrades}
+            hideTokenInfo={hideTokenInfo}
+            inventoryOnly={inventoryOnly}
           />
         </div>
       </div>

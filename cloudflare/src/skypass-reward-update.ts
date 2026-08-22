@@ -1,0 +1,761 @@
+import type {
+  CardSet,
+  DeckClass,
+  ItemType,
+  SkypassReward,
+  SkypassTier
+} from '@opensky/proto'
+
+import { allLibraryCards } from './card-library'
+import { alreadyExists, invalidArgument } from './errors'
+import {
+  SKYPASS_REWARD_POLICY_HASH,
+  SKYPASS_REWARD_POLICY_VERSION,
+  SKYPASS_SUPPORTED_REWARD_ITEM_TYPES
+} from './skypass-reward-policy'
+import { STARTER_DECK_BY_HERO_ID } from './starter-decks'
+
+const MAX_CSV_BYTES = 1024 * 1024
+const MAX_CSV_ROWS = 2000
+const MAX_REDIRECTS = 3
+const FETCH_TIMEOUT_MS = 10_000
+
+const TIER_ID: Record<string, number> = { FREE: 1, PREMIUM: 2 }
+const ITEM_TYPE_ID: Record<string, number> = {
+  USDC: 100,
+  SW_BASE_CARDS: 300,
+  SW_SKYPASS: 301,
+  SW_TITLES: 302,
+  SW_STICKER_POINTS: 303,
+  SW_XP: 304,
+  SW_SILVER_DUST: 400,
+  SW_SILVER_CARDS: 401,
+  SW_GOLD_CARDS: 402,
+  SW_CONQUEST_TICKET: 403,
+  SW_CRYSTALS: 404,
+  SW_STICKERS: 405,
+  SW_HERO_SKINS: 406,
+  SW_CARD_BACKS: 407,
+  SW_HERO: 500
+}
+const ITEM_TYPE_BY_ID = Object.fromEntries(
+  Object.entries(ITEM_TYPE_ID).map(([name, id]) => [id, name])
+) as Record<number, ItemType>
+const CARD_SETS = new Set([
+  'CORE_SET',
+  'CORE_EXPANSION',
+  'CLASH_OF_INVENTORS',
+  'HEXBOUND_INVASION',
+  'STARTER_EXPANSION'
+])
+const HERO_IDS = new Set(Array.from({ length: 15 }, (_, index) => index + 1))
+const CARD_IDS = new Set(allLibraryCards().map(card => card.id))
+const SUPPORTED_REWARD_ITEM_TYPES = new Set<number>(
+  SKYPASS_SUPPORTED_REWARD_ITEM_TYPES
+)
+
+interface RewardAttributes {
+  tokenIDs?: number[]
+  cardSets?: CardSet[]
+  cardSetsExcluded?: CardSet[]
+  unlockDeckClasses?: DeckClass[]
+}
+
+interface RewardRow {
+  id: number
+  level: number
+  season: number
+  tier: number
+  item_type: number
+  amount: number
+  is_starter: number
+  attributes: string | null
+  is_infinite: number
+}
+
+interface ParsedReward {
+  id?: number
+  level: number
+  season: number
+  tier: number
+  itemType: number
+  amount: number
+  isStarter: number
+  attributes: RewardAttributes | null
+  isInfinite: number
+}
+
+interface PolicyRow {
+  season: number
+  version: number
+  status: 'DRAFT' | 'ACTIVE'
+  mutation_id: string
+  source_origin: string
+  content_sha256: string
+  reward_count: number
+  fulfillment_policy_version: number
+  fulfillment_policy_hash: string
+  created_by_user_id: string
+  activated_by_user_id: string | null
+  activation_reason: string | null
+  review_reference: string | null
+  created_at: string
+  activated_at: string | null
+}
+
+export type SkypassRewardFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>
+
+const parseAttributes = (value: string | null): RewardAttributes => {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value) as RewardAttributes
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const present = (row: RewardRow): SkypassReward => {
+  const attributes = row.attributes ? parseAttributes(row.attributes) : null
+  return {
+    id: row.id,
+    level: row.level,
+    season: row.season,
+    tier: (row.tier === 2 ? 'PREMIUM' : 'FREE') as SkypassTier,
+    itemType: ITEM_TYPE_BY_ID[row.item_type] || ('UNKNOWN' as ItemType),
+    amount: row.amount,
+    isStarter: row.is_starter === 1,
+    isInfinite: row.is_infinite === 1,
+    attributes: (attributes
+      ? {
+          tokenIDs: attributes.tokenIDs || [],
+          cardSets: attributes.cardSets || [],
+          cardSetsExcluded: attributes.cardSetsExcluded || [],
+          unlockDeckClasses: attributes.unlockDeckClasses || []
+        }
+      : null) as unknown as SkypassReward['attributes'],
+    claimable: false,
+    claimed: false
+  }
+}
+
+const semanticSnapshot = (reward: ParsedReward | RewardRow) => {
+  const parsed = 'itemType' in reward
+  const attributes = parsed
+    ? reward.attributes || {}
+    : parseAttributes(reward.attributes)
+  return {
+    level: reward.level,
+    season: reward.season,
+    tier: reward.tier,
+    itemType: parsed ? reward.itemType : reward.item_type,
+    amount: reward.amount,
+    isStarter: parsed ? reward.isStarter === 1 : reward.is_starter === 1,
+    attributes,
+    isInfinite: parsed ? reward.isInfinite === 1 : reward.is_infinite === 1
+  }
+}
+
+const parseCsv = (input: string): string[][] => {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  let closedQuote = false
+  let rowHadSyntax = false
+
+  const finishField = () => {
+    row.push(field)
+    field = ''
+    closedQuote = false
+  }
+  const finishRow = () => {
+    finishField()
+    if (rowHadSyntax || row.some(value => value.length > 0)) rows.push(row)
+    row = []
+    rowHadSyntax = false
+    if (rows.length > MAX_CSV_ROWS + 1) {
+      throw invalidArgument(`SkyPass CSV exceeds ${MAX_CSV_ROWS} reward rows`)
+    }
+  }
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index]
+    if (quoted) {
+      if (char === '"') {
+        if (input[index + 1] === '"') {
+          field += '"'
+          index++
+        } else {
+          quoted = false
+          closedQuote = true
+        }
+      } else if (char === '\r' && input[index + 1] === '\n') {
+        field += '\n'
+        index++
+      } else {
+        field += char
+      }
+      continue
+    }
+    if (closedQuote && char !== ',' && char !== '\r' && char !== '\n') {
+      throw invalidArgument('SkyPass CSV contains characters after a quote')
+    }
+    if (char === '"') {
+      if (field.length > 0 || closedQuote) {
+        throw invalidArgument('SkyPass CSV contains an invalid quote')
+      }
+      quoted = true
+      rowHadSyntax = true
+    } else if (char === ',') {
+      rowHadSyntax = true
+      finishField()
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && input[index + 1] === '\n') index++
+      finishRow()
+    } else {
+      field += char
+      rowHadSyntax = true
+    }
+  }
+  if (quoted) throw invalidArgument('SkyPass CSV contains an unterminated quote')
+  if (rowHadSyntax || row.length || field.length) finishRow()
+  if (!rows.length) throw invalidArgument('SkyPass CSV is empty')
+  if (rows[0].length !== 8 || rows.slice(1).some(value => value.length !== 8)) {
+    throw invalidArgument('SkyPass CSV must contain exactly eight columns')
+  }
+  if (rows.length === 1) {
+    throw invalidArgument('SkyPass CSV must contain at least one reward')
+  }
+  return rows.slice(1)
+}
+
+const uint16 = (input: string, field: string, allowEmpty: boolean) => {
+  const value = input.trim()
+  if (!value) {
+    if (allowEmpty) return 0
+    throw invalidArgument(`${field} is empty`)
+  }
+  if (!/^\d+$/.test(value)) throw invalidArgument(`${field} is invalid`)
+  // Match the source's ParseUint(..., 64) followed by uint16 conversion.
+  const parsed = BigInt(value)
+  if (parsed > 0xffff_ffff_ffff_ffffn) {
+    throw invalidArgument(`${field} is invalid`)
+  }
+  return Number(BigInt.asUintN(16, parsed))
+}
+
+const tokenIds = (input: string) => {
+  const values: number[] = []
+  for (const value of input.trim().split(',')) {
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    if (!/^\d+$/.test(trimmed)) throw invalidArgument('token IDs are invalid')
+    const parsed = BigInt(trimmed)
+    if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw invalidArgument('token ID exceeds Cloud Weasel integer precision')
+    }
+    values.push(Number(parsed))
+  }
+  return values
+}
+
+const cardSets = (input: string, field: string) => {
+  const values: CardSet[] = []
+  for (const value of input.trim().split(',')) {
+    const name = value.trim()
+    if (!name) continue
+    if (!CARD_SETS.has(name)) throw invalidArgument(`${field} is invalid`)
+    values.push(name as CardSet)
+  }
+  return values
+}
+
+const sourceBool = (input: string) => {
+  const value = input.trim()
+  if (!value) return false
+  if (['1', 't', 'T', 'TRUE', 'true', 'True'].includes(value)) return true
+  if (['0', 'f', 'F', 'FALSE', 'false', 'False'].includes(value)) return false
+  throw invalidArgument('is starter is invalid')
+}
+
+const allowedOriginSet = (input?: string) => {
+  const origins = new Set<string>()
+  for (const value of input?.split(',') || []) {
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    let parsed: URL
+    try {
+      parsed = new URL(trimmed)
+    } catch {
+      throw new Error('SKYPASS_REWARDS_ALLOWED_ORIGINS is invalid')
+    }
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.username ||
+      parsed.password ||
+      parsed.origin !== trimmed.replace(/\/$/, '')
+    ) {
+      throw new Error('SKYPASS_REWARDS_ALLOWED_ORIGINS must contain HTTPS origins')
+    }
+    origins.add(parsed.origin)
+  }
+  return origins
+}
+
+const checkedUrl = (input: string, origins: Set<string>, base?: URL) => {
+  let parsed: URL
+  try {
+    parsed = base ? new URL(input, base) : new URL(input)
+  } catch {
+    throw invalidArgument('SkyPass CSV URL is invalid')
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw invalidArgument('SkyPass CSV URL must use HTTPS without credentials')
+  }
+  if (!origins.has(parsed.origin)) {
+    throw invalidArgument('SkyPass CSV origin is not allowed')
+  }
+  return parsed
+}
+
+const responseText = async (response: Response) => {
+  const declared = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > MAX_CSV_BYTES) {
+    throw invalidArgument(`SkyPass CSV exceeds ${MAX_CSV_BYTES} bytes`)
+  }
+  if (!response.body) return ''
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_CSV_BYTES) {
+      await reader.cancel()
+      throw invalidArgument(`SkyPass CSV exceeds ${MAX_CSV_BYTES} bytes`)
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(body)
+  } catch {
+    throw invalidArgument('SkyPass CSV is not valid UTF-8')
+  }
+}
+
+const contentHash = async (text: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)]
+    .map(value => value.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+export class SkypassRewardUpdateRepository {
+  private readonly origins: Set<string>
+
+  constructor(
+    private readonly database: D1Database,
+    private readonly fetcher: SkypassRewardFetch = fetch,
+    allowedOrigins?: string
+  ) {
+    this.origins = allowedOriginSet(allowedOrigins)
+  }
+
+  private async download(input: string) {
+    let url = checkedUrl(input, this.origins)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      for (let redirects = 0; ; redirects++) {
+        let response: Response
+        try {
+          response = await this.fetcher(url, {
+            method: 'GET',
+            redirect: 'manual',
+            signal: controller.signal
+          })
+        } catch {
+          throw invalidArgument('fetch SkyPass CSV failed')
+        }
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          if (redirects >= MAX_REDIRECTS) {
+            throw invalidArgument('SkyPass CSV has too many redirects')
+          }
+          const location = response.headers.get('location')
+          if (!location) throw invalidArgument('SkyPass CSV redirect is missing a location')
+          url = checkedUrl(location, this.origins, url)
+          continue
+        }
+        if (response.status !== 200) {
+          throw invalidArgument(`fetch SkyPass CSV returned status ${response.status}`)
+        }
+        if (response.headers.get('content-type') !== 'text/csv') {
+          throw invalidArgument('SkyPass CSV content type must be text/csv')
+        }
+        return { text: await responseText(response), origin: url.origin }
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private async parse(season: number, text: string): Promise<ParsedReward[]> {
+    const rewards: ParsedReward[] = []
+    const identities = new Set<string>()
+    for (const record of parseCsv(text)) {
+      const level = uint16(record[0], 'level', false)
+      const tierName = record[1].trim()
+      const tier = TIER_ID[tierName]
+      if (!tier) throw invalidArgument('tier is invalid')
+      const itemTypeName = record[2].trim()
+      const itemType = ITEM_TYPE_ID[itemTypeName]
+      if (!itemType) throw invalidArgument('item type is invalid')
+      if (!SUPPORTED_REWARD_ITEM_TYPES.has(itemType)) {
+        throw invalidArgument('item type has no off-chain SkyPass fulfillment')
+      }
+      const amount = uint16(record[3], 'amount', true)
+      const isStarter = sourceBool(record[4])
+      const ids = tokenIds(record[5])
+      const included = cardSets(record[6], 'card sets')
+      const excluded = cardSets(record[7], 'card sets excluded')
+      if (amount === 0 && !ids.length) {
+        throw invalidArgument('amount cannot be zero when without token IDs')
+      }
+      if (amount > 0 && ids.length) {
+        throw invalidArgument('amount cannot be greater than zero when there are token IDs')
+      }
+      if (included.some(value => excluded.includes(value))) {
+        throw invalidArgument('the same card set cannot be included and excluded')
+      }
+      if (isStarter && tier !== TIER_ID.FREE) {
+        throw invalidArgument('only free tier can be a starter')
+      }
+      if (itemTypeName === 'SW_HERO') {
+        if (!ids.length) throw invalidArgument('hero rewards require token IDs')
+        if (ids.some(id => !HERO_IDS.has(id))) {
+          throw invalidArgument('hero does not exist')
+        }
+      }
+      if (itemTypeName === 'SW_CONQUEST_TICKET' && amount === 0) {
+        throw invalidArgument('Conquest ticket amount cannot be zero')
+      }
+      if (itemTypeName === 'SW_STICKER_POINTS' && amount === 0) {
+        throw invalidArgument('sticker points amount cannot be zero')
+      }
+      if (
+        ['SW_BASE_CARDS', 'SW_SILVER_CARDS'].includes(itemTypeName) &&
+        ids.some(id => !CARD_IDS.has(id))
+      ) {
+        throw invalidArgument('card does not exist')
+      }
+      if (itemTypeName === 'SW_CARD_BACKS' && !ids.length) {
+        throw invalidArgument('card back rewards require token IDs')
+      }
+      if (itemTypeName === 'SW_TITLES' && !ids.length) {
+        throw invalidArgument('title rewards require token IDs')
+      }
+      if (itemTypeName === 'SW_STICKERS') {
+        if (!ids.length) throw invalidArgument('sticker rewards require token IDs')
+        const placeholders = ids.map(() => '?').join(', ')
+        const found = await this.database
+          .prepare(
+            `SELECT COUNT(DISTINCT token_id) AS count FROM content_stickers
+             WHERE token_id IN (${placeholders})`
+          )
+          .bind(...ids)
+          .first<number>('count')
+        if (found !== ids.length) throw invalidArgument('sticker does not exist')
+      }
+      const identity = `${level}:${tier}:${isStarter ? 1 : 0}`
+      if (identities.has(identity)) throw invalidArgument('reward duplicated')
+      identities.add(identity)
+      const attributes: RewardAttributes = {}
+      if (ids.length) attributes.tokenIDs = ids
+      if (included.length) attributes.cardSets = included
+      if (excluded.length) attributes.cardSetsExcluded = excluded
+      if (itemTypeName === 'SW_HERO') {
+        const unlocks = ids
+          .map(id => STARTER_DECK_BY_HERO_ID.get(id)?.deckClass)
+          .filter((value): value is DeckClass => !!value)
+        if (unlocks.length) attributes.unlockDeckClasses = unlocks
+      }
+      rewards.push({
+        level,
+        season,
+        tier,
+        itemType,
+        amount,
+        isStarter: isStarter ? 1 : 0,
+        attributes: Object.keys(attributes).length ? attributes : null,
+        isInfinite: 0
+      })
+    }
+    if (!rewards.length) throw invalidArgument('reward CSV is empty')
+    rewards[rewards.length - 1].isInfinite = 1
+    return rewards
+  }
+
+  private async rows(season: number, version?: number) {
+    const rows = await this.database
+      .prepare(
+        `SELECT id, level, season, tier, item_type, amount, is_starter,
+                attributes, is_infinite
+         FROM ${version === undefined ? 'skypass_reward_active_rewards' : 'skypass_rewards'}
+         WHERE season = ? AND policy_ordinal IS NOT NULL${version === undefined ? '' : ' AND policy_version = ?'}
+         ORDER BY level ASC, tier ASC, is_starter ASC, id ASC`
+      )
+      .bind(...(version === undefined ? [season] : [season, version]))
+      .all<RewardRow>()
+    return rows.results
+  }
+
+  async update(
+    actorUserId: string,
+    season: number,
+    sourceUrl: string,
+    at = new Date()
+  ): Promise<SkypassReward[]> {
+    if (!Number.isSafeInteger(season) || season < 1 || season > 65535) {
+      throw invalidArgument('season is invalid')
+    }
+    if (typeof sourceUrl !== 'string' || !sourceUrl) {
+      throw invalidArgument('url is required')
+    }
+    const downloaded = await this.download(sourceUrl)
+    const rewards = await this.parse(season, downloaded.text)
+    const hash = await contentHash(downloaded.text)
+    const before = await this.rows(season)
+    const claimed = await this.database
+      .prepare(
+        `SELECT 1 FROM player_skypass_claims claim
+         JOIN skypass_rewards reward ON reward.id = claim.reward_id
+         WHERE reward.season = ? LIMIT 1`
+      )
+      .bind(season)
+      .first()
+    if (claimed) throw invalidArgument('a claimed SkyPass season cannot be updated')
+
+    const actorGameAccountId = await this.database
+      .prepare('SELECT id FROM game_accounts WHERE user_id = ?')
+      .bind(actorUserId)
+      .first<number>('id')
+    if (!actorGameAccountId) throw new Error('staff game account is missing')
+    const expectedVersion =
+      (await this.database
+        .prepare(
+          `SELECT MAX(version) AS version FROM skypass_reward_policy_versions
+           WHERE season = ?`
+        )
+        .bind(season)
+        .first<number>('version')) || 0
+    const version = expectedVersion + 1
+    const mutationId = crypto.randomUUID()
+    const timestamp = at.toISOString()
+    const statements: D1PreparedStatement[] = [
+      this.database
+        .prepare(
+          `INSERT INTO skypass_reward_policy_versions
+             (season, version, status, mutation_id, source_origin,
+              content_sha256, reward_count, fulfillment_policy_version,
+              fulfillment_policy_hash, created_by_user_id,
+              activated_by_user_id, activation_reason, review_reference,
+              created_at, activated_at)
+           VALUES (?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL)`
+        )
+        .bind(
+          season,
+          version,
+          mutationId,
+          downloaded.origin,
+          hash,
+          rewards.length,
+          SKYPASS_REWARD_POLICY_VERSION,
+          SKYPASS_REWARD_POLICY_HASH,
+          actorUserId,
+          timestamp
+        )
+    ]
+    for (const [index, reward] of rewards.entries()) {
+      const attributes = reward.attributes ? JSON.stringify(reward.attributes) : null
+      statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO skypass_rewards
+               (level, season, tier, item_type, amount, is_starter, attributes,
+                updated_at, updated_by, is_infinite, policy_version,
+                policy_ordinal)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             WHERE EXISTS (
+               SELECT 1 FROM skypass_reward_policy_versions policy
+               WHERE policy.season = ? AND policy.version = ?
+                 AND policy.status = 'DRAFT' AND policy.mutation_id = ?
+             )`
+          )
+          .bind(
+            reward.level,
+            season,
+            reward.tier,
+            reward.itemType,
+            reward.amount,
+            reward.isStarter,
+            attributes,
+            timestamp,
+            actorGameAccountId,
+            reward.isInfinite,
+            version,
+            index + 1,
+            season,
+            version,
+            mutationId
+          )
+      )
+    }
+    statements.push(
+      this.database
+        .prepare(
+          `INSERT INTO staff_skypass_reward_audit
+             (operation, season, version, actor_user_id, source_origin,
+              content_sha256, before_json, after_json, created_at)
+           SELECT 'REPLACE', ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM skypass_reward_policy_versions policy
+             WHERE policy.season = ? AND policy.version = ?
+               AND policy.status = 'DRAFT' AND policy.mutation_id = ?
+           )`
+        )
+        .bind(
+          season,
+          version,
+          actorUserId,
+          downloaded.origin,
+          hash,
+          JSON.stringify(before.map(semanticSnapshot)),
+          JSON.stringify(rewards.map(semanticSnapshot)),
+          timestamp,
+          season,
+          version,
+          mutationId
+        )
+    )
+    let results: D1Result[]
+    try {
+      results = await this.database.batch(statements)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Claimed SkyPass')) {
+        throw invalidArgument('a claimed SkyPass season cannot be updated')
+      }
+      throw error
+    }
+    if (results[0].meta.changes !== 1) {
+      throw alreadyExists('SkyPass reward definitions changed concurrently')
+    }
+    return (await this.rows(season, version)).map(present)
+  }
+
+  async review(season: number, version: number) {
+    if (!Number.isSafeInteger(season) || season < 1 || season > 65535) {
+      throw invalidArgument('season is invalid')
+    }
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw invalidArgument('version is invalid')
+    }
+    const policy = await this.database
+      .prepare(
+        `SELECT season, version, status, mutation_id, source_origin,
+                content_sha256, reward_count, fulfillment_policy_version,
+                fulfillment_policy_hash, created_by_user_id,
+                activated_by_user_id, activation_reason, review_reference,
+                created_at, activated_at
+         FROM skypass_reward_policy_versions
+         WHERE season = ? AND version = ?`
+      )
+      .bind(season, version)
+      .first<PolicyRow>()
+    if (!policy) throw invalidArgument('SkyPass reward policy does not exist')
+    const rewards = (await this.rows(season, version)).map(present)
+    return {
+      policy: {
+        season: policy.season,
+        version: policy.version,
+        status: policy.status,
+        mutationId: policy.mutation_id,
+        sourceOrigin: policy.source_origin,
+        contentSHA256: policy.content_sha256,
+        rewardCount: policy.reward_count,
+        fulfillmentPolicyVersion: policy.fulfillment_policy_version,
+        fulfillmentPolicyHash: policy.fulfillment_policy_hash,
+        createdByUserId: policy.created_by_user_id,
+        activatedByUserId: policy.activated_by_user_id,
+        activationReason: policy.activation_reason,
+        reviewReference: policy.review_reference,
+        createdAt: policy.created_at,
+        activatedAt: policy.activated_at
+      },
+      rewards
+    }
+  }
+
+  async activate(
+    actorUserId: string,
+    season: number,
+    version: number,
+    reason: string,
+    reviewReference: string,
+    at = new Date()
+  ): Promise<SkypassReward[]> {
+    if (!Number.isSafeInteger(season) || season < 1 || season > 65535) {
+      throw invalidArgument('season is invalid')
+    }
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw invalidArgument('version is invalid')
+    }
+    if (typeof reason !== 'string' || !reason.trim()) {
+      throw invalidArgument('reason is required')
+    }
+    if (typeof reviewReference !== 'string' || !reviewReference.trim()) {
+      throw invalidArgument('review reference is required')
+    }
+    let result: D1Result
+    try {
+      result = await this.database
+        .prepare(
+          `UPDATE skypass_reward_policy_versions
+           SET status = 'ACTIVE', activated_by_user_id = ?,
+               activation_reason = ?, review_reference = ?, activated_at = ?
+           WHERE season = ? AND version = ? AND status = 'DRAFT'`
+        )
+        .bind(
+          actorUserId,
+          reason.trim(),
+          reviewReference.trim(),
+          at.toISOString(),
+          season,
+          version
+        )
+        .run()
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('SkyPass reward policy activation is invalid')
+      ) {
+        throw invalidArgument('SkyPass reward policy activation is invalid')
+      }
+      throw error
+    }
+    if (result.meta.changes !== 1) {
+      throw invalidArgument('SkyPass reward draft does not exist')
+    }
+    return (await this.rows(season)).map(present)
+  }
+}

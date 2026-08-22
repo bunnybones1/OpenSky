@@ -7,6 +7,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { Button } from '~/shared/components/Button'
 import { SKYPASS_UNIT_PRICE } from '~/shared/constants/skypass'
 import { useResponsiveQuery } from '~/shared/hooks/ui/useResponsiveQuery'
@@ -21,6 +22,7 @@ import { Sprinkles } from '~/shared/style/Sprinkles.css'
 import { useProcessSPIAP } from './hooks/useProcessSPIAP'
 import { useProcessSPUSDCOrder } from './hooks/useProcessSPUSDCOrder'
 import { useProcessStripeSPOrder } from './hooks/useProcessStripeSPOrder'
+import { IdentitySkyPassPurchaseButtons } from './IdentitySkyPassPurchaseButtons'
 import { SkyPassPurchaseButtonsStyle } from './SkyPassPurchaseButtons.css'
 
 const isIOSApp = isIOSNativeApp()
@@ -29,7 +31,11 @@ const CC_ADORNMENT = { icon: 'credit-card' } as const
 const USDC_ADORNMENT = { icon: 'usdc' } as const
 const SPINNER_ADORNMENT = { icon: 'spinner' } as const
 
-export const SkyPassPurchaseButtons = memo(() => {
+// This legacy component intentionally remains colocated so the source wallet
+// flow is preserved verbatim while the exported Google component substitutes
+// identity-native commerce before any legacy hooks mount.
+// eslint-disable-next-line react-refresh/only-export-components
+const LegacySkyPassPurchaseButtons = memo(() => {
   const isTablet = useResponsiveQuery('tablet')
   const { t } = useTranslation()
   const isCat3State = useIsCategoryThreeState()
@@ -143,4 +149,9 @@ export const SkyPassPurchaseButtons = memo(() => {
   )
 })
 
-SkyPassPurchaseButtons.displayName = 'SkyPassPurchaseButtons'
+LegacySkyPassPurchaseButtons.displayName = 'LegacySkyPassPurchaseButtons'
+
+export const SkyPassPurchaseButtons =
+  env.AUTH_MODE === 'google'
+    ? IdentitySkyPassPurchaseButtons
+    : LegacySkyPassPurchaseButtons

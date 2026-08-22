@@ -2,9 +2,11 @@ import { SwapType } from '@0xsequence/metadata'
 import clsx from 'clsx'
 import { memo, useCallback } from 'react'
 
+import env from '~/env'
 import { CardPrice } from '~/shared/components/CardPrice'
 import { CardRow } from '~/shared/components/CardRow/CardRow'
 import { Icon } from '~/shared/components/Icon/Icon'
+import { Text } from '~/shared/components/Text'
 import {
   selectGoldsState,
   updateSelectGoldsState
@@ -77,7 +79,13 @@ export const ConfirmGoldsListRow = memo(({ id, quantity }: CartItemListRowProps)
           width: 'full'
         })}
       >
-        <CardPrice mode={SwapType.SELL} tokenId={id} quantity={quantity} />
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="white" fontSize="16px">
+            Off-chain
+          </Text>
+        ) : (
+          <CardPrice mode={SwapType.SELL} tokenId={id} quantity={quantity} />
+        )}
       </div>
       <div
         className={Sprinkles({
@@ -99,7 +107,18 @@ export const ConfirmGoldsListRow = memo(({ id, quantity }: CartItemListRowProps)
           width: 'full'
         })}
       >
-        <CardPrice isSubtotal mode={SwapType.SELL} tokenId={id} quantity={quantity} />
+        {env.AUTH_MODE === 'google' ? (
+          <Text color="white" fontSize="16px">
+            {quantity} Gold
+          </Text>
+        ) : (
+          <CardPrice
+            isSubtotal
+            mode={SwapType.SELL}
+            tokenId={id}
+            quantity={quantity}
+          />
+        )}
       </div>
     </div>
   )

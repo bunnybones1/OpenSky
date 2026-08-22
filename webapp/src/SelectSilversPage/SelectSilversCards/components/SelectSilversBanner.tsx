@@ -3,6 +3,7 @@ import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { FancyBackButton } from '~/shared/components/FancyBackButton/FancyBackButton'
 import { Text } from '~/shared/components/Text'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
@@ -17,7 +18,13 @@ export const SelectSilversBanner = memo(() => {
   const dispatch = useDispatch()
 
   const goBack = useCallback(() => {
-    dispatch(push(ROUTES_CONFIG.routes.PURCHASE_CONQUEST.directPath))
+    dispatch(
+      push(
+        env.AUTH_MODE === 'google'
+          ? ROUTES_CONFIG.routes.PLAY.routes.CONQUEST.directPath
+          : ROUTES_CONFIG.routes.PURCHASE_CONQUEST.directPath
+      )
+    )
   }, [dispatch])
 
   return (

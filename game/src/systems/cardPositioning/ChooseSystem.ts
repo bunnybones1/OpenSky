@@ -43,6 +43,7 @@ import { world } from '~/world'
 
 import { Easing } from '../animation/Easing'
 import { simpleTweener } from '../animation/tweeners'
+import { hasActiveCardSelection } from './cardSelectionUiState'
 
 const _selectableCards: ReadonlyTrackableCollection<Entity<Components>> =
   CardInstanceComponent.entities.intersect(
@@ -273,7 +274,10 @@ export default class ChooseSystem extends System<Components> {
     }
   }
   updateGui() {
-    if (!this.enabled) {
+    // State reconstruction clears the selection before the replay timeline
+    // advances to its next frame. The UI's ready callback can still arrive in
+    // that gap, but there is no selection UI or suggestion set to update.
+    if (!hasActiveCardSelection(this.enabled, this.cardSelectionState)) {
       return
     }
     const ui = this.ui.getContainer('cardSelection')

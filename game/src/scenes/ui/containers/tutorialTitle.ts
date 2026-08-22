@@ -9,6 +9,7 @@ import RectangleMaterial from '~/materials/RectangleMaterial'
 import Mesh2D from '~/meshes/Mesh2D'
 import Object2D from '~/meshes/Object2D'
 import RectangleMesh from '~/meshes/RectangleMesh'
+import { productDocumentTitle } from '~/productBrand'
 import { Easing } from '~/systems/animation/Easing'
 import { simpleTweener } from '~/systems/animation/tweeners'
 import * as textOptions from '~/systems/text/TextOptions'
@@ -115,7 +116,7 @@ export default class TutorialTitleContainer extends UIContainer {
         ? (i18n.t(this.tutorialDescription.translate) as string)
         : ''
 
-    document.title = `OpenSky | ${title} ${description}`
+    document.title = productDocumentTitle(`${title} ${description}`)
 
     const headingText = new UITextMesh(title, textOptions.splashTitle)
     headingText.matrix.setConstraintsPosition(

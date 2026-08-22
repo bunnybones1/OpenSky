@@ -12,7 +12,7 @@ import { useHeroUnlockLevels } from '~/shared/queries/useHeroUnlockLevels'
 export const useSelectableDecks = (isConquest?: boolean) => {
   const { data: decks } = useUserDecks()
   const { data: unlockLevels } = useHeroUnlockLevels()
-  const { data: conquestStatus } = useConquestStatus()
+  const { data: conquestStatus } = useConquestStatus(!!isConquest)
 
   const selectableDecks = useMemo(() => {
     if (!!isConquest) {

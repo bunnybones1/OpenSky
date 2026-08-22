@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { useAsync } from 'react-use'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { getGoldCardsForHeroMint } from '~/HeroFeaturePage/ReviewMintOrderButton/MintHeroesDialog/MintHeroesModalControls/useConfirmHeroMintOrder/get-gold-cards-for-hero-mint'
 import {
   derivedHeroFeatureState,
@@ -32,7 +33,8 @@ export const useMintHeroesTotal = (selectedGolds: CartItem[]) => {
 
   const { data: cardsSortedByPriceDescending } = useTokensSortedByPrice(
     SwapType.BUY,
-    ItemType.SW_GOLD_CARDS
+    ItemType.SW_GOLD_CARDS,
+    env.AUTH_MODE === 'google'
   )
 
   const cardsSortedByPriceAscending = useMemo(() => {
@@ -64,7 +66,8 @@ export const useMintHeroesTotal = (selectedGolds: CartItem[]) => {
         info.id,
         info.quantity,
         cardsSortedByPriceAscending
-      )
+      ),
+      enabled: env.AUTH_MODE !== 'google'
     }))
   })
 
@@ -87,6 +90,7 @@ export const useMintHeroesTotal = (selectedGolds: CartItem[]) => {
    * @note Will compare cost of total golds to purchase vs cards sold, bought and sent
    */
   const totalGoldReduction = useAsync(async () => {
+    if (env.AUTH_MODE === 'google') return
     if (!selectedGolds.length) return
     if (!selectedGolds) return
 

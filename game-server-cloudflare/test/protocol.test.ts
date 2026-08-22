@@ -1,0 +1,166 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  GameProtocolError,
+  IgnoredGameMessageError,
+  MAX_GAME_MESSAGE_BYTES,
+  parseClientMessage,
+  parseSourcePing,
+  SourceGameError,
+  UnknownGameMessageError
+} from '../src/protocol'
+
+const joinMessage = (loadingProgress: unknown = 0.5) => ({
+  type: 'join_server',
+  authToken: 'legacy-token',
+  loadingProgress,
+  subkeyCertification: {
+    player: Array(20).fill(1),
+    subkey: Array(20).fill(2),
+    signature: Array(65).fill(3)
+  }
+})
+
+describe('game WebSocket protocol validation', () => {
+  it('accepts source-compatible join and spectate messages', () => {
+    expect(parseClientMessage(JSON.stringify(joinMessage()))).toMatchObject({
+      type: 'join_server',
+      loadingProgress: 0.5
+    })
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          type: 'spectate_server',
+          spectateToken: 'identity:player.private-code',
+          authToken: null
+        })
+      )
+    ).toEqual({
+      type: 'spectate_server',
+      spectateToken: 'identity:player.private-code',
+      authToken: null
+    })
+  })
+
+  it('classifies source spectate validation errors with their exact wire', () => {
+    for (const [spectateToken, message] of [
+      ['', 'invalid spectate player'],
+      ['.code', 'invalid spectate player'],
+      [`player.${'a'.repeat(51)}`, 'invalid spectate code'],
+      ['player.one.two.three', 'invalid spectate code']
+    ]) {
+      let error: unknown
+      try {
+        parseClientMessage(
+          JSON.stringify({
+            type: 'spectate_server',
+            spectateToken,
+            authToken: null
+          })
+        )
+      } catch (caught) {
+        error = caught
+      }
+      expect(error).toBeInstanceOf(SourceGameError)
+      expect(error).toMatchObject({ message, level: 'server' })
+    }
+  })
+
+  it('preserves the source PING prefix and first colon-delimited ID', () => {
+    expect(parseSourcePing('PING:123')).toEqual({ handled: true, id: '123' })
+    expect(parseSourcePing('PINGlegacy:123:ignored')).toEqual({
+      handled: true,
+      id: '123'
+    })
+    expect(parseSourcePing('PING')).toEqual({ handled: true })
+    expect(parseSourcePing('{"type":"timesync"}')).toEqual({
+      handled: false
+    })
+  })
+
+  it('rejects invalid join loading state before it reaches durable storage', () => {
+    const missing = joinMessage()
+    delete (missing as { loadingProgress?: unknown }).loadingProgress
+    expect(() => parseClientMessage(JSON.stringify(missing))).toThrow(
+      GameProtocolError
+    )
+    for (const progress of [null, Number.NaN, -0.1, 1.1]) {
+      expect(() =>
+        parseClientMessage(JSON.stringify(joinMessage(progress)))
+      ).toThrow(GameProtocolError)
+    }
+  })
+
+  it('accepts only non-empty, byte-aligned hexadecimal gameplay diffs', () => {
+    expect(
+      parseClientMessage(JSON.stringify({ type: 'gameplay', data: ['0x00ff'] }))
+    ).toEqual({ type: 'gameplay', data: ['0x00ff'] })
+    for (const diff of ['0x', '0x0', '0xgg', '00ff']) {
+      expect(() =>
+        parseClientMessage(JSON.stringify({ type: 'gameplay', data: [diff] }))
+      ).toThrow(GameProtocolError)
+    }
+  })
+
+  it('requires emotes to use exactly one source union variant', () => {
+    expect(
+      parseClientMessage(JSON.stringify({ type: 'emote', sticker: 5 }))
+    ).toEqual({ type: 'emote', sticker: 5 })
+    const sourceSizedChat = 'c'.repeat(501)
+    expect(
+      parseClientMessage(
+        JSON.stringify({ type: 'emote', chat: sourceSizedChat })
+      )
+    ).toEqual({ type: 'emote', chat: sourceSizedChat })
+    for (const message of [
+      { type: 'emote' },
+      { type: 'emote', emote: 'gg', sticker: 5 },
+      { type: 'emote', chat: 'hello', emote: 'hello' },
+      { type: 'emote', sticker: Number.MAX_SAFE_INTEGER + 1 }
+    ]) {
+      expect(() => parseClientMessage(JSON.stringify(message))).toThrow(
+        'invalid emote'
+      )
+    }
+  })
+
+  it('accepts source-compatible binary JSON and bounds malformed messages', () => {
+    const binary = new TextEncoder().encode(JSON.stringify(joinMessage()))
+      .buffer as ArrayBuffer
+    expect(parseClientMessage(binary)).toMatchObject({
+      type: 'join_server',
+      loadingProgress: 0.5
+    })
+    expect(() =>
+      parseClientMessage(new ArrayBuffer(MAX_GAME_MESSAGE_BYTES + 1))
+    ).toThrow('message is too large')
+    expect(() => parseClientMessage(new ArrayBuffer(1))).toThrow(
+      'message is not valid JSON'
+    )
+    expect(() => parseClientMessage('{')).toThrow(IgnoredGameMessageError)
+    expect(() => parseClientMessage('null')).toThrow(IgnoredGameMessageError)
+    expect(() => parseClientMessage('{}')).toThrow(UnknownGameMessageError)
+    expect(() => parseClientMessage('{"type":"abandon_match"}')).toThrow(
+      UnknownGameMessageError
+    )
+    expect(() => parseClientMessage('{"type":"spectate_server"}')).toThrow(
+      'invalid spectate request'
+    )
+    for (const spectateToken of [
+      '',
+      `.code`,
+      `player.${'a'.repeat(51)}`,
+      'player.one.two.three'
+    ]) {
+      expect(() =>
+        parseClientMessage(
+          JSON.stringify({
+            type: 'spectate_server',
+            spectateToken,
+            authToken: null
+          })
+        )
+      ).toThrow(GameProtocolError)
+    }
+  })
+})

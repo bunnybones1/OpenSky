@@ -1,0 +1,144 @@
+{
+  "name": "opensky-webapp",
+  "account_id": "528badc1c29c30196335df252a73c5a6",
+  "compatibility_date": "2026-07-15",
+  "main": "./cloudflare/src/index.ts",
+  "workers_dev": true,
+  "triggers": {
+    "crons": ["* * * * *", "17 3 * * *"]
+  },
+  "version_metadata": {
+    "binding": "WORKER_VERSION"
+  },
+  "assets": {
+    "directory": "./webapp/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "opensky-auth",
+      "database_id": "2ac6fbbd-359b-407c-9d87-bd62b17a7548",
+      "migrations_dir": "./cloudflare/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CLIENT_FEEDBACK",
+      "bucket_name": "cloud-weasel-client-feedback"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MATCHMAKER_POOLS",
+        "class_name": "MatchmakerPool",
+        "script_name": "cloud-weasel-matchmaker"
+      },
+      {
+        "name": "GAME_MATCHES",
+        "class_name": "GameMatch",
+        "script_name": "cloud-weasel-game-server"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "name": "cloud-weasel-conquest-v2-rewards",
+      "binding": "CONQUEST_V2_REWARD_WORKFLOW",
+      "class_name": "ConquestV2RewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-conquest-readiness-drill",
+      "binding": "CONQUEST_READINESS_DRILL_WORKFLOW",
+      "class_name": "ConquestReadinessDrillWorkflow"
+    },
+    {
+      "name": "cloud-weasel-leaderboard-rewards",
+      "binding": "LEADERBOARD_REWARD_WORKFLOW",
+      "class_name": "LeaderboardRewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-skypass-season-close",
+      "binding": "SKYPASS_SEASON_CLOSE_WORKFLOW",
+      "class_name": "SkypassSeasonCloseWorkflow"
+    },
+    {
+      "name": "cloud-weasel-referral-sticker-rewards",
+      "binding": "REFERRAL_STICKER_REWARD_WORKFLOW",
+      "class_name": "ReferralStickerRewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-account-deletion",
+      "binding": "ACCOUNT_DELETION_WORKFLOW",
+      "class_name": "AccountDeletionWorkflow"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "cloud-weasel-conquest-gold-delivery",
+        "binding": "CONQUEST_GOLD_DELIVERY_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-conquest-v2-reward-delivery",
+        "binding": "CONQUEST_V2_REWARD_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-leaderboard-reward-delivery",
+        "binding": "LEADERBOARD_REWARD_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-player-push-delivery",
+        "binding": "PUSH_NOTIFICATION_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-skypass-auto-claim-delivery",
+        "binding": "SKYPASS_AUTO_CLAIM_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-referral-sticker-reward-delivery",
+        "binding": "REFERRAL_STICKER_REWARD_QUEUE"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "cloud-weasel-conquest-gold-delivery",
+        "dead_letter_queue": "cloud-weasel-conquest-gold-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-conquest-v2-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-conquest-v2-reward-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-leaderboard-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-leaderboard-reward-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-player-push-delivery",
+        "dead_letter_queue": "cloud-weasel-player-push-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-skypass-auto-claim-delivery",
+        "dead_letter_queue": "cloud-weasel-skypass-auto-claim-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-referral-sticker-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-referral-sticker-reward-delivery-dlq"
+      }
+    ]
+  },
+  "services": [
+    {
+      "binding": "MATCH_SERVICE",
+      "service": "cloud-weasel-match-service"
+    }
+  ],
+  "vars": {
+    "SEQUENCE_API_HOST": "https://api.sequence.app",
+    "ALLOWED_ORIGINS": "https://opensky-webapp.dysinski-tomasz.workers.dev,http://127.0.0.1:8787,http://localhost:8787"
+  }
+}

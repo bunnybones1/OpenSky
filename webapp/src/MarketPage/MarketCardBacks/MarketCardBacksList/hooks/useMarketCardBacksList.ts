@@ -5,13 +5,14 @@ import { useSnapshot } from 'valtio'
 
 import { isDefined } from '~/shared/helpers/is-defined-is-not-null'
 import { useFilteredCardBacksList } from '~/shared/hooks/card-backs/useFilteredCardBacksList'
+import { useTokenBalances } from '~/shared/queries/useTokenBalances'
 import { useTokensSortedByPrice } from '~/shared/queries/useTokensSortedByPrice'
 import { marketCardBacksFilterState } from '~/shared/state/market-cardbacks/market-cardbacks-filter-state'
 import { updateMarketCardBacksState } from '~/shared/state/market-cardbacks/market-cardbacks-state'
 import { CARD_SORTING_OPTIONS, OwnershipFilter } from '~/shared/types/cards'
 import { PriceAndSupplyWithId } from '~/shared/types/market'
 
-export const useMarketCardBacksList = () => {
+export const useMarketCardBacksList = (inventoryOnly = false) => {
   const filters = useSnapshot(marketCardBacksFilterState)
 
   const mode =
@@ -19,12 +20,31 @@ export const useMarketCardBacksList = () => {
 
   const { data: cardBacksSortedByPriceDesc } = useTokensSortedByPrice(
     mode,
-    ItemType.SW_CARD_BACKS
+    ItemType.SW_CARD_BACKS,
+    inventoryOnly
   )
 
   const { cardBacksList } = useFilteredCardBacksList(filters)
+  const { data: balances } = useTokenBalances(ItemType.SW_CARD_BACKS)
 
   const marketCardBacksList = useMemo(() => {
+    if (inventoryOnly) {
+      if (cardBacksList === undefined || balances === undefined) return undefined
+
+      const balanceById = new Map(
+        (balances || []).map((balance) => [balance.tokenID, balance.balance])
+      )
+      const direction =
+        filters.sort === CARD_SORTING_OPTIONS.QUANTITY_ASCENDING ? 1 : -1
+
+      return [...cardBacksList].sort((left, right) => {
+        const quantityDifference =
+          ((balanceById.get(left.id) || 0) - (balanceById.get(right.id) || 0)) *
+          direction
+        return quantityDifference || left.id - right.id
+      })
+    }
+
     if (cardBacksSortedByPriceDesc === undefined || cardBacksList === undefined)
       return undefined
 
@@ -49,7 +69,14 @@ export const useMarketCardBacksList = () => {
           })
 
     return [...sortedCardBacks, ...cardBacksWithoutPrice]
-  }, [filters.sort, mode, cardBacksList, cardBacksSortedByPriceDesc])
+  }, [
+    balances,
+    cardBacksList,
+    cardBacksSortedByPriceDesc,
+    filters.sort,
+    inventoryOnly,
+    mode
+  ])
 
   useEffect(() => {
     updateMarketCardBacksState('numSearchResults', marketCardBacksList?.length)

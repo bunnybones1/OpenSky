@@ -2,6 +2,7 @@ import { UserStorageKeys } from '@opensky/shared/constants'
 import { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Box, FlexBox, Text } from '~/shared/components/Base'
 import { Checkbox } from '~/shared/components/Checkbox'
 import { useUpdateUserStorage } from '~/shared/mutations/useUpdateUserStorage'
@@ -17,12 +18,13 @@ import { TitleButton } from './components/TitleButton'
 import { UserNameSettingInput } from './components/UserNameSettingInput'
 import { DeleteAccountSettings } from './DeleteAccountSettings/DeleteAccountSettings'
 import { SoundSettings } from './SoundSettings/SoundSettings'
+import { WalletConnectionsSettings } from './WalletConnectionsSettings/WalletConnectionsSettings'
 
 interface DefaultSettingsListProps {
   setListMode: (mode: 'default' | 'art' | 'country' | 'title') => void
 }
 
-export const DefaultSettingsList = memo(
+const LegacyDefaultSettingsList = memo(
   ({ setListMode }: DefaultSettingsListProps) => {
     const { t } = useTranslation()
 
@@ -101,6 +103,59 @@ export const DefaultSettingsList = memo(
       </>
     )
   }
+)
+
+LegacyDefaultSettingsList.displayName = 'LegacyDefaultSettingsList'
+
+const IdentityDefaultSettingsList = memo(
+  ({ setListMode }: DefaultSettingsListProps) => {
+    const { t } = useTranslation()
+    const setTagArtList = useCallback(() => setListMode('art'), [setListMode])
+    const setRegionList = useCallback(() => setListMode('country'), [setListMode])
+    const setTitleList = useCallback(() => setListMode('title'), [setListMode])
+
+    return (
+      <>
+        <FlexBox
+          alignItems="center"
+          justifyContent="center"
+          flexDirection="column"
+          width="100%"
+        >
+          <Text pb={10} fontSize={18} color="purple9" fontWeight="bold">
+            {t('profile.SKYTAG')}
+          </Text>
+          <FlexBox type="centered-column">
+            <Box width={238}>
+              <TagArtButton handleList={setTagArtList} />
+            </Box>
+            <Box width={238} mt={2}>
+              <TitleButton handleList={setTitleList} />
+            </Box>
+            <Box width={238} mt={2}>
+              <RegionButton handleList={setRegionList} />
+            </Box>
+          </FlexBox>
+        </FlexBox>
+        <LocaleSettings />
+        <UserNameSettingInput />
+        <SoundSettings />
+        <GameCacheSettings />
+        <MobileSettings />
+        <WalletConnectionsSettings />
+      </>
+    )
+  }
+)
+
+IdentityDefaultSettingsList.displayName = 'IdentityDefaultSettingsList'
+
+export const DefaultSettingsList = memo((props: DefaultSettingsListProps) =>
+  env.AUTH_MODE === 'google' ? (
+    <IdentityDefaultSettingsList {...props} />
+  ) : (
+    <LegacyDefaultSettingsList {...props} />
+  )
 )
 
 DefaultSettingsList.displayName = 'DefaultSettingsList'

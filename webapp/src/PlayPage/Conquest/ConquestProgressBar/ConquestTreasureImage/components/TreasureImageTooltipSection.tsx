@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import env from '~/env'
 import { Icon } from '~/shared/components/Icon/Icon'
 import { ImageIcon } from '~/shared/components/ImageIcon/ImageIcon'
 import { Text } from '~/shared/components/Text'
@@ -58,37 +59,49 @@ export const TreasureTooltipSection = memo(
         <Text color="white" fontSize="16px">
           {t('general.LevelWithArg', { level })}
         </Text>
-        <div
-          className={Sprinkles({
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingTop: '8px'
-          })}
-        >
-          <ImageIcon type="usdc" height="16px" />
-          <Text marginLeft="4px" color="cold6" fontSize="14px">
-            {`${amountUSDC} USDC`}
-          </Text>
-        </div>
-        <div
-          className={Sprinkles({
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingTop: '8px'
-          })}
-        >
-          {!!getAssetUrl && (
-            <img
-              src={getAssetUrl('webapp/icons/silver-cards.webp')}
-              className={TreasureSilverCardsImg}
-            />
-          )}
-          <Text marginLeft="4px" color="warm7" fontSize="14px">
-            {t(`play.treasureToolTipSilverCards`, { count: amountSilver })}
-          </Text>
-        </div>
+        {env.AUTH_MODE !== 'google' && (
+          <div
+            className={Sprinkles({
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingTop: '8px'
+            })}
+          >
+            <ImageIcon type="usdc" height="16px" />
+            <Text marginLeft="4px" color="cold6" fontSize="14px">
+              {`${amountUSDC} USDC`}
+            </Text>
+          </div>
+        )}
+        {amountSilver > 0 ? (
+          <div
+            className={Sprinkles({
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingTop: '8px'
+            })}
+          >
+            {!!getAssetUrl && (
+              <img
+                src={getAssetUrl('webapp/icons/silver-cards.webp')}
+                className={TreasureSilverCardsImg}
+              />
+            )}
+            <Text marginLeft="4px" color="warm7" fontSize="14px">
+              {t(`play.treasureToolTipSilverCards`, { count: amountSilver })}
+            </Text>
+          </div>
+        ) : (
+          env.AUTH_MODE === 'google' && (
+            <div className={Sprinkles({ paddingTop: '8px' })}>
+              <Text color="purple8" fontSize="12px">
+                {t('play.treasureRewardsInactive')}
+              </Text>
+            </div>
+          )
+        )}
       </div>
     )
   }

@@ -58,13 +58,18 @@
   "cardDetails": {
     "artist": "Arte por",
     "baseExplanation": "Não negociável, desbloqueie ao subir de nível",
+    "baseExplanationOffchain": "Desbloqueada pela progressão do Cloud Weasel e guardada no seu inventário.",
     "baseNotTradable": "Cartas Base não são negociáveis.",
     "enchantNotTradable": "Encantos não são negociáveis.",
     "goldExplanation": "Negociável, oferta limitada, ganhe através da Conquista",
+    "goldExplanationOffchain": "Carta Ouro cosmética obtida na Conquista e entregue no seu inventário do Cloud Weasel.",
+    "inventoryBalance": "Inventário",
     "newBadge": "NOVA",
+    "offchainInventory": "Item do inventário do Cloud Weasel. Disponível para jogar e colecionar.",
     "relatedCards": "CARTAS RELACIONADAS",
     "relatedDecks": "BARALHOS RELACIONADOS",
     "silverExplanation": "Negociável, ganhe através de Conquista e Classificação",
+    "silverExplanationOffchain": "Carta Prata cosmética obtida na Conquista ou na Classificação e guardada no seu inventário do Cloud Weasel.",
     "tokenNotTradable": "Cartas Token não são negociáveis."
   },
   "cards": {
@@ -383,7 +388,8 @@
     "areYouSure": "Tem certeza? Todo seu progresso será perdido.",
     "enterYourUsername": "Coloque seu nome de usuário para confirmar",
     "onceDeleted": "Após excluir sua conta, não há volta. Por favor, tenha absoluta certeza.",
-    "walletAccess": "(Você ainda terá acesso a sua carteira)"
+    "walletAccess": "(Você ainda terá acesso a sua carteira)",
+    "googleConfirmation": "O Google pedirá que você confirme sua identidade. O acesso à conta é interrompido imediatamente; os dados pessoais do perfil são anonimizados após 30 dias."
   },
   "deleteDeck": "<normal>Tem certeza que quer</normal> <scary>DELETAR</scary> <normal>seu Baralho?</normal>",
   "downloadAssets": {
@@ -530,7 +536,8 @@
     "Validating": "Validando",
     "Variable": "Variável",
     "Wallet": "Carteira",
-    "walletAddress": "Endereço da Carteira"
+    "walletAddress": "Endereço da Carteira",
+    "Collected": "Coletado"
   },
   "heroes": {
     "MySkins": "Meus Cosméticos"
@@ -547,7 +554,14 @@
     "orderDetailsTitle": "CUNHE COSMÉTICOS DE HERÓIS",
     "selectedCardsCount": "{{ count }} Cartas selecionadas",
     "selectGoldCardsTitle": "SELECIONE CARTAS OURO",
-    "totalSkinsInOrder": "TOTAL ({{ total }} ITENS)"
+    "totalSkinsInOrder": "TOTAL ({{ total }} ITENS)",
+    "offchainExchangeDelivered": "As recompensas são entregues fora da blockchain",
+    "offchainExchangeExplanation": "Troque 10 cartas Ouro da sua conta por cada visual de Herói Legado. A recompensa é entregue imediatamente no seu inventário do Cloud Weasel; nenhuma carteira ou transação de blockchain é necessária.",
+    "offchainExchangeFinal": "As trocas de inventário são definitivas",
+    "offchainExchangeRate": "10 cartas Ouro por visual de Herói · Recompensa fora da blockchain",
+    "offchainOrderDetailsTitle": "DESBLOQUEAR VISUAIS DE HERÓI",
+    "selectGoldCards": "Selecionar cartas Ouro",
+    "unlockHeroSkins": "DESBLOQUEAR VISUAIS DE HERÓI"
   },
   "home": {
     "mainFeatureConquest": {
@@ -704,6 +718,7 @@
     "conquestEntry": "Use Bilhetes para entrar no modo Conquista",
     "conquestInfoWeeklyGolds": "{{ count }} Ouro(s) <highlight>apenas por {{ timeUntilRewards }}</highlight>",
     "conquestPointsPerMatch": "Pontos por partida",
+    "conquestRewardsInactive": "As recompensas de cartas da Conquista não estão ativas no momento.",
     "conquestSilverRewards": "VOCÊ RECEBEU CARTAS PRATA DE EXPANSÃO NO CONQUISTA!",
     "conquestWarningLineOne": "Aviso: Conquista não está disponível para",
     "conquestWarningLineTwo": "jogadores com classificação menor que Recruta ",
@@ -712,9 +727,19 @@
     "convertConquestTicketsModalMessageTop": "Entrar no Conquista ficou ainda mais fácil!",
     "convertSilverWarning": "Atenção! Você está prestes a converter suas cartas em Bilhetes Conquista, e isso não pode ser revertido.",
     "convertTo": "Converta para {{ count }}",
+    "exchangeRate": "Taxa de troca",
     "createGameCode": "CRIAR CÓDIGO DE JOGO",
     "customizeNotifications": "Você pode customizar suas notificações para receber atualizações sobre conteúdos especiais!",
     "delayedGoldMinting": "Cartas Ouro levam 24 horas para serem cunhadas",
+    "deliveryIn": "Entrega em {{ hours }}h {{ minutes }}m",
+    "deliveryInProgress": "Entrega em andamento",
+    "silverExchangeFinal": "As trocas de inventário são definitivas",
+    "silverExchangeFinalTooltip": "Cartas Prata trocadas por Bilhetes de Conquista não podem ser recuperadas.",
+    "silverExchangeRate": "1 Prata → 1 Bilhete",
+    "silverExchangeWarning": "Trocar as cartas Prata selecionadas da sua conta por Bilhetes de Conquista? Isso não pode ser desfeito. Os Bilhetes são entregues imediatamente no seu inventário do Cloud Weasel.",
+    "silverTicketsReceived_one": "{{ count }} Bilhete",
+    "silverTicketsReceived_other": "{{ count }} Bilhetes",
+    "ticketsReceived": "Bilhetes recebidos",
     "delayedMinting_one": "Em 24 horas esta carta será cunhada e enviada para sua Coleção.",
     "delayedMinting_other": "Em 24 horas estas cartas serão cunhadas e enviadas para sua Coleção.",
     "excludesLastSet": "Excluir o último conjunto de expansão.",
@@ -742,6 +767,7 @@
         "descriptionShort": "Compita por Cartas Ouro",
         "level10": "Parabéns! Você alcançou nível 10.",
         "pendingGolds": "Cartas pendentes para serem cunhadas",
+        "pendingGoldsOffchain": "Cartas aguardando entrega",
         "title": "CONQUISTA",
         "toUnlock": "Alcance o rank Novato para desbloquear o modo Conquista",
         "unlockMore": "Continue jogando para desbloquear mais cartas ouro!"
@@ -769,6 +795,7 @@
     "loadingConquestPrices": "BUSCANDO MELHOR PREÇO...",
     "myDeck": "Meu Baralho",
     "noMatchesFound": "Nenhuma partida encontrada.",
+    "noDeliveriesPending": "No momento não há cartas aguardando entrega.",
     "noMintsPending": "No momento não há cartas esperando serem cunhadas.",
     "noTicketsWarning": "Aviso: No momento não há Bilhetes de Conquista disponíveis. Por favor, espere 6 horas antes de comprar.",
     "play": "JOGAR",
@@ -833,10 +860,12 @@
       "levelWeeklyTreasureLineTwo": "AO ADICIONAR ITENS NEGOCIÁVEIS (NFTs) NO SEU BARALHO",
       "points_one": "+{{ count }} Ponto",
       "points_other": "+{{ count }} Pontos",
+      "percentagePoints": "+{{ count }}% Pontos",
       "silvers_one": "+{{ count }} Prata",
       "silvers_other": "+{{ count }} Pratas",
       "winsBundle_one": "{{ count }} Ganhe Pacote",
-      "winsBundle_other": "{{ count }} Ganha Pacote"
+      "winsBundle_other": "{{ count }} Ganha Pacote",
+      "levelWeeklyTreasureLineTwoOffchain": "ADICIONANDO ITENS COLECIONÁVEIS AO SEU BARALHO"
     },
     "selectDeck": "SELECIONE BARALHO",
     "silversAvailable": "PRATAS DISPONÍVEIS",
@@ -856,7 +885,16 @@
     "welcome": "Bem-Vindo ao OpenSky",
     "wonInConquest": "foram ganhas na Conquista.",
     "yourFriend": "seu amigo",
-    "youWon": "Você ganhou"
+    "youWon": "Você ganhou",
+    "completedDeliveryNumCards": "Parabéns! <white>{{ count }}</white> cartas foram entregues!",
+    "completedDeliverySpecificCard": "Parabéns! A carta <white>{{ name }}</white> foi entregue!",
+    "conquestDeckPointsTooltipMessageOffchain": "Consiga pontos de Conquista suficientes antes do fim da semana para ganhar um Tesouro. Quando as recompensas semanais estão ativas, os Tesouros entregam cartas Prata no seu inventário do Cloud Weasel. Aumente o nível do seu Tesouro para ganhar mais cartas!",
+    "conquestWeeklyGoldsOffchain": "Estas cartas Ouro estão disponíveis como recompensas fora da blockchain por tempo limitado.",
+    "delayedDelivery_one": "Em 24 horas esta carta será entregue na sua biblioteca.",
+    "delayedDelivery_other": "Em 24 horas estas cartas serão entregues na sua biblioteca.",
+    "delayedGoldDelivery": "As recompensas de cartas Ouro são entregues no seu inventário do Cloud Weasel após 24 horas;",
+    "treasureRewardsInactive": "As recompensas do Tesouro semanal não estão ativas no momento.",
+    "treasureToolTipHeaderOffchain": "AS RECOMPENSAS SEMANAIS DE PRATA SÃO GUARDADAS NO CLOUD WEASEL"
   },
   "playerLeaderboard": {
     "rewardExplainer": "Recompensa não incluí Carta Prata da última expansão"
@@ -1006,13 +1044,26 @@
     "winStreak": "Sequência",
     "XP": "XP",
     "xpRewardDesc": "Concedido quando esta classificação é alcançada.",
-    "xpRewardTitle": "Recompensa"
+    "xpRewardTitle": "Recompensa",
+    "walletConnect": "Conectar carteira",
+    "walletConnectInactive": "O WalletConnect estará disponível após a configuração de um ID de projeto público do Cloud Weasel e da lista de origens permitidas.",
+    "walletConnecting": "Conectando…",
+    "walletConnections": "CARTEIRAS VINCULADAS",
+    "walletConnectionsDescription": "Conexão de propriedade opcional e somente leitura. Sua conta do Google continua sendo seu login e as recompensas do Cloud Weasel permanecem no seu inventário fora da blockchain.",
+    "walletConnectionsEmpty": "Nenhuma carteira está vinculada. Você pode usar todos os recursos do Cloud Weasel que não exigem carteira.",
+    "walletContentsEmpty": "Nenhum ativo compatível foi encontrado nesta carteira.",
+    "walletContentsInactive": "O conteúdo externo aparecerá após a ativação da configuração revisada do indexador somente leitura.",
+    "walletContentsTruncated": "Esta carteira tem mais itens compatíveis do que esta tela pode carregar com segurança.",
+    "walletRefreshContents": "Atualizar conteúdo",
+    "walletUnlink": "Desvincular",
+    "walletUnlinkConfirm": "Desvincular esta carteira da sua conta do Cloud Weasel? Seu login com o Google e seu inventário fora da blockchain não serão afetados."
   },
   "prompt": {
     "dismiss": "Não mostre isso novamente"
   },
   "purchaseSkypass": {
-    "inAppPurchase": "Compra dentro do App"
+    "inAppPurchase": "Compra dentro do App",
+    "unavailable": "EM BREVE"
   },
   "quests": {
     "NewQuests": "NOVAS MISSÕES!",
@@ -1241,7 +1292,15 @@
       "SW_XP": "XP"
     },
     "tradableTooltip": "Esses itens são cunhados em Blockchain e negociáveis usando sua Carteira Sequence.",
-    "unknownSeasonName": "TBD"
+    "unknownSeasonName": "TBD",
+    "detailsDescsOffchain": {
+      "CardBack": "O verso de carta {{ name }} é uma recompensa exclusiva por tempo limitado entregue no seu inventário do Cloud Weasel.",
+      "ConquestTickets": "Use Bilhetes de Conquista do seu inventário do Cloud Weasel para entrar no modo Conquista e competir por recompensas fora da blockchain.",
+      "NewSticker": "O adesivo {{ name }} é uma recompensa exclusiva por tempo limitado entregue no seu inventário do Cloud Weasel.",
+      "SilverCard": "Obtenha uma carta Prata da expansão mais recente no seu inventário do Cloud Weasel.",
+      "StickerPoints": "Acumule pontos para obter Adesivos por tempo limitado da trilha de recompensas Convide um Amigo no seu inventário do Cloud Weasel."
+    },
+    "premiumDescOffchain": "Ative o Skypass Premium para obter todas as recompensas sazonais desbloqueadas no seu inventário do Cloud Weasel."
   },
   "support": {
     "accountBanned": "Desculpe, parece que esta conta foi banida.",
@@ -1352,11 +1411,28 @@
     "silverCardsExplainerLineTwo": "são as recompensas da Classificação Ranqueada.",
     "silverSavingsLineOne": "Cartas Prata estão baratas! Você está economizando USDC! Você estará",
     "silverSavingsLineTwo": "comprando e queimando as Pratas mais baratas automaticamente.",
-    "skytagRequirement": "Você precisa possuir uma carta para usar como fundo da sua SkyTag."
+    "skytagRequirement": "Você precisa possuir uma carta para usar como fundo da sua SkyTag.",
+    "conquestRulesLineSevenOffchain": "As recompensas de cartas Ouro chegam ao seu inventário após 24 horas",
+    "goldCardsExplainerLineOneOffchain": "Cartas Ouro são itens cosméticos colecionáveis guardados",
+    "goldCardsExplainerLineTwoOffchain": "no inventário do Cloud Weasel e obtidos na Conquista.",
+    "progressionInfoOffchain": "Adicione <span class='whiteText'>cartas colecionáveis</span> ao seu baralho e <span class='whiteText'>equipe um visual de Herói</span> para conseguir mais pontos de Conquista por partida.",
+    "silverCardsExplainerLineOneOffchain": "Cartas Prata são itens cosméticos colecionáveis guardados",
+    "silverCardsExplainerLineTwoOffchain": "no inventário do Cloud Weasel e obtidos ao jogar."
   },
   "unsupportedBrowser": {
     "browserNotSupported": "OpenSky não tem suporte ao seu navegador.",
     "chrome": "Chrome",
     "firefox": "Firefox"
+  },
+  "identityAuth": {
+    "cancelled": "O login com o Google foi cancelado.",
+    "continueWithGoogle": "CONTINUAR COM O GOOGLE",
+    "description": "Entre para salvar seu progresso entre dispositivos ou vá diretamente para o modo Prática.",
+    "failed": "Não foi possível concluir o login com o Google. Tente novamente ou vá para o modo Prática.",
+    "notConfigured": "O login com o Google está temporariamente indisponível. O modo Prática continua disponível.",
+    "playPractice": "JOGAR PRÁTICA",
+    "signOut": "SAIR",
+    "statusUnavailable": "Não foi possível carregar o status do seu login. O modo Prática continua disponível.",
+    "walletOptional": "A conexão de carteira é opcional e nunca é necessária para o modo Prática."
   }
 }

@@ -5,6 +5,7 @@ import { Sprinkles } from '~/shared/style/Sprinkles.css'
 import { ItemsLink } from './components/ItemsLink'
 import { MarketLink } from './components/MarketLink'
 import { RanksLink } from './components/RanksLink'
+import { SkyPassLink } from './components/SkyPassLink'
 import { PlayLink } from './PlayLink/PlayLink'
 
 interface LinkSectionProps {
@@ -30,6 +31,7 @@ export const LinkSection = memo(({ isHorizontal }: LinkSectionProps) => {
       <ItemsLink isHorizontal={isHorizontal} />
       <RanksLink isHorizontal={isHorizontal} />
       <MarketLink isHorizontal={isHorizontal} />
+      <SkyPassLink isHorizontal={isHorizontal} />
       <PlayLink isHorizontal={isHorizontal} />
     </div>
   )

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
 import { Text } from '~/__deprecated__/Text'
+import env from '~/env'
 import { FlexBox, Grid } from '~/shared/components/Base'
 import { Button } from '~/shared/components/Button'
 import { Portal } from '~/shared/components/Portal'
@@ -10,6 +11,7 @@ import { GDPR_COUNTRIES } from '~/shared/constants/accounts'
 import { COOKIE_SETTINGS_DIALOG_ID } from '~/shared/constants/ui'
 import {
   COOKIE_POLICY_ALL,
+  IDENTITY_COOKIE_POLICY_ALL,
   saveAllCookieConsent
 } from '~/shared/helpers/analytics-old'
 import { controlDialog } from '~/shared/hooks/useDialog/control-dialog'
@@ -34,9 +36,11 @@ const CookieDisclaimer = memo(() => {
     GDPR_COUNTRIES.includes(window.sessStorage.countryCode)
 
   const saveAllCookies = () => {
-    saveAllCookieConsent(COOKIE_POLICY_ALL)
+    const policy =
+      env.AUTH_MODE === 'google' ? IDENTITY_COOKIE_POLICY_ALL : COOKIE_POLICY_ALL
+    saveAllCookieConsent(policy)
     if (!!authenticationState.userAddress) {
-      saveCookiePolicy.mutate(COOKIE_POLICY_ALL)
+      saveCookiePolicy.mutate(policy)
     }
   }
 
@@ -80,20 +84,29 @@ const CookieDisclaimer = memo(() => {
               fontWeight={'500'}
               width="1"
             >
-              {t('support.cookieDisclaimerLineOne')}
-              {t('support.cookieDisclaimerLineTwo')}{' '}
-              <a
-                href="https://sequence.xyz/cookies.html"
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  color: '#fff',
-                  textDecoration: 'none'
-                }}
-              >
-                {t('support.cookieDisclaimerLineThree')}
-              </a>
-              .
+              {env.AUTH_MODE === 'google' ? (
+                <>
+                  Cloud Weasel uses essential session storage and lets you choose
+                  whether to allow future Cloud Weasel product analytics.
+                </>
+              ) : (
+                <>
+                  {t('support.cookieDisclaimerLineOne')}
+                  {t('support.cookieDisclaimerLineTwo')}{' '}
+                  <a
+                    href="https://sequence.xyz/cookies.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: '#fff',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    {t('support.cookieDisclaimerLineThree')}
+                  </a>
+                  .
+                </>
+              )}
             </Text>
             <Grid
               gridTemplateColumns={['1fr 1fr']}

@@ -3,6 +3,7 @@ import { ItemType } from '@opensky/proto'
 import { memo, useCallback } from 'react'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { CardListLoader } from '~/shared/components/CardListLoader/CardListLoader'
 import { VirtualizedItemList } from '~/shared/components/VirtualizedItemList'
 import { CARD_RATIO } from '~/shared/constants/ui'
@@ -50,13 +51,16 @@ export const SelectGoldsCardsList = memo(() => {
     grade: ItemType.SW_GOLD_CARDS
   })
 
-  const { sortedCards } = usePriceSortedCards({
+  const { sortedCards: priceSortedCards } = usePriceSortedCards({
     cards,
     sort: sort,
     grade: ItemType.SW_GOLD_CARDS,
     mode: SwapType.SELL,
+    disabled: env.AUTH_MODE === 'google',
     onUpdate
   })
+
+  const sortedCards = env.AUTH_MODE === 'google' ? cards : priceSortedCards
 
   const { estimateSize, listParentRef } = useEstimateVirtualizedItemSize({
     numColumns,

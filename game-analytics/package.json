@@ -5,11 +5,14 @@
   "private": true,
   "main": "dist/index.js",
   "scripts": {
+    "test": "vitest run --config vitest.config.mts && vitest run --config vitest.cloudflare.config.mts --maxWorkers=1",
     "dev": "concurrently \"tsc -w\" \"nodemon --watch ./dist/ --exec pnpm build\"",
     "dist": "rm -rf dist && pnpm ncc build src/index.ts -o dist && cp ../state/js-bindings/packages/node-sys/bindings_bg.wasm ./dist",
     "start": "FUNCTION_TARGET=getVersionAndIDFromReplay npx functions-framework --signature-type=cloudevent",
     "start2": "FUNCTION_TARGET=pubMatchData npx functions-framework --signature-type=cloudevent --port=8081",
-    "gen-sample-analytics": "tsx ./scripts/gen-sample-analytics"
+    "gen-sample-analytics": "tsx ./scripts/gen-sample-analytics",
+    "deploy:cloudflare": "node ../utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc",
+    "typecheck:cloudflare": "tsc -p tsconfig.cloudflare.json --noEmit"
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.3.0",
@@ -20,11 +23,14 @@
     "@opensky/deck-string-codec": "workspace:*",
     "@opensky/proto": "workspace:*",
     "@opensky/shared": "workspace:*",
+    "@skyweaver/state-browser-sys": "workspace:*",
     "@skyweaver/state-metadata": "workspace:*",
     "@skyweaver/state-node-sys": "workspace:*",
     "ethers": "^5.5.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.21.0",
+    "@cloudflare/workers-types": "5.20260809.1",
     "@types/node": "^14.14.35",
     "@vercel/ncc": "^0.34.0",
     "concurrently": "^7.3.0",
@@ -36,6 +42,7 @@
     "tsconfig-paths": "^3.9.0",
     "tsx": "^3.11.0",
     "typescript": "^5.1.6",
+    "vitest": "4.1.10",
     "webpack": "^5.75.0",
     "webpack-cli": "^4.10.0",
     "ws": "^7.2.0"

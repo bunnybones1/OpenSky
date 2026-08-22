@@ -3,6 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { Text } from '~/__deprecated__/Text'
+import env from '~/env'
 import { GameMode, ItemType, PlayerRank, PlayerRankStage } from '~/lib/proto'
 import { Box } from '~/shared/components/Base'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
@@ -184,7 +185,12 @@ export const FeedRowText = memo(({ feedItem }: Props) => {
               </>
             )}
             <Box style={{ fontSize: '14px' }}>
-              {t('play.delayedMinting', { count: meta.cards.length })}
+              {t(
+                env.AUTH_MODE === 'google'
+                  ? 'play.delayedDelivery'
+                  : 'play.delayedMinting',
+                { count: meta.cards.length }
+              )}
             </Box>
           </Text>
         </Box>
@@ -207,7 +213,11 @@ export const FeedRowText = memo(({ feedItem }: Props) => {
             {hasMulti ? (
               <Trans
                 t={t}
-                i18nKey="play.completedMintingNumCards"
+                i18nKey={
+                  env.AUTH_MODE === 'google'
+                    ? 'play.completedDeliveryNumCards'
+                    : 'play.completedMintingNumCards'
+                }
                 components={{
                   white: <span className="whiteText" />
                 }}
@@ -216,7 +226,11 @@ export const FeedRowText = memo(({ feedItem }: Props) => {
             ) : (
               <Trans
                 t={t}
-                i18nKey="play.completedMintingSpecificCard"
+                i18nKey={
+                  env.AUTH_MODE === 'google'
+                    ? 'play.completedDeliverySpecificCard'
+                    : 'play.completedMintingSpecificCard'
+                }
                 components={{
                   white: <span className="whiteText" />
                 }}

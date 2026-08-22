@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
 
+import env from '~/env'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
 import { isSecretShopVisibleForMe } from '~/shared/helpers/handle-secret-features'
 import { makeMarketCardsRoute } from '~/shared/helpers/routes/market-page'
@@ -19,13 +20,14 @@ interface MarketLinkProps {
 }
 
 export const MarketLink = memo(({ isHorizontal }: MarketLinkProps) => {
+  const isIdentityMarket = env.AUTH_MODE === 'google'
   const isMarketRoute = useSelector(isMarketRouteSelector)
 
   const isShop = useMatch(ROUTES_CONFIG.routes.SHOP.directPath)
 
   const isMarketEnabled = useIsMarketEnabled()
 
-  const { data: cart } = useCart()
+  const { data: cart } = useCart(!isIdentityMarket)
 
   const cartCount = useMemo(() => {
     if (!cart) return undefined
@@ -40,20 +42,32 @@ export const MarketLink = memo(({ isHorizontal }: MarketLinkProps) => {
 
   const { t } = useTranslation()
 
-  if (!isMarketEnabled) return null
+  if (!isIdentityMarket && !isMarketEnabled) return null
 
   return (
     <NavBarLink
       to={
-        isSecretShopVisible
-          ? ROUTES_CONFIG.routes.SHOP.directPath
-          : makeMarketCardsRoute()
+        isIdentityMarket
+          ? makeMarketCardsRoute()
+          : isSecretShopVisible
+            ? ROUTES_CONFIG.routes.SHOP.directPath
+            : makeMarketCardsRoute()
       }
-      isActive={isSecretShopVisible ? !!isShop : isMarketRoute}
-      text={isSecretShopVisible ? t('navigation.shop') : t('navigation.market')}
+      isActive={
+        isIdentityMarket
+          ? isMarketRoute
+          : isSecretShopVisible
+            ? !!isShop
+            : isMarketRoute
+      }
+      text={
+        !isIdentityMarket && isSecretShopVisible
+          ? t('navigation.shop')
+          : t('navigation.market')
+      }
       icon="shop"
       id="market"
-      unread={isSecretShopVisible ? undefined : cartCount}
+      unread={isIdentityMarket || isSecretShopVisible ? undefined : cartCount}
       isHorizontal={isHorizontal}
     />
   )

@@ -11,18 +11,19 @@ import {
 export interface ServerInfo {
   status: string
   name: string
-  hostname: string
-  internalHostname: string
-  port: number
-  ws: string
-  http: string
-  internalHttp: string
+  hostname?: string
+  internalHostname?: string
+  port?: number
+  ws?: string
+  http?: string
+  internalHttp?: string
   load: {
     inProgressMatches: number
     maxCapacity: number
     completedMatches: number
   }
-  releaseVersion: string
+  releaseVersion?: string
+  error?: string
 }
 
 export interface FindMatchMessage {
@@ -66,7 +67,7 @@ export interface ReconnectSpectatorMessage
   forSpectator: string
 }
 
-export interface RecentMatchInfo {
+export interface StoredRecentMatchInfo {
   type: 'recent_match_info'
   playerID: string
   gameMode: GameMode
@@ -79,6 +80,16 @@ export interface RecentMatchInfo {
   conquestInfo?: [Conquest, Conquest]
   store: string
   rewards: Reward[]
+}
+
+// The game server stores conquestInfo only for Conquest matches. The Go
+// matchmaker decodes that value into its non-optional [2]Conquest field and
+// therefore always emits the pair on the public /matchinfo response.
+export interface RecentMatchInfo extends Omit<
+  StoredRecentMatchInfo,
+  'conquestInfo'
+> {
+  conquestInfo: [Conquest, Conquest]
 }
 
 export interface TimeSyncMessage {

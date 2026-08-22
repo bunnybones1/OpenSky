@@ -1,0 +1,67 @@
+# Cloudflare Worker runtime values for local `wrangler dev`.
+# Copy this file to `.dev.vars`. Never commit the populated file.
+
+# Generate a random value with at least 32 characters.
+SESSION_SIGNING_KEY=replace-with-at-least-32-random-characters
+
+# Google Auth Platform OAuth client with application type "Web application".
+GOOGLE_CLIENT_ID=replace-with-google-web-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
+
+# Optional EIP-1271 verification for Polygon smart-contract wallets linked via
+# WalletConnect. Keep this server-side; the browser project ID is configured in
+# webapp/config/webapp.cloudflare.json and is not a secret.
+WALLET_RPC_URL_137=https://replace-with-your-polygon-rpc.example
+
+# Optional read-only wallet contents. All three values are required together.
+# The access key comes from Sequence Builder and grants indexer reads only.
+WALLET_INDEXER_URL_137=https://polygon-indexer.sequence.app
+WALLET_INDEXER_ACCESS_KEY=replace-with-sequence-project-access-key
+WALLET_ASSET_CONTRACT_137=0xreplace-with-reviewed-opensky-assets-contract
+
+# Optional OneSignal device push. Keep the REST API key in a Wrangler secret.
+# The public app ID must also be placed in webapp/config/webapp.cloudflare.json
+# so the browser can opt a device into the same OneSignal application.
+ONESIGNAL_APP_ID=00000000-0000-4000-8000-000000000000
+ONESIGNAL_REST_API_KEY=replace-with-onesignal-rest-api-key
+
+# Shared only by the web/API gateway, matchmaker, match service, and game service.
+INTERNAL_AUTH_SECRET=replace-with-a-long-random-value
+
+# Optional Cloud Weasel social integrations. Keep the Twitch client secret in
+# Wrangler secrets in production. The Discord value is the full HTTPS widget
+# JSON endpoint for the Cloud Weasel server; do not reuse the source server ID.
+DISCORD_WIDGET_URL=https://discord.com/api/guilds/replace-with-server-id/widget.json
+TWITCH_CLIENT_ID=replace-with-twitch-client-id
+TWITCH_CLIENT_SECRET=replace-with-twitch-client-secret
+TWITCH_GAME_ID=replace-with-cloud-weasel-game-id
+
+# Optional Samsung Galaxy Store verification. This non-secret value must equal
+# the Android package registered for Cloud Weasel. TEST receipts never grant
+# inventory; the Worker uses Samsung's fixed HTTPS production receipt API.
+SAMSUNG_IAP_PACKAGE_NAME=com.example.cloudweasel
+
+# Optional Google Play verification. Create a dedicated Play Console service
+# account with Android Publisher access, then keep its complete JSON key in a
+# Wrangler secret. This is separate from the Google login OAuth client above.
+GOOGLE_PLAY_PACKAGE_NAME=com.example.cloudweasel
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON={"type":"service_account","client_email":"replace-with-play-service-account@example.iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\\nreplace-with-private-key\\n-----END PRIVATE KEY-----\\n"}
+
+# Optional Apple App Store Server API verification. Create an In-App Purchase
+# key in App Store Connect. Store the .p8 value as a Wrangler secret; the other
+# values are identifiers. Production transactions only; sandbox never grants.
+APPLE_APP_STORE_BUNDLE_ID=com.example.cloudweasel
+APPLE_APP_STORE_ISSUER_ID=replace-with-app-store-connect-issuer-id
+APPLE_APP_STORE_KEY_ID=REPLACEKEY
+APPLE_APP_STORE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nreplace-with-app-store-connect-p8-key\n-----END PRIVATE KEY-----\n"
+
+# Optional Stripe Checkout integration. Checkout remains disabled unless both
+# secrets, both redirect URLs, and the selected product's price ID are set.
+# Keep secret values in Wrangler secrets; price IDs and redirect URLs may be
+# configured as environment variables.
+STRIPE_SECRET_KEY=replace-with-stripe-secret-key
+STRIPE_WEBHOOK_SECRET=replace-with-stripe-webhook-signing-secret
+STRIPE_SKYPASS_PRICE_ID=replace-with-stripe-skypass-price-id
+STRIPE_CONQUEST_TICKET_PRICE_ID=replace-with-stripe-ticket-price-id
+STRIPE_SUCCESS_URL=http://localhost:8787/skypass
+STRIPE_CANCEL_URL=http://localhost:8787/skypass/purchase

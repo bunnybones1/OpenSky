@@ -5,6 +5,7 @@ import { memo, useCallback } from 'react'
 import { push } from 'redux-first-history'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { CardsFilterPanel } from '~/shared/components/CardsFilterPanel/CardsFilterPanel'
 import { makeMarketCardsRoute } from '~/shared/helpers/routes/market-page'
 import { useResponsiveQuery } from '~/shared/hooks/ui/useResponsiveQuery'
@@ -35,6 +36,7 @@ export const MarketCardsFilterPanel = memo(() => {
     onlyDuplicates
   } = useSnapshot(marketCardsFilterState)
   const dispatch = useDispatch()
+  const isIdentityMarket = env.AUTH_MODE === 'google'
   const isTabletWide = useResponsiveQuery('tabletWide')
 
   const mode = ownership === OwnershipFilter.OWNED ? SwapType.SELL : SwapType.BUY
@@ -161,12 +163,12 @@ export const MarketCardsFilterPanel = memo(() => {
 
   const onOwnershipChange = useCallback(
     (value: OwnershipFilter) => {
-      if (mode === SwapType.BUY) {
+      if (isIdentityMarket || mode === SwapType.BUY) {
         updateMarketCardsFilterState('ownership', value)
         updateRoute()
       }
     },
-    [mode, updateRoute]
+    [isIdentityMarket, mode, updateRoute]
   )
 
   const onOnlyDuplicatesChange = useCallback(
@@ -196,8 +198,10 @@ export const MarketCardsFilterPanel = memo(() => {
       onEffectsChange={onEffectsChange}
       effects={effects}
       ClearButton={FilterClearButton}
-      onOwnershipChange={mode === SwapType.BUY ? onOwnershipChange : undefined}
-      ownership={mode === SwapType.BUY ? ownership : undefined}
+      onOwnershipChange={
+        isIdentityMarket || mode === SwapType.BUY ? onOwnershipChange : undefined
+      }
+      ownership={isIdentityMarket || mode === SwapType.BUY ? ownership : undefined}
       onOnlyDuplicatesChange={
         isDuplicatesDisabled ? undefined : onOnlyDuplicatesChange
       }

@@ -3,6 +3,7 @@ import { memo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { push } from 'redux-first-history'
 
+import env from '~/env'
 import { AuthenticationClient } from '~/shared/clients'
 import { Button } from '~/shared/components/Button'
 import { Input } from '~/shared/components/Input/Input'
@@ -32,6 +33,7 @@ const { closeDialog: closeAccountSettingsDialog } = controlDialog(
 
 export const DeleteAccountDialog = memo(() => {
   const [username, setUsername] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { t } = useTranslation()
   const { getAssetUrl } = useGetAssetContext()
   const { data: authedAccount } = useAuthedAccount()
@@ -46,12 +48,18 @@ export const DeleteAccountDialog = memo(() => {
   }, [])
 
   const handleClick = useCallback(async () => {
-    AuthenticationClient.deleteAccount(() => {
-      closeDialog()
-      closeAccountSettingsDialog()
-      dispatch(push(ROUTES_CONFIG.routes.DELETED_ACCOUNT.directPath))
-    })
-  }, [dispatch])
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await AuthenticationClient.deleteAccount(() => {
+        closeDialog()
+        closeAccountSettingsDialog()
+        dispatch(push(ROUTES_CONFIG.routes.DELETED_ACCOUNT.directPath))
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [dispatch, isSubmitting])
 
   return (
     <div
@@ -105,7 +113,9 @@ export const DeleteAccountDialog = memo(() => {
           {t('deleteAccount.areYouSure')}
         </Text>
         <Text fontSize="16px" color="purple8" fontWeight="500">
-          {t('deleteAccount.walletAccess')}
+          {env.AUTH_MODE === 'google'
+            ? t('deleteAccount.googleConfirmation')
+            : t('deleteAccount.walletAccess')}
         </Text>
         <Text fontSize="16px" color="white" fontWeight="500">
           {t('deleteAccount.onceDeleted')}
@@ -135,7 +145,9 @@ export const DeleteAccountDialog = memo(() => {
               height="36px"
               text={t('general.Confirm')}
               onClick={handleClick}
-              disabled={!!authedAccount && username !== authedAccount?.name}
+              disabled={
+                isSubmitting || !authedAccount || username !== authedAccount.name
+              }
               buttonClassName={FullWidthButtonStyle}
               className={FullWidthButtonStyle}
             />

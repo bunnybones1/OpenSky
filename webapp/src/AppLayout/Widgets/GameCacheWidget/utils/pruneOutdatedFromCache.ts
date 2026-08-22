@@ -5,6 +5,9 @@ import { delayPromise } from '@opensky/shared/utils/async'
 import env from '~/env'
 import { getAssetManifest } from '~/shared/queries/useAssetManifest'
 
+import { openExistingCache } from './openExistingCache'
+import { reportCachePrune } from './reportCachePrune'
+
 const getManifestUrlSegment = (url: string) => {
   const segments = url.split('/')
 
@@ -26,11 +29,8 @@ const pruneAssets = async (cacheName: CacheNames, manifest: AssetHashManifest) =
     if (!window.caches) {
       return
     }
-    if (!(await window.caches.has(cacheName))) {
-      console.error(`No cache named ${cacheName}`)
-      return
-    }
-    const cache = await window.caches.open(cacheName)
+    const cache = await openExistingCache(window.caches, cacheName)
+    if (!cache) return
 
     const keys = await cache.keys()
 
@@ -67,7 +67,7 @@ const pruneAssets = async (cacheName: CacheNames, manifest: AssetHashManifest) =
         }
       }
     }
-    console.warn(`Found ${numPruned} ${cacheName} assets to prune.`)
+    reportCachePrune(numPruned, `${cacheName} assets`)
   } catch (error) {
     console.error(`Error pruning ${cacheName} assets`, error)
   }
@@ -96,12 +96,8 @@ const pruneAssetManifests = async (cacheName: CacheNames) => {
     if (!window.caches) {
       return
     }
-    if (!(await window.caches.has(cacheName))) {
-      console.error(`No cache named ${cacheName}`)
-      return
-    }
-
-    const cache = await window.caches.open(cacheName)
+    const cache = await openExistingCache(window.caches, cacheName)
+    if (!cache) return
 
     const keys = await cache.keys()
 
@@ -129,7 +125,7 @@ const pruneAssetManifests = async (cacheName: CacheNames) => {
         }
       }
     }
-    console.warn(`Found ${numPruned} asset manifests to prune.`)
+    reportCachePrune(numPruned, 'asset manifests')
   } catch (error) {
     console.error(`Error pruning asset manifests`, error)
   }

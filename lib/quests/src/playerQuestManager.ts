@@ -24,6 +24,14 @@ interface ActiveQuest {
   questType: QuestType
 }
 
+export interface PlayerQuestRuntimeState {
+  quests: Array<{
+    id: number
+    progress: number
+    statefulEventState: unknown
+  }>
+}
+
 // No private matches allowed!!
 const DEFAULT_GAME_MODE_FILTER: Array<GameMode> = [
   GameMode.CONQUEST_CONSTRUCTED,
@@ -244,5 +252,31 @@ export class PlayerQuestManager {
     return Object.fromEntries(
       this.activeQuests.map(q => [q.id, q.progress - q.initProgress])
     )
+  }
+
+  /**
+   * Preserve the source quest evaluator across runtimes such as a hibernating
+   * Durable Object. Values are structured-cloneable quest implementation
+   * state (primitives, arrays, Maps and Sets) rather than class instances.
+   */
+  snapshotRuntimeState(): PlayerQuestRuntimeState {
+    return {
+      quests: this.activeQuests.map(quest => ({
+        id: quest.id,
+        progress: quest.progress,
+        statefulEventState: quest.statefulEventState
+      }))
+    }
+  }
+
+  restoreRuntimeState(snapshot?: PlayerQuestRuntimeState): void {
+    if (!snapshot) return
+    const saved = new Map(snapshot.quests.map(quest => [quest.id, quest]))
+    for (const quest of this.activeQuests) {
+      const restored = saved.get(quest.id)
+      if (!restored) continue
+      quest.progress = Math.max(quest.initProgress, restored.progress)
+      quest.statefulEventState = restored.statefulEventState
+    }
   }
 }

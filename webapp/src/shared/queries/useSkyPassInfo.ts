@@ -4,6 +4,7 @@ import orderBy from 'lodash-es/orderBy'
 import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 
+import env from '~/env'
 import { ItemType, SkypassLevel, SkypassTier } from '~/lib/proto'
 import { APIClient, GlobalQueryClient } from '~/shared/clients'
 import { SKYPASS_INFO } from '~/shared/constants/react-query-keys'
@@ -120,7 +121,8 @@ export const useSkyPassInfo = () => {
 
       const { hasPremium, levels, seasonName, seasonNumber } = res
 
-      const showPremiumItems = IS_PREMIUM_SKYPASS_AVAILABLE || hasPremium
+      const showPremiumItems =
+        env.AUTH_MODE === 'google' || IS_PREMIUM_SKYPASS_AVAILABLE || hasPremium
 
       const orderedLevels = orderBy(levels, ['level'])
 

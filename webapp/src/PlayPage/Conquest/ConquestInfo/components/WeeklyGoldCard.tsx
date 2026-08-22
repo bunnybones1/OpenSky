@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
+import env from '~/env'
 import { Card } from '~/shared/components/Card/Card'
 import { CardBalance } from '~/shared/components/CardBalanceInfo'
 import { Icon } from '~/shared/components/Icon/Icon'
@@ -12,11 +13,12 @@ import { Sprinkles } from '~/shared/style/Sprinkles.css'
 
 interface WeeklyGoldCardProps {
   id: number
-  mintedAmount: number
+  collectedAmount: number
 }
 
-export const WeeklyGoldCard = memo(({ id, mintedAmount }: WeeklyGoldCardProps) => {
+export const WeeklyGoldCard = memo(({ id, collectedAmount }: WeeklyGoldCardProps) => {
   const { t } = useTranslation()
+  const isOffchain = env.AUTH_MODE === 'google'
   return (
     <Link
       className={Sprinkles({
@@ -34,7 +36,14 @@ export const WeeklyGoldCard = memo(({ id, mintedAmount }: WeeklyGoldCardProps) =
           paddingTop: '60px'
         }}
       >
-        <Tooltip placement="top" tooltip={t('play.conquestWeeklyGolds')}>
+        <Tooltip
+          placement="top"
+          tooltip={t(
+            isOffchain
+              ? 'play.conquestWeeklyGoldsOffchain'
+              : 'play.conquestWeeklyGolds'
+          )}
+        >
           <div
             className={Sprinkles({
               display: 'flex',
@@ -44,7 +53,9 @@ export const WeeklyGoldCard = memo(({ id, mintedAmount }: WeeklyGoldCardProps) =
           >
             <Icon type="info-empty" height="12px" color="purple7" />
             <Text marginLeft="4px" color="purple7" fontSize="14px" fontWeight="500">
-              {`${mintedAmount} ${t('generic.Minted')}`}
+              {`${collectedAmount} ${t(
+                isOffchain ? 'generic.Collected' : 'generic.Minted'
+              )}`}
             </Text>
           </div>
         </Tooltip>

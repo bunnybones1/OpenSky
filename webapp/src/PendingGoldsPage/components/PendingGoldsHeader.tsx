@@ -25,7 +25,7 @@ const PendingGoldsHeader = memo(() => {
       type="end-row"
     >
       <Box height="100%" width="100%" position="relative">
-        <TitleDetail title={t('play.gameModes.CONQUEST.pendingGolds')} />
+        <TitleDetail title={t('play.gameModes.CONQUEST.pendingGoldsOffchain')} />
       </Box>
     </StyledPlayerHeader>
   )

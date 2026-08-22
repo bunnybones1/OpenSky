@@ -3,6 +3,7 @@ import { FlagCodes } from '@opensky/shared/constants'
 import { memo } from 'react'
 
 import { RowArt } from '~/__deprecated__/RowArt'
+import env from '~/env'
 import { Box } from '~/shared/components/Base/Box'
 import { FlexBox } from '~/shared/components/Base/FlexBox'
 import { ExperienceBar } from '~/shared/components/ExperienceBar/ExperienceBar'
@@ -10,6 +11,7 @@ import { useAccountTagArtUrl } from '~/shared/hooks/useAccountTagArtUrl'
 import { useActiveAccount } from '~/shared/hooks/useActiveAccount'
 
 import { BattleTagPlayerInfo } from './components/BattleTagPlayerInfo'
+import { IdentityInventoryInfo } from './IdentityInventoryInfo'
 import SettingsButton from './SettingsButton/SettingsButton'
 import { SpectateInfo } from './SpectateInfo/SpectateInfo'
 import WalletInfo from './WalletInfo/WalletInfo'
@@ -90,7 +92,7 @@ export const ExpandedBattleTag = memo(() => {
           </FlexBox>
         </BattleTagIdentityWrapper>
       </FlexBox>
-      <WalletInfo />
+      {env.AUTH_MODE === 'google' ? <IdentityInventoryInfo /> : <WalletInfo />}
       <SpectateInfo />
     </>
   )

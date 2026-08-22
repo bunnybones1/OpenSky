@@ -10,7 +10,11 @@ import { WalletWidget } from './components/WalletWidget'
 import { GameCacheWidget } from './GameCacheWidget/GameCacheWidget'
 import { MatchMakerWidget } from './MatchMakerWidget/MatchMakerWidget'
 
-export const Widgets = memo(() => {
+interface WidgetsProps {
+  showWallet?: boolean
+}
+
+export const Widgets = memo(({ showWallet = true }: WidgetsProps) => {
   const isHomeRoute = useSelector(isHomeRouteSelector)
 
   return (
@@ -36,7 +40,7 @@ export const Widgets = memo(() => {
       >
         <MatchMakerWidget />
         {isHomeRoute && <GameCacheWidget />}
-        <WalletWidget />
+        {showWallet && <WalletWidget />}
       </FlexBox>
     </Portal>
   )

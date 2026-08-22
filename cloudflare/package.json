@@ -1,0 +1,29 @@
+{
+  "name": "@opensky/cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --maxWorkers=1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ethersproject/address": "^5.8.0",
+    "@ethersproject/hash": "^5.8.0",
+    "@ethersproject/wallet": "^5.8.0",
+    "@opensky/proto": "workspace:*",
+    "@opensky/shared": "workspace:*",
+    "@peculiar/x509": "1.14.3",
+    "reflect-metadata": "0.2.2",
+    "@skyweaver/state-browser-sys": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.21.0",
+    "@cloudflare/workers-types": "5.20260809.1",
+    "esbuild": "0.28.1",
+    "typescript": "^5.1.6",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "wrangler": "4.110.0"
+  }
+}

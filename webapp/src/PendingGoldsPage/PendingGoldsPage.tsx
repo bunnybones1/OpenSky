@@ -56,7 +56,7 @@ const PendingGoldCardsPage = memo(() => {
               textAlign="center"
               fontWeight="500"
             >
-              {t('play.noMintsPending')}
+              {t('play.noDeliveriesPending')}
             </Text>
           </FlexBox>
         )}
@@ -69,7 +69,7 @@ const PendingGoldCardsPage = memo(() => {
                   <PendingGoldCard
                     id={tokenId}
                     key={`${groupIndex}-${tokenId}`}
-                    mintAt={pendingGroup.mintAt}
+                    deliverAt={pendingGroup.mintAt}
                   />
                 )
               })

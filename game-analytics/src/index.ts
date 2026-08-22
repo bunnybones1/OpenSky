@@ -4,6 +4,7 @@ import { getFilesInGCS, uploadMatch } from './googleCloudStorage'
 import { Game } from './Match'
 import { PubsubMessage } from '@google-cloud/pubsub/build/src/publisher'
 import { PubSub } from '@google-cloud/pubsub'
+import { WasmMatch } from '@skyweaver/state-node-sys'
 
 // Register a CloudEvent callback with the Functions Framework that will
 // be triggered by Cloud Storage.
@@ -106,7 +107,7 @@ const pubMatchData = async (cloudEvent: PubsubMessage) => {
     // try to load it and add it
     console.log('adding match', matchID)
     try {
-      const gameMatchData = await Game.loadMatch(matchID, record)
+      const gameMatchData = await Game.loadMatch(matchID, record, WasmMatch)
       console.log('Finished generating match data...')
       if (gameMatchData.type === 'matchData') {
         // uploade matchData to GCS
