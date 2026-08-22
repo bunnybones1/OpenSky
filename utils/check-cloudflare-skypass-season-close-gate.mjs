@@ -147,7 +147,6 @@ export const skypassSeasonCloseEffectErrors = evidence => {
     'REVIEWED_SKYPASS_WORKFLOW',
     'REVIEWED_SKYPASS_QUEUE',
     'REVIEWED_SKYPASS_DEAD_LETTER_QUEUE',
-    "'0125_skypass_season_close_workflow_handoffs.sql'",
     'skypass_workflow_tables_present',
     'skypass_workflow_contract_guards_present'
   ])

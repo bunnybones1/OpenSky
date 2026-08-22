@@ -278,9 +278,9 @@ test('rejects direct-cron, partial-claim, terminal-state, and topology mutations
     },
     {
       ...current,
-      productionRunner: current.productionRunner.replace(
-        "'0125_skypass_season_close_workflow_handoffs.sql'",
-        "'0124_push_notification_queue_delivery.sql'"
+      productionRunner: current.productionRunner.replaceAll(
+        'skypass_workflow_contract_guards_present',
+        'skypass_contract_removed'
       )
     }
   ]

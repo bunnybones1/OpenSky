@@ -3115,21 +3115,50 @@ receipts, reopens old pending/terminal failures, and removes the copied
 five-attempt business ceiling. The Queue, DLQ, binding, migration, runtime, and
 credentials remain local, unprovisioned, unapplied, and undeployed.
 
+## Effect-faithful SkyPass season close — 2026-08-21
+
+Commit `b114331e` replaces direct season-close player batches with one
+deterministic Workflow per season and one narrow Queue responsibility per
+eligible player. D1 pins the exact reward policy and content, waits for atomic
+match-XP publication, applies each player's complete remaining reward set, and
+publishes the source auto-claimed flag, immutable completion receipt, and exact
+one-time notification together. Migration `0125` removes the copied terminal
+retry ceiling while preserving successful prior claims. The Workflow, Queue,
+DLQ, migration, and runtime remain local and undeployed.
+
+## Effect-faithful referral sticker orchestration — 2026-08-21
+
+Commit `31793663` replaces direct cron scanning and delivery with one
+deterministic Workflow per accepted hourly sweep and strict PREPARE/DELIVER
+Queue pointers. D1 remains authoritative for the independently approved
+schedule, previous-season carry, cumulative thresholds, incremental point
+deduction, top-five friend attribution, overlapping 23-hour entitlements,
+exact 100-copy off-chain inventory grants, moderation, and completion.
+
+Migration `0126` adopts every structurally complete legacy pending or delivered
+batch without rewriting its point, award, schedule, inventory, or timestamp
+evidence and fails closed on partial `PREPARING`/`DELIVERING` state. Queue/DLQ
+exhaustion never becomes an entitlement terminal state; immutable failures and
+deterministic Workflow restart re-drive pending D1 responsibility. Focused
+referral suites pass 20/20 and the full main Worker passes 86 files and 552
+tests. The Workflow, Queue, DLQ, migration, schedule, and runtime remain local,
+unprovisioned, unapplied, and undeployed.
+
 ## Suggested next slice
 
-The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold, and
-external-push orchestration corrections are complete locally. Continue with
-one remaining main-Worker cron responsibility at a time, beginning each with
-an effect/recovery audit rather than a topology rewrite. No later
-responsibility has been selected yet.
+The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
+external-push, SkyPass, and referral-sticker orchestration corrections are
+complete locally. Continue with one remaining main-Worker responsibility at a
+time, beginning each with an effect/recovery audit rather than a topology
+rewrite.
 Player-facing parity remains separate and must continue using the original
 interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
 then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and
-`0124` at the documented quiescent boundary, provision both exact reviewed
-reward Workflow/Queue/DLQ topologies plus the delayed-Gold and external-push
-Queues/DLQs, deploy the exact
+`0124`, `0125`, and `0126` at the documented quiescent boundary, provision all
+four exact reviewed reward Workflow/Queue/DLQ topologies plus the delayed-Gold
+and external-push Queues/DLQs, deploy the exact
 tested Workers with both bot flags still false and both reward schedules
 disabled, and only consider a bounded ranked/PvP-bot soak after ordinary
 multiplayer and analytics paths are healthy. This remains unauthorized while

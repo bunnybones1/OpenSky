@@ -2,9 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: architecture selected after the effect-fidelity audit. Implementation,
-provisioning, migration, activation, deployment, and a live drill are not
-authorized by this decision.
+Status: architecture implemented and guarded locally through migration `0126`.
+Provisioning, remote migration, schedule activation, deployment, and a live
+drill remain unauthorized.
 
 ## Decision
 
@@ -132,13 +132,13 @@ The Queue message is a strict versioned union:
 ```ts
 type ReferralStickerRewardQueueMessage =
   | {
-      kind: 'REFERRAL_STICKER_PREPARE'
+      kind: 'PREPARE'
       version: 1
       sweepId: number
       userId: string
     }
   | {
-      kind: 'REFERRAL_STICKER_DELIVER'
+      kind: 'DELIVER'
       version: 1
       sweepId: number
       batchId: number
@@ -209,9 +209,9 @@ complete old pending batch becomes a re-drivable delivery responsibility.
 Contradictory partial or delivered evidence fails migration closed rather than
 guessing a player outcome.
 
-## Required executable evidence
+## Executable evidence
 
-Before implementation is ready, tests and mutation gates must prove:
+The implementation and mutation gates prove:
 
 - exact one-hour sweep acceptance and 23-hour per-batch publication timing;
 - current-season carry, cumulative-threshold math, incremental point deduction,
@@ -243,3 +243,13 @@ committed with its migration, bindings, Queue/DLQ configuration, production
 preflight, tests, and recovery gate. The complete exact-head local release and
 draft-PR CI must pass before any separately authorized provisioning or
 deployment. Schedule activation remains a later two-actor operation.
+
+The implementation milestone is `31793663`; source-effect and production
+safeguards are committed at `76c4768f`. Focused referral suites pass 20/20
+tests across the legacy effect harness and Workflow boundary, the migration
+fixture preserves valid pending/delivered batches and rejects partial
+`PREPARING`/`DELIVERING` evidence, the full main Worker passes 86 files and 552
+tests, and the strengthened runner/topology/production-schema gates pass. The
+complete exact-head release and exact-head draft-PR CI remain mandatory before
+any push is considered deployable, and deployment still requires separate
+explicit authorization.
