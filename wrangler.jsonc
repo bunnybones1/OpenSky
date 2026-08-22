@@ -49,6 +49,11 @@
       "name": "cloud-weasel-leaderboard-rewards",
       "binding": "LEADERBOARD_REWARD_WORKFLOW",
       "class_name": "LeaderboardRewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-skypass-season-close",
+      "binding": "SKYPASS_SEASON_CLOSE_WORKFLOW",
+      "class_name": "SkypassSeasonCloseWorkflow"
     }
   ],
   "queues": {
@@ -68,6 +73,10 @@
       {
         "queue": "cloud-weasel-player-push-delivery",
         "binding": "PUSH_NOTIFICATION_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-skypass-auto-claim-delivery",
+        "binding": "SKYPASS_AUTO_CLAIM_QUEUE"
       }
     ],
     "consumers": [
@@ -86,6 +95,10 @@
       {
         "queue": "cloud-weasel-player-push-delivery",
         "dead_letter_queue": "cloud-weasel-player-push-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-skypass-auto-claim-delivery",
+        "dead_letter_queue": "cloud-weasel-skypass-auto-claim-delivery-dlq"
       }
     ]
   },

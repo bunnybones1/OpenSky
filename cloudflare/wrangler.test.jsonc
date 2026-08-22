@@ -28,6 +28,10 @@
       {
         "binding": "PUSH_NOTIFICATION_QUEUE",
         "queue": "cloud-weasel-player-push-delivery-test"
+      },
+      {
+        "binding": "SKYPASS_AUTO_CLAIM_QUEUE",
+        "queue": "cloud-weasel-skypass-auto-claim-delivery-test"
       }
     ]
   },

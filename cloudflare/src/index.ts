@@ -32,7 +32,13 @@ import {
 } from './push-notifications'
 import { runReferralStickerRewards } from './referral-sticker-rewards'
 import { handleReplayRequest } from './replays'
-import { runDueSkypassAutoClaims } from './skypass-auto-claim'
+import {
+  dispatchDueSkypassAutoClaims,
+  handleSkypassAutoClaimQueue,
+  SKYPASS_AUTO_CLAIM_QUEUE_NAME,
+  SkypassSeasonCloseWorkflow,
+  type SkypassAutoClaimQueueMessage
+} from './skypass-auto-claim'
 import { WalletLinksRepository } from './wallet-links'
 import {
   CONQUEST_GOLD_DELIVERY_QUEUE_NAME,
@@ -77,7 +83,7 @@ export default {
         dispatchDueConquestV2Rewards(env),
         dispatchDueLeaderboardRewards(env),
         runReferralStickerRewards(env.AUTH_DB),
-        runDueSkypassAutoClaims(env.AUTH_DB),
+        dispatchDueSkypassAutoClaims(env),
         dispatchDuePushNotifications(env.AUTH_DB, env),
         new AccountDeletionRepository(
           env.AUTH_DB,
@@ -93,6 +99,7 @@ export default {
       | ConquestV2RewardQueueMessage
       | LeaderboardRewardQueueMessage
       | PushNotificationQueueMessage
+      | SkypassAutoClaimQueueMessage
     >,
     env
   ): Promise<void> {
@@ -129,6 +136,13 @@ export default {
       )
       return
     }
+    if (batch.queue === SKYPASS_AUTO_CLAIM_QUEUE_NAME) {
+      await handleSkypassAutoClaimQueue(
+        batch as MessageBatch<SkypassAutoClaimQueueMessage>,
+        env.AUTH_DB
+      )
+      return
+    }
     throw new Error(`unsupported Queue binding: ${batch.queue}`)
   }
 } satisfies ExportedHandler<
@@ -137,6 +151,11 @@ export default {
   | ConquestV2RewardQueueMessage
   | LeaderboardRewardQueueMessage
   | PushNotificationQueueMessage
+  | SkypassAutoClaimQueueMessage
 >
 
-export { ConquestV2RewardWorkflow, LeaderboardRewardWorkflow }
+export {
+  ConquestV2RewardWorkflow,
+  LeaderboardRewardWorkflow,
+  SkypassSeasonCloseWorkflow
+}

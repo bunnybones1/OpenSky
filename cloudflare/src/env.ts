@@ -8,6 +8,10 @@ import type {
 } from './leaderboard-reward-orchestration'
 import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 import type { PushNotificationQueueMessage } from './push-notifications'
+import type {
+  SkypassAutoClaimQueueMessage,
+  SkypassSeasonCloseWorkflowParams
+} from './skypass-auto-claim'
 
 export interface Env {
   ASSETS: Fetcher
@@ -52,5 +56,7 @@ export interface Env {
   LEADERBOARD_REWARD_WORKFLOW?: Workflow<LeaderboardRewardWorkflowParams>
   LEADERBOARD_REWARD_QUEUE?: Queue<LeaderboardRewardQueueMessage>
   PUSH_NOTIFICATION_QUEUE?: Queue<PushNotificationQueueMessage>
+  SKYPASS_SEASON_CLOSE_WORKFLOW?: Workflow<SkypassSeasonCloseWorkflowParams>
+  SKYPASS_AUTO_CLAIM_QUEUE?: Queue<SkypassAutoClaimQueueMessage>
   WORKER_VERSION: WorkerVersionMetadata
 }
