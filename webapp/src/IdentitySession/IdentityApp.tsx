@@ -22,6 +22,7 @@ import { QuestsPage } from '~/QuestsPage/QuestsPage'
 import { SelectGoldCardsForSkinPage } from '~/SelectGoldCardsForSkinPage/SelectGoldCardsForSkinPage'
 import { SelectSilversPage } from '~/SelectSilversPage/SelectSilversPage'
 import { ROUTES_CONFIG } from '~/shared/constants/routes'
+import { IS_PREMIUM_SKYPASS_AVAILABLE } from '~/shared/constants/skypass'
 import SkyPassPage from '~/SkyPassPage/SkyPassPage'
 import { SkyPassPurchasePage } from '~/SkyPassPurchasePage/SkyPassPurchasePage'
 
@@ -130,10 +131,12 @@ export const IdentityApp = memo(() => {
             element={<SkyPassPage />}
             path={ROUTES_CONFIG.routes.SKY_PASS.directPath}
           />
-          <Route
-            element={<SkyPassPurchasePage />}
-            path={ROUTES_CONFIG.routes.SKY_PASS_PURCHASE.path}
-          />
+          {IS_PREMIUM_SKYPASS_AVAILABLE && (
+            <Route
+              element={<SkyPassPurchasePage />}
+              path={ROUTES_CONFIG.routes.SKY_PASS_PURCHASE.path}
+            />
+          )}
           <Route
             element={
               <Suspense fallback={<RouteLoaderComponent />}>

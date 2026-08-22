@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { TimeUntilSeasonEnd } from '~/AccountPage/AccountIdentity/RankSection/RankSection'
-import env from '~/env'
 import { Box, FlexBox, Text } from '~/shared/components/Base'
 import { Button } from '~/shared/components/Button'
 import { Icon } from '~/shared/components/Icon/Icon'
@@ -39,8 +38,7 @@ export const Level = memo(
     const navigate = useNavigate()
     const isTabletWide = useResponsiveQuery('tabletWide')
     const isSmallScreen = !isTabletWide
-    const premiumSkyPassVisible =
-      env.AUTH_MODE === 'google' || IS_PREMIUM_SKYPASS_AVAILABLE
+    const premiumSkyPassVisible = IS_PREMIUM_SKYPASS_AVAILABLE
 
     return (
       <FlexBox
