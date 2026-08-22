@@ -3222,10 +3222,13 @@ The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
 external-push, SkyPass, referral-sticker, account-deletion, Conquest-readiness,
 and wallet-proof corrections are complete locally. No known active source
 runner or main-Worker business responsibility lacks a reviewed disposition.
-The next safe local slice is a read-only audit of the shared durable-effect
-discovery trigger and the complete undeployed migration/resource rollout, or
-additional original-interface player-flow evidence. Player-facing parity must
-continue using the original interface rather than redesigning it.
+That read-only audit is now recorded in
+[`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
+It requires independent `waitUntil` ownership for the eight durable discovery
+responsibilities and a staged replacement for the unsafe all-pending remote
+migration command before production can be considered. Additional
+original-interface player-flow evidence remains useful; player-facing parity
+must continue using the original interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
 then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and

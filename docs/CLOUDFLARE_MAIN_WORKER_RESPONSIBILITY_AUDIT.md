@@ -15,6 +15,12 @@ release safeguards at `498a8215`, as documented in
 This audit and these milestones do not authorize provisioning, migration,
 activation, deployment, a live drill, or any production mutation.
 
+The shared discovery and undeployed rollout boundary was reassessed in
+[`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
+The one-minute responsibilities must receive independent Worker execution
+lifetimes, and the current all-pending remote migration command must not be used
+for the required `0115`-alone cutover.
+
 ## Decision
 
 Keep the one-minute Worker cron only as a bounded discovery and recovery

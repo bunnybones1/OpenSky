@@ -2832,11 +2832,15 @@ At the pause audit:
 The separately queued PromoteGrandmasters retry/failure, delayed Conquest Gold,
 external-push, and Conquest-readiness audits are complete. No known dormant
 matchmaker, non-RPC route, or active source-worker disposition remains. The
-next safe local slice is a read-only audit of the shared durable-effect
-discovery trigger and the complete undeployed migration/resource rollout, or
-additional original-interface player-flow evidence. The main known remaining
-work is controlled production provisioning, activation, and evidence—not a
-broad rewrite of the original application.
+shared durable-effect discovery and undeployed migration/resource rollout audit
+is now recorded in
+[`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
+It found two local safeguards to complete before production can be considered:
+independent `waitUntil` ownership for all eight discovery responsibilities and
+a staged replacement for the current all-pending remote migration command. The
+main known remaining work after those safeguards is controlled production
+provisioning, activation, and evidence—not a broad rewrite of the original
+application.
 
 ## Resume checklist
 
