@@ -16,9 +16,9 @@ migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. The latest exact-head
 release and draft-PR CI passed at `d7f8e12f` in GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>; complete
-release validation and exact-head PR CI for the newer external-push milestone
-remain outstanding. A
+<https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>. The complete
+local release contract for the newer external-push milestone passed at
+`49ebd31c`; exact-head draft-PR CI remains outstanding. A
 distinct, minimal `0121_conquest_v2_workflow_handoffs.sql` protects the
 Conquest Workflow/Queue boundary, and `0122_leaderboard_reward_workflow_handoffs.sql`
 protects the equivalent leaderboard business responsibility. Neither
@@ -33,8 +33,8 @@ production mutation pause remains in force.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `e8f552c4`
-  (`Deliver external push notifications through Queues`)
+- Last code/test checkpoint: `49ebd31c`
+  (`Decouple Gold gate from terminal migration order`)
 - Latest tested runtime commit: `e8f552c4`
   (`Deliver external push notifications through Queues`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
@@ -49,9 +49,11 @@ production mutation pause remains in force.
   tested but are **not deployed**. The prior complete release and exact-head
   draft-PR CI passed at `d7f8e12f`. It produced web entry
   `/assets/index-fd3d9163.js`, game entry
-  `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact. A
-  complete build and exact-head PR CI of the current external-push head remain
-  required.
+  `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact. The
+  current `49ebd31c` head passed the complete local release contract and
+  produced web entry `/assets/index-1eddfd33.js`, game entry
+  `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact.
+  Exact-head draft-PR CI remains required.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus

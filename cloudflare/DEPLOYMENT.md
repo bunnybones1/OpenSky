@@ -8,7 +8,8 @@
 - Match service Worker: `cloud-weasel-match-service` (`700ffbb4-f8ce-401f-afeb-ba856be1a5e9`)
 - Game Worker: `cloud-weasel-game-server` (`fcb811fc-43dd-4c49-a244-f1c5f91ff828`)
 - Paused branch checkpoint: external-push runtime commit `e8f552c4` is tested
-  but not deployed. Migrations
+  but not deployed; the complete local release contract passed at gate and
+  documentation head `49ebd31c`. Migrations
   `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`,
   `0117_match_experience_publication_state.sql`,
@@ -32,11 +33,11 @@
   focused Queue tests, its 4/4 mutation/migration gate, 12/12 production
   preflight tests, all 85 main-Worker files and 538 tests, and a fresh local
   application of every D1 migration through `0124` plus the exact production
-  schema query. The latest
-  complete exact-head release and draft-PR CI passed at `d7f8e12f` in GitHub
+  schema query. The complete local exact-head release passed at `49ebd31c`,
+  producing a validated 594-file artifact. The latest draft-PR CI passed at
+  `d7f8e12f` in GitHub
   Actions run <https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>.
-  Complete release validation and exact-head CI for the current documentation
-  head remain required.
+  Exact-head CI for the current documentation head remains required.
   This checkpoint also preserves the source API and matchmaker `/ping`
   heartbeats plus the game server `/` and `/ping` routes. A fail-closed
   4/4/5-route inventory is required by the complete release contract and the
