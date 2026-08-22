@@ -30,7 +30,13 @@ import {
   PUSH_NOTIFICATION_QUEUE_NAME,
   type PushNotificationQueueMessage
 } from './push-notifications'
-import { runReferralStickerRewards } from './referral-sticker-rewards'
+import {
+  dispatchDueReferralStickerRewards,
+  handleReferralStickerRewardQueue,
+  REFERRAL_STICKER_REWARD_QUEUE_NAME,
+  ReferralStickerRewardWorkflow,
+  type ReferralStickerRewardQueueMessage
+} from './referral-sticker-reward-orchestration'
 import { handleReplayRequest } from './replays'
 import {
   dispatchDueSkypassAutoClaims,
@@ -82,7 +88,7 @@ export default {
         runConquestReadinessDrills(env),
         dispatchDueConquestV2Rewards(env),
         dispatchDueLeaderboardRewards(env),
-        runReferralStickerRewards(env.AUTH_DB),
+        dispatchDueReferralStickerRewards(env),
         dispatchDueSkypassAutoClaims(env),
         dispatchDuePushNotifications(env.AUTH_DB, env),
         new AccountDeletionRepository(
@@ -99,6 +105,7 @@ export default {
       | ConquestV2RewardQueueMessage
       | LeaderboardRewardQueueMessage
       | PushNotificationQueueMessage
+      | ReferralStickerRewardQueueMessage
       | SkypassAutoClaimQueueMessage
     >,
     env
@@ -136,6 +143,13 @@ export default {
       )
       return
     }
+    if (batch.queue === REFERRAL_STICKER_REWARD_QUEUE_NAME) {
+      await handleReferralStickerRewardQueue(
+        batch as MessageBatch<ReferralStickerRewardQueueMessage>,
+        env.AUTH_DB
+      )
+      return
+    }
     if (batch.queue === SKYPASS_AUTO_CLAIM_QUEUE_NAME) {
       await handleSkypassAutoClaimQueue(
         batch as MessageBatch<SkypassAutoClaimQueueMessage>,
@@ -151,11 +165,13 @@ export default {
   | ConquestV2RewardQueueMessage
   | LeaderboardRewardQueueMessage
   | PushNotificationQueueMessage
+  | ReferralStickerRewardQueueMessage
   | SkypassAutoClaimQueueMessage
 >
 
 export {
   ConquestV2RewardWorkflow,
   LeaderboardRewardWorkflow,
+  ReferralStickerRewardWorkflow,
   SkypassSeasonCloseWorkflow
 }

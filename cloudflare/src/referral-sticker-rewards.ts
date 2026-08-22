@@ -5,7 +5,7 @@ import {
 import { seasonFromDate } from './legacy-seasons'
 
 const STICKER_REWARD_AMOUNT = 100
-const DELIVERY_DELAY_MS = 23 * 60 * 60 * 1000
+export const REFERRAL_STICKER_DELIVERY_DELAY_MS = 23 * 60 * 60 * 1000
 
 interface StickerRow {
   token_id: number
@@ -30,7 +30,7 @@ interface FriendPointRow {
   points: number
 }
 
-interface DueBatchRow {
+export interface ReferralStickerDueBatch {
   id: number
   user_id: string
 }
@@ -41,7 +41,7 @@ export interface ReferralStickerRewardRun {
   delivered: number
 }
 
-const carryPointsIntoSeason = async (
+export const carryReferralPointsIntoSeason = async (
   database: D1Database,
   season: number,
   now: string
@@ -108,12 +108,13 @@ const candidateUsers = async (
   return rows.results
 }
 
-const prepareForUser = async (
+export const prepareReferralStickerRewardForUser = async (
   database: D1Database,
   userId: string,
   season: number,
   scheduleVersion: number,
-  now: Date
+  now: Date,
+  sweepId?: number
 ): Promise<boolean> => {
   const [stickersResult, previous, points, friendsResult] = await Promise.all([
     database
@@ -165,16 +166,40 @@ const prepareForUser = async (
   ])
 
   const previousCost = previous?.required_points ?? 0
-  const totalPoints = (points?.balance ?? 0) + previousCost
+  const observedBalance = points?.balance ?? 0
+  const totalPoints = observedBalance + previousCost
   const earned = stickersResult.results.filter(
     sticker => sticker.required_points <= totalPoints
   )
-  if (earned.length === 0) return false
+  if (earned.length === 0) {
+    if (sweepId !== undefined) {
+      await database
+        .prepare(
+          `UPDATE referral_sticker_reward_sweep_players
+           SET status = 'APPLIED', outcome = 'NO_AWARD',
+               observed_balance = ?, previous_cost = ?, total_points = ?,
+               completed_at = ?
+           WHERE sweep_id = ? AND user_id = ? AND status = 'PENDING'`
+        )
+        .bind(
+          observedBalance,
+          previousCost,
+          totalPoints,
+          now.toISOString(),
+          sweepId,
+          userId
+        )
+        .run()
+    }
+    return false
+  }
   const totalCost = Math.max(...earned.map(sticker => sticker.required_points))
   const pointsDeducted = totalCost - previousCost
 
   const nowText = now.toISOString()
-  const deliverAt = new Date(now.getTime() + DELIVERY_DELAY_MS).toISOString()
+  const deliverAt = new Date(
+    now.getTime() + REFERRAL_STICKER_DELIVERY_DELAY_MS
+  ).toISOString()
   const claimToken = crypto.randomUUID()
   const statements: D1PreparedStatement[] = [
     database
@@ -293,6 +318,46 @@ const prepareForUser = async (
       )
       .bind(claimToken)
   )
+  if (sweepId !== undefined) {
+    statements.push(
+      database
+        .prepare(
+          `UPDATE referral_sticker_reward_sweep_players
+           SET status = 'APPLIED', outcome = 'BATCH',
+               batch_id = (
+                 SELECT id FROM referral_sticker_reward_batches
+                 WHERE claim_token = ? AND status = 'PENDING'
+               ),
+               observed_balance = ?, previous_cost = ?, total_points = ?,
+               completed_at = ?
+           WHERE sweep_id = ? AND user_id = ? AND status = 'PENDING'
+             AND EXISTS (
+               SELECT 1 FROM referral_sticker_reward_batches
+               WHERE claim_token = ? AND status = 'PENDING'
+             )`
+        )
+        .bind(
+          claimToken,
+          observedBalance,
+          previousCost,
+          totalPoints,
+          nowText,
+          sweepId,
+          userId,
+          claimToken
+        ),
+      database
+        .prepare(
+          `INSERT INTO referral_sticker_reward_sweep_deliveries
+             (sweep_id, batch_id, status, created_at)
+           SELECT player.sweep_id, player.batch_id, 'PENDING', ?
+           FROM referral_sticker_reward_sweep_players player
+           WHERE player.sweep_id = ? AND player.user_id = ?
+             AND player.status = 'APPLIED' AND player.outcome = 'BATCH'`
+        )
+        .bind(nowText, sweepId, userId)
+    )
+  }
   await database.batch(statements)
   const prepared = await database
     .prepare(
@@ -301,13 +366,14 @@ const prepareForUser = async (
     )
     .bind(claimToken)
     .first()
-  return prepared !== null
+  if (prepared !== null) return true
+  return false
 }
 
 const dueBatches = async (
   database: D1Database,
   now: Date
-): Promise<DueBatchRow[]> => {
+): Promise<ReferralStickerDueBatch[]> => {
   const rows = await database
     .prepare(
       `SELECT id, user_id FROM referral_sticker_reward_batches
@@ -319,14 +385,15 @@ const dueBatches = async (
        ORDER BY deliver_at ASC, id ASC`
     )
     .bind(now.toISOString())
-    .all<DueBatchRow>()
+    .all<ReferralStickerDueBatch>()
   return rows.results
 }
 
-const deliverBatch = async (
+export const deliverReferralStickerRewardBatch = async (
   database: D1Database,
-  batch: DueBatchRow,
-  now: Date
+  batch: ReferralStickerDueBatch,
+  now: Date,
+  sweepId?: number
 ): Promise<boolean> => {
   const deliveryToken = crypto.randomUUID()
   const nowText = now.toISOString()
@@ -398,6 +465,17 @@ const deliverBatch = async (
       )
       .bind(nowText, batch.id, deliveryToken)
   )
+  if (sweepId !== undefined) {
+    statements.push(
+      database
+        .prepare(
+          `UPDATE referral_sticker_reward_sweep_deliveries
+           SET status = 'APPLIED', completed_at = ?
+           WHERE sweep_id = ? AND batch_id = ? AND status = 'PENDING'`
+        )
+        .bind(nowText, sweepId, batch.id)
+    )
+  }
   await database.batch(statements)
   const delivered = await database
     .prepare(
@@ -429,7 +507,7 @@ export const runReferralStickerRewards = async (
     schedule?.minimum_points !== null &&
     schedule?.minimum_points !== undefined
   ) {
-    await carryPointsIntoSeason(database, season, nowText)
+    await carryReferralPointsIntoSeason(database, season, nowText)
     const candidates = await candidateUsers(
       database,
       season,
@@ -438,7 +516,7 @@ export const runReferralStickerRewards = async (
     )
     for (const candidate of candidates) {
       if (
-        await prepareForUser(
+        await prepareReferralStickerRewardForUser(
           database,
           candidate.user_id,
           season,
@@ -453,7 +531,9 @@ export const runReferralStickerRewards = async (
 
   let delivered = 0
   for (const batch of await dueBatches(database, now)) {
-    if (await deliverBatch(database, batch, now)) delivered += 1
+    if (await deliverReferralStickerRewardBatch(database, batch, now)) {
+      delivered += 1
+    }
   }
 
   return {

@@ -32,6 +32,10 @@
       {
         "binding": "SKYPASS_AUTO_CLAIM_QUEUE",
         "queue": "cloud-weasel-skypass-auto-claim-delivery-test"
+      },
+      {
+        "binding": "REFERRAL_STICKER_REWARD_QUEUE",
+        "queue": "cloud-weasel-referral-sticker-reward-delivery-test"
       }
     ]
   },

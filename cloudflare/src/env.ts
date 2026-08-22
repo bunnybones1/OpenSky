@@ -9,6 +9,10 @@ import type {
 import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
 import type { PushNotificationQueueMessage } from './push-notifications'
 import type {
+  ReferralStickerRewardQueueMessage,
+  ReferralStickerRewardWorkflowParams
+} from './referral-sticker-reward-orchestration'
+import type {
   SkypassAutoClaimQueueMessage,
   SkypassSeasonCloseWorkflowParams
 } from './skypass-auto-claim'
@@ -56,6 +60,8 @@ export interface Env {
   LEADERBOARD_REWARD_WORKFLOW?: Workflow<LeaderboardRewardWorkflowParams>
   LEADERBOARD_REWARD_QUEUE?: Queue<LeaderboardRewardQueueMessage>
   PUSH_NOTIFICATION_QUEUE?: Queue<PushNotificationQueueMessage>
+  REFERRAL_STICKER_REWARD_WORKFLOW?: Workflow<ReferralStickerRewardWorkflowParams>
+  REFERRAL_STICKER_REWARD_QUEUE?: Queue<ReferralStickerRewardQueueMessage>
   SKYPASS_SEASON_CLOSE_WORKFLOW?: Workflow<SkypassSeasonCloseWorkflowParams>
   SKYPASS_AUTO_CLAIM_QUEUE?: Queue<SkypassAutoClaimQueueMessage>
   WORKER_VERSION: WorkerVersionMetadata

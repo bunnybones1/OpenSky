@@ -54,6 +54,11 @@
       "name": "cloud-weasel-skypass-season-close",
       "binding": "SKYPASS_SEASON_CLOSE_WORKFLOW",
       "class_name": "SkypassSeasonCloseWorkflow"
+    },
+    {
+      "name": "cloud-weasel-referral-sticker-rewards",
+      "binding": "REFERRAL_STICKER_REWARD_WORKFLOW",
+      "class_name": "ReferralStickerRewardWorkflow"
     }
   ],
   "queues": {
@@ -77,6 +82,10 @@
       {
         "queue": "cloud-weasel-skypass-auto-claim-delivery",
         "binding": "SKYPASS_AUTO_CLAIM_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-referral-sticker-reward-delivery",
+        "binding": "REFERRAL_STICKER_REWARD_QUEUE"
       }
     ],
     "consumers": [
@@ -99,6 +108,10 @@
       {
         "queue": "cloud-weasel-skypass-auto-claim-delivery",
         "dead_letter_queue": "cloud-weasel-skypass-auto-claim-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-referral-sticker-reward-delivery",
+        "dead_letter_queue": "cloud-weasel-referral-sticker-reward-delivery-dlq"
       }
     ]
   },
