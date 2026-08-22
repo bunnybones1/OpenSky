@@ -190,6 +190,7 @@ content-addressed plan; they do not contact or mutate Cloudflare:
 ```sh
 pnpm db:plan:cloudflare:remote:0115
 pnpm db:plan:cloudflare:remote:0116-0128
+pnpm resources:plan:cloudflare:production
 ```
 
 The first phase may be applied only after every reviewed allocation mode is
@@ -202,6 +203,15 @@ exact-head PR CI run. A retry accepts only a canonical applied prefix of that
 same phase, allowing safe recovery if Wrangler committed earlier migrations
 before a later one failed. Do not execute either apply command or deploy while
 the production pause is active.
+
+The resource plan validates and displays the complete production inventory:
+one D1 database, two private R2 buckets, fourteen Queue/DLQ containers, five
+Workers, six Workflows, all service and Durable Object bindings, and required
+secret names without reading values. Its 39 displayed Wrangler commands are
+read-only inspection steps grouped by foundation, deployed topology, and
+credential presence. The command itself executes none of them and cannot
+provision or deploy anything. WalletConnect and the other optional integrations
+remain non-blocking.
 
 Production package scripts use one reviewed target runner. It pins the Cloud
 Weasel account, Worker names, and `opensky-auth` database ID from the checked-in

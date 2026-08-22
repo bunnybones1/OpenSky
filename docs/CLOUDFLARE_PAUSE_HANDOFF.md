@@ -2832,7 +2832,9 @@ At the pause audit:
   failure cannot strand already committed earlier migrations;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
-  bucket creation;
+  bucket creation. The undeployed production game-server config now includes
+  the matching private R2 and Queue producer bindings, so a future rollout
+  cannot silently omit original match analytics;
 - Conquest was implemented but intentionally gated, not an unported service.
 
 The separately queued PromoteGrandmasters retry/failure, delayed Conquest Gold,
@@ -2841,13 +2843,16 @@ matchmaker, non-RPC route, or active source-worker disposition remains. The
 shared durable-effect discovery and undeployed migration/resource rollout audit
 is now recorded in
 [`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
-Its two local safeguards are complete: all eight discovery responsibilities now
+Its three local safeguards are complete: all eight discovery responsibilities now
 have independent `waitUntil` ownership, and the unsafe all-pending remote
-migration command has a tested staged replacement. Neither migration phase was
-executed. The main known remaining work after those safeguards is complete
-resource inventory/preflight evidence, then separately authorized controlled
-production provisioning, migration, rollout, activation, and evidence—not a
-broad rewrite of the original application.
+migration command has a tested staged replacement. A complete plan-only
+inventory now validates one D1, two private R2 buckets, fourteen Queue/DLQ
+containers, five Workers, six Workflows, all binding edges, and required secret
+names; it also prints but does not execute the 39 read-only inspection commands.
+Neither migration phase nor any resource command was executed. The main known
+remaining work is exact-head release evidence, then separately authorized
+controlled production provisioning, migration, rollout, activation, and
+evidence—not a broad rewrite of the original application.
 
 ## Resume checklist
 

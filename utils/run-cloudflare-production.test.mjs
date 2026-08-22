@@ -966,7 +966,9 @@ test('requires every package deployment path to use the target runner', () => {
       'db:plan:cloudflare:remote:0115':
         'node ./utils/run-cloudflare-production-migrations.mjs plan authoritative-decks',
       'db:plan:cloudflare:remote:0116-0128':
-        'node ./utils/run-cloudflare-production-migrations.mjs plan durable-runtime'
+        'node ./utils/run-cloudflare-production-migrations.mjs plan durable-runtime',
+      'resources:plan:cloudflare:production':
+        'node ./utils/plan-cloudflare-production-resources.mjs plan'
     }
   }
   const analyticsPackage = {

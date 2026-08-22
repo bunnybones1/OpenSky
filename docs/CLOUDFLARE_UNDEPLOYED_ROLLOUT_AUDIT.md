@@ -2,9 +2,10 @@
 
 Status date: 2026-08-21
 
-Status: discovery isolation and the staged migration replacement are
-implemented and directly tested locally. This audit authorizes no provisioning,
-migration, deployment, activation, live drill, or production mutation.
+Status: discovery isolation, the staged migration replacement, and the complete
+resource/preflight plan are implemented and directly tested locally. This audit
+authorizes no provisioning, migration, deployment, activation, live drill, or
+production mutation.
 
 ## Scope
 
@@ -130,6 +131,31 @@ Cloudflare migration reference:
 
 - <https://developers.cloudflare.com/d1/reference/migrations/>
 
+## Decision 3: separate resource foundations from deployed topology
+
+The checked-in production inventory now covers one pinned D1 database, two
+private R2 buckets, fourteen primary Queue/DLQ containers, five Workers, six
+Workflows, three service bindings, five Durable Object bindings, every Queue
+producer/consumer/DLQ edge, and required secret names without reading secret
+values. WalletConnect, OneSignal, Stripe, Twitch, and mobile-store integrations
+remain explicitly non-blocking.
+
+The inventory found that the analytics consumer was configured but the
+production game-server producer had remained intentionally omitted after the
+old R2 blocker was removed. Leaving it that way would make a future rollout
+silently lose the original match-analytics effect. The checked-in game-server
+config now binds the exact private analytics R2 bucket and Queue producer. This
+restores the future data path but creates or activates nothing by itself.
+
+`pnpm resources:plan:cloudflare:production` validates the complete checked-in
+topology and prints 39 account-pinned, read-only inspection commands divided
+into foundation, deployed-topology, and credential-presence stages. The plan
+implementation has no child process or network primitive, its gate rejects
+mutation verbs and duplicate evidence, and it prints required secret names
+only. It does not execute the commands, provision missing resources, inspect
+secret values, deploy Workers, create Workflow instances, resume delivery, or
+activate a policy.
+
 ## Reassessed `0119` and `0120`
 
 The corrected, still-undeployed migrations remain suitable for the later
@@ -158,10 +184,13 @@ publication.
 5. stop before every production mutation unless the user explicitly authorizes
    the exact reviewed rollout head and phase.
 
-The first two steps are complete locally: all eight responsibilities are registered
-independently before execution, an injected sibling failure test proves the
-remaining lifetime completes, and the release gate rejects aggregate ownership,
-swallowed failure, inventory drift, or lost direct evidence. The staged runner's
-tests prove exact phase inventory and hashes, strict read-only cutover state,
-exact-head CI identity, temporary-directory isolation and cleanup, ordered
-preflight/apply/postflight boundaries, and retirement of the bulk path.
+The first three steps are complete locally: all eight responsibilities are
+registered independently before execution, an injected sibling failure test
+proves the remaining lifetime completes, and the release gate rejects aggregate
+ownership, swallowed failure, inventory drift, or lost direct evidence. The
+staged runner's tests prove exact phase inventory and hashes, strict read-only
+cutover state, exact-head CI identity, temporary-directory isolation and
+cleanup, ordered preflight/apply/postflight boundaries, and retirement of the
+bulk path. The resource tests reject drift in every foundation, binding,
+Workflow, Durable Object, Cron, analytics, credential-name, and dormant
+activation boundary.

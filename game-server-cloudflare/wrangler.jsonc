@@ -24,11 +24,21 @@
       "migrations_dir": "../cloudflare/migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "GAME_ANALYTICS",
+      "bucket_name": "cloud-weasel-game-analytics"
+    }
+  ],
   "queues": {
     "producers": [
       {
         "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
         "queue": "cloud-weasel-conquest-gold-delivery"
+      },
+      {
+        "binding": "GAME_ANALYTICS_QUEUE",
+        "queue": "cloud-weasel-game-analytics"
       }
     ]
   },
