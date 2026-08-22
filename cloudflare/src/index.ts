@@ -62,10 +62,52 @@ import {
 
 export const DURABLE_EFFECT_DISCOVERY_CRON = '* * * * *'
 
+export type DurableEffectDiscovery = Readonly<{
+  name: string
+  run: (env: Env) => Promise<unknown>
+}>
+
+export const DURABLE_EFFECT_DISCOVERIES: readonly DurableEffectDiscovery[] =
+  Object.freeze([
+    {
+      name: 'conquest-gold-delivery',
+      run: env => dispatchDueConquestGoldDeliveries(env)
+    },
+    {
+      name: 'conquest-readiness-drill',
+      run: env => dispatchPendingConquestReadinessDrills(env)
+    },
+    {
+      name: 'conquest-v2-rewards',
+      run: env => dispatchDueConquestV2Rewards(env)
+    },
+    {
+      name: 'leaderboard-rewards',
+      run: env => dispatchDueLeaderboardRewards(env)
+    },
+    {
+      name: 'referral-sticker-rewards',
+      run: env => dispatchDueReferralStickerRewards(env)
+    },
+    {
+      name: 'skypass-auto-claims',
+      run: env => dispatchDueSkypassAutoClaims(env)
+    },
+    {
+      name: 'push-notifications',
+      run: env => dispatchDuePushNotifications(env.AUTH_DB, env)
+    },
+    {
+      name: 'account-deletions',
+      run: env => dispatchPendingAccountDeletions(env)
+    }
+  ])
+
 export const runScheduled = (
   controller: ScheduledController,
   env: Env,
-  ctx: ExecutionContext
+  ctx: ExecutionContext,
+  durableEffectDiscoveries = DURABLE_EFFECT_DISCOVERIES
 ): void => {
   if (controller.cron === WALLET_CHALLENGE_CLEANUP_CRON) {
     ctx.waitUntil(
@@ -78,18 +120,16 @@ export const runScheduled = (
   if (controller.cron !== DURABLE_EFFECT_DISCOVERY_CRON) {
     throw new Error(`unsupported Cron Trigger: ${controller.cron}`)
   }
-  ctx.waitUntil(
-    Promise.all([
-      dispatchDueConquestGoldDeliveries(env),
-      dispatchPendingConquestReadinessDrills(env),
-      dispatchDueConquestV2Rewards(env),
-      dispatchDueLeaderboardRewards(env),
-      dispatchDueReferralStickerRewards(env),
-      dispatchDueSkypassAutoClaims(env),
-      dispatchDuePushNotifications(env.AUTH_DB, env),
-      dispatchPendingAccountDeletions(env)
-    ]).then(() => undefined)
-  )
+  for (const discovery of durableEffectDiscoveries) {
+    // Register every independent responsibility before starting it. Cloudflare
+    // keeps separately registered waitUntil promises alive when a sibling
+    // rejects, while the rejection still marks the Cron invocation failed.
+    ctx.waitUntil(
+      Promise.resolve()
+        .then(() => discovery.run(env))
+        .then(() => undefined)
+    )
+  }
 }
 
 export default {
