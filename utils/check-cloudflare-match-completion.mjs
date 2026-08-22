@@ -940,7 +940,7 @@ export const experiencePublicationErrors = (
   for (const token of [
     'FROM multiplayer_match_experience_players experience',
     "match.status <> 'ended'",
-    'if (unpublishedExperience) return true'
+    'if (await hasUnpublishedSeasonExperience(database, season))'
   ]) {
     if (!skypassAutoClaim.includes(token)) {
       errors.push(`SkyPass close publication barrier is missing: ${token}`)
@@ -995,12 +995,10 @@ export const experiencePublicationErrors = (
     }
   }
   for (const token of [
-    "it('keeps a season close open until staged match XP publishes'",
-    'seasonsCompleted: 0',
-    'playersProcessed: 0',
+    "it('does not snapshot absent or zero-progress rows and waits for staged match XP'",
+    'ready: false, playersAdded: 0',
     "SET status = 'ended'",
-    'seasonsCompleted: 1',
-    'playersProcessed: 1'
+    'ready: true, playersAdded: 1'
   ]) {
     if (!skypassAutoClaimTest.includes(token)) {
       errors.push(`match XP SkyPass-close regression is missing: ${token}`)
@@ -1516,11 +1514,7 @@ export const rankPublicationErrors = value => {
       gameServerTest,
       'for (let attempt = 1; attempt <= 6; attempt += 1)'
     ],
-    [
-      'Grandweaver attempt-seven recovery',
-      gameServerTest,
-      'attemptCount: 7,'
-    ],
+    ['Grandweaver attempt-seven recovery', gameServerTest, 'attemptCount: 7,'],
     [
       'Grandweaver terminal-client ordering',
       gameServerTest,

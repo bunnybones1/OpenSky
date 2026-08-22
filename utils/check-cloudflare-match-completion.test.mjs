@@ -903,7 +903,7 @@ test('rejects weakened XP snapshots, projections, guards, or runtime proof', asy
     {
       ...value,
       skypassAutoClaimTest: value.skypassAutoClaimTest.replace(
-        'keeps a season close open until staged match XP publishes',
+        'does not snapshot absent or zero-progress rows and waits for staged match XP',
         'closes the season over staged XP'
       )
     },
