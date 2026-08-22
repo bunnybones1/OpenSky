@@ -2,8 +2,8 @@
 
 Status date: 2026-08-21
 
-Status: target boundary selected; implementation and deployment are not
-authorized by this document.
+Status: implemented locally at `84948e70` and guarded at `498a8215`;
+deployment is not authorized by this document.
 
 ## Decision
 
@@ -85,3 +85,11 @@ Focused tests and a release gate should prove:
 
 This is a local-only maintenance correction. Exact-head release, exact-head
 draft-PR CI, and explicit authorization remain mandatory before deployment.
+
+## Local evidence
+
+Focused wallet suites pass 17/17. The mutation-tested cleanup gate and corrected
+worker-runner gate each pass 7/7; production-target preflight passes 12/12;
+release identity passes 6/6; and the full main Worker passes 88 files and 564
+tests. A complete release and exact-head draft-PR CI remain required for this
+newer documentation head.

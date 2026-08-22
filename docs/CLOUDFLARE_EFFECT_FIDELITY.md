@@ -126,7 +126,8 @@ observable contract.
 | External push Queue handoff in migration `0124`                                                                   | Keep undeployed             | `e8f552c4` preserves eligible notification text, identity, validity, stable provider idempotency, reward independence, and re-drive while removing direct cron sends and the copied five-attempt terminal state.                                                           |
 | SkyPass Workflow/Queue handoff in migration `0125`                                                                | Keep undeployed             | `b114331e` preserves the source close boundary, complete per-player claim, notification, policy pin, match-XP publication barrier, and recoverability while removing direct cron batches and the copied five-attempt terminal state.                                       |
 | Referral sticker Workflow/Queue handoff in migration `0126`                                                       | Keep undeployed             | `31793663` preserves hourly discovery, cumulative thresholds, top-five attribution, overlapping 23-hour entitlements, atomic off-chain inventory, sanctions, publication barriers, and recovery without copied runner caps or retry ceilings.                              |
-| Account-deletion Workflow/R2 handoff in migration `0127`                                                         | Keep undeployed             | `002b7ddf` preserves fresh Google step-up, immediate lockout, the exact delayed deadline, R2-first privacy cleanup, atomic D1 anonymization/tombstones, game history, and recovery without copied batches or retry ceilings.                                                   |
+| Account-deletion Workflow/R2 handoff in migration `0127`                                                          | Keep undeployed             | `002b7ddf` preserves fresh Google step-up, immediate lockout, the exact delayed deadline, R2-first privacy cleanup, atomic D1 anonymization/tombstones, game history, and recovery without copied batches or retry ceilings.                                               |
+| Wallet-proof challenge maintenance                                                                                | Keep undeployed             | `84948e70` preserves exact proof validity, authorization, single use, and the 24-hour evidence floor while separating disposable idempotent cleanup from durable-effect recovery without copying `BalanceSyncRunner`.                                                      |
 | Static gates that parse Go ticker, batch, work-group, or retry tokens                                             | Replace                     | They should derive behavioral test cases from the source and then test the TypeScript boundary as a black box.                                                                                                                                                             |
 | Protocol, enum, game-rule, atomic-publication, eviction, reconnect, off-chain, auth, and production-disable gates | Keep                        | These directly protect client, player, security, or operator effects.                                                                                                                                                                                                      |
 
@@ -339,7 +340,13 @@ applies the due off-chain effect atomically, and cron only re-drives due
 receipts. Its Queue/D1 boundary is recorded in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md).
 The other responsibilities remain separate later slices; the next one is not
-selected without its own effect/recovery audit.
+selected without its own effect/recovery audit. Account deletion then completed
+locally at `002b7ddf`, and wallet-proof challenge maintenance completed locally
+at `84948e70`. The latter uses request-path cleanup plus one isolated
+low-frequency Cron Trigger because deleting already-unusable proof rows has no
+durable player entitlement or publication effect. The next unconverted
+main-Worker responsibility is the explicitly authorized Conquest readiness
+drill; its operational effects must be audited before selecting a new boundary.
 
 - Move one responsibility at a time to the selected Workflow, Queue, Durable
   Object alarm, request-path idempotent update, or explicit retirement.

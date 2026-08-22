@@ -320,6 +320,36 @@ tamper rejection, duplicate safety, per-player failure isolation, recovery on
 attempt seven after six failures, and guarded cycle/reset completion. It also
 fails when direct cron delivery or copied page/attempt mechanisms return.
 
+### `wallet-challenge-cleanup-gate` (added at `498a8215`)
+
+Keep:
+
+- the exact ten-minute, origin-bound proof lifetime and five-active-challenge
+  cap;
+- single-use ownership verification and optional-wallet authorization
+  boundary;
+- at least 24 hours of challenge evidence after expiry;
+- opportunistic cleanup on challenge creation; and
+- fail-closed dispatch for every configured Cron Trigger.
+
+Replace:
+
+- coupling disposable cleanup to the shared one-minute durable-effect fan-out;
+- treating challenge deletion as evidence that legacy balance synchronization
+  was ported; and
+- any copied `BalanceSyncRunner` ticker, batch, cursor, retry, or terminal-task
+  topology.
+
+The gate derives the two reviewed Cron values from source, requires exactly one
+configured trigger for each, proves the cleanup branch returns before durable
+discovery, and rejects any Queue, Workflow, Durable Object, alarm, retry, or
+unrelated dispatch authority in that branch. Mutation tests move cleanup back
+into durable discovery, inject unrelated reward work, remove or duplicate the
+Cron topology, restore copied Go tokens, and conflate cleanup with the
+BalanceSync disposition. The separate worker-runner evidence now points to the
+authenticated read-only wallet-contents projection, including the assertion
+that D1 inventory is never mutated.
+
 ## Gate conversion rule
 
 For every implementation lock, use this sequence:
@@ -362,5 +392,8 @@ in-app authority. SkyPass season close completed at `b114331e`, with its
 effect/migration gate at `312de3fb` and destination reward-mutator coverage at
 `9b3f2551`. Its Workflow/Queue boundary preserves the exact close time, policy
 pin, complete per-player claim, atomic receipt/notification, staged-match-XP
-barrier, and re-drive. The next main-Worker responsibility remains unselected
-until its own effect/recovery audit.
+barrier, and re-drive. Referral rewards and account deletion then completed
+under their separately guarded Workflow boundaries. Disposable wallet-proof
+maintenance completed at `84948e70`, with its effect gate at `498a8215`; the
+next unconverted responsibility is the Conquest readiness drill and remains
+unselected pending an operational effect/recovery audit.

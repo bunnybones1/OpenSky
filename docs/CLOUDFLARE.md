@@ -3163,13 +3163,41 @@ production preflight passes 12/12, and the full main Worker passes 87 files and
 559 tests. The Workflow, private R2 binding, migration, and runtime remain
 local, unprovisioned, unapplied, and undeployed.
 
+## Effect-faithful wallet challenge maintenance — 2026-08-21
+
+Commit `84948e70` moves expired wallet-proof garbage collection out of the
+one-minute reward/privacy discovery fan-out. Challenge creation still performs
+the same idempotent D1 cleanup opportunistically, while one separate
+low-frequency Cron Trigger owns dormant cleanup and returns before any durable
+business dispatcher. An unreviewed Cron expression fails closed.
+
+The request-path contract remains unchanged: proof challenges expire at the
+exact ten-minute deadline, no user may hold more than five active challenges,
+the server-owned origin/message and wallet ownership are rechecked, successful
+proof is consumed once with its wallet link, and rows are retained until at
+least 24 hours after expiry. Cleanup deletes already-unusable evidence only, so
+it needs no Workflow, Queue, Durable Object, alarm per challenge, D1 task
+runner, retry ceiling, or completion receipt.
+
+The gate at `498a8215` rejects Cron coupling, missing or duplicate trigger
+topology, unrelated work in the cleanup branch, copied Go balance-sync cadence
+or retry tokens, and conflation of cleanup with the behavioral replacement for
+`BalanceSyncRunner`. That replacement is the authenticated read-only external
+wallet-contents projection, which never mutates D1 inventory or makes a wallet
+login/reward authority. Focused wallet suites pass 17/17, both affected gates
+pass 7/7, production preflight passes 12/12, release identity passes 6/6, and
+the full main Worker passes 88 files and 564 tests. The trigger and runtime
+remain local and undeployed.
+
 ## Suggested next slice
 
 The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
-external-push, SkyPass, referral-sticker, and account-deletion orchestration
-corrections are complete locally. Continue with one remaining main-Worker
-responsibility at a time, beginning with disposable wallet-proof cleanup and
-an effect/recovery audit rather than a topology rewrite.
+external-push, SkyPass, referral-sticker, account-deletion orchestration, and
+wallet-proof cleanup corrections are complete locally. Continue with one
+remaining main-Worker responsibility at a time. The next unconverted call is
+the explicitly authorized Conquest readiness drill; audit its operator-visible
+progress, authorization, recovery, and evidence effects before choosing a
+Cloudflare boundary rather than copying its current implementation.
 Player-facing parity remains separate and must continue using the original
 interface rather than redesigning it.
 

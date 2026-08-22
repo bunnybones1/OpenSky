@@ -15,8 +15,8 @@ uncommitted source-style Conquest `0121` attempt lifecycle was discarded;
 migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. The latest exact-head
-release and draft-PR CI passed at `98bde368` in GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32540047837>. A
+release and draft-PR CI passed at `e282602a` in GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32547892604>. A
 distinct, minimal `0121_conquest_v2_workflow_handoffs.sql` protects the
 Conquest Workflow/Queue boundary, and `0122_leaderboard_reward_workflow_handoffs.sql`
 protects the equivalent leaderboard business responsibility. Neither
@@ -37,16 +37,20 @@ cron finalization with one deterministic Workflow per accepted Google step-up.
 The Workflow preserves the exact deletion deadline, verifies private R2 cleanup
 before guarded D1 anonymization, and never turns infrastructure retry exhaustion
 into an abandoned privacy responsibility.
+Wallet-proof challenge maintenance is isolated at `84948e70` and guarded at
+`498a8215`: request-path cleanup plus one low-frequency Cron Trigger preserve
+the exact proof and retention effects without coupling disposable D1 deletion
+to reward/privacy recovery or copying the legacy balance-sync runner.
 The production mutation pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `a7a5ef72`
-  (`Guard account deletion Workflow effects`)
-- Latest tested runtime commit: `002b7ddf`
-  (`Orchestrate account deletion with Workflows`)
+- Last code/test checkpoint: `498a8215`
+  (`Guard wallet challenge maintenance effects`)
+- Latest tested runtime commit: `84948e70`
+  (`Isolate wallet challenge maintenance`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -71,11 +75,18 @@ The production mutation pause remains in force.
   tests. The complete release and exact-head draft-PR CI passed at `d5a51c57`
   in GitHub run `32545808974`.
 - The account-deletion runtime at `002b7ddf` and safeguards through `a7a5ef72`
-  are committed and locally tested but are **not deployed**. Focused suites
+  are committed and tested but are **not deployed**. Focused suites
   pass 12/12, the migration/effect gate passes 6/6, production preflight passes
-  12/12, and the full main Worker passes 87 files and 559 tests. A complete
-  exact-head release and exact-head draft-PR CI remain required for the final
-  documentation head.
+  12/12, and the full main Worker passes 87 files and 559 tests. The complete
+  release and exact-head draft-PR CI passed at `e282602a` in GitHub run
+  `32547892604`.
+- Wallet-proof cleanup at `84948e70` and safeguards through `498a8215` are
+  committed and locally tested but are **not deployed**. Focused wallet suites
+  pass 17/17, the cleanup gate passes 7/7, the corrected worker-runner gate
+  passes 7/7, production preflight passes 12/12, release identity passes 6/6,
+  and the full main Worker passes 88 files and 564 tests. No schema migration or
+  durable orchestration resource was added. A complete release and exact-head
+  draft-PR CI remain required for this newer documentation head.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus

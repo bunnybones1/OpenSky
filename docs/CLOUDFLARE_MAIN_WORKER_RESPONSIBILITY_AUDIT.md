@@ -9,6 +9,9 @@ release safeguards at `312de3fb`; referral sticker orchestration implemented
 locally through migration `0126`; and account-deletion orchestration is
 implemented locally through migration `0127` as documented in
 [`CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md`](./CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md).
+Wallet-proof challenge cleanup is isolated locally at `84948e70`, with
+release safeguards at `498a8215`, as documented in
+[`CLOUDFLARE_WALLET_CHALLENGE_CLEANUP.md`](./CLOUDFLARE_WALLET_CHALLENGE_CLEANUP.md).
 This audit and these milestones do not authorize provisioning, migration,
 activation, deployment, a live drill, or any production mutation.
 
@@ -35,22 +38,22 @@ it does not need a Workflow or a copied task runner.
 
 ## Current fan-out
 
-`cloudflare/src/index.ts` currently starts nine unrelated lifecycles in one
-`Promise.all`. A failure in any one rejects the shared scheduled invocation,
-even though the responsibilities have different authorities, timing, scale,
-and recovery needs.
+`cloudflare/src/index.ts` now routes two reviewed Cron Triggers explicitly. The
+one-minute trigger starts eight durable or operational discovery/recovery
+lifecycles in one `Promise.all`. The separate low-frequency trigger owns only
+disposable wallet-proof cleanup and returns before that shared fan-out.
 
-| Current call                            | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                                      |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `dispatchDueConquestGoldDeliveries`     | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Completed at `e4ec21f5`                                                          |
-| `runConquestReadinessDrills`            | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress               |
-| `dispatchDueConquestV2Rewards`          | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                                          |
-| `dispatchDueLeaderboardRewards`         | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                                          |
-| `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per accepted hourly sweep plus Queue per prepared user or due award batch      | Implemented and guarded locally through migration `0126`; undeployed             |
-| `dispatchDueSkypassAutoClaims`          | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Completed at `b114331e`; guarded at `312de3fb`                                   |
-| `dispatchDuePushNotifications`          | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                                          |
-| `dispatchPendingAccountDeletions`        | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Implemented and guarded locally through migration `0127`; undeployed             |
-| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path cleanup plus an isolated low-frequency Cron Trigger                        | Boundary selected; no durable workflow is required for disposable challenges     |
+| Current call                           | Observable responsibility                                                                          | Selected target boundary                                                                | Disposition                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `dispatchDueConquestGoldDeliveries`    | Deliver an already-earned delayed Gold-card entitlement exactly once                               | Delayed Queue per D1 delivery, with a narrow due-only discovery/re-drive trigger        | Completed at `e4ec21f5`                                              |
+| `runConquestReadinessDrills`           | Advance an explicitly authorized operational drill and preserve its audit trail                    | Existing explicit operation state plus Workflow or a dedicated alarm keyed by operation | Later operational slice; never couple it to public reward progress   |
+| `dispatchDueConquestV2Rewards`         | Accept one reviewed weekly cycle and ensure durable delivery                                       | Workflow per cycle plus Queue per player                                                | Completed at `36ca654d`                                              |
+| `dispatchDueLeaderboardRewards`        | Snapshot two ranked ladders, grant weekly off-chain rewards, then apply the correct rank reset     | Workflow per cycle plus Queue per player                                                | Completed at `e555f930`                                              |
+| `dispatchDueReferralStickerRewards`    | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per accepted hourly sweep plus Queue per prepared user or due award batch      | Implemented and guarded locally through migration `0126`; undeployed |
+| `dispatchDueSkypassAutoClaims`         | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Completed at `b114331e`; guarded at `312de3fb`                       |
+| `dispatchDuePushNotifications`         | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                              |
+| `dispatchPendingAccountDeletions`      | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Implemented and guarded locally through migration `0127`; undeployed |
+| `WalletLinksRepository.cleanupExpired` | Remove expired, unused proof challenges                                                            | Request-path cleanup plus an isolated low-frequency Cron Trigger                        | Completed at `84948e70`; guarded at `498a8215`; undeployed           |
 
 These boundaries are independent. Converting one does not authorize changing
 the others or weakening their existing fail-closed gates.
@@ -277,3 +280,18 @@ anonymizes the account, creates provider tombstones, and completes both D1
 receipts. The focused suite passes 12/12, the migration/effect gate passes 6/6,
 production preflight passes 12/12, and the full main Worker passes 87 files and
 559 tests. The Workflow, R2 binding, migration, and runtime remain undeployed.
+
+Wallet-proof challenge maintenance is isolated locally at `84948e70`, with a
+mutation-tested release gate at `498a8215`. The request path still enforces the
+exact ten-minute proof lifetime, five-active-challenge cap, origin and ownership
+checks, one-way consumption, and 24-hour evidence-retention floor. Challenge
+creation removes old rows opportunistically. A separate Cron Trigger performs
+only the same idempotent D1 DELETE and returns before durable-effect discovery;
+unknown Cron expressions fail closed. Focused wallet suites pass 17/17, the
+cleanup gate and worker-runner gate each pass 7/7, production preflight passes
+12/12, release identity passes 6/6, and the full main Worker passes 88 files and
+564 tests. No migration, Workflow, Queue, Durable Object, alarm-per-challenge,
+task table, retry ceiling, or completion receipt was added. The corrected
+`BalanceSyncRunner` disposition is independently evidenced by authenticated,
+read-only provider projection that never mutates D1 inventory. The trigger and
+runtime remain undeployed.
