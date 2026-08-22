@@ -50,7 +50,7 @@ and recovery needs.
 | `dispatchDueSkypassAutoClaims`          | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Completed at `b114331e`; guarded at `312de3fb`                                   |
 | `dispatchDuePushNotifications`          | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                                          |
 | `dispatchPendingAccountDeletions`        | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Implemented and guarded locally through migration `0127`; undeployed             |
-| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges  |
+| `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path cleanup plus an isolated low-frequency Cron Trigger                        | Boundary selected; no durable workflow is required for disposable challenges     |
 
 These boundaries are independent. Converting one does not authorize changing
 the others or weakening their existing fail-closed gates.
