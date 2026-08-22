@@ -28,8 +28,12 @@ export const REVIEWED_PUSH_NOTIFICATION_QUEUE =
   'cloud-weasel-player-push-delivery'
 export const REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE =
   'cloud-weasel-player-push-delivery-dlq'
+export const REVIEWED_SKYPASS_WORKFLOW = 'cloud-weasel-skypass-season-close'
+export const REVIEWED_SKYPASS_QUEUE = 'cloud-weasel-skypass-auto-claim-delivery'
+export const REVIEWED_SKYPASS_DEAD_LETTER_QUEUE =
+  'cloud-weasel-skypass-auto-claim-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0124_push_notification_queue_delivery.sql'
+  '0125_skypass_season_close_workflow_handoffs.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -272,7 +276,67 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       AND name = 'player_notification_push_failures_insert_guard'
       AND instr(sql, "delivery.status = 'PENDING'") > 0
       AND instr(sql, 'notification.expires_at >= NEW.failed_at') > 0)
-    AS push_notification_queue_contract_guards_present;`
+    AS push_notification_queue_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'skypass_season_close_orchestrations',
+      'skypass_auto_claim_deliveries',
+      'player_skypass_auto_claim_failures'
+    )) AS skypass_workflow_tables_present,
+  (SELECT COUNT(*)
+     FROM pragma_table_info('player_skypass_season_stats')
+     WHERE name = 'autoclaimed')
+    AS skypass_autoclaimed_column_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'skypass_season_close_orchestration_insert_guard',
+      'skypass_season_close_orchestration_update_guard',
+      'skypass_season_close_orchestrations_no_delete',
+      'skypass_auto_claim_delivery_insert_guard',
+      'skypass_auto_claim_delivery_update_guard',
+      'skypass_auto_claim_deliveries_no_delete',
+      'player_skypass_auto_claims_insert_guard',
+      'player_skypass_auto_claim_notification_insert_guard',
+      'player_skypass_auto_claim_failures_insert_guard',
+      'player_skypass_auto_claim_failures_no_update',
+      'player_skypass_auto_claim_failures_no_delete',
+      'player_skypass_season_stats_autoclaimed_guard',
+      'skypass_policy_after_close_guard',
+      'skypass_season_close_cycles_transition_guard'
+    )) AS skypass_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'skypass_auto_claim_deliveries'
+      AND instr(sql, "status IN ('PENDING', 'APPLIED')") > 0
+      AND instr(sql, "'DEAD'") = 0
+      AND instr(sql, 'attempt') = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'skypass_season_close_orchestration_insert_guard'
+      AND instr(sql, 'skypass_reward_active_policies') > 0
+      AND instr(sql, 'policy_content_sha256') > 0
+      AND instr(sql, 'fulfillment_policy_hash') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'player_skypass_auto_claims_insert_guard'
+      AND instr(sql, 'multiplayer_match_experience_players') > 0
+      AND instr(sql, 'skypass_reward_active_policies') > 0
+      AND instr(sql, "application_status = 'APPLIED'") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'skypass_auto_claim_delivery_update_guard'
+      AND instr(sql, 'stats.autoclaimed = 1') > 0
+      AND instr(sql, 'player_notifications') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'skypass_season_close_cycles_transition_guard'
+      AND instr(sql, "delivery.status <> 'APPLIED'") > 0
+      AND instr(sql, 'multiplayer_match_experience_players') > 0)
+    AS skypass_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -453,13 +517,22 @@ const rewardOrchestrationErrors = config => {
   const pushConsumer = consumers.find(
     value => value.queue === REVIEWED_PUSH_NOTIFICATION_QUEUE
   )
+  const skypassWorkflow = workflows.find(
+    value => value.binding === 'SKYPASS_SEASON_CLOSE_WORKFLOW'
+  )
+  const skypassProducer = producers.find(
+    value => value.binding === 'SKYPASS_AUTO_CLAIM_QUEUE'
+  )
+  const skypassConsumer = consumers.find(
+    value => value.queue === REVIEWED_SKYPASS_QUEUE
+  )
   if (
-    workflows.length !== 2 ||
+    workflows.length !== 3 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
-    producers.length !== 4 ||
+    producers.length !== 5 ||
     producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
-    consumers.length !== 4 ||
+    consumers.length !== 5 ||
     consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE ||
     leaderboardWorkflow?.name !== REVIEWED_LEADERBOARD_WORKFLOW ||
     leaderboardWorkflow?.class_name !== 'LeaderboardRewardWorkflow' ||
@@ -471,10 +544,14 @@ const rewardOrchestrationErrors = config => {
       REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE ||
     pushProducer?.queue !== REVIEWED_PUSH_NOTIFICATION_QUEUE ||
     pushConsumer?.dead_letter_queue !==
-      REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE
+      REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE ||
+    skypassWorkflow?.name !== REVIEWED_SKYPASS_WORKFLOW ||
+    skypassWorkflow?.class_name !== 'SkypassSeasonCloseWorkflow' ||
+    skypassProducer?.queue !== REVIEWED_SKYPASS_QUEUE ||
+    skypassConsumer?.dead_letter_queue !== REVIEWED_SKYPASS_DEAD_LETTER_QUEUE
   ) {
     return [
-      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, and external-push Workflow/Queue/dead-letter topology'
+      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, external-push, and SkyPass Workflow/Queue/dead-letter topology'
     ]
   }
   return []
@@ -644,7 +721,11 @@ export const productionSchemaRow = output => {
     row?.conquest_gold_readiness_effect_view_present !== 1 ||
     row?.push_notification_queue_tables_present !== 2 ||
     row?.push_notification_queue_guards_present !== 5 ||
-    row?.push_notification_queue_contract_guards_present !== 3
+    row?.push_notification_queue_contract_guards_present !== 3 ||
+    row?.skypass_workflow_tables_present !== 3 ||
+    row?.skypass_autoclaimed_column_present !== 1 ||
+    row?.skypass_workflow_guards_present !== 14 ||
+    row?.skypass_workflow_contract_guards_present !== 5
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

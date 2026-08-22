@@ -102,3 +102,29 @@ test('requires push discovery and Queue consumption rather than a direct cron se
     )
   )
 })
+
+test('requires SkyPass Workflow discovery and Queue consumption rather than direct cron claims', () => {
+  const evidence = completeEvidence()
+  evidence.SkypassEndOfSeasonRunner = evidence.SkypassEndOfSeasonRunner.replace(
+    'dispatchDueSkypassAutoClaims',
+    'runDueSkypassAutoClaims'
+  ).replace('SkypassSeasonCloseWorkflow', 'setInterval')
+  evidence.SkypassAutoClaimRunner = evidence.SkypassAutoClaimRunner.replace(
+    'handleSkypassAutoClaimQueue',
+    'claimFromScheduledHandler'
+  )
+  const audit = auditWorkerRunners({
+    source: sourceFor(Object.keys(EXPECTED_RUNNERS)),
+    evidenceSources: evidence
+  })
+  assert.ok(
+    audit.errors.some(error =>
+      error.includes('SkypassEndOfSeasonRunner is missing ported evidence')
+    )
+  )
+  assert.ok(
+    audit.errors.some(error =>
+      error.includes('SkypassAutoClaimRunner is missing ported evidence')
+    )
+  )
+})

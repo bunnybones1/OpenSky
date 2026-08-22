@@ -575,10 +575,13 @@ describe('SkyPass season-close orchestration', () => {
         .first()
     ).toEqual({ status: 'PENDING' })
 
+    const redrive = await publish()
+    expect(redrive.bodies).toEqual([faultBody])
+
     await env.AUTH_DB.prepare(
       'DROP TRIGGER reject_one_skypass_queue_player'
     ).run()
-    const recovered = queueMessage(faultBody, 'fault-message', 7)
+    const recovered = queueMessage(redrive.bodies[0], 'fault-message', 7)
     await handleSkypassAutoClaimQueue(
       messageBatch([recovered.message]),
       env.AUTH_DB,

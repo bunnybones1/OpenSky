@@ -26,6 +26,9 @@ import {
   REVIEWED_LEADERBOARD_WORKFLOW,
   REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE,
   REVIEWED_PUSH_NOTIFICATION_QUEUE,
+  REVIEWED_SKYPASS_DEAD_LETTER_QUEUE,
+  REVIEWED_SKYPASS_QUEUE,
+  REVIEWED_SKYPASS_WORKFLOW,
   REVIEWED_PRODUCTION_TARGETS,
   REQUIRED_PRODUCTION_SCHEMA_MIGRATION
 } from './run-cloudflare-production.mjs'
@@ -92,6 +95,11 @@ const configFor = target => ({
             name: REVIEWED_LEADERBOARD_WORKFLOW,
             binding: 'LEADERBOARD_REWARD_WORKFLOW',
             class_name: 'LeaderboardRewardWorkflow'
+          },
+          {
+            name: REVIEWED_SKYPASS_WORKFLOW,
+            binding: 'SKYPASS_SEASON_CLOSE_WORKFLOW',
+            class_name: 'SkypassSeasonCloseWorkflow'
           }
         ],
         queues: {
@@ -111,6 +119,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_PUSH_NOTIFICATION_QUEUE,
               binding: 'PUSH_NOTIFICATION_QUEUE'
+            },
+            {
+              queue: REVIEWED_SKYPASS_QUEUE,
+              binding: 'SKYPASS_AUTO_CLAIM_QUEUE'
             }
           ],
           consumers: [
@@ -129,6 +141,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_PUSH_NOTIFICATION_QUEUE,
               dead_letter_queue: REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE
+            },
+            {
+              queue: REVIEWED_SKYPASS_QUEUE,
+              dead_letter_queue: REVIEWED_SKYPASS_DEAD_LETTER_QUEUE
             }
           ]
         }
@@ -168,7 +184,7 @@ test('rejects account, environment, Worker, and database drift', () => {
   )
 })
 
-test('pins both reward Workflow, Queue, and dead-letter topologies', () => {
+test('pins all reward Workflow, Queue, and dead-letter topologies', () => {
   const targetPath = 'wrangler.jsonc'
   const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
   for (const changed of [
@@ -221,6 +237,23 @@ test('pins both reward Workflow, Queue, and dead-letter topologies', () => {
         ...baseline.queues,
         consumers: baseline.queues.consumers.map(consumer =>
           consumer.queue === REVIEWED_PUSH_NOTIFICATION_QUEUE
+            ? { ...consumer, dead_letter_queue: undefined }
+            : consumer
+        )
+      }
+    },
+    {
+      ...baseline,
+      workflows: baseline.workflows.filter(
+        workflow => workflow.binding !== 'SKYPASS_SEASON_CLOSE_WORKFLOW'
+      )
+    },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        consumers: baseline.queues.consumers.map(consumer =>
+          consumer.queue === REVIEWED_SKYPASS_QUEUE
             ? { ...consumer, dead_letter_queue: undefined }
             : consumer
         )
@@ -457,7 +490,17 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'player_notification_push_delivery_update_guard',
     'player_notification_push_failures_insert_guard',
     "status IN ('PENDING', 'SENT')",
-    'NEW.last_enqueued_at >= OLD.last_enqueued_at'
+    'NEW.last_enqueued_at >= OLD.last_enqueued_at',
+    'skypass_season_close_orchestrations',
+    'skypass_auto_claim_deliveries',
+    'player_skypass_auto_claim_failures',
+    'autoclaimed',
+    'skypass_season_close_orchestration_insert_guard',
+    'player_skypass_auto_claims_insert_guard',
+    'skypass_auto_claim_delivery_update_guard',
+    'skypass_season_close_cycles_transition_guard',
+    'policy_content_sha256',
+    'fulfillment_policy_hash'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -542,7 +585,11 @@ test('accepts only one successful complete read-only schema row', () => {
     conquest_gold_readiness_effect_view_present: 1,
     push_notification_queue_tables_present: 2,
     push_notification_queue_guards_present: 5,
-    push_notification_queue_contract_guards_present: 3
+    push_notification_queue_contract_guards_present: 3,
+    skypass_workflow_tables_present: 3,
+    skypass_autoclaimed_column_present: 1,
+    skypass_workflow_guards_present: 14,
+    skypass_workflow_contract_guards_present: 5
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -721,6 +768,30 @@ test('accepts only one successful complete read-only schema row', () => {
         results: [
           { ...complete, push_notification_queue_contract_guards_present: 2 }
         ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, skypass_workflow_tables_present: 2 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, skypass_autoclaimed_column_present: 0 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, skypass_workflow_guards_present: 13 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, skypass_workflow_contract_guards_present: 4 }],
         success: true
       }
     ]),
