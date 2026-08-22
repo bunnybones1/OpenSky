@@ -1,5 +1,8 @@
 import { handleApiRequest } from './api'
-import { AccountDeletionRepository } from './account-deletion'
+import {
+  AccountDeletionWorkflow,
+  dispatchPendingAccountDeletions
+} from './account-deletion-orchestration'
 import { applyAssetCachePolicy } from './asset-cache'
 import {
   dispatchDueConquestGoldDeliveries,
@@ -91,10 +94,7 @@ export default {
         dispatchDueReferralStickerRewards(env),
         dispatchDueSkypassAutoClaims(env),
         dispatchDuePushNotifications(env.AUTH_DB, env),
-        new AccountDeletionRepository(
-          env.AUTH_DB,
-          env.CLIENT_FEEDBACK
-        ).finalizeDue(),
+        dispatchPendingAccountDeletions(env),
         new WalletLinksRepository(env.AUTH_DB).cleanupExpired()
       ]).then(() => undefined)
     )
@@ -170,6 +170,7 @@ export default {
 >
 
 export {
+  AccountDeletionWorkflow,
   ConquestV2RewardWorkflow,
   LeaderboardRewardWorkflow,
   ReferralStickerRewardWorkflow,

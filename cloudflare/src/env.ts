@@ -1,3 +1,4 @@
+import type { AccountDeletionWorkflowParams } from './account-deletion-orchestration'
 import type {
   ConquestV2RewardQueueMessage,
   ConquestV2RewardWorkflowParams
@@ -54,6 +55,7 @@ export interface Env {
   MATCHMAKER_POOLS: DurableObjectNamespace
   GAME_MATCHES: DurableObjectNamespace
   MATCH_SERVICE: Fetcher
+  ACCOUNT_DELETION_WORKFLOW?: Workflow<AccountDeletionWorkflowParams>
   CONQUEST_GOLD_DELIVERY_QUEUE: Queue<ConquestGoldDeliveryQueueMessage>
   CONQUEST_V2_REWARD_WORKFLOW?: Workflow<ConquestV2RewardWorkflowParams>
   CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>

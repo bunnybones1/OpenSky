@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AccountDeletionRepository } from '../src/account-deletion'
+import {
+  AccountDeletionRepository,
+  deleteAccountPrivateFeedback,
+  finalizeAcceptedAccountDeletion
+} from '../src/account-deletion'
 import { AccountActionsRepository } from '../src/account-actions'
 import type { Env } from '../src/env'
 import type { GoogleAuthServices } from '../src/google-auth'
@@ -28,6 +32,10 @@ const exchangeCode = vi.fn<GoogleAuthServices['exchangeCode']>(
   async () => profile
 )
 const services: GoogleAuthServices = { exchangeCode }
+const createDeletionWorkflow = vi.fn(async () => ({ id: 'created' }))
+const deletionWorkflow = {
+  create: createDeletionWorkflow
+} as unknown as Workflow<{ userId: string }>
 
 const setCookies = (response: Response): string[] => {
   const headers = response.headers as Headers & {
@@ -56,7 +64,7 @@ const request = (
   if (cookie) headers.set('Cookie', cookie)
   return handleIdentityRequest(
     new Request(`https://opensky.example${path}`, { ...init, headers }),
-    testEnv,
+    { ...testEnv, ACCOUNT_DELETION_WORKFLOW: deletionWorkflow },
     services
   )
 }
@@ -105,6 +113,7 @@ const seedPendingConquestGold = async () => {
 
 beforeEach(async () => {
   exchangeCode.mockClear()
+  createDeletionWorkflow.mockClear()
   testSequence += 1
   userId = `deletion-player-${testSequence}`
   profile = {
@@ -336,10 +345,14 @@ describe('identity-native account deletion', () => {
       code: 'auth.account_deleted'
     })
 
-    const retry = await new AccountDeletionRepository(
-      env.AUTH_DB,
-      env.CLIENT_FEEDBACK
-    ).request(userId, new Date('2026-08-13T00:00:00.000Z'))
+    expect(createDeletionWorkflow).toHaveBeenCalledWith({
+      id: `account-deletion-${userId}`,
+      params: { userId }
+    })
+    const retry = await new AccountDeletionRepository(env.AUTH_DB).request(
+      userId,
+      new Date('2026-08-13T00:00:00.000Z')
+    )
     expect(retry).toMatchObject({
       status: 'PENDING',
       requestedAt: deletion!.requested_at,
@@ -354,10 +367,7 @@ describe('identity-native account deletion', () => {
 
   it('soft-deletes due identities, preserves game state, and prevents recreation', async () => {
     const requestedAt = new Date('2026-07-01T00:00:00.000Z')
-    await new AccountDeletionRepository(
-      env.AUTH_DB,
-      env.CLIENT_FEEDBACK
-    ).request(userId, requestedAt)
+    await new AccountDeletionRepository(env.AUTH_DB).request(userId, requestedAt)
     await env.AUTH_DB.batch([
       env.AUTH_DB.prepare(
         `INSERT INTO wallet_link_challenges
@@ -397,19 +407,42 @@ describe('identity-native account deletion', () => {
       .bind(userId, requestedAt.toISOString())
       .run()
 
-    const repository = new AccountDeletionRepository(
+    await expect(
+      finalizeAcceptedAccountDeletion(
+        env.AUTH_DB,
+        userId,
+        `account-deletion-${userId}`,
+        '2026-07-30T22:59:59.999Z',
+        0,
+        new Date('2026-07-30T22:59:59.999Z')
+      )
+    ).rejects.toThrow('deadline has not elapsed')
+    const objectsDeleted = await deleteAccountPrivateFeedback(
       env.AUTH_DB,
-      env.CLIENT_FEEDBACK
+      env.CLIENT_FEEDBACK,
+      userId
     )
+    expect(objectsDeleted).toBe(1)
     expect(
-      await repository.finalizeDue(new Date('2026-07-30T22:59:59.999Z'))
-    ).toEqual({ completed: 0 })
+      await finalizeAcceptedAccountDeletion(
+        env.AUTH_DB,
+        userId,
+        `account-deletion-${userId}`,
+        '2026-07-30T23:00:00.000Z',
+        objectsDeleted,
+        new Date('2026-07-30T23:00:00.000Z')
+      )
+    ).toMatchObject({ status: 'completed' })
     expect(
-      await repository.finalizeDue(new Date('2026-07-30T23:00:00.000Z'))
-    ).toEqual({ completed: 1 })
-    expect(
-      await repository.finalizeDue(new Date('2026-07-31T00:00:00.000Z'))
-    ).toEqual({ completed: 0 })
+      await finalizeAcceptedAccountDeletion(
+        env.AUTH_DB,
+        userId,
+        `account-deletion-${userId}`,
+        '2026-07-30T23:00:00.000Z',
+        0,
+        new Date('2026-07-31T00:00:00.000Z')
+      )
+    ).toMatchObject({ status: 'already_completed' })
 
     const user = await env.AUTH_DB.prepare(
       `SELECT display_name, primary_email, avatar_url FROM users WHERE id = ?`

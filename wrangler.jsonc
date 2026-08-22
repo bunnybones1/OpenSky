@@ -59,6 +59,11 @@
       "name": "cloud-weasel-referral-sticker-rewards",
       "binding": "REFERRAL_STICKER_REWARD_WORKFLOW",
       "class_name": "ReferralStickerRewardWorkflow"
+    },
+    {
+      "name": "cloud-weasel-account-deletion",
+      "binding": "ACCOUNT_DELETION_WORKFLOW",
+      "class_name": "AccountDeletionWorkflow"
     }
   ],
   "queues": {
