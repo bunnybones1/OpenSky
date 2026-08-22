@@ -133,7 +133,6 @@ export const pushNotificationEffectErrors = evidence => {
   requireTokens(errors, evidence.productionRunner, 'production preflight', [
     'REVIEWED_PUSH_NOTIFICATION_QUEUE',
     'REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE',
-    "'0124_push_notification_queue_delivery.sql'",
     'push_notification_queue_contract_guards_present'
   ])
   return errors

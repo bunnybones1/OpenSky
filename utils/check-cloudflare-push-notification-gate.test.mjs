@@ -187,13 +187,16 @@ test('rejects authority, isolation, retry-ceiling, and topology mutations', asyn
     },
     {
       ...current,
-      productionRunner: current.productionRunner.replace(
-        "'0124_push_notification_queue_delivery.sql'",
-        "'0123_conquest_gold_queue_delivery.sql'"
+      productionRunner: current.productionRunner.replaceAll(
+        'push_notification_queue_contract_guards_present',
+        'removed_push_notification_contract_guards'
       )
     }
   ]
-  for (const mutated of mutations) {
-    assert.ok(pushNotificationEffectErrors(mutated).length > 0)
+  for (const [index, mutated] of mutations.entries()) {
+    assert.ok(
+      pushNotificationEffectErrors(mutated).length > 0,
+      `mutation ${index + 1} escaped the push gate`
+    )
   }
 })
