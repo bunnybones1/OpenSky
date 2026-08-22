@@ -3,6 +3,7 @@ import type {
   ConquestV2RewardQueueMessage,
   ConquestV2RewardWorkflowParams
 } from './conquest-v2-reward-orchestration'
+import type { ConquestReadinessDrillWorkflowParams } from './conquest-drill-orchestration'
 import type {
   LeaderboardRewardQueueMessage,
   LeaderboardRewardWorkflowParams
@@ -56,6 +57,7 @@ export interface Env {
   GAME_MATCHES: DurableObjectNamespace
   MATCH_SERVICE: Fetcher
   ACCOUNT_DELETION_WORKFLOW?: Workflow<AccountDeletionWorkflowParams>
+  CONQUEST_READINESS_DRILL_WORKFLOW?: Workflow<ConquestReadinessDrillWorkflowParams>
   CONQUEST_GOLD_DELIVERY_QUEUE: Queue<ConquestGoldDeliveryQueueMessage>
   CONQUEST_V2_REWARD_WORKFLOW?: Workflow<ConquestV2RewardWorkflowParams>
   CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>

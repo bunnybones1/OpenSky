@@ -52,6 +52,11 @@
       "class_name": "ConquestV2RewardWorkflow"
     },
     {
+      "name": "cloud-weasel-conquest-readiness-drill",
+      "binding": "CONQUEST_READINESS_DRILL_WORKFLOW",
+      "class_name": "ConquestReadinessDrillWorkflow"
+    },
+    {
       "name": "cloud-weasel-leaderboard-rewards",
       "binding": "LEADERBOARD_REWARD_WORKFLOW",
       "class_name": "LeaderboardRewardWorkflow"

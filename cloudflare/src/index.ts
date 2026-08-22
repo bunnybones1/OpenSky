@@ -8,7 +8,10 @@ import {
   dispatchDueConquestGoldDeliveries,
   handleConquestGoldDeliveryQueue
 } from './conquest-delivery'
-import { runConquestReadinessDrills } from './conquest-drill'
+import {
+  ConquestReadinessDrillWorkflow,
+  dispatchPendingConquestReadinessDrills
+} from './conquest-drill-orchestration'
 import {
   CONQUEST_V2_REWARD_QUEUE_NAME,
   ConquestV2RewardWorkflow,
@@ -78,7 +81,7 @@ export const runScheduled = (
   ctx.waitUntil(
     Promise.all([
       dispatchDueConquestGoldDeliveries(env),
-      runConquestReadinessDrills(env),
+      dispatchPendingConquestReadinessDrills(env),
       dispatchDueConquestV2Rewards(env),
       dispatchDueLeaderboardRewards(env),
       dispatchDueReferralStickerRewards(env),
@@ -194,6 +197,7 @@ export default {
 
 export {
   AccountDeletionWorkflow,
+  ConquestReadinessDrillWorkflow,
   ConquestV2RewardWorkflow,
   LeaderboardRewardWorkflow,
   ReferralStickerRewardWorkflow,

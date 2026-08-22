@@ -1,5 +1,4 @@
 import { alreadyExists, invalidArgument } from './errors'
-import type { Env } from './env'
 import { PlayerRepository } from './player'
 
 export const CONQUEST_DRILL_OPERATION_HEADER = 'x-cloud-weasel-operation-key'
@@ -51,6 +50,10 @@ interface PoolWindowRow {
   ends_at: string
 }
 
+interface DeliveryWindowRow extends PoolWindowRow {
+  deliver_at: string | null
+}
+
 export interface ConquestDrillOperationView {
   operationKey: string
   poolVersion: string
@@ -78,7 +81,7 @@ export type ConquestDrillDispatch = (
   matchNumber: number
 ) => Promise<void>
 
-const operationKey = (value: string | null) => {
+export const normalizeConquestDrillOperationKey = (value: string | null) => {
   if (!value || !OPERATION_KEY_PATTERN.test(value)) {
     throw invalidArgument('valid Conquest drill operation key required')
   }
@@ -157,6 +160,13 @@ export class ConquestDrillRepository {
       .first<OperationRow>()
   }
 
+  async get(operationKeyValue: string): Promise<ConquestDrillOperationView> {
+    const key = normalizeConquestDrillOperationKey(operationKeyValue)
+    const row = await this.operation(key)
+    if (!row) throw new Error('Conquest drill operation does not exist')
+    return present(row)
+  }
+
   async list(versionValue?: unknown): Promise<ConquestDrillOperationView[]> {
     const version =
       versionValue === undefined ? undefined : poolVersion(versionValue)
@@ -192,7 +202,7 @@ export class ConquestDrillRepository {
     operationKeyValue: string | null,
     at = new Date()
   ): Promise<ConquestDrillOperationView> {
-    const key = operationKey(operationKeyValue)
+    const key = normalizeConquestDrillOperationKey(operationKeyValue)
     const version = poolVersion(value.poolVersion)
     const reason = boundedText(value.reason, 'reason')
     const requestJson = canonicalRequest(version, reason)
@@ -359,12 +369,8 @@ export class ConquestDrillRepository {
     const matchNumber = row.completed_match_count + 1
     const match = await this.match(row, matchNumber)
     if (!match) {
-      try {
-        await dispatch(row.operation_key, matchNumber)
-        summary.dispatched++
-      } catch {
-        if (await this.fail(row, 'MATCH_DISPATCH_FAILED', at)) summary.failed++
-      }
+      await dispatch(row.operation_key, matchNumber)
+      summary.dispatched++
       return
     }
     if (match.status === 'failed') {
@@ -372,7 +378,7 @@ export class ConquestDrillRepository {
       return
     }
     if (match.status !== 'ended') {
-      if (at.getTime() - Date.parse(match.updated_at) > MATCH_TIMEOUT_MS) {
+      if (at.getTime() - Date.parse(match.updated_at) >= MATCH_TIMEOUT_MS) {
         if (await this.fail(row, 'MATCH_LEDGER_FAILED', at)) summary.failed++
       } else {
         summary.waiting++
@@ -415,12 +421,16 @@ export class ConquestDrillRepository {
           row.completed_match_count
         )
         .run()
-      if ((advanced.meta.changes ?? 0) < 1) {
-        throw new Error('Conquest drill state changed concurrently')
+      if ((advanced.meta.changes ?? 0) >= 1) summary.advanced++
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('authoritative Conquest drill match required')
+      ) {
+        if (await this.fail(row, 'MATCH_OUTCOME_INVALID', at)) summary.failed++
+        return
       }
-      summary.advanced++
-    } catch {
-      if (await this.fail(row, 'MATCH_OUTCOME_INVALID', at)) summary.failed++
+      throw error
     }
   }
 
@@ -462,36 +472,22 @@ export class ConquestDrillRepository {
 
   async run(
     dispatch: ConquestDrillDispatch,
-    at = new Date(),
-    operationKeyValue?: string
+    at: Date,
+    operationKeyValue: string
   ): Promise<ConquestDrillRunSummary> {
-    const selectedKey = operationKeyValue
-      ? operationKey(operationKeyValue)
-      : undefined
-    const rows = selectedKey
-      ? await this.database
-          .prepare(
-            `SELECT operation_key, pool_version, actor_user_id, target_user_id,
-                    opponent_user_ids_json, request_json, status,
-                    completed_match_count, failure_reason, created_at,
-                    updated_at, completed_at
-             FROM staff_conquest_drill_operations
-             WHERE operation_key = ?
-               AND status IN ('RUNNING', 'WAITING_DELIVERY')`
-          )
-          .bind(selectedKey)
-          .all<OperationRow>()
-      : await this.database
-          .prepare(
-            `SELECT operation_key, pool_version, actor_user_id, target_user_id,
-                    opponent_user_ids_json, request_json, status,
-                    completed_match_count, failure_reason, created_at,
-                    updated_at, completed_at
-             FROM staff_conquest_drill_operations
-             WHERE status IN ('RUNNING', 'WAITING_DELIVERY')
-             ORDER BY updated_at, operation_key LIMIT 10`
-          )
-          .all<OperationRow>()
+    const selectedKey = normalizeConquestDrillOperationKey(operationKeyValue)
+    const rows = await this.database
+      .prepare(
+        `SELECT operation_key, pool_version, actor_user_id, target_user_id,
+                opponent_user_ids_json, request_json, status,
+                completed_match_count, failure_reason, created_at,
+                updated_at, completed_at
+         FROM staff_conquest_drill_operations
+         WHERE operation_key = ?
+           AND status IN ('RUNNING', 'WAITING_DELIVERY')`
+      )
+      .bind(selectedKey)
+      .all<OperationRow>()
     const summary: ConquestDrillRunSummary = {
       dispatched: 0,
       advanced: 0,
@@ -508,31 +504,49 @@ export class ConquestDrillRepository {
     }
     return summary
   }
-}
 
-const dispatchThroughMatchService =
-  (env: Env): ConquestDrillDispatch =>
-  async (key, matchNumber) => {
-    const response = await env.MATCH_SERVICE.fetch(
-      new Request(
-        'https://cloud-weasel-match-service/internal/conquest-readiness/matches',
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-cloud-weasel-internal-auth': env.INTERNAL_AUTH_SECRET
-          },
-          body: JSON.stringify({ operationKey: key, matchNumber })
-        }
-      )
-    )
-    if (!response.ok) {
-      throw new Error(`readiness match service returned ${response.status}`)
+  async nextObservationAt(
+    operationKeyValue: string,
+    at = new Date(),
+    intervalMs = 2 * 60 * 1_000
+  ): Promise<Date> {
+    const key = normalizeConquestDrillOperationKey(operationKeyValue)
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1) {
+      throw new Error('Conquest drill observation interval is invalid')
     }
+    const row = await this.operation(key)
+    if (!row) throw new Error('Conquest drill operation does not exist')
+    if (row.status === 'COMPLETED' || row.status === 'FAILED') return at
+    const intervalAt = at.getTime() + intervalMs
+    if (row.status === 'RUNNING') {
+      const match = await this.match(row, row.completed_match_count + 1)
+      if (!match || match.status === 'ended' || match.status === 'failed') {
+        return new Date(intervalAt)
+      }
+      const deadline = Date.parse(match.updated_at) + MATCH_TIMEOUT_MS
+      return new Date(Math.min(intervalAt, deadline))
+    }
+    const delivery = await this.database
+      .prepare(
+        `SELECT delivery.deliver_at, pool.ends_at
+         FROM staff_conquest_drill_operations operation
+         JOIN conquest_reward_pools pool ON pool.version = operation.pool_version
+         LEFT JOIN player_conquests conquest
+           ON conquest.user_id = operation.target_user_id
+         LEFT JOIN player_conquest_gold_deliveries delivery
+           ON delivery.conquest_id = conquest.id
+         WHERE operation.operation_key = ?
+           AND operation.status = 'WAITING_DELIVERY'`
+      )
+      .bind(key)
+      .first<DeliveryWindowRow>()
+    if (!delivery) throw new Error('Conquest drill delivery window is missing')
+    const poolEnd = Date.parse(delivery.ends_at)
+    const deliverAt = delivery.deliver_at
+      ? Date.parse(delivery.deliver_at)
+      : intervalAt
+    return new Date(
+      Math.min(poolEnd, deliverAt > at.getTime() ? deliverAt : intervalAt)
+    )
   }
-
-export const runConquestReadinessDrills = (env: Env, at = new Date()) =>
-  new ConquestDrillRepository(env.AUTH_DB).run(
-    dispatchThroughMatchService(env),
-    at
-  )
+}

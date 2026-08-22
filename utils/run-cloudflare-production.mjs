@@ -12,6 +12,8 @@ export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
 export const REVIEWED_ACCOUNT_DELETION_WORKFLOW =
   'cloud-weasel-account-deletion'
+export const REVIEWED_CONQUEST_READINESS_DRILL_WORKFLOW =
+  'cloud-weasel-conquest-readiness-drill'
 export const REVIEWED_CONQUEST_GOLD_QUEUE =
   'cloud-weasel-conquest-gold-delivery'
 export const REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE =
@@ -41,7 +43,7 @@ export const REVIEWED_REFERRAL_STICKER_QUEUE =
 export const REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE =
   'cloud-weasel-referral-sticker-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0127_account_deletion_workflow_orchestration.sql'
+  '0128_conquest_readiness_drill_workflows.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -447,7 +449,53 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
     WHERE type = 'trigger'
       AND name = 'account_deletion_orchestration_failure_insert_guard'
       AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
-    AS account_deletion_workflow_contract_guards_present;`
+    AS account_deletion_workflow_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'staff_conquest_drill_orchestrations',
+      'staff_conquest_drill_orchestration_failures'
+    )) AS conquest_drill_workflow_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'staff_conquest_drill_orchestration_insert_guard',
+      'staff_conquest_drill_operation_orchestrate',
+      'staff_conquest_drill_orchestration_complete',
+      'staff_conquest_drill_orchestration_update_guard',
+      'staff_conquest_drill_orchestration_no_delete',
+      'staff_conquest_drill_orchestration_failure_insert_guard',
+      'staff_conquest_drill_orchestration_failures_no_update',
+      'staff_conquest_drill_orchestration_failures_no_delete'
+    )) AS conquest_drill_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'staff_conquest_drill_orchestrations'
+      AND instr(sql, "'conquest-readiness-drill-' || operation_key") > 0
+      AND instr(sql, "'DEAD'") = 0
+      AND instr(sql, 'attempt_count') = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'staff_conquest_drill_operation_orchestrate'
+      AND instr(sql, "OLD.status = 'PREPARING'") > 0
+      AND instr(sql, "NEW.status = 'RUNNING'") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'staff_conquest_drill_orchestration_update_guard'
+      AND instr(sql, "operation.status IN ('COMPLETED', 'FAILED')") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'staff_conquest_drill_orchestration_failures'
+      AND instr(sql, "'WORKFLOW_PROGRESS'") > 0
+      AND instr(sql, 'attempt') = 0
+      AND instr(sql, 'retry') = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'staff_conquest_drill_orchestration_failure_insert_guard'
+      AND instr(sql, 'workflow_instance_id = NEW.workflow_instance_id') > 0)
+    AS conquest_drill_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -648,8 +696,11 @@ const rewardOrchestrationErrors = config => {
   const accountDeletionWorkflow = workflows.find(
     value => value.binding === 'ACCOUNT_DELETION_WORKFLOW'
   )
+  const conquestReadinessDrillWorkflow = workflows.find(
+    value => value.binding === 'CONQUEST_READINESS_DRILL_WORKFLOW'
+  )
   if (
-    workflows.length !== 5 ||
+    workflows.length !== 6 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
     producers.length !== 6 ||
@@ -677,10 +728,14 @@ const rewardOrchestrationErrors = config => {
     referralStickerConsumer?.dead_letter_queue !==
       REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE ||
     accountDeletionWorkflow?.name !== REVIEWED_ACCOUNT_DELETION_WORKFLOW ||
-    accountDeletionWorkflow?.class_name !== 'AccountDeletionWorkflow'
+    accountDeletionWorkflow?.class_name !== 'AccountDeletionWorkflow' ||
+    conquestReadinessDrillWorkflow?.name !==
+      REVIEWED_CONQUEST_READINESS_DRILL_WORKFLOW ||
+    conquestReadinessDrillWorkflow?.class_name !==
+      'ConquestReadinessDrillWorkflow'
   ) {
     return [
-      'main Worker must retain the reviewed account-deletion, delayed Gold, Conquest V2, leaderboard, external-push, SkyPass, and referral-sticker Workflow/Queue/dead-letter topology'
+      'main Worker must retain the reviewed Conquest-readiness, account-deletion, delayed Gold, Conquest V2, leaderboard, external-push, SkyPass, and referral-sticker Workflow/Queue/dead-letter topology'
     ]
   }
   return []
@@ -860,7 +915,10 @@ export const productionSchemaRow = output => {
     row?.referral_sticker_workflow_contract_guards_present !== 6 ||
     row?.account_deletion_workflow_tables_present !== 2 ||
     row?.account_deletion_workflow_guards_present !== 9 ||
-    row?.account_deletion_workflow_contract_guards_present !== 4
+    row?.account_deletion_workflow_contract_guards_present !== 4 ||
+    row?.conquest_drill_workflow_tables_present !== 2 ||
+    row?.conquest_drill_workflow_guards_present !== 8 ||
+    row?.conquest_drill_workflow_contract_guards_present !== 5
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

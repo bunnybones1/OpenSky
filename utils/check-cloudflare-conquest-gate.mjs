@@ -1670,8 +1670,7 @@ export const conquestGateErrors = (config, evidence = {}) => {
       "status IN ('RUNNING', 'WAITING_DELIVERY')",
       'MATCH_OUTCOME_INVALID',
       'FROM conquest_verified_drill_receipts',
-      'DELIVERY_WINDOW_EXPIRED',
-      '/internal/conquest-readiness/matches'
+      'DELIVERY_WINDOW_EXPIRED'
     ]) {
       if (!evidence.drillRepository.includes(token)) {
         errors.push(`Conquest drill orchestrator is missing: ${token}`)
@@ -1766,8 +1765,17 @@ export const conquestGateErrors = (config, evidence = {}) => {
     }
   }
   if (evidence.scheduler !== undefined) {
-    if (!evidence.scheduler.includes('runConquestReadinessDrills(env)')) {
-      errors.push('Conquest drill orchestrator is missing from the scheduler')
+    if (
+      !evidence.scheduler.includes(
+        'dispatchPendingConquestReadinessDrills(env)'
+      )
+    ) {
+      errors.push(
+        'Conquest drill Workflow recovery is missing from the scheduler'
+      )
+    }
+    if (evidence.scheduler.includes('runConquestReadinessDrills(env)')) {
+      errors.push('Conquest drill business runner remains in the scheduler')
     }
   }
   if (evidence.v2ScheduleActivation !== undefined) {

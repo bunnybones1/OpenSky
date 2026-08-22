@@ -212,7 +212,7 @@ test('fails closed if approval, settlement, admission, or drill evidence disappe
       'completed: 1',
       'readiness: 0, enabled_modes: 0'
     ].join('\n'),
-    scheduler: 'runConquestReadinessDrills(env)',
+    scheduler: 'dispatchPendingConquestReadinessDrills(env)',
     v2ScheduleActivation: [
       'CREATE TABLE conquest_v2_reward_schedule_activations',
       'activated_by_user_id <> created_by_user_id',
@@ -592,8 +592,8 @@ test('requires Workflow, Queue, D1, and recovery evidence for Conquest V2', asyn
     conquestV2CloudflareOrchestrationErrors({
       ...evidence,
       scheduler: scheduler.replace(
-        'export {\n  AccountDeletionWorkflow,\n  ConquestV2RewardWorkflow,\n',
-        'export {\n  AccountDeletionWorkflow,\n'
+        'export {\n  AccountDeletionWorkflow,\n  ConquestReadinessDrillWorkflow,\n  ConquestV2RewardWorkflow,\n',
+        'export {\n  AccountDeletionWorkflow,\n  ConquestReadinessDrillWorkflow,\n'
       )
     }).some(error => error.includes('entrypoint'))
   )

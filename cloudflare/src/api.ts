@@ -85,6 +85,7 @@ import {
   CONQUEST_DRILL_OPERATION_HEADER,
   ConquestDrillRepository
 } from './conquest-drill'
+import { scheduleConquestReadinessDrill } from './conquest-drill-orchestration'
 import {
   CONQUEST_REWARD_POOL_OPERATION_HEADER,
   ConquestRewardPoolOperationsRepository
@@ -129,10 +130,7 @@ import {
   sourceFriendPointsResponseWire,
   sourcePointsGiftedResponseWire
 } from './friend-points-wire'
-import {
-  sourceDiscordInfoWire,
-  sourceTwitchInfoWire
-} from './social-info-wire'
+import { sourceDiscordInfoWire, sourceTwitchInfoWire } from './social-info-wire'
 import { DeckRanksRepository } from './deck-ranks'
 import { ContentRepository } from './content'
 import type { Env } from './env'
@@ -158,9 +156,7 @@ import {
 } from './leaderboard-reward-schedule-operations'
 import { PlayerRpcRepository } from './player-rpc'
 import { PlayerSupportRepository } from './player-support'
-import {
-  sourceNullablePaymentProviderProductListWire
-} from './payment-provider-product-wire'
+import { sourceNullablePaymentProviderProductListWire } from './payment-provider-product-wire'
 import { listPaymentProviderProducts } from './payment-provider-products'
 import { sourcePaymentListWire, sourcePaymentLogListWire } from './payment-wire'
 import {
@@ -1144,9 +1140,7 @@ export const handleApiRequest = async (
         const principal = await identityPrincipal(request, env)
         await staff.requireAdmin(principal.userId)
         return json(request, env, {
-          banners: sourceNullableBannerListWire(
-            await content.listAllBanners()
-          )
+          banners: sourceNullableBannerListWire(await content.listAllBanners())
         })
       }
 
@@ -1449,7 +1443,8 @@ export const handleApiRequest = async (
           reason?: unknown
         }>(request)
         return json(request, env, {
-          operation: await conquestDrills.start(
+          operation: await scheduleConquestReadinessDrill(
+            env,
             principal.userId,
             body,
             request.headers.get(CONQUEST_DRILL_OPERATION_HEADER)
@@ -1968,8 +1963,7 @@ export const handleApiRequest = async (
         }>(request)
         if (!body.req) throw invalidArgument('req is required')
         const principal = await optionalRpcPrincipal(request, env)
-        const accountAddress =
-          body.req.accountAddress || principal?.reference
+        const accountAddress = body.req.accountAddress || principal?.reference
         if (!accountAddress) {
           throw invalidArgument('accountAddress is required')
         }

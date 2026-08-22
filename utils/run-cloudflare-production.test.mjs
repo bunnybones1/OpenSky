@@ -19,6 +19,7 @@ import {
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
   REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE,
   REVIEWED_CONQUEST_GOLD_QUEUE,
+  REVIEWED_CONQUEST_READINESS_DRILL_WORKFLOW,
   REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE,
   REVIEWED_CONQUEST_V2_QUEUE,
   REVIEWED_CONQUEST_V2_WORKFLOW,
@@ -94,6 +95,11 @@ const configFor = target => ({
             name: REVIEWED_CONQUEST_V2_WORKFLOW,
             binding: 'CONQUEST_V2_REWARD_WORKFLOW',
             class_name: 'ConquestV2RewardWorkflow'
+          },
+          {
+            name: REVIEWED_CONQUEST_READINESS_DRILL_WORKFLOW,
+            binding: 'CONQUEST_READINESS_DRILL_WORKFLOW',
+            class_name: 'ConquestReadinessDrillWorkflow'
           },
           {
             name: REVIEWED_LEADERBOARD_WORKFLOW,
@@ -301,6 +307,12 @@ test('pins all reward Workflow, Queue, and dead-letter topologies', () => {
       ...baseline,
       workflows: baseline.workflows.filter(
         workflow => workflow.binding !== 'ACCOUNT_DELETION_WORKFLOW'
+      )
+    },
+    {
+      ...baseline,
+      workflows: baseline.workflows.filter(
+        workflow => workflow.binding !== 'CONQUEST_READINESS_DRILL_WORKFLOW'
       )
     },
     {
@@ -571,7 +583,13 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'referral_sticker_reward_sweep_players_update_guard',
     'referral_sticker_reward_sweep_deliveries_update_guard',
     'referral_sticker_reward_queue_failures_insert_guard',
-    "origin IN ('SCHEDULE', 'MIGRATION')"
+    "origin IN ('SCHEDULE', 'MIGRATION')",
+    'staff_conquest_drill_orchestrations',
+    'staff_conquest_drill_orchestration_failures',
+    'staff_conquest_drill_operation_orchestrate',
+    'staff_conquest_drill_orchestration_update_guard',
+    'staff_conquest_drill_orchestration_failure_insert_guard',
+    "'conquest-readiness-drill-' || operation_key"
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -666,7 +684,10 @@ test('accepts only one successful complete read-only schema row', () => {
     referral_sticker_workflow_contract_guards_present: 6,
     account_deletion_workflow_tables_present: 2,
     account_deletion_workflow_guards_present: 9,
-    account_deletion_workflow_contract_guards_present: 4
+    account_deletion_workflow_contract_guards_present: 4,
+    conquest_drill_workflow_tables_present: 2,
+    conquest_drill_workflow_guards_present: 8,
+    conquest_drill_workflow_contract_guards_present: 5
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -910,6 +931,26 @@ test('accepts only one successful complete read-only schema row', () => {
       {
         results: [
           { ...complete, account_deletion_workflow_contract_guards_present: 3 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_drill_workflow_tables_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, conquest_drill_workflow_guards_present: 7 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, conquest_drill_workflow_contract_guards_present: 4 }
         ],
         success: true
       }

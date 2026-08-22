@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleApiRequest } from '../src/api'
 import {
@@ -7,6 +7,7 @@ import {
   ConquestDrillRepository,
   conquestDrillProposalId
 } from '../src/conquest-drill'
+import { conquestDrillWorkflowInstanceId } from '../src/conquest-drill-orchestration'
 import { applyConquestGoldDeliveryQueueMessage } from '../src/conquest-delivery'
 import { ConquestReadinessOperationsRepository } from '../src/conquest-readiness-operations'
 import type { Env } from '../src/env'
@@ -19,7 +20,19 @@ import { settlePendingConquest } from '../../game-server-cloudflare/src/conquest
 import { approvedConquestPoolStatements } from './helpers/conquest-pool'
 
 const actor = `drill-runner-${crypto.randomUUID()}`
-const testEnv = env as unknown as Env
+const conquestWorkflowCreate = vi.fn(async (options: { id: string }) => ({
+  id: options.id
+}))
+const testEnv = new Proxy(env as unknown as Env, {
+  get(target, property) {
+    if (property === 'CONQUEST_READINESS_DRILL_WORKFLOW') {
+      return {
+        create: conquestWorkflowCreate
+      } as unknown as Workflow<{ operationKey: string }>
+    }
+    return Reflect.get(target, property)
+  }
+})
 
 const rpcAs = async (
   userId: string,
@@ -182,6 +195,7 @@ const recordCompletedMatch = async (
 }
 
 beforeEach(async () => {
+  conquestWorkflowCreate.mockClear()
   await provisionActor()
   await env.AUTH_DB.prepare(
     `UPDATE game_mode_status SET enabled = 0, updated_at = ?
@@ -265,16 +279,34 @@ describe('dormant Conquest readiness drill operations', () => {
         key
       )
     ).rejects.toThrow('operation key was already used')
-    expect(
-      (
-        await repository.run(
-          async () => {
-            throw new Error('close completed test operation')
-          },
-          new Date(),
-          key
+    const failedAt = new Date().toISOString()
+    await repository.run(
+      async () => {
+        await env.AUTH_DB.prepare(
+          `INSERT INTO multiplayer_matches
+           (proposal_id, replay_id, mode, version,
+            player1_principal, player2_principal, player1_user_id,
+            player2_user_id, match_payload_json, status, created_at, updated_at)
+         VALUES (?, ?, 'CONQUEST_CONSTRUCTED', 'readiness-test',
+                 '0x1111111111111111111111111111111111111111',
+                 '0x2222222222222222222222222222222222222222', ?, ?, '{}',
+                 'failed', ?, ?)`
         )
-      ).failed
+          .bind(
+            conquestDrillProposalId(key, 1),
+            `failed-readiness-replay-${key}`,
+            operation.targetUserId,
+            operation.opponentUserIds[0],
+            failedAt,
+            failedAt
+          )
+          .run()
+      },
+      new Date(),
+      key
+    )
+    expect(
+      (await repository.run(async () => undefined, new Date(), key)).failed
     ).toBe(1)
   })
 
@@ -488,6 +520,10 @@ describe('dormant Conquest readiness drill operations', () => {
         completedMatchCount: 0
       }
     })
+    expect(conquestWorkflowCreate).toHaveBeenCalledWith({
+      id: conquestDrillWorkflowInstanceId(key),
+      params: { operationKey: key }
+    })
 
     const listed = await rpcAs(actor, 'GMListConquestDrills', {
       poolVersion: version
@@ -564,7 +600,7 @@ describe('dormant Conquest readiness drill operations', () => {
     })
   })
 
-  it('dispatches only the next sequential match and fails closed on dispatch error', async () => {
+  it('dispatches only the next sequential match and keeps infrastructure errors recoverable', async () => {
     const version = await approvedPool()
     const key = crypto.randomUUID()
     const repository = new ConquestDrillRepository(env.AUTH_DB)
@@ -594,25 +630,18 @@ describe('dormant Conquest readiness drill operations', () => {
       `readiness-drill-match-${key}-1`
     )
 
-    expect(
-      await repository.run(
+    await expect(
+      repository.run(
         async () => {
           throw new Error('untrusted upstream detail')
         },
         new Date(),
         key
       )
-    ).toEqual({
-      dispatched: 0,
-      advanced: 0,
-      completed: 0,
-      failed: 1,
-      waiting: 0
-    })
+    ).rejects.toThrow('untrusted upstream detail')
     expect((await repository.list(version))[0]).toMatchObject({
-      status: 'FAILED',
-      completedMatchCount: 0,
-      failureReason: 'MATCH_DISPATCH_FAILED'
+      status: 'RUNNING',
+      completedMatchCount: 0
     })
     expect(
       await env.AUTH_DB.prepare(
@@ -625,14 +654,17 @@ describe('dormant Conquest readiness drill operations', () => {
     ).toMatchObject({
       results: [
         { status: 'PREPARING', completed_match_count: 0 },
-        { status: 'RUNNING', completed_match_count: 0 },
-        {
-          status: 'FAILED',
-          completed_match_count: 0,
-          failure_reason: 'MATCH_DISPATCH_FAILED'
-        }
+        { status: 'RUNNING', completed_match_count: 0 }
       ]
     })
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT completed_at FROM staff_conquest_drill_orchestrations
+         WHERE operation_key = ?`
+      )
+        .bind(key)
+        .first('completed_at')
+    ).toBeNull()
   })
 
   it('rejects unprivileged starts, short windows, enabled modes, and forged completion', async () => {
@@ -754,8 +786,15 @@ describe('dormant Conquest readiness drill operations', () => {
 
     const deliveredAt = new Date(base + 25 * 60 * 60 * 1_000)
     const delivery = await env.AUTH_DB.prepare(
-      'SELECT conquest_id FROM player_conquest_gold_deliveries'
-    ).first<{ conquest_id: number }>()
+      'SELECT conquest_id, deliver_at FROM player_conquest_gold_deliveries'
+    ).first<{ conquest_id: number; deliver_at: string }>()
+    const beforeDelivery = new Date(Date.parse(delivery!.deliver_at) - 1)
+    expect(
+      await repository.run(async () => undefined, beforeDelivery, key)
+    ).toMatchObject({ waiting: 1, completed: 0, failed: 0 })
+    expect(await repository.nextObservationAt(key, beforeDelivery)).toEqual(
+      new Date(delivery!.deliver_at)
+    )
     expect(
       await applyConquestGoldDeliveryQueueMessage(
         env.AUTH_DB,
