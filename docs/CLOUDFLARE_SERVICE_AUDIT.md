@@ -15,7 +15,7 @@ without reviewing this inventory fails the Cloudflare build.
 | `api` worker target | Main Worker cron plus Durable Object alarms; each registered source runner also has a separate mechanical audit.                                                                   |
 | `matchmaker`        | `matchmaker-ts`, using Durable Objects and a separate match service.                                                                                                               |
 | `server`            | `game-server-cloudflare` authoritative Durable Objects, coordinated by `match-service-cloudflare`, with receipt-gated final publication. The source server was already TypeScript. |
-| `game-analytics`    | TypeScript Worker/Queue/R2 port is complete and tested. R2 is enabled; production activation is paused before private bucket creation and consumer deployment.                     |
+| `game-analytics`    | TypeScript Worker/Queue/R2 port is complete, tested, and live. A bounded production replay completed its D1 receipt and all three source-compatible CSV outputs.                   |
 | `chain`             | Superseded by off-chain D1 reward receipts, verified Stripe/mobile purchase receipts, and inventory exchanges. WalletConnect remains read-only and optional.                       |
 
 `sheets` is an internal Tauri/Vite content tool, not a hosted player service.
@@ -35,18 +35,12 @@ CORS proxying remain local conveniences. Its `draft` entry is a stale orphan:
 there is no `draft/` source directory in this checkout and it is not part of the
 product description or Cloudflare runtime.
 
-## Remaining operational work
+## Operational status and remaining product configuration
 
-- Create the private `cloud-weasel-game-analytics` bucket, deploy and verify the
-  analytics consumer, and only then deploy the game-server replay producer.
-  First complete the quiescent `0115_authoritative_match_decks.sql` migration
-  and exact game-server rollout: the consumer now refuses to derive CSVs unless
-  both replayed final decks agree with that immutable D1 pair.
-  The latest explicitly account-pinned read-only check on 2026-08-20 confirmed
-  that R2 is enabled but the bucket list remains empty. Both queues still exist
-  with zero producers and zero consumers, the deployment inventory returns
-  `10007` because no analytics Worker exists, and D1 has no pending migrations.
-  This is paused production provisioning, not a remaining TypeScript port.
+- The production analytics bucket, consumer, replay producer, `0115`
+  authoritative-deck boundary, D1 receipt, and three CSV outputs were verified
+  end to end on 2026-08-22. See
+  [`CLOUDFLARE_PRODUCTION_LAUNCH.md`](./CLOUDFLARE_PRODUCTION_LAUNCH.md).
 - External device push has a disabled-by-default OneSignal adapter. An empty or
   malformed app ID now makes every SDK operation inert, and the optional
   welcome destination must be configured as an explicit HTTPS URL. Activation

@@ -2,6 +2,13 @@
 
 Status date: 2026-08-21
 
+> **Superseded on 2026-08-22.** The user resumed and explicitly authorized the
+> production launch. The controlled rollout is complete; current production
+> evidence lives in
+> [`CLOUDFLARE_PRODUCTION_LAUNCH.md`](./CLOUDFLARE_PRODUCTION_LAUNCH.md). The
+> remaining text preserves the exact historical pause boundary and must not be
+> read as current deployment state.
+
 Production mutation is intentionally paused at the user's request. Local
 source-faithful code, test, documentation, PR, and CI work may continue, but do
 not resume deployment, provisioning, product activation, or live drills

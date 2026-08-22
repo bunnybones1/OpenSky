@@ -11,6 +11,10 @@ Games Inc.
 For the Cloudflare migration, deployment, and rollout status, see
 [`docs/CLOUDFLARE.md`](./docs/CLOUDFLARE.md).
 
+Production: <https://opensky-webapp.dysinski-tomasz.workers.dev>. The launch
+evidence and intentionally closed features are recorded in
+[`docs/CLOUDFLARE_PRODUCTION_LAUNCH.md`](./docs/CLOUDFLARE_PRODUCTION_LAUNCH.md).
+
 ## Repositories
 
 - https://github.com/bunnybones1/OpenSky (Cloud Weasel fork)

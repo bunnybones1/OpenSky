@@ -28,14 +28,14 @@ export const EXPECTED_DOCKER_WORKLOADS = {
     evidence: ["'game', 'dist'", "'webapp', 'dist'"]
   },
   'game-analytics': {
-    disposition: 'ported-blocked',
+    disposition: 'ported',
     evidenceFile: 'docs/CLOUDFLARE_GAME_ANALYTICS.md',
     evidence: [
       'Cloudflare adapter',
-      'R2 is enabled',
-      'paused before bucket creation',
-      'zero producers and zero consumers',
-      'no analytics Worker exists yet'
+      'Private bucket `cloud-weasel-game-analytics`',
+      'game-server producer are live',
+      'completed one analytics receipt on its first',
+      'deterministic output prefix'
     ]
   },
   matchmaker: {

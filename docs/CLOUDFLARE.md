@@ -3244,8 +3244,9 @@ remain local and undeployed.
 
 The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
 external-push, SkyPass, referral-sticker, account-deletion, Conquest-readiness,
-and wallet-proof corrections are complete locally. No known active source
-runner or main-Worker business responsibility lacks a reviewed disposition.
+and wallet-proof corrections are complete and deployed behind their reviewed
+fail-closed gates. No known active source runner or main-Worker business
+responsibility lacks a reviewed disposition.
 That read-only audit is now recorded in
 [`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
 Its two local safeguards are now implemented: independent `waitUntil` ownership
@@ -3255,24 +3256,25 @@ command. Additional
 original-interface player-flow evidence remains useful; player-facing parity
 must continue using the original interface rather than redesigning it.
 
-Production activation remains a separate authorized exercise: apply `0115`,
-then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and
-`0124`, `0125`, `0126`, `0127`, and `0128` at the documented quiescent boundary,
-provision all six exact reviewed Workflow topologies plus the delayed-Gold,
-external-push, reward, account-deletion R2/Queue/DLQ, and Conquest-readiness
-resources, deploy the exact tested Workers with both bot flags still false and
-both reward schedules disabled, and only consider a bounded ranked/PvP-bot
-soak after ordinary multiplayer and analytics paths are healthy. This remains
-unauthorized while the production pause is in force.
+Production activation completed on 2026-08-22 at exact tested runtime commit
+`d6299092a1d2a01f8dfd9557b7cda99118462b84`. Migrations `0115` through `0128`,
+all six reviewed Workflows, both private R2 buckets, all Queue/DLQ topologies,
+and all five Workers are live. A bounded Practice match proved terminal
+publication, replay archival, off-chain reward receipts, and the analytics
+consumer before the six reviewed allocation modes were restored. Ranked/PvP
+bots and Conquest remain disabled. See
+[`CLOUDFLARE_PRODUCTION_LAUNCH.md`](./CLOUDFLARE_PRODUCTION_LAUNCH.md) for the
+exact versions, CI run, operational evidence, and intentionally deferred
+product activation.
 
-The deployed D1 readiness boundary remains inert, but the new Workflow and
-migration `0128` are local and undeployed. After an explicitly authorized
-rollout, the next Conquest step would be an explicitly authorized exercise, not
-a code-path shortcut: it must use distinct pool proposer, pool activator, drill
-runner, and final verifier actors; wait for three real sequential matches and
-the unchanged 24-hour Gold delivery; and inspect every immutable receipt before
-either public queue is considered. Do not grant capabilities or create a
-production reward pool merely to manufacture deployment evidence. If that
+The deployed D1 readiness boundary, migration `0128`, and Conquest-readiness
+Workflow remain inert because no production drill or reward pool was
+authorized. The next Conquest step would be a separately authorized exercise,
+not a code-path shortcut: it must use distinct pool proposer, pool activator,
+drill runner, and final verifier actors; wait for three real sequential matches
+and the unchanged 24-hour Gold delivery; and inspect every immutable receipt
+before either public queue is considered. Do not grant capabilities or create
+a production reward pool merely to manufacture deployment evidence. If that
 exercise is authorized later, its synthetic accounts and matches will remain
 quarantined from public player and reward surfaces by migration `0113` while
 staff retain audit access.

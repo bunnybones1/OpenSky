@@ -20,7 +20,7 @@ The legacy Google Cloud Functions entrypoint remains operational by injecting `s
   migration `0115`'s immutable authoritative match-deck pair before any CSV is
   generated.
 
-## Remaining deployment adapter
+## Deployment adapter
 
 The Cloudflare adapter archives the private source-shaped replay records and a
 manifest to R2, then sends a version-pinned reference through Cloudflare
@@ -35,28 +35,20 @@ The analytics Worker exposes only `/health`; replay archives and CSVs have no pu
 
 ## Rollout status
 
-- D1 migration `0065_multiplayer_match_analytics.sql` is applied in production.
-- D1 migration `0115_authoritative_match_decks.sql` is not applied. Drain
-  Practice/ranked allocation and apply `0115` before either analytics component
-  is deployed.
-- Queues `cloud-weasel-game-analytics` and
-  `cloud-weasel-game-analytics-dead-letter` are provisioned.
-- R2 is enabled on Cloudflare account
-  `528badc1c29c30196335df252a73c5a6`, but production provisioning remains
-  paused before bucket creation. An explicitly account-pinned, read-only check
-  on 2026-08-20 returned an empty bucket list. Both analytics queues remain
-  provisioned with zero producers and zero consumers, the deployment inventory
-  returned Cloudflare `10007` because no analytics Worker exists yet, and D1
-  reported no migrations to apply.
+- D1 migrations `0065_multiplayer_match_analytics.sql` and
+  `0115_authoritative_match_decks.sql` are applied in production.
+- Private bucket `cloud-weasel-game-analytics`, Queues
+  `cloud-weasel-game-analytics` and
+  `cloud-weasel-game-analytics-dead-letter`, the analytics consumer, and the
+  game-server producer are live.
+- Production Practice match `13` completed one analytics receipt on its first
+  attempt. Its private manifest records 20 replay records and 31,530 bytes;
+  the match, game-state, and move CSV objects all exist beneath the
+  deterministic output prefix.
 - The package deploy command uses the Wrangler version pinned in the workspace's
   `cloudflare` package; it no longer assumes an uninstalled package-local CLI.
-- Do not deploy the analytics consumer until `0115` exists. Do not deploy the
-  game-server producer until bucket `cloud-weasel-game-analytics` exists and
-  the analytics consumer is healthy.
-- The undeployed production game-server config now includes both analytics
-  bindings. This prevents an eventual exact-head rollout from silently omitting
-  the original analytics effect after the R2 account blocker was removed; it
-  does not provision the bucket, publish a message, or deploy either Worker.
-  Match completion and off-chain rewards remain authoritative independently.
+- The production game-server config includes both analytics bindings. Match
+  completion and off-chain rewards remain authoritative independently from
+  this observational pipeline.
 
 Analytics is observational and cannot grant gameplay items. The off-chain build gate scans the Worker for player inventory writes or transaction calls. All player-facing match, quest, conquest, and SkyPass rewards remain canonical off-chain inventory rows in D1; WalletConnect is not a dependency of this pipeline.

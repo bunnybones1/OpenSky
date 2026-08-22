@@ -77,23 +77,24 @@ test('rejects an analytics deploy command without the reviewed target runner', (
   ])
 })
 
-test('rejects the obsolete account-level R2 blocker as analytics evidence', () => {
+test('rejects stale pre-deployment analytics evidence', () => {
   const input = validInput()
   input.evidenceSources['game-analytics'] = [
     'Cloudflare adapter',
-    'waiting for R2 to be enabled'
-  ].join('\n')
-  const errors = auditServices(input).errors
-  for (const evidence of [
     'R2 is enabled',
     'paused before bucket creation',
     'zero producers and zero consumers',
     'no analytics Worker exists yet'
+  ].join('\n')
+  const errors = auditServices(input).errors
+  for (const evidence of [
+    'Private bucket `cloud-weasel-game-analytics`',
+    'game-server producer are live',
+    'completed one analytics receipt on its first',
+    'deterministic output prefix'
   ]) {
     assert.ok(
-      errors.includes(
-        `game-analytics is missing ported-blocked evidence: ${evidence}`
-      )
+      errors.includes(`game-analytics is missing ported evidence: ${evidence}`)
     )
   }
 })
