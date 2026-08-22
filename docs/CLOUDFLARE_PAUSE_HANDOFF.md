@@ -15,10 +15,8 @@ uncommitted source-style Conquest `0121` attempt lifecycle was discarded;
 migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. The latest exact-head
-release and draft-PR CI passed at `d7f8e12f` in GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32537376126>. The complete
-local release contract for the newer external-push milestone passed at
-`49ebd31c`; exact-head draft-PR CI remains outstanding. A
+release and draft-PR CI passed at `98bde368` in GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32540047837>. A
 distinct, minimal `0121_conquest_v2_workflow_handoffs.sql` protects the
 Conquest Workflow/Queue boundary, and `0122_leaderboard_reward_workflow_handoffs.sql`
 protects the equivalent leaderboard business responsibility. Neither
@@ -27,16 +25,19 @@ recreates the discarded attempt runner. Migration
 boundary without a copied attempt runner, and
 `0124_push_notification_queue_delivery.sql` replaces direct cron/provider
 sends and the five-attempt terminal state with a D1 outbox plus Queue. The
-production mutation pause remains in force.
+distinct `0125_skypass_season_close_workflow_handoffs.sql` replaces direct
+cron-owned SkyPass player claims with one Workflow per season and one Queue
+responsibility per eligible player. It does not recreate the source runner.
+The production mutation pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `49ebd31c`
-  (`Decouple Gold gate from terminal migration order`)
-- Latest tested runtime commit: `e8f552c4`
-  (`Deliver external push notifications through Queues`)
+- Last code/test checkpoint: `aa0601a0`
+  (`Make shared HMAC usage types portable`)
+- Latest tested runtime commit: `b114331e`
+  (`Orchestrate SkyPass season close with Workflows`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -45,15 +46,15 @@ production mutation pause remains in force.
 - Last known deployed web entry: `/assets/index-c324c4ff.js`
 - Last known deployed game entry:
   `/game/cloudflare/assets/index-7e9c419b.js`
-- The runtime changes from `38386294` through `e8f552c4` are committed and
-  tested but are **not deployed**. The prior complete release and exact-head
-  draft-PR CI passed at `d7f8e12f`. It produced web entry
-  `/assets/index-fd3d9163.js`, game entry
+- The SkyPass runtime at `b114331e` and its release safeguards through
+  `aa0601a0` are committed and tested but are **not deployed**. The prior
+  complete release and exact-head draft-PR CI passed at `98bde368`. The
+  pre-documentation release candidate at `aa0601a0` passed all 86 gates, 85
+  main Worker files and 542 tests, the component suites, and artifact assembly.
+  It produced web entry `/assets/index-c8882239.js`, game entry
   `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact. The
-  current `49ebd31c` head passed the complete local release contract and
-  produced web entry `/assets/index-1eddfd33.js`, game entry
-  `/game/cloudflare/assets/index-ccb53c4b.js`, and a 594-file artifact.
-  Exact-head draft-PR CI remains required.
+  final committed documentation head and exact-head draft-PR CI remain
+  required.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus
@@ -63,7 +64,8 @@ production mutation pause remains in force.
   `0121_conquest_v2_workflow_handoffs.sql`, plus
   `0122_leaderboard_reward_workflow_handoffs.sql`, plus
   `0123_conquest_gold_queue_delivery.sql`, plus
-  `0124_push_notification_queue_delivery.sql`, are committed but have **not**
+  `0124_push_notification_queue_delivery.sql`, plus
+  `0125_skypass_season_close_workflow_handoffs.sql`, are committed but have **not**
   been applied to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
@@ -77,7 +79,9 @@ production mutation pause remains in force.
   No Worker from `e4ec21f5` or later may be deployed until `0123` and the exact
   reviewed delayed-Gold Queue producer/consumer/DLQ topology also exist. No
   Worker from `e8f552c4` or later may be deployed until `0124` and the exact
-  reviewed external-push Queue producer/consumer/DLQ topology also exist. Apply
+  reviewed external-push Queue producer/consumer/DLQ topology also exist. No
+  Worker from `b114331e` or later may be deployed until `0125` and the exact
+  reviewed SkyPass Workflow/Queue/DLQ topology also exist. Apply
   the migrations in order while match allocation is quiescent as described
   below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
@@ -279,6 +283,44 @@ Worker files and 538 tests, and a fresh isolated D1 chain plus exact schema
 query through `0124`. No remote preflight, Queue/DLQ provisioning, migration,
 credential change, deployment, or production mutation was performed. A full
 exact-head release and draft-PR CI remain required.
+
+## SkyPass season-close Workflow/Queue milestone
+
+Commit `b114331e` replaces the source-shaped cron loop with a
+Cloudflare-native Workflow/Queue/D1 boundary while preserving the Go-visible
+effect:
+
+- a season is accepted at its source end plus ten seconds under an exact active
+  policy version, content digest, and off-chain fulfillment digest;
+- the Workflow waits for same-season staged match XP, snapshots only players
+  whose achieved level exceeds their initial season level, and re-drives D1
+  responsibilities through narrow Queue messages;
+- each player receives the complete earned, claimable, unclaimed reward set in
+  one D1 application, including free/premium selection and prior manual claims;
+- the source auto-claimed flag, immutable completion receipt, and exact
+  `Autoclaimed Rewards` notification publish once, with no notification for a
+  zero-reward completion;
+- malformed or unknown messages acknowledge without mutation, while valid
+  failures remain `PENDING` with immutable evidence beyond six attempts and
+  Queue/DLQ exhaustion; and
+- a terminal Workflow with incomplete D1 truth is restarted under the same
+  deterministic instance identity.
+
+Migration `0125` preserves successful `0064` claims, gained-reward payloads,
+receipts, completion times, and notifications. It reopens any completed cycle
+with an eligible missing receipt and converts a copied five-attempt exclusion
+to a pending responsibility. The representative migration fixture aborts on a
+corrupt legacy receipt.
+
+Validation passes 10/10 focused Workers tests, the 4/4 mutation/migration gate,
+the worker-runner audit, the 12/12 production preflight suite, typecheck, and a
+fresh isolated D1 chain through `0125`. The complete pre-documentation release
+candidate also passes with 85 main Worker files and 542 tests, game-server
+43+136, match-service 48, matchmaker 63+69, analytics 4+5, and a validated
+594-file artifact. No remote preflight, Workflow/Queue/DLQ provisioning,
+migration, credential change, deployment, activation, or production mutation
+was performed. The final committed documentation head and exact-head draft-PR
+CI remain required.
 
 ## Multiplayer XP publication milestone
 
@@ -2576,17 +2618,18 @@ production migration state. Migrations
 `0120_grandweaver_task_attempts.sql`, and
 `0121_conquest_v2_workflow_handoffs.sql`, and
 `0122_leaderboard_reward_workflow_handoffs.sql`, and
-`0123_conquest_gold_queue_delivery.sql` and
-`0124_push_notification_queue_delivery.sql` are not: apply `0115` first at
-its quiescent game-server boundary, then `0116` through `0124` before deploying
-the current Workers. Keep both ranked-bot flags false and both reward schedules
-disabled throughout that baseline rollout. Every checked-in deploy command now
-performs the read-only schema preflight and refuses to spawn Wrangler unless
-the prior invariants, corrected `0119`/`0120` responsibility contracts,
-`0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards, the `0124`
-external-push outbox guards, both exact
-reviewed Workflow/Queue/DLQ topologies, and the exact delayed-Gold
-and external-push producer/consumer/DLQ topologies are present.
+`0123_conquest_gold_queue_delivery.sql`,
+`0124_push_notification_queue_delivery.sql`, and
+`0125_skypass_season_close_workflow_handoffs.sql` are not: apply `0115` first
+at its quiescent game-server boundary, then `0116` through `0125` before
+deploying the current Workers. Keep both ranked-bot flags false and both reward
+schedules disabled throughout that baseline rollout. Every checked-in deploy
+command now performs the read-only schema preflight and refuses to spawn
+Wrangler unless the prior invariants, corrected `0119`/`0120` responsibility
+contracts, `0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards,
+the `0124` external-push outbox guards, the `0125` SkyPass close guards, all
+three reviewed Workflow/Queue/DLQ topologies, and the exact delayed-Gold,
+external-push, and SkyPass producer/consumer/DLQ topologies are present.
 
 ## Other outstanding work
 
@@ -2594,7 +2637,7 @@ and external-push producer/consumer/DLQ topologies are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested runtime changes through `e8f552c4` only after a
+- Deploy and verify the tested SkyPass runtime at `b114331e` only after a
   later documentation head passes the full release contract and exact-head PR
   CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.
@@ -2605,8 +2648,8 @@ and external-push producer/consumer/DLQ topologies are present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`
-  through `0124`; provision the exact dormant reward and external-push
-  topologies, deploy the exact tested game-server runtime immediately,
+  through `0125`; provision the exact dormant reward, external-push, and
+  SkyPass season-close topologies, deploy the exact tested game-server runtime immediately,
   verify protocol health, and only then restore the previously enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
@@ -2666,10 +2709,11 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116` through `0124`, deployment, and activation remain
+  but migrations `0116` through `0125`, deployment, and activation remain
   paused;
 - every production deploy command now fails closed until the remote D1 proves
-  the `0115` through `0124` invariants and exact reviewed reward/push topologies;
+  the `0115` through `0125` invariants and exact reviewed reward/push/SkyPass
+  topologies;
   the migration command remains the only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before

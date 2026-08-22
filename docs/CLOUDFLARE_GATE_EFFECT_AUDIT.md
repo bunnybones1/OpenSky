@@ -8,9 +8,9 @@ authorize runtime changes, migration, deployment, or feature activation.
 
 ## Scope and method
 
-The current `build:cloudflare` command requires 85 named
+The current `build:cloudflare` command requires 86 named
 `check:cloudflare:*` gates before assembling the webapp and browser game. This
-audit classifies every one of those 85 gates by the effect it should protect.
+audit classifies every one of those 86 gates by the effect it should protect.
 
 The classification asks four questions:
 
@@ -23,8 +23,8 @@ The classification asks four questions:
    fidelity or safety?
 
 The four groups below are disjoint and complete: 15 release/operational gates,
-42 client/player-contract gates, 24 runtime-effect gates, and four mixed gates
-tracked through effect-level conversion. The total is 85; no build gate is
+42 client/player-contract gates, 25 runtime-effect gates, and four mixed gates
+tracked through effect-level conversion. The total is 86; no build gate is
 omitted or counted twice.
 
 ## 1. Release and operational safety: keep
@@ -110,7 +110,7 @@ repository calls, or statement order are not.
 
 ## 3. Runtime effects and safety: keep, narrow where noted
 
-These 24 gates protect game/reward outcomes, authorization, mutation
+These 25 gates protect game/reward outcomes, authorization, mutation
 boundaries, or operational safety:
 
 - `float32`
@@ -128,6 +128,7 @@ boundaries, or operational safety:
 - `conquest-operator`
 - `conquest-gold-gate`
 - `push-notification-gate`
+- `skypass-season-close-gate`
 - `leaderboard-gate`
 - `referral-sticker-gate`
 - `offchain`
@@ -355,5 +356,11 @@ safety, and recoverability while rejecting direct cron grants and terminal
 abandonment after a copied attempt ceiling. The decision and evidence are
 recorded in
 [`CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md`](./CLOUDFLARE_CONQUEST_GOLD_DELIVERY.md);
-the next main-Worker responsibility remains unselected until its own
-effect/recovery audit.
+external push then completed at `e8f552c4` with the same no-terminal-abandonment
+rule, stable provider idempotency, poison isolation, and reward-independent
+in-app authority. SkyPass season close completed at `b114331e`, with its
+effect/migration gate at `312de3fb` and destination reward-mutator coverage at
+`9b3f2551`. Its Workflow/Queue boundary preserves the exact close time, policy
+pin, complete per-player claim, atomic receipt/notification, staged-match-XP
+barrier, and re-drive. The next main-Worker responsibility remains unselected
+until its own effect/recovery audit.

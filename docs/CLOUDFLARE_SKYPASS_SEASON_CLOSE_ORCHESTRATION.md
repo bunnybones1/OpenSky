@@ -1,7 +1,7 @@
 # Cloudflare SkyPass season-close orchestration
 
-Status: architecture selected; implementation and production rollout are not
-authorized.
+Status: implemented and tested locally at `b114331e`, with fail-closed release
+safeguards at `312de3fb`. Production rollout is not authorized.
 
 ## Decision
 
@@ -179,3 +179,26 @@ Before this milestone may be considered ready:
 
 No Worker deployment, Workflow or Queue provisioning, remote migration,
 product activation, or live drill is part of this architecture milestone.
+
+## Local implementation evidence
+
+Migration `0125_skypass_season_close_workflow_handoffs.sql` and the runtime now
+implement this boundary. Focused Workers validation passes 10/10, including a
+six-reward atomic rollback/recovery, manual-claim exhaustion, exact source
+notification data, staged match-XP waiting, concurrent duplicate delivery,
+six poison-message failures followed by attempt-seven recovery, D1 re-drive,
+and terminal Workflow restart.
+
+The mutation/migration gate passes 4/4. Its isolated SQLite fixture preserves
+the existing claim row, gained-reward payload, auto-claim receipt, completion
+time, and notification from a successful `0064` player while reopening a
+previously completed cycle and five-attempt failure as `PENDING`. A mismatched
+legacy receipt aborts migration. The worker-runner audit and 12-case production
+preflight suite also pass with the exact three-Workflow/five-Queue topology and
+all D1 contract guards.
+
+The Workflow, Queue, DLQ, binding, migration, and Worker remain undeployed and
+unprovisioned. The complete pre-documentation release candidate passes with 85
+main Worker files and 542 tests plus the component suites and 594-file artifact.
+The final committed documentation head and exact-head draft-PR CI are still
+required before any separately authorized deployment can be considered.

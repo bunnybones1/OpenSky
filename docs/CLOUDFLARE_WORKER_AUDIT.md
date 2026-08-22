@@ -50,8 +50,8 @@ mint. WalletConnect remains an optional ownership integration only.
 | `RankPointsHardResetRunner`    | Ported      | Implemented in the leaderboard reset cycle.                                                                                                                                                                                                                                                                            |
 | `RankPointsSoftResetRunner`    | Ported      | Implemented in the leaderboard reset cycle.                                                                                                                                                                                                                                                                            |
 | `SendTxnsRunner`               | Superseded  | Its 13 queues have a separate mechanical audit; every player reward behavior maps to an off-chain item or entitlement, while one producerless treasury-transfer queue is classified as unused infrastructure.                                                                                                          |
-| `SkypassAutoClaimRunner`       | Ported      | Bounded retries reuse immutable manual-claim receipts and deliver every earned reward from the active exact policy off chain.                                                                                                                                                                                          |
-| `SkypassEndOfSeasonRunner`     | Ported      | D1 season-close cycles become due at the source boundary plus ten seconds, read only the active exact reward policy, and complete once.                                                                                                                                                                                |
+| `SkypassAutoClaimRunner`       | Ported      | One Queue responsibility per eligible player reuses immutable manual-claim receipts and applies the complete remaining active-policy reward set off chain in one D1 transaction. D1 stays pending and re-drivable beyond Queue/DLQ exhaustion.                                                                         |
+| `SkypassEndOfSeasonRunner`     | Ported      | One deterministic Workflow per D1 close becomes due at the source boundary plus ten seconds, pins the exact active policy, waits for match-XP publication, snapshots eligible players, and completes only after every durable player receipt.                                                                          |
 | `StripeEventRunner`            | Ported      | Verified Stripe webhooks fulfill purchases idempotently in D1.                                                                                                                                                                                                                                                         |
 | `TxnStatusRunner`              | Superseded  | Atomic D1 reward receipts and completion guards replace relayer polling and make retry status local, auditable, and exactly once.                                                                                                                                                                                      |
 
@@ -92,7 +92,7 @@ later mint happens in another worker.
 The TypeScript reward-mutator gate closes the other side of that boundary. It
 inventories all direct writes to the seven authoritative reward/progression
 ledgers across the main Worker, game server, and match service. The reviewed
-inventory currently contains 18 modules and 68 writes; any count drift or new
+inventory currently contains 20 modules and 71 writes; any count drift or new
 module requires an explicit off-chain safety disposition before release.
 
 SkyPass season close reuses the existing immutable claim receipts and off-chain
