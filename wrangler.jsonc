@@ -5,7 +5,7 @@
   "main": "./cloudflare/src/index.ts",
   "workers_dev": true,
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["* * * * *", "17 3 * * *"]
   },
   "version_metadata": {
     "binding": "WORKER_VERSION"

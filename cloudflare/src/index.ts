@@ -48,11 +48,46 @@ import {
   SkypassSeasonCloseWorkflow,
   type SkypassAutoClaimQueueMessage
 } from './skypass-auto-claim'
-import { WalletLinksRepository } from './wallet-links'
+import {
+  WALLET_CHALLENGE_CLEANUP_CRON,
+  WalletLinksRepository
+} from './wallet-links'
 import {
   CONQUEST_GOLD_DELIVERY_QUEUE_NAME,
   type ConquestGoldDeliveryQueueMessage
 } from '@opensky/shared/conquest-gold-delivery'
+
+export const DURABLE_EFFECT_DISCOVERY_CRON = '* * * * *'
+
+export const runScheduled = (
+  controller: ScheduledController,
+  env: Env,
+  ctx: ExecutionContext
+): void => {
+  if (controller.cron === WALLET_CHALLENGE_CLEANUP_CRON) {
+    ctx.waitUntil(
+      new WalletLinksRepository(env.AUTH_DB)
+        .cleanupExpired()
+        .then(() => undefined)
+    )
+    return
+  }
+  if (controller.cron !== DURABLE_EFFECT_DISCOVERY_CRON) {
+    throw new Error(`unsupported Cron Trigger: ${controller.cron}`)
+  }
+  ctx.waitUntil(
+    Promise.all([
+      dispatchDueConquestGoldDeliveries(env),
+      runConquestReadinessDrills(env),
+      dispatchDueConquestV2Rewards(env),
+      dispatchDueLeaderboardRewards(env),
+      dispatchDueReferralStickerRewards(env),
+      dispatchDueSkypassAutoClaims(env),
+      dispatchDuePushNotifications(env.AUTH_DB, env),
+      dispatchPendingAccountDeletions(env)
+    ]).then(() => undefined)
+  )
+}
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -84,20 +119,8 @@ export default {
     if (url.pathname.startsWith('/api/')) return handleApiRequest(request, env)
     return applyAssetCachePolicy(request, await env.ASSETS.fetch(request))
   },
-  async scheduled(_controller, env, ctx): Promise<void> {
-    ctx.waitUntil(
-      Promise.all([
-        dispatchDueConquestGoldDeliveries(env),
-        runConquestReadinessDrills(env),
-        dispatchDueConquestV2Rewards(env),
-        dispatchDueLeaderboardRewards(env),
-        dispatchDueReferralStickerRewards(env),
-        dispatchDueSkypassAutoClaims(env),
-        dispatchDuePushNotifications(env.AUTH_DB, env),
-        dispatchPendingAccountDeletions(env),
-        new WalletLinksRepository(env.AUTH_DB).cleanupExpired()
-      ]).then(() => undefined)
-    )
+  async scheduled(controller, env, ctx): Promise<void> {
+    runScheduled(controller, env, ctx)
   },
   async queue(
     batch: MessageBatch<

@@ -15,6 +15,8 @@ const RPC_TIMEOUT_MS = 5_000
 const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 const ERC1271_SELECTOR = '1626ba7e'
 
+export const WALLET_CHALLENGE_CLEANUP_CRON = '17 3 * * *'
+
 type WalletProofSource = 'eip4361' | 'eip4361-erc1271'
 
 interface WalletLinksOptions {
