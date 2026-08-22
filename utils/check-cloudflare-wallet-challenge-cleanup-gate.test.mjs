@@ -44,8 +44,8 @@ test('fails closed when any reviewed evidence source disappears', async () => {
 test('rejects cleanup restored to durable-effect discovery', async () => {
   const current = await liveEvidence()
   const mutation = current.scheduler.replace(
-    'dispatchPendingAccountDeletions(env)',
-    'dispatchPendingAccountDeletions(env),\nnew WalletLinksRepository(env.AUTH_DB).cleanupExpired()'
+    '.then(() => discovery.run(env))',
+    '.then(async () => { await new WalletLinksRepository(env.AUTH_DB).cleanupExpired(); return discovery.run(env) })'
   )
   assert.ok(
     walletChallengeCleanupGateErrors({ ...current, scheduler: mutation }).some(

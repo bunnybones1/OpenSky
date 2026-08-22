@@ -2,8 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: decision only. This audit authorizes no provisioning, migration,
-deployment, activation, live drill, or production mutation.
+Status: discovery isolation is implemented and directly tested locally; staged
+migration replacement remains pending. This audit authorizes no provisioning,
+migration, deployment, activation, live drill, or production mutation.
 
 ## Scope
 
@@ -131,3 +132,7 @@ publication.
 5. stop before every production mutation unless the user explicitly authorizes
    the exact reviewed rollout head and phase.
 
+The first step is complete locally: all eight responsibilities are registered
+independently before execution, an injected sibling failure test proves the
+remaining lifetime completes, and the release gate rejects aggregate ownership,
+swallowed failure, inventory drift, or lost direct evidence.

@@ -8,9 +8,9 @@ authorize runtime changes, migration, deployment, or feature activation.
 
 ## Scope and method
 
-The current `build:cloudflare` command requires 89 named
+The current `build:cloudflare` command requires 90 named
 `check:cloudflare:*` gates before assembling the webapp and browser game. This
-audit classifies every one of those 89 gates by the effect it should protect.
+audit classifies every one of those 90 gates by the effect it should protect.
 
 The classification asks four questions:
 
@@ -23,8 +23,8 @@ The classification asks four questions:
    fidelity or safety?
 
 The four groups below are disjoint and complete: 15 release/operational gates,
-42 client/player-contract gates, 28 runtime-effect gates, and four mixed gates
-tracked through effect-level conversion. The total is 89; no build gate is
+42 client/player-contract gates, 29 runtime-effect gates, and four mixed gates
+tracked through effect-level conversion. The total is 90; no build gate is
 omitted or counted twice.
 
 ## 1. Release and operational safety: keep
@@ -110,11 +110,12 @@ repository calls, or statement order are not.
 
 ## 3. Runtime effects and safety: keep, narrow where noted
 
-These 28 gates protect game/reward outcomes, authorization, mutation
+These 29 gates protect game/reward outcomes, authorization, mutation
 boundaries, or operational safety:
 
 - `float32`
 - `season-progress`
+- `durable-effect-discovery-gate`
 - `game-ingress`
 - `matchmaker-ingress`
 - `matchmaker-session`

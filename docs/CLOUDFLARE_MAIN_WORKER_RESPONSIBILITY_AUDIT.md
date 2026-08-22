@@ -45,9 +45,11 @@ it does not need a Workflow or a copied task runner.
 ## Current fan-out
 
 `cloudflare/src/index.ts` now routes two reviewed Cron Triggers explicitly. The
-one-minute trigger starts eight durable or operational discovery/recovery
-lifecycles in one `Promise.all`. The separate low-frequency trigger owns only
-disposable wallet-proof cleanup and returns before that shared fan-out.
+one-minute trigger registers eight durable or operational discovery/recovery
+lifecycles independently with the Worker execution context. One rejection is
+observable but cannot curtail a sibling lifetime. The separate low-frequency
+trigger owns only disposable wallet-proof cleanup and returns before that
+shared fan-out.
 
 | Current call                             | Observable responsibility                                                                          | Selected target boundary                                                               | Disposition                                                          |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
