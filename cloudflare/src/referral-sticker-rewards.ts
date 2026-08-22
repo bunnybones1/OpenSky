@@ -6,8 +6,6 @@ import { seasonFromDate } from './legacy-seasons'
 
 const STICKER_REWARD_AMOUNT = 100
 const DELIVERY_DELAY_MS = 23 * 60 * 60 * 1000
-const MAX_PREPARATIONS_PER_RUN = 20
-const MAX_DELIVERIES_PER_RUN = 100
 
 interface StickerRow {
   token_id: number
@@ -81,6 +79,7 @@ const candidateUsers = async (
     .prepare(
       `SELECT item.user_id
        FROM player_items item
+       JOIN users ON users.id = item.user_id AND users.user_kind = 'PLAYER'
        JOIN player_account_settings settings ON settings.user_id = item.user_id
        WHERE item.item_type = 'SW_STICKER_POINTS' AND item.token_id = 0
          AND item.balance >= ?
@@ -102,10 +101,9 @@ const candidateUsers = async (
                AND award.token_id = sticker.token_id
            )
          )
-       ORDER BY item.user_id ASC
-       LIMIT ?`
+       ORDER BY item.user_id ASC`
     )
-    .bind(minimumPoints, season, scheduleVersion, MAX_PREPARATIONS_PER_RUN)
+    .bind(minimumPoints, season, scheduleVersion)
     .all<CandidateRow>()
   return rows.results
 }
@@ -189,10 +187,6 @@ const prepareForUser = async (
            SELECT 1 FROM player_items
            WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS'
              AND token_id = 0 AND balance >= ?
-         ) AND NOT EXISTS (
-           SELECT 1 FROM referral_sticker_reward_batches
-           WHERE user_id = ? AND season = ?
-             AND status IN ('PREPARING', 'PENDING', 'DELIVERING')
          ) AND ${noUnpublishedReferralPointsSQL('?', '?')}`
       )
       .bind(
@@ -206,8 +200,6 @@ const prepareForUser = async (
         nowText,
         userId,
         pointsDeducted,
-        userId,
-        season,
         userId,
         season
       ),
@@ -324,9 +316,9 @@ const dueBatches = async (
          WHERE settings.user_id = referral_sticker_reward_batches.user_id
            AND settings.account_status NOT IN ('BANNED', 'SUSPENDED', 'DELETED')
        )
-       ORDER BY deliver_at ASC, id ASC LIMIT ?`
+       ORDER BY deliver_at ASC, id ASC`
     )
-    .bind(now.toISOString(), MAX_DELIVERIES_PER_RUN)
+    .bind(now.toISOString())
     .all<DueBatchRow>()
   return rows.results
 }

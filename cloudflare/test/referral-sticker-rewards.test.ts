@@ -56,7 +56,7 @@ const addUser = async (userId: string) => {
   await new PlayerRepository(env.AUTH_DB).bootstrap(userId)
 }
 
-const setupRewards = async () => {
+const setupRewards = async (includeHigherTier = false) => {
   await Promise.all([
     addUser(inviterId),
     addUser(firstFriendId),
@@ -101,10 +101,19 @@ const setupRewards = async () => {
        VALUES (101, 10, ?), (102, 20, ?), (103, 30, ?)`
     ).bind(SEASON, SEASON, SEASON)
   ])
+  if (includeHigherTier) {
+    await env.AUTH_DB.prepare(
+      `INSERT INTO content_stickers (token_id, required_points, season)
+       VALUES (104, 40, ?)`
+    )
+      .bind(SEASON)
+      .run()
+  }
   await activateSchedule(SEASON, [
     { tokenId: 101, requiredPoints: 10 },
     { tokenId: 102, requiredPoints: 20 },
-    { tokenId: 103, requiredPoints: 30 }
+    { tokenId: 103, requiredPoints: 30 },
+    ...(includeHigherTier ? [{ tokenId: 104, requiredPoints: 40 }] : [])
   ])
 }
 
@@ -243,7 +252,10 @@ beforeEach(async () => {
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_awards'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_reward_batches'),
     env.AUTH_DB.prepare('DELETE FROM referral_sticker_schedule_versions'),
-    env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'sticker-%'`),
+    env.AUTH_DB.prepare(
+      `DELETE FROM users
+       WHERE id LIKE 'sticker-%' OR id = 'system:sticker-reward-test'`
+    ),
     env.AUTH_DB.prepare('DELETE FROM content_stickers')
   ])
   await env.AUTH_DB.batch([
@@ -602,6 +614,106 @@ describe('off-chain referral sticker rewards', () => {
         .bind(inviterId)
         .first()
     ).toEqual({ batches: 1, awards: 3, points: 5 })
+  })
+
+  it('prepares a higher entitlement while an earlier delivery is pending', async () => {
+    await setupRewards(true)
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
+      prepared: 1,
+      delivered: 0
+    })
+    await env.AUTH_DB.prepare(
+      `UPDATE player_items SET balance = balance + 10, updated_at = ?
+       WHERE user_id = ? AND item_type = 'SW_STICKER_POINTS' AND token_id = 0`
+    )
+      .bind(new Date(NOW.getTime() + 60 * 60 * 1000).toISOString(), inviterId)
+      .run()
+
+    expect(
+      await runReferralStickerRewards(
+        env.AUTH_DB,
+        new Date(NOW.getTime() + 60 * 60 * 1000)
+      )
+    ).toMatchObject({ prepared: 1, delivered: 0 })
+    expect(
+      (
+        await env.AUTH_DB.prepare(
+          `SELECT total_cost, previous_cost, points_deducted, status
+           FROM referral_sticker_reward_batches ORDER BY total_cost`
+        ).all()
+      ).results
+    ).toEqual([
+      {
+        total_cost: 30,
+        previous_cost: 0,
+        points_deducted: 30,
+        status: 'PENDING'
+      },
+      {
+        total_cost: 40,
+        previous_cost: 30,
+        points_deducted: 10,
+        status: 'PENDING'
+      }
+    ])
+  })
+
+  it('does not turn source runner batch sizes into entitlement limits', async () => {
+    const userIds = Array.from(
+      { length: 21 },
+      (_, index) => `sticker-bulk-${String(index).padStart(2, '0')}`
+    )
+    for (const userId of userIds) await addUser(userId)
+    await env.AUTH_DB.batch([
+      ...userIds.map(userId =>
+        env.AUTH_DB.prepare(
+          `INSERT INTO player_items
+             (user_id, item_type, token_id, balance, is_new, unlock_source,
+              created_at, updated_at)
+           VALUES (?, 'SW_STICKER_POINTS', 0, 10, 0, 'test', ?, ?)`
+        ).bind(userId, NOW.toISOString(), NOW.toISOString())
+      ),
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_stickers (token_id, required_points, season)
+         VALUES (101, 10, ?)`
+      ).bind(SEASON)
+    ])
+    await activateSchedule(SEASON, [{ tokenId: 101, requiredPoints: 10 }])
+
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
+      prepared: 21
+    })
+  })
+
+  it('excludes operational system principals from sticker entitlements', async () => {
+    const systemId = 'system:sticker-reward-test'
+    const nowText = NOW.toISOString()
+    await env.AUTH_DB.prepare(
+      `INSERT INTO users
+       (id, display_name, primary_email, user_kind, created_at, updated_at)
+       VALUES (?, 'Sticker System', 'system-sticker@example.invalid',
+               'SYSTEM', ?, ?)`
+    )
+      .bind(systemId, nowText, nowText)
+      .run()
+    await new PlayerRepository(env.AUTH_DB).bootstrap(systemId)
+    await env.AUTH_DB.batch([
+      env.AUTH_DB.prepare(
+        `INSERT INTO player_items
+           (user_id, item_type, token_id, balance, is_new, unlock_source,
+            created_at, updated_at)
+         VALUES (?, 'SW_STICKER_POINTS', 0, 10, 0, 'test', ?, ?)`
+      ).bind(systemId, nowText, nowText),
+      env.AUTH_DB.prepare(
+        `INSERT INTO content_stickers (token_id, required_points, season)
+         VALUES (101, 10, ?)`
+      ).bind(SEASON)
+    ])
+    await activateSchedule(SEASON, [{ tokenId: 101, requiredPoints: 10 }])
+
+    expect(await runReferralStickerRewards(env.AUTH_DB, NOW)).toMatchObject({
+      prepared: 0
+    })
   })
 
   it('preserves source support for zero-point promotional stickers', async () => {
