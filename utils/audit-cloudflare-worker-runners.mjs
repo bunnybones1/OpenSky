@@ -120,9 +120,11 @@ export const EXPECTED_RUNNERS = {
     disposition: 'ported',
     evidenceFile: 'cloudflare/src/push-notifications.ts',
     evidence: [
-      'runPushNotifications',
+      'dispatchDuePushNotifications',
+      'handlePushNotificationQueue',
       'include_aliases',
       'idempotency_key',
+      'player_notification_push_failures',
       "status = 'SENT'"
     ]
   },
