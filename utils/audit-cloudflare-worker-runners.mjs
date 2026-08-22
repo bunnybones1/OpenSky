@@ -21,8 +21,14 @@ export const EXPECTED_RUNNERS = {
   },
   BalanceSyncRunner: {
     disposition: 'superseded',
-    evidenceFile: 'cloudflare/src/wallet-links.ts',
-    evidence: ['WalletLinksRepository', 'cleanupExpired']
+    evidenceFile: 'cloudflare/test/wallet-contents.test.ts',
+    evidence: [
+      'projects only reviewed Polygon asset balances without mutating inventory',
+      'SELECT COUNT(*) AS count FROM player_items',
+      "status: 'not_configured'",
+      'keeps the contents endpoint private to the Google session',
+      'fails closed on provider errors'
+    ]
   },
   ConquestV2PoolRunner: {
     disposition: 'ported',
