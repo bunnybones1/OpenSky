@@ -59,7 +59,6 @@ export const EXPECTED_AUTH_MODE_FILES = {
   'SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/BurnSilversList/BurnSilversList.tsx': [2, 'offchain-silver-exchange'],
   'SelectSilversPage/SelectSilversCards/ViewSelectedCardsButton/BurnSilversDialog/components/BurnSilversTotalRow.tsx': [2, 'offchain-silver-exchange'],
   'SelectSilversPage/SelectSilversCards/components/SelectSilversBanner.tsx': [1, 'offchain-silver-exchange'],
-  'SkyPassPage/SkyPassForeground/Level/Level.tsx': [1, 'offchain-skypass-reward'],
   'SkyPassPage/SkyPassForeground/RewardsCarousel/shared/components/SkyPassThumbnail/SkyPassThumbnail.tsx': [1, 'offchain-skypass-reward'],
   'SkyPassPage/SkyPassForeground/SkyPassClaimReward/SkyPassClaimReward.tsx': [2, 'offchain-skypass-reward'],
   'SkyPassPurchasePage/SkyPassPurchaseDetails/components/CardBackDetail.tsx': [2, 'offchain-skypass-reward'],
@@ -229,7 +228,7 @@ const main = async () => {
     process.exitCode = 1
     return
   }
-  process.stdout.write('All 74 AUTH_MODE files and 117 references have reviewed identity dispositions\n')
+  process.stdout.write('All 73 AUTH_MODE files and 116 references have reviewed identity dispositions\n')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()
