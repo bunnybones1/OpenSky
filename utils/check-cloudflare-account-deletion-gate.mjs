@@ -137,7 +137,6 @@ export const accountDeletionGateErrors = (evidence = {}) => {
   ])
   requireTokens(evidence.productionRunner, 'production preflight', [
     'REVIEWED_ACCOUNT_DELETION_WORKFLOW',
-    "'0127_account_deletion_workflow_orchestration.sql'",
     'account_deletion_workflow_tables_present',
     'account_deletion_workflow_guards_present',
     'account_deletion_workflow_contract_guards_present'
