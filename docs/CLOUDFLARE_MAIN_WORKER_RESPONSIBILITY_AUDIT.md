@@ -6,8 +6,8 @@ Status: leaderboard implemented locally at `e555f930`; delayed Conquest Gold
 implemented locally at `e4ec21f5`; external push delivery implemented locally
 at `e8f552c4`; SkyPass season close implemented locally at `b114331e` with
 release safeguards at `312de3fb`; referral sticker orchestration implemented
-locally through migration `0126`; and the account-deletion Workflow boundary
-is selected in
+locally through migration `0126`; and account-deletion orchestration is
+implemented locally through migration `0127` as documented in
 [`CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md`](./CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md).
 This audit and these milestones do not authorize provisioning, migration,
 activation, deployment, a live drill, or any production mutation.
@@ -49,7 +49,7 @@ and recovery needs.
 | `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per accepted hourly sweep plus Queue per prepared user or due award batch      | Implemented and guarded locally through migration `0126`; undeployed             |
 | `dispatchDueSkypassAutoClaims`          | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Completed at `b114331e`; guarded at `312de3fb`                                   |
 | `dispatchDuePushNotifications`          | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                                          |
-| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Boundary selected; retain immutable deadline and auditable partial recovery      |
+| `dispatchPendingAccountDeletions`        | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Implemented and guarded locally through migration `0127`; undeployed             |
 | `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges  |
 
 These boundaries are independent. Converting one does not authorize changing
@@ -267,3 +267,13 @@ complete pre-documentation release candidate passes 85 main Worker files and
 Queue, DLQ, binding, migration, and code remain unprovisioned and undeployed.
 The final committed documentation head, exact-head PR CI, and explicit user
 authorization remain mandatory.
+
+Account deletion and migration `0127` are implemented locally at `002b7ddf`,
+with mutation-tested release safeguards at `a7a5ef72`. Fresh Google step-up
+still atomically locks the account and records the exact source deadline. One
+deterministic Workflow sleeps to that deadline, verifies the private R2 prefix
+empty, then atomically removes live identities/wallet/private D1 data,
+anonymizes the account, creates provider tombstones, and completes both D1
+receipts. The focused suite passes 12/12, the migration/effect gate passes 6/6,
+production preflight passes 12/12, and the full main Worker passes 87 files and
+559 tests. The Workflow, R2 binding, migration, and runtime remain undeployed.

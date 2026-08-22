@@ -32,16 +32,21 @@ Migration `0126_referral_sticker_reward_workflow_handoffs.sql` similarly
 replaces direct cron-owned referral processing with hourly Workflows, narrow
 PREPARE/DELIVER Queue pointers, and D1 business receipts without copying source
 runner caps or retry ceilings.
+Migration `0127_account_deletion_workflow_orchestration.sql` replaces direct
+cron finalization with one deterministic Workflow per accepted Google step-up.
+The Workflow preserves the exact deletion deadline, verifies private R2 cleanup
+before guarded D1 anonymization, and never turns infrastructure retry exhaustion
+into an abandoned privacy responsibility.
 The production mutation pause remains in force.
 
 ## Exact checkpoint
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `76c4768f`
-  (`Guard referral sticker Workflow effects`)
-- Latest tested runtime commit: `31793663`
-  (`Orchestrate referral sticker rewards with Workflows`)
+- Last code/test checkpoint: `a7a5ef72`
+  (`Guard account deletion Workflow effects`)
+- Latest tested runtime commit: `002b7ddf`
+  (`Orchestrate account deletion with Workflows`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -60,11 +65,17 @@ The production mutation pause remains in force.
   final committed documentation head and exact-head draft-PR CI remain
   required.
 - The referral-sticker runtime at `31793663` and its release safeguards through
-  `76c4768f` are committed and locally tested but are **not deployed**. Focused
+  `76c4768f` are committed and tested but are **not deployed**. Focused
   referral suites pass 20/20 tests, migration preservation/fail-closed fixtures
-  pass, and the full main Worker passes 86 files and 552 tests. The complete
-  exact-head release and exact-head draft-PR CI have not yet run for this local
-  head.
+  pass, and the full main Worker at that milestone passed 86 files and 552
+  tests. The complete release and exact-head draft-PR CI passed at `d5a51c57`
+  in GitHub run `32545808974`.
+- The account-deletion runtime at `002b7ddf` and safeguards through `a7a5ef72`
+  are committed and locally tested but are **not deployed**. Focused suites
+  pass 12/12, the migration/effect gate passes 6/6, production preflight passes
+  12/12, and the full main Worker passes 87 files and 559 tests. A complete
+  exact-head release and exact-head draft-PR CI remain required for the final
+  documentation head.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus
@@ -76,7 +87,8 @@ The production mutation pause remains in force.
   `0123_conquest_gold_queue_delivery.sql`, plus
   `0124_push_notification_queue_delivery.sql`, plus
   `0125_skypass_season_close_workflow_handoffs.sql`, plus
-  `0126_referral_sticker_reward_workflow_handoffs.sql`, are committed but have **not**
+  `0126_referral_sticker_reward_workflow_handoffs.sql`, plus
+  `0127_account_deletion_workflow_orchestration.sql`, are committed but have **not**
   been applied to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
@@ -94,7 +106,9 @@ The production mutation pause remains in force.
   Worker from `b114331e` or later may be deployed until `0125` and the exact
   reviewed SkyPass Workflow/Queue/DLQ topology also exist. No Worker from
   `31793663` or later may be deployed until `0126` and the exact reviewed
-  referral-sticker Workflow/Queue/DLQ topology also exist. Apply
+  referral-sticker Workflow/Queue/DLQ topology also exist. No Worker from
+  `002b7ddf` or later may be deployed until `0127`, the exact reviewed account
+  deletion Workflow, and the private client-feedback R2 binding also exist. Apply
   the migrations in order while match allocation is quiescent as described
   below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
@@ -2590,7 +2604,7 @@ production gate after any later commit.
    the separate private client-feedback retention policy before storing feedback.
 4. Complete the quiescent migration `0115` transition, then apply `0116`,
    `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, `0124`, `0125`, and
-   `0126` in order while
+   `0126`, and `0127` in order while
    allocations remain stopped; provision the exact reviewed dormant reward
    Workflows, Queues, and DLQs; and then deploy/verify the exact tested game
    server without analytics producer bindings, as described under Production
@@ -2607,7 +2621,9 @@ production gate after any later commit.
    topology; the main Worker from `b114331e` assumes `0125` plus the reviewed
    SkyPass Workflow/Queue/DLQ topology; and the main Worker from `31793663`
    assumes `0126` plus the reviewed referral-sticker Workflow/Queue/DLQ
-   topology. No current deploy command may run against an older database or
+   topology; and the main Worker from `002b7ddf` assumes `0127`, the reviewed
+   account-deletion Workflow, and the private `CLIENT_FEEDBACK` R2 binding. No
+   current deploy command may run against an older database or
    incomplete topology.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
@@ -2656,16 +2672,18 @@ production migration state. Migrations
 `0123_conquest_gold_queue_delivery.sql`,
 `0124_push_notification_queue_delivery.sql`, and
 `0125_skypass_season_close_workflow_handoffs.sql`, and
-`0126_referral_sticker_reward_workflow_handoffs.sql` are not: apply `0115` first
-at its quiescent game-server boundary, then `0116` through `0126` before
+`0126_referral_sticker_reward_workflow_handoffs.sql`, and
+`0127_account_deletion_workflow_orchestration.sql` are not: apply `0115` first
+at its quiescent game-server boundary, then `0116` through `0127` before
 deploying the current Workers. Keep both ranked-bot flags false and both reward
 schedules disabled throughout that baseline rollout. Every checked-in deploy
 command now performs the read-only schema preflight and refuses to spawn
 Wrangler unless the prior invariants, corrected `0119`/`0120` responsibility
 contracts, `0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards,
 the `0124` external-push outbox guards, the `0125` SkyPass close guards, the
-`0126` referral-sticker sweep guards, all four reviewed Workflow/Queue/DLQ
-topologies, and the exact delayed-Gold, external-push, SkyPass, and
+`0126` referral-sticker sweep guards, the `0127` account-deletion privacy
+guards, all five reviewed Workflow topologies, and the exact delayed-Gold,
+external-push, SkyPass, and
 referral-sticker producer/consumer/DLQ topologies are present.
 
 ## Other outstanding work
@@ -2674,7 +2692,7 @@ referral-sticker producer/consumer/DLQ topologies are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested SkyPass and referral-sticker runtimes only after a
+- Deploy and verify the tested SkyPass, referral-sticker, and account-deletion runtimes only after a
   later documentation head passes the full release contract and exact-head PR
   CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.
@@ -2685,8 +2703,8 @@ referral-sticker producer/consumer/DLQ topologies are present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`
-  through `0126`; provision the exact dormant reward, external-push, and
-  SkyPass season-close topologies, deploy the exact tested game-server runtime immediately,
+  through `0127`; provision the exact dormant reward, external-push, SkyPass
+  season-close, and account-deletion topologies, deploy the exact tested game-server runtime immediately,
   verify protocol health, and only then restore the previously enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
@@ -2746,11 +2764,11 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116` through `0126`, deployment, and activation remain
+  but migrations `0116` through `0127`, deployment, and activation remain
   paused;
 - every production deploy command now fails closed until the remote D1 proves
-  the `0115` through `0126` invariants and exact reviewed
-  reward/push/SkyPass/referral-sticker topologies;
+  the `0115` through `0127` invariants and exact reviewed
+  reward/push/SkyPass/referral-sticker/account-deletion topologies;
   the migration command remains the only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before

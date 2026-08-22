@@ -3144,21 +3144,40 @@ referral suites pass 20/20 and the full main Worker passes 86 files and 552
 tests. The Workflow, Queue, DLQ, migration, schedule, and runtime remain local,
 unprovisioned, unapplied, and undeployed.
 
+## Effect-faithful account deletion orchestration — 2026-08-21
+
+Commit `002b7ddf` replaces the direct cron finalizer with one deterministic
+Workflow per accepted Google step-up. D1 atomically locks access, records the
+source's exact 30-days-minus-one-hour deadline, and creates the Workflow
+responsibility. The Workflow sleeps to that deadline, deletes and verifies the
+private R2 feedback prefix, then atomically removes live identity, wallet, and
+private D1 state, anonymizes the account, creates provider tombstones, and
+completes both immutable receipts while preserving game history.
+
+Migration `0127` preserves structurally complete pending/completed requests and
+fails closed on contradictory deletion state. A Workflow creation gap, R2
+failure, D1 failure after R2 cleanup, terminal Workflow state, and duplicate
+completion all remain re-drivable without the source batch of 50 or five-retry
+abandonment. Focused suites pass 12/12, the migration/effect gate passes 6/6,
+production preflight passes 12/12, and the full main Worker passes 87 files and
+559 tests. The Workflow, private R2 binding, migration, and runtime remain
+local, unprovisioned, unapplied, and undeployed.
+
 ## Suggested next slice
 
 The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
-external-push, SkyPass, and referral-sticker orchestration corrections are
-complete locally. Continue with one remaining main-Worker responsibility at a
-time, beginning each with an effect/recovery audit rather than a topology
-rewrite.
+external-push, SkyPass, referral-sticker, and account-deletion orchestration
+corrections are complete locally. Continue with one remaining main-Worker
+responsibility at a time, beginning with disposable wallet-proof cleanup and
+an effect/recovery audit rather than a topology rewrite.
 Player-facing parity remains separate and must continue using the original
 interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
 then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and
-`0124`, `0125`, and `0126` at the documented quiescent boundary, provision all
-four exact reviewed reward Workflow/Queue/DLQ topologies plus the delayed-Gold
-and external-push Queues/DLQs, deploy the exact
+`0124`, `0125`, `0126`, and `0127` at the documented quiescent boundary,
+provision all five exact reviewed Workflow topologies plus the delayed-Gold,
+external-push, reward, and account-deletion R2/Queue/DLQ resources, deploy the exact
 tested Workers with both bot flags still false and both reward schedules
 disabled, and only consider a bounded ranked/PvP-bot soak after ordinary
 multiplayer and analytics paths are healthy. This remains unauthorized while

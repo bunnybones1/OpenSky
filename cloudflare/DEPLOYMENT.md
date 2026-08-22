@@ -328,10 +328,11 @@
   both grants and removals currently fail closed
 - Identity-native account deletion through the original settings dialog and a
   fresh Google OIDC step-up. Access stops immediately at `TO_DELETE`; the
-  minute scheduler performs the source's soft anonymization after 30 days
-  minus one hour, unlinks optional wallets, removes private user storage, and
-  retains opaque provider tombstones so the deleted identity cannot be
-  recreated. Game and audit history remain referentially intact
+  deterministic account Workflow sleeps until the source's 30-days-minus-one-
+  hour deadline, verifies private R2 feedback is gone, then atomically unlinks
+  optional wallets, removes live identity/private D1 data, anonymizes the
+  account, and retains opaque provider tombstones so the deleted identity
+  cannot be recreated. Game and audit history remain referentially intact
 - Optional EVM wallet ownership links attached to an existing Google identity,
   using exact origin-bound ERC-4361 messages, ten-minute single-use nonces,
   ERC-191 EOA signature recovery, concurrent replay rejection, database-level
@@ -340,9 +341,10 @@
 - Source client-feedback ingestion ported from private S3 to private R2, with
   authenticated identity-scoped keys, bounded JSON and JPEG payloads,
   collision resistance, an optimistic ten-submission-per-hour D1 guard, and
-  account-deletion cleanup. Production currently returns `503` after
-  authentication because R2 has not been enabled on the Cloudflare account;
-  payloads are never accepted and discarded silently
+  account-deletion cleanup. The reviewed private R2 binding and account
+  Workflow are checked in but remain undeployed; the deployed Worker must keep
+  returning explicit `503` rather than accept and discard payloads until that
+  exact dormant topology is authorized and provisioned
 - Source-compatible `501` response for the intentionally disabled live-record read
 - Local bot plus authoritative practice, ranked, challenge, and multiplayer paths
 - Original Tutorial, Ranked, Practice PvP, and Conquest play screens for Google identities

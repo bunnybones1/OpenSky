@@ -2,8 +2,8 @@
 
 Status date: 2026-08-21
 
-Status: target boundary selected; implementation, migration, provisioning, and
-deployment are not authorized by this document.
+Status: architecture implemented and guarded locally through migration `0127`.
+Provisioning, migration, and deployment remain unauthorized.
 
 ## Decision
 
@@ -143,3 +143,20 @@ binding, migration, and exact schema guards before any code can be deployed.
 This slice remains undeployed. Exact-head local release, exact-head draft-PR CI,
 and explicit user authorization remain mandatory before provisioning, migration,
 or deployment.
+
+## Executable evidence
+
+The focused account-deletion suites pass 12/12 tests. They prove binding-less
+acceptance fails before D1 mutation, a D1-to-Workflow creation gap reuses one
+deterministic instance, terminal Workflow state restarts while D1 is pending,
+the exact source deadline is preserved, instance tampering cannot delete data,
+R2 failure leaves D1 pending, and an R2-empty/D1-pending interruption recovers
+to one completion.
+
+The mutation-tested release gate passes 6/6. Its SQLite fixtures preserve valid
+pending/completed requests, auto-create orchestration for future requests, fail
+closed on contradictory completed state, and reject completion before R2
+evidence. The full main Worker passes 87 files and 559 tests, typecheck passes,
+the worker-runner audit remains complete, and production preflight passes 12/12
+while requiring the exact Workflow, private R2 bucket binding, migration `0127`,
+nine schema guards, and four contract guards.
