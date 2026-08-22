@@ -18,7 +18,9 @@ export interface SessionClaims {
 
 const algorithm = { name: 'HMAC', hash: 'SHA-256' }
 
-const importKey = (secret: string, usages: KeyUsage[]) =>
+type HmacKeyUsage = 'sign' | 'verify'
+
+const importKey = (secret: string, usages: HmacKeyUsage[]) =>
   crypto.subtle.importKey('raw', utf8(secret), algorithm, false, usages)
 
 export const signSession = async (
