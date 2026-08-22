@@ -3163,6 +3163,33 @@ production preflight passes 12/12, and the full main Worker passes 87 files and
 559 tests. The Workflow, private R2 binding, migration, and runtime remain
 local, unprovisioned, unapplied, and undeployed.
 
+## Effect-faithful Conquest readiness-drill orchestration — 2026-08-21
+
+Commit `5ba4949a` replaces the direct minute-scan drill runner with one
+deterministic Cloudflare Workflow for each explicitly authorized D1 operation.
+The operator protocol is unchanged: separate RUN permission, exact UUID
+operation key, isolated SYSTEM principals, three sequential real matches,
+four-hour authoritative match deadlines, unchanged Conquest settlement, exact
+24-hour off-chain Gold delivery, and a separate VERIFY actor before public
+readiness can exist.
+
+Migration `0128` adopts valid `RUNNING` and `WAITING_DELIVERY` operations and
+auto-creates responsibility when future provisioning reaches `RUNNING`.
+Workflow status remains operational evidence; the guarded operation/audit,
+match ledger, settlement, delivery, and readiness receipts remain business
+authority. Transient match-service and platform errors are observed and
+re-driven without becoming `MATCH_DISPATCH_FAILED`; genuine failed/timed-out
+matches, invalid outcomes, and expired delivery windows remain terminal.
+
+The Workflow reconciles one exact operation at a time and durably sleeps to the
+next observation, match deadline, or known `deliver_at`. The minute trigger only
+re-ensures incomplete deterministic instances; it no longer advances drills or
+copies the former `LIMIT 10` scan. Focused suites pass 16/16, the new
+migration/effect gate passes 6/6, the existing Conquest gate passes 13/13, and
+production preflight passes 12/12; the full main Worker passes 89 files and 569
+tests. The Workflow, migration, runtime, and any live drill remain
+unprovisioned, unapplied, unauthorized, and undeployed.
+
 ## Effect-faithful wallet challenge maintenance — 2026-08-21
 
 Commit `84948e70` moves expired wallet-proof garbage collection out of the
@@ -3192,31 +3219,31 @@ remain local and undeployed.
 ## Suggested next slice
 
 The Conquest, post-match, matchmaker-cadence, leaderboard, delayed-Gold,
-external-push, SkyPass, referral-sticker, account-deletion orchestration, and
-wallet-proof cleanup corrections are complete locally. Continue with one
-remaining main-Worker responsibility at a time. The next unconverted call is
-the explicitly authorized Conquest readiness drill; audit its operator-visible
-progress, authorization, recovery, and evidence effects before choosing a
-Cloudflare boundary rather than copying its current implementation.
-Player-facing parity remains separate and must continue using the original
-interface rather than redesigning it.
+external-push, SkyPass, referral-sticker, account-deletion, Conquest-readiness,
+and wallet-proof corrections are complete locally. No known active source
+runner or main-Worker business responsibility lacks a reviewed disposition.
+The next safe local slice is a read-only audit of the shared durable-effect
+discovery trigger and the complete undeployed migration/resource rollout, or
+additional original-interface player-flow evidence. Player-facing parity must
+continue using the original interface rather than redesigning it.
 
 Production activation remains a separate authorized exercise: apply `0115`,
 then `0116`, `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, and
-`0124`, `0125`, `0126`, and `0127` at the documented quiescent boundary,
-provision all five exact reviewed Workflow topologies plus the delayed-Gold,
-external-push, reward, and account-deletion R2/Queue/DLQ resources, deploy the exact
-tested Workers with both bot flags still false and both reward schedules
-disabled, and only consider a bounded ranked/PvP-bot soak after ordinary
-multiplayer and analytics paths are healthy. This remains unauthorized while
-the production pause is in force.
+`0124`, `0125`, `0126`, `0127`, and `0128` at the documented quiescent boundary,
+provision all six exact reviewed Workflow topologies plus the delayed-Gold,
+external-push, reward, account-deletion R2/Queue/DLQ, and Conquest-readiness
+resources, deploy the exact tested Workers with both bot flags still false and
+both reward schedules disabled, and only consider a bounded ranked/PvP-bot
+soak after ordinary multiplayer and analytics paths are healthy. This remains
+unauthorized while the production pause is in force.
 
-The dormant, separately authorized readiness orchestrator is deployed and
-verified inert. The next Conquest step is an explicitly authorized exercise,
-not a code-path shortcut: it must use distinct pool proposer, pool activator,
-drill runner, and final verifier actors; wait for three real sequential matches
-and the unchanged 24-hour Gold delivery; and inspect every immutable receipt
-before either public queue is considered. Do not grant capabilities or create a
+The deployed D1 readiness boundary remains inert, but the new Workflow and
+migration `0128` are local and undeployed. After an explicitly authorized
+rollout, the next Conquest step would be an explicitly authorized exercise, not
+a code-path shortcut: it must use distinct pool proposer, pool activator, drill
+runner, and final verifier actors; wait for three real sequential matches and
+the unchanged 24-hour Gold delivery; and inspect every immutable receipt before
+either public queue is considered. Do not grant capabilities or create a
 production reward pool merely to manufacture deployment evidence. If that
 exercise is authorized later, its synthetic accounts and matches will remain
 quarantined from public player and reward surfaces by migration `0113` while

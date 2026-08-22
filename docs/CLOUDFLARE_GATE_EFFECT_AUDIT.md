@@ -8,9 +8,9 @@ authorize runtime changes, migration, deployment, or feature activation.
 
 ## Scope and method
 
-The current `build:cloudflare` command requires 86 named
+The current `build:cloudflare` command requires 89 named
 `check:cloudflare:*` gates before assembling the webapp and browser game. This
-audit classifies every one of those 86 gates by the effect it should protect.
+audit classifies every one of those 89 gates by the effect it should protect.
 
 The classification asks four questions:
 
@@ -23,8 +23,8 @@ The classification asks four questions:
    fidelity or safety?
 
 The four groups below are disjoint and complete: 15 release/operational gates,
-42 client/player-contract gates, 25 runtime-effect gates, and four mixed gates
-tracked through effect-level conversion. The total is 86; no build gate is
+42 client/player-contract gates, 28 runtime-effect gates, and four mixed gates
+tracked through effect-level conversion. The total is 89; no build gate is
 omitted or counted twice.
 
 ## 1. Release and operational safety: keep
@@ -110,7 +110,7 @@ repository calls, or statement order are not.
 
 ## 3. Runtime effects and safety: keep, narrow where noted
 
-These 25 gates protect game/reward outcomes, authorization, mutation
+These 28 gates protect game/reward outcomes, authorization, mutation
 boundaries, or operational safety:
 
 - `float32`
@@ -127,10 +127,13 @@ boundaries, or operational safety:
 - `system-player-gate`
 - `conquest-operator`
 - `conquest-gold-gate`
+- `conquest-drill-orchestration-gate`
 - `push-notification-gate`
 - `skypass-season-close-gate`
 - `leaderboard-gate`
 - `referral-sticker-gate`
+- `account-deletion-gate`
+- `wallet-challenge-cleanup-gate`
 - `offchain`
 - `reward-producers`
 - `reward-mutators`
@@ -178,6 +181,11 @@ re-drive while rejecting direct cron grants and copied attempt ceilings.
 notification outbox, narrow Queue authority, stable provider idempotency,
 validity and Google-identity targeting, indefinite D1 re-drive, and reward
 failure isolation while rejecting direct cron sends and terminal retry limits.
+`account-deletion-gate`, `wallet-challenge-cleanup-gate`, and
+`conquest-drill-orchestration-gate` extend the same effect-first rule: they pin
+respectively the R2-before-D1 privacy boundary, disposable proof-retention
+boundary, and authorized sequential-match/readiness boundary while rejecting
+copied source batches, attempt ceilings, and direct business-state cron runners.
 
 ### `worker-runners`
 

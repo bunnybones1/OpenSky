@@ -2,10 +2,9 @@
 
 Status date: 2026-08-21
 
-Status: target boundary selected; the existing direct Cron runner remains in
-the local source until the next committed implementation milestone. No new
-migration, Workflow provisioning, remote migration, or deployment is
-authorized by this decision.
+Status: implemented locally at `5ba4949a` through migration `0128`; the
+Workflow, migration, and runtime remain unprovisioned, unapplied, and
+undeployed. No remote mutation or deployment is authorized by this document.
 
 ## Decision
 
@@ -100,10 +99,11 @@ The Workflow should perform these durable, idempotent steps:
 
 Polling cadence is an operational choice, not part of the client contract. A
 two-minute durable sleep between D1 ledger observations is the initial target:
-it keeps a worst-case drill comfortably below the Workflow step budget while
-preserving the exact four-hour and delivery deadlines through timestamp checks.
-The implementation must sleep to an exact known `deliver_at` rather than poll
-through the 24-hour reward delay.
+it keeps a worst-case drill comfortably below the Workflow step budget because
+each observation is one idempotent reconciliation step plus a non-counting
+sleep. Exact timestamp checks preserve the four-hour and delivery deadlines.
+The implementation sleeps to a known `deliver_at` rather than polling through
+the 24-hour reward delay.
 
 Cloudflare documents deterministic instance creation, status inspection, and
 restart through the Workers API, durable `step.sleep`/`step.sleepUntil`, and
@@ -136,20 +136,20 @@ audit rows remain the business record.
 
 ## Recovery matrix
 
-| Interruption | Required recovery |
-| --- | --- |
-| D1 operation commits before Workflow creation | Exact-operation replay or narrow recovery creates the deterministic instance. |
-| Workflow creation succeeds but its response is lost | Re-ensure observes the same running/waiting instance; no second drill can be created. |
-| Match dispatch fails before allocation | Workflow step retry or same-instance restart dispatches the same proposal ID. |
-| Match allocation succeeds but the response is lost | Re-read finds the exact ledger and waits; allocation is not duplicated. |
-| Workflow wakes before a match deadline | It re-reads authoritative state and sleeps again; timing is derived from D1, not wake cadence. |
-| Workflow errors or is terminated while D1 remains active | Recovery restarts the same instance from guarded, idempotent D1 state. |
-| Workflow appears complete while D1 remains active | Treat it as incomplete responsibility and restart the same instance. |
-| Match ends with an authoritative loss, invalid receipt, or failed/timed-out ledger | D1 records the corresponding terminal business failure once. |
-| Third settlement exists but Gold is not yet due | Sleep until the exact entitlement `deliver_at`; do not invent a shorter delay. |
-| Delivery is due but Queue processing is delayed | Continue recoverably waiting while the reviewed pool window is open. |
-| Delivery window expires without the verified receipt | D1 records `DELIVERY_WINDOW_EXPIRED`; public modes remain disabled. |
-| D1 completion is retried | Existing guarded transition and immutable audit absorb the duplicate. |
+| Interruption                                                                       | Required recovery                                                                              |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| D1 operation commits before Workflow creation                                      | Exact-operation replay or narrow recovery creates the deterministic instance.                  |
+| Workflow creation succeeds but its response is lost                                | Re-ensure observes the same running/waiting instance; no second drill can be created.          |
+| Match dispatch fails before allocation                                             | Workflow step retry or same-instance restart dispatches the same proposal ID.                  |
+| Match allocation succeeds but the response is lost                                 | Re-read finds the exact ledger and waits; allocation is not duplicated.                        |
+| Workflow wakes before a match deadline                                             | It re-reads authoritative state and sleeps again; timing is derived from D1, not wake cadence. |
+| Workflow errors or is terminated while D1 remains active                           | Recovery restarts the same instance from guarded, idempotent D1 state.                         |
+| Workflow appears complete while D1 remains active                                  | Treat it as incomplete responsibility and restart the same instance.                           |
+| Match ends with an authoritative loss, invalid receipt, or failed/timed-out ledger | D1 records the corresponding terminal business failure once.                                   |
+| Third settlement exists but Gold is not yet due                                    | Sleep until the exact entitlement `deliver_at`; do not invent a shorter delay.                 |
+| Delivery is due but Queue processing is delayed                                    | Continue recoverably waiting while the reviewed pool window is open.                           |
+| Delivery window expires without the verified receipt                               | D1 records `DELIVERY_WINDOW_EXPIRED`; public modes remain disabled.                            |
+| D1 completion is retried                                                           | Existing guarded transition and immutable audit absorb the duplicate.                          |
 
 ## Gate and test requirements
 
@@ -181,3 +181,22 @@ The implementation milestone is not complete until executable evidence proves:
 This slice remains local-only. A complete exact-head release contract, green
 exact-head draft-PR CI, and explicit user authorization remain mandatory before
 Workflow provisioning, remote migration, or deployment.
+
+## Local evidence
+
+The focused Conquest operation, readiness, and Workflow suites pass 16/16
+tests. They prove binding-less acceptance leaves no D1 operation, a committed
+creation gap is recoverable under one instance, complete/errored/terminated
+Workflow state restarts while D1 remains active, tampered instances fail
+closed, transient dispatch errors leave the business operation `RUNNING`, the
+four-hour match deadline and 24-hour delivery boundary are exact, and the real
+three-win settlement still requires an independent final verifier.
+
+The mutation-tested migration/effect gate passes 6/6. Its SQLite fixtures adopt
+valid active operations, auto-bridge future `PREPARING` to `RUNNING`
+transitions, reject invalid active timestamps, and preserve immutable
+orchestration/failure evidence. The existing Conquest gate passes 13/13 and the
+production-target preflight passes 12/12 while pinning migration `0128`, all
+eight D1 guards, five contract guards, and the exact Workflow
+name/binding/class. The complete main Worker passes 89 files and 569 tests. A
+complete release and exact-head draft-PR CI remain required for this newer head.

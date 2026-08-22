@@ -15,8 +15,8 @@ uncommitted source-style Conquest `0121` attempt lifecycle was discarded;
 migrations `0119` and `0120` were reassessed in
 [`CLOUDFLARE_POST_MATCH_ORCHESTRATION.md`](./CLOUDFLARE_POST_MATCH_ORCHESTRATION.md)
 and were corrected and locally reverified at `6795a7fd`. The latest exact-head
-release and draft-PR CI passed at `e282602a` in GitHub Actions run
-<https://github.com/bunnybones1/OpenSky/actions/runs/32547892604>. A
+release and draft-PR CI passed at `35a61144` in GitHub Actions run
+<https://github.com/bunnybones1/OpenSky/actions/runs/32549365820>. A
 distinct, minimal `0121_conquest_v2_workflow_handoffs.sql` protects the
 Conquest Workflow/Queue boundary, and `0122_leaderboard_reward_workflow_handoffs.sql`
 protects the equivalent leaderboard business responsibility. Neither
@@ -37,6 +37,11 @@ cron finalization with one deterministic Workflow per accepted Google step-up.
 The Workflow preserves the exact deletion deadline, verifies private R2 cleanup
 before guarded D1 anonymization, and never turns infrastructure retry exhaustion
 into an abandoned privacy responsibility.
+Migration `0128_conquest_readiness_drill_workflows.sql` removes direct
+minute-scan advancement from the explicitly authorized Conquest readiness
+drill. One deterministic Workflow now drives each D1 operation, while Cron only
+re-ensures incomplete instances. Transient dispatch/platform faults remain
+recoverable and cannot become failed-match business outcomes.
 Wallet-proof challenge maintenance is isolated at `84948e70` and guarded at
 `498a8215`: request-path cleanup plus one low-frequency Cron Trigger preserve
 the exact proof and retention effects without coupling disposable D1 deletion
@@ -47,10 +52,10 @@ The production mutation pause remains in force.
 
 - Branch: `agent/cloud-weasel-cloudflare-port`
 - Draft PR: <https://github.com/bunnybones1/OpenSky/pull/1>
-- Last code/test checkpoint: `498a8215`
-  (`Guard wallet challenge maintenance effects`)
-- Latest tested runtime commit: `84948e70`
-  (`Isolate wallet challenge maintenance`)
+- Last code/test checkpoint: `5ba4949a`
+  (`Orchestrate Conquest drills with Workflows`)
+- Latest tested runtime commit: `5ba4949a`
+  (`Orchestrate Conquest drills with Workflows`)
 - Latest storage-readiness evidence checkpoint: `470a79c5`
   (`Refresh Cloudflare storage readiness`)
 - Production URL: <https://opensky-webapp.dysinski-tomasz.workers.dev>
@@ -85,8 +90,16 @@ The production mutation pause remains in force.
   pass 17/17, the cleanup gate passes 7/7, the corrected worker-runner gate
   passes 7/7, production preflight passes 12/12, release identity passes 6/6,
   and the full main Worker passes 88 files and 564 tests. No schema migration or
-  durable orchestration resource was added. A complete release and exact-head
-  draft-PR CI remain required for this newer documentation head.
+  durable orchestration resource was added. The complete release and exact-head
+  draft-PR CI passed at `35a61144` in GitHub run `32549365820`.
+- The Conquest readiness-drill runtime at `5ba4949a` is committed and locally
+  tested but is **not deployed**. Focused suites pass 16/16, the new
+  migration/effect gate passes 6/6, the existing Conquest gate passes 13/13,
+  production preflight passes 12/12, and the full main Worker passes 89 files
+  and 569 tests. One deterministic Workflow now owns each authorized operation;
+  D1 remains authoritative and the minute trigger only re-ensures incomplete
+  instances. A complete release and exact-head draft-PR CI remain required for
+  this newer head.
 - Migrations `0115_authoritative_match_decks.sql`,
   `0116_registered_matchmaker_bots.sql`, and
   `0117_match_experience_publication_state.sql`, plus
@@ -99,7 +112,8 @@ The production mutation pause remains in force.
   `0124_push_notification_queue_delivery.sql`, plus
   `0125_skypass_season_close_workflow_handoffs.sql`, plus
   `0126_referral_sticker_reward_workflow_handoffs.sql`, plus
-  `0127_account_deletion_workflow_orchestration.sql`, are committed but have **not**
+  `0127_account_deletion_workflow_orchestration.sql`, plus
+  `0128_conquest_readiness_drill_workflows.sql`, are committed but have **not**
   been applied to production. No Worker from `90ebe652` or later may be
   deployed until `0115` and `0116` exist, no Worker from `5636d901` or later
   may be deployed until `0117` exists, and no Worker from `c22d9263` or later
@@ -119,9 +133,10 @@ The production mutation pause remains in force.
   `31793663` or later may be deployed until `0126` and the exact reviewed
   referral-sticker Workflow/Queue/DLQ topology also exist. No Worker from
   `002b7ddf` or later may be deployed until `0127`, the exact reviewed account
-  deletion Workflow, and the private client-feedback R2 binding also exist. Apply
-  the migrations in order while match allocation is quiescent as described
-  below.
+  deletion Workflow, and the private client-feedback R2 binding also exist. No
+  Worker from `5ba4949a` or later may be deployed until `0128` and the exact
+  reviewed Conquest readiness-drill Workflow also exist. Apply the migrations
+  in order while match allocation is quiescent as described below.
 - Commits `50605dd0` and `9237cbd2` add production storage-topology safeguards
   and correct Queue dead-letter behavior. Commit `2863a23d` protects an
   already-snapshotted Conquest V2 cycle from a later schedule disable. Commit
@@ -2615,7 +2630,7 @@ production gate after any later commit.
    the separate private client-feedback retention policy before storing feedback.
 4. Complete the quiescent migration `0115` transition, then apply `0116`,
    `0117`, `0118`, `0119`, `0120`, `0121`, `0122`, `0123`, `0124`, `0125`, and
-   `0126`, and `0127` in order while
+   `0126`, `0127`, and `0128` in order while
    allocations remain stopped; provision the exact reviewed dormant reward
    Workflows, Queues, and DLQs; and then deploy/verify the exact tested game
    server without analytics producer bindings, as described under Production
@@ -2633,9 +2648,10 @@ production gate after any later commit.
    SkyPass Workflow/Queue/DLQ topology; and the main Worker from `31793663`
    assumes `0126` plus the reviewed referral-sticker Workflow/Queue/DLQ
    topology; and the main Worker from `002b7ddf` assumes `0127`, the reviewed
-   account-deletion Workflow, and the private `CLIENT_FEEDBACK` R2 binding. No
-   current deploy command may run against an older database or
-   incomplete topology.
+   account-deletion Workflow, and the private `CLIENT_FEEDBACK` R2 binding; the
+   main Worker from `5ba4949a` assumes `0128` plus the reviewed Conquest
+   readiness-drill Workflow. No current deploy command may run against an
+   older database or incomplete topology.
 5. Create the private analytics bucket `cloud-weasel-game-analytics` if absent.
    The existing analytics config binds it as `GAME_ANALYTICS`.
 6. Create a separate private client-feedback bucket and add the reviewed
@@ -2684,8 +2700,9 @@ production migration state. Migrations
 `0124_push_notification_queue_delivery.sql`, and
 `0125_skypass_season_close_workflow_handoffs.sql`, and
 `0126_referral_sticker_reward_workflow_handoffs.sql`, and
-`0127_account_deletion_workflow_orchestration.sql` are not: apply `0115` first
-at its quiescent game-server boundary, then `0116` through `0127` before
+`0127_account_deletion_workflow_orchestration.sql`, and
+`0128_conquest_readiness_drill_workflows.sql` are not: apply `0115` first
+at its quiescent game-server boundary, then `0116` through `0128` before
 deploying the current Workers. Keep both ranked-bot flags false and both reward
 schedules disabled throughout that baseline rollout. Every checked-in deploy
 command now performs the read-only schema preflight and refuses to spawn
@@ -2693,9 +2710,33 @@ Wrangler unless the prior invariants, corrected `0119`/`0120` responsibility
 contracts, `0121`/`0122` handoff guards, the `0123` delayed-Gold effect guards,
 the `0124` external-push outbox guards, the `0125` SkyPass close guards, the
 `0126` referral-sticker sweep guards, the `0127` account-deletion privacy
-guards, all five reviewed Workflow topologies, and the exact delayed-Gold,
-external-push, SkyPass, and
+guards, the `0128` Conquest drill guards, all six reviewed Workflow topologies,
+and the exact delayed-Gold, external-push, SkyPass, and
 referral-sticker producer/consumer/DLQ topologies are present.
+
+## Effect-faithful Conquest readiness-drill orchestration
+
+Commit `5ba4949a` replaces direct one-minute scan advancement with one
+deterministically named Workflow per explicitly authorized drill operation.
+The staff RPC still requires the separate RUN capability and exact operation
+key; D1 still guards isolated SYSTEM principals, three sequential authoritative
+target wins, the four-hour match deadline, the existing settlement, the exact
+24-hour off-chain Gold delivery, terminal operator outcomes, and a separate
+VERIFY actor before readiness can enable anything.
+
+Migration `0128` adopts every valid active operation and auto-creates Workflow
+responsibility on future `PREPARING` to `RUNNING` transitions. It stores no
+attempt count, retry ceiling, work batch, or abandonment status. Transient
+match-service or Workflow faults leave the operation recoverable; only
+authoritative match failure, timeout, invalid outcome, or delivery-window expiry
+becomes a terminal business result. Cron only re-ensures incomplete instances
+and cannot advance D1 state.
+
+Focused suites pass 16/16, the mutation-tested migration/effect gate passes
+6/6, the existing Conquest gate passes 13/13, and production preflight passes
+12/12; the full main Worker passes 89 files and 569 tests. The Workflow,
+migration, runtime, any live drill, and any activation remain unprovisioned,
+unapplied, and undeployed.
 
 ## Other outstanding work
 
@@ -2703,9 +2744,9 @@ referral-sticker producer/consumer/DLQ topologies are present.
 
 - Keep the pushed milestone and refreshed handoff behind green exact-head PR
   CI before any production work resumes.
-- Deploy and verify the tested SkyPass, referral-sticker, and account-deletion runtimes only after a
-  later documentation head passes the full release contract and exact-head PR
-  CI. Keep
+- Deploy and verify the tested SkyPass, referral-sticker, account-deletion, and
+  Conquest readiness runtimes only after a later documentation head passes the
+  full release contract and exact-head PR CI. Keep
   leaderboard rewards hidden until a real approved schedule exists.
 - The source registered bot account and unlocked-deck path is ported and
   verified locally. Keep optional ranked/PvP bots disabled until `0116`, the
@@ -2714,9 +2755,10 @@ referral-sticker producer/consumer/DLQ topologies are present.
 - For the `0115` transition, use the existing game-mode controls to disable
   new Practice and ranked allocations, allow already-active matches to end,
   and verify zero `creating` or `active` match rows. Apply `0115`, then `0116`
-  through `0127`; provision the exact dormant reward, external-push, SkyPass
-  season-close, and account-deletion topologies, deploy the exact tested game-server runtime immediately,
-  verify protocol health, and only then restore the previously enabled modes.
+  through `0128`; provision the exact dormant reward, external-push, SkyPass
+  season-close, account-deletion, and Conquest-readiness topologies, deploy the
+  exact tested game-server runtime immediately, verify protocol health, and
+  only then restore the previously enabled modes.
   Do not leave old game-server code accepting matches after the migration
   boundary.
 - Provision and verify the private analytics consumer in the safe order above;
@@ -2737,12 +2779,13 @@ referral-sticker producer/consumer/DLQ topologies are present.
 The TypeScript implementation, settlement receipts, operator flow, and safety
 gates are complete, including bounded level-ten delivery and delivery of
 snapshotted cycles across a later schedule disable. Production remains
-deliberately disabled. The reviewed Workflow, delivery Queue, and DLQ are not
-provisioned and migration `0121` is not applied. Before enabling it, Cloud
-Weasel still needs those resources, authoritative eligible Silver card IDs,
-weekly Gold IDs and window, separate proposer/activator/runner/verifier
-identities, three real drill matches, and the unchanged 24-hour observation
-period. Do not create or activate pools merely to make the UI nonempty.
+deliberately disabled. The reviewed reward Workflow, delivery Queue/DLQ, and
+readiness-drill Workflow are not provisioned; migrations `0121` and `0128` are
+not applied. Before enabling it, Cloud Weasel still needs those resources,
+authoritative eligible Silver card IDs, weekly Gold IDs and window, separate
+proposer/activator/runner/verifier identities, three real drill matches, and
+the unchanged 24-hour observation period. Do not create or activate pools
+merely to make the UI nonempty.
 
 ### Product configuration and decisions
 
@@ -2775,11 +2818,11 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116` through `0127`, deployment, and activation remain
+  but migrations `0116` through `0128`, deployment, and activation remain
   paused;
 - every production deploy command now fails closed until the remote D1 proves
-  the `0115` through `0127` invariants and exact reviewed
-  reward/push/SkyPass/referral-sticker/account-deletion topologies;
+  the `0115` through `0128` invariants and exact reviewed reward/push/SkyPass/
+  referral-sticker/account-deletion/Conquest-readiness topologies;
   the migration command remains the only preflight-exempt operation;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
@@ -2787,12 +2830,13 @@ At the pause audit:
 - Conquest was implemented but intentionally gated, not an unported service.
 
 The separately queued PromoteGrandmasters retry/failure, delayed Conquest Gold,
-and external-push audits are complete. No known dormant matchmaker, non-RPC
-route, or active source-worker disposition remains. The next safe local slice should come from
-a fresh effect/recovery audit of one remaining main-Worker responsibility or
-from original-interface player-flow evidence; the main known remaining work is
-controlled production provisioning, activation, and evidence—not a broad
-rewrite of the original application.
+external-push, and Conquest-readiness audits are complete. No known dormant
+matchmaker, non-RPC route, or active source-worker disposition remains. The
+next safe local slice is a read-only audit of the shared durable-effect
+discovery trigger and the complete undeployed migration/resource rollout, or
+additional original-interface player-flow evidence. The main known remaining
+work is controlled production provisioning, activation, and evidence—not a
+broad rewrite of the original application.
 
 ## Resume checklist
 
