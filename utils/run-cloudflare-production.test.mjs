@@ -479,24 +479,14 @@ test('requires the pinned private player-feedback bucket for account deletion', 
   )
 })
 
-test('builds explicit deploy and remote migration invocations', () => {
-  const config = configFor(REVIEWED_PRODUCTION_TARGETS.get('wrangler.jsonc'))
-  assert.deepEqual(productionInvocation('deploy', 'wrangler.jsonc', config), [
+test('builds only explicit deploy invocations', () => {
+  assert.deepEqual(productionInvocation('deploy', 'wrangler.jsonc'), [
     'deploy',
     '--config',
     '../wrangler.jsonc'
   ])
-  assert.deepEqual(productionInvocation('migrate', 'wrangler.jsonc', config), [
-    'd1',
-    'migrations',
-    'apply',
-    'opensky-auth',
-    '--remote',
-    '--config',
-    '../wrangler.jsonc'
-  ])
   assert.throws(
-    () => productionInvocation('delete', 'wrangler.jsonc', config),
+    () => productionInvocation('migrate', 'wrangler.jsonc'),
     /unsupported/
   )
 })
@@ -604,22 +594,18 @@ test('requires the exact reviewed remote schema before every deploy', () => {
   assert.ok(productionSchemaInvocation().includes('--json'))
 })
 
-test('places the read-only schema preflight before every deploy only', () => {
-  for (const [targetPath, target] of REVIEWED_PRODUCTION_TARGETS) {
-    const config = configFor(target)
-    const plan = productionOperationPlan('deploy', targetPath, config)
+test('places the read-only schema preflight before every deploy', () => {
+  for (const [targetPath] of REVIEWED_PRODUCTION_TARGETS) {
+    const plan = productionOperationPlan('deploy', targetPath)
     assert.deepEqual(
       plan.map(step => step.kind),
       ['schema-preflight', 'operation']
     )
     assert.deepEqual(plan[0].args, productionSchemaInvocation())
   }
-  const config = configFor(REVIEWED_PRODUCTION_TARGETS.get('wrangler.jsonc'))
-  assert.deepEqual(
-    productionOperationPlan('migrate', 'wrangler.jsonc', config).map(
-      step => step.kind
-    ),
-    ['operation']
+  assert.throws(
+    () => productionOperationPlan('migrate', 'wrangler.jsonc'),
+    /unsupported/
   )
 })
 
@@ -629,7 +615,7 @@ test('the production runner cannot bypass its reviewed preflight plan', async ()
     'utf8'
   )
   const ordered = [
-    'const plan = productionOperationPlan(operation, targetPath, config)',
+    'const plan = productionOperationPlan(operation, targetPath)',
     "const preflight = plan.find(step => step.kind === 'schema-preflight')",
     'const check = spawnSync(',
     'productionSchemaRow(check.stdout)',
@@ -977,8 +963,10 @@ test('requires every package deployment path to use the target runner', () => {
         'node ./utils/run-cloudflare-production.mjs deploy matchmaker-ts/wrangler.jsonc',
       'deploy:cloudflare:analytics':
         'node ./utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc',
-      'db:migrate:cloudflare:remote':
-        'node ./utils/run-cloudflare-production.mjs migrate wrangler.jsonc'
+      'db:plan:cloudflare:remote:0115':
+        'node ./utils/run-cloudflare-production-migrations.mjs plan authoritative-decks',
+      'db:plan:cloudflare:remote:0116-0128':
+        'node ./utils/run-cloudflare-production-migrations.mjs plan durable-runtime'
     }
   }
   const analyticsPackage = {
@@ -1008,6 +996,21 @@ test('requires every package deployment path to use the target runner', () => {
   assert.ok(
     productionScriptErrors(rootPackage, analyticsPackage).some(error =>
       error.includes('direct Wrangler')
+    )
+  )
+  rootPackage.scripts['db:migrate:cloudflare:remote'] =
+    'node ./utils/run-cloudflare-production.mjs migrate wrangler.jsonc'
+  assert.ok(
+    productionScriptErrors(rootPackage, analyticsPackage).some(error =>
+      error.includes('all-pending')
+    )
+  )
+  delete rootPackage.scripts['db:migrate:cloudflare:remote']
+  rootPackage.scripts['lookalike-migration'] =
+    'pnpm exec wrangler --config ../wrangler.jsonc d1 migrations apply opensky-auth --remote'
+  assert.ok(
+    productionScriptErrors(rootPackage, analyticsPackage).some(error =>
+      error.includes('all-pending')
     )
   )
 })

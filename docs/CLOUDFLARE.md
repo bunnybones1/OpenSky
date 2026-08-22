@@ -183,12 +183,25 @@ account, create that database and replace the generated `database_id` in the con
 pnpm --dir cloudflare exec wrangler d1 create opensky-auth --config ../wrangler.jsonc
 ```
 
-Apply migrations and configure the secrets above before deploying:
+Configure the secrets above before deploying. Production migrations are split
+at the authoritative-deck cutover boundary. These commands only print the
+content-addressed plan; they do not contact or mutate Cloudflare:
 
 ```sh
-pnpm db:migrate:cloudflare:remote
-pnpm deploy:cloudflare
+pnpm db:plan:cloudflare:remote:0115
+pnpm db:plan:cloudflare:remote:0116-0128
 ```
+
+The first phase may be applied only after every reviewed allocation mode is
+disabled and all `creating`/`active` matches have drained. The second phase may
+be applied only after the first phase's receipt and authoritative-deck schema
+are verified. Each printed plan binds the exact Git head, production account
+and D1 ID, migration filenames and file hashes to a confirmation digest. Its
+printed `apply` command additionally requires an explicitly supplied successful
+exact-head PR CI run. A retry accepts only a canonical applied prefix of that
+same phase, allowing safe recovery if Wrangler committed earlier migrations
+before a later one failed. Do not execute either apply command or deploy while
+the production pause is active.
 
 Production package scripts use one reviewed target runner. It pins the Cloud
 Weasel account, Worker names, and `opensky-auth` database ID from the checked-in
@@ -199,13 +212,14 @@ Wrangler command.
 
 Before any deploy operation, that runner also uses the reviewed root config to
 execute a fixed read-only query against the production auth D1 database. It
-requires migrations through `0124`, including authoritative decks, registered
+requires migrations through `0128`, including authoritative decks, registered
 bots, atomic XP/account-stat publication, recoverable post-match
 responsibilities, Conquest and leaderboard Workflow/Queue handoff receipts,
-delayed-Gold Queue effect guards, and external-push outbox/Queue guards. It
+delayed-Gold Queue effect guards, external-push outbox/Queue guards, SkyPass,
+referral-sticker, account-deletion, and Conquest-readiness orchestration. It
 refuses to spawn the deploy process on a missing, malformed, unsuccessful,
-duplicate, or unexpected result. The migration command is intentionally exempt
-so it can bring the schema forward before a deploy.
+duplicate, or unexpected result. The former all-pending remote migration path
+is retired; the target gate rejects any package script that restores it.
 
 Component deploys also fail closed on their relevant typechecks and complete
 unit/Workers integration suites:
@@ -3224,9 +3238,10 @@ and wallet-proof corrections are complete locally. No known active source
 runner or main-Worker business responsibility lacks a reviewed disposition.
 That read-only audit is now recorded in
 [`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
-It requires independent `waitUntil` ownership for the eight durable discovery
-responsibilities and a staged replacement for the unsafe all-pending remote
-migration command before production can be considered. Additional
+Its two local safeguards are now implemented: independent `waitUntil` ownership
+for all eight durable discovery responsibilities and a staged,
+content-addressed replacement for the unsafe all-pending remote migration
+command. Additional
 original-interface player-flow evidence remains useful; player-facing parity
 must continue using the original interface rather than redesigning it.
 

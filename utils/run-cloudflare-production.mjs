@@ -800,28 +800,11 @@ export const productionTargetErrors = (
   return errors
 }
 
-export const productionInvocation = (operation, targetPath, config) => {
+export const productionInvocation = (operation, targetPath) => {
   const normalized = normalizedTargetPath(targetPath)
   const configFromRunner = path.posix.join('..', normalized)
   if (operation === 'deploy') {
     return ['deploy', '--config', configFromRunner]
-  }
-  if (operation === 'migrate') {
-    const databases = authDatabase(config)
-    if (databases.length !== 1) {
-      throw new Error(
-        `${normalized} has no unambiguous AUTH_DB migration target`
-      )
-    }
-    return [
-      'd1',
-      'migrations',
-      'apply',
-      databases[0].database_name,
-      '--remote',
-      '--config',
-      configFromRunner
-    ]
   }
   throw new Error(`unsupported Cloudflare production operation: ${operation}`)
 }
@@ -838,18 +821,13 @@ export const productionSchemaInvocation = () => [
   PRODUCTION_SCHEMA_QUERY
 ]
 
-export const productionOperationPlan = (operation, targetPath, config) => {
-  const operationStep = {
+export const productionOperationPlan = (operation, targetPath) => [
+  { kind: 'schema-preflight', args: productionSchemaInvocation() },
+  {
     kind: 'operation',
-    args: productionInvocation(operation, targetPath, config)
+    args: productionInvocation(operation, targetPath)
   }
-  return operation === 'deploy'
-    ? [
-        { kind: 'schema-preflight', args: productionSchemaInvocation() },
-        operationStep
-      ]
-    : [operationStep]
-}
+]
 
 export const productionSchemaRow = output => {
   let parsed
@@ -940,8 +918,10 @@ export const productionScriptErrors = (rootPackage, analyticsPackage) => {
       'node ./utils/run-cloudflare-production.mjs deploy matchmaker-ts/wrangler.jsonc',
     'deploy:cloudflare:analytics':
       'node ./utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc',
-    'db:migrate:cloudflare:remote':
-      'node ./utils/run-cloudflare-production.mjs migrate wrangler.jsonc'
+    'db:plan:cloudflare:remote:0115':
+      'node ./utils/run-cloudflare-production-migrations.mjs plan authoritative-decks',
+    'db:plan:cloudflare:remote:0116-0128':
+      'node ./utils/run-cloudflare-production-migrations.mjs plan durable-runtime'
   }
   const errors = []
   const hasDirectWranglerCommand = script => /\bwrangler\s/.test(script ?? '')
@@ -952,6 +932,18 @@ export const productionScriptErrors = (rootPackage, analyticsPackage) => {
     }
     if (hasDirectWranglerCommand(script)) {
       errors.push(`${name} contains a direct Wrangler production command`)
+    }
+  }
+  for (const [name, script] of Object.entries(scripts)) {
+    if (
+      name === 'db:migrate:cloudflare:remote' ||
+      script.includes('run-cloudflare-production.mjs migrate') ||
+      (/\bwrangler\b.*\bd1\s+migrations\s+apply\b/.test(script) &&
+        /\s--remote\b/.test(script))
+    ) {
+      errors.push(
+        `${name} restores the retired all-pending production migration path`
+      )
     }
   }
   if (
@@ -984,9 +976,9 @@ export const productionScriptErrors = (rootPackage, analyticsPackage) => {
 const main = async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const commandArguments = process.argv.slice(2)
-  if (commandArguments.length !== 2) {
+  if (commandArguments.length !== 2 || commandArguments[0] !== 'deploy') {
     throw new Error(
-      'usage: run-cloudflare-production.mjs <deploy|migrate> <reviewed config>'
+      'usage: run-cloudflare-production.mjs deploy <reviewed config>'
     )
   }
   const [operation, requestedTarget] = commandArguments
@@ -1010,7 +1002,7 @@ const main = async () => {
   ]
   if (errors.length) throw new Error(errors.join('\n'))
 
-  const plan = productionOperationPlan(operation, targetPath, config)
+  const plan = productionOperationPlan(operation, targetPath)
   process.stdout.write(
     `Cloudflare production target: ${config.name} in reviewed account ${config.account_id}\n`
   )

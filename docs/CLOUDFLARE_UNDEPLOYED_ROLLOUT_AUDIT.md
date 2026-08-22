@@ -2,8 +2,8 @@
 
 Status date: 2026-08-21
 
-Status: discovery isolation is implemented and directly tested locally; staged
-migration replacement remains pending. This audit authorizes no provisioning,
+Status: discovery isolation and the staged migration replacement are
+implemented and directly tested locally. This audit authorizes no provisioning,
 migration, deployment, activation, live drill, or production mutation.
 
 ## Scope
@@ -16,8 +16,9 @@ topology.
 
 ## Decision 1: isolate discovery lifetimes
 
-The one-minute trigger currently starts eight independent discovery/recovery
-responsibilities inside one `Promise.all` and registers only that aggregate
+At audit time, the one-minute trigger started eight independent
+discovery/recovery responsibilities inside one `Promise.all` and registered
+only that aggregate
 with `ctx.waitUntil`. A rejection settles the aggregate immediately even though
 other JavaScript promises may still have D1, Workflow, Queue, or service-binding
 I/O in flight. Those sibling effects are idempotent, but relying on them to
@@ -38,7 +39,7 @@ running even when another rejects. Therefore the target boundary is one
   terminal abandonment state is introduced; and
 - the separate low-frequency wallet-challenge cleanup branch remains isolated.
 
-The runtime needs a direct test that injects one rejecting discovery and one
+The runtime now has a direct test that injects one rejecting discovery and one
 still-running sibling, proves both are registered independently, and proves the
 sibling completes. A mutation-tested release gate must reject restoration of a
 single `Promise.all`/`Promise.allSettled` discovery owner or loss/addition of an
@@ -56,7 +57,7 @@ Practice and ranked allocation is disabled and every `creating`/`active` match
 has drained. Only then may `0116` through `0128` be applied and the matching
 Workers deployed before allocations resume.
 
-The checked-in remote migration command invokes:
+The former checked-in remote migration command invoked:
 
 ```text
 wrangler d1 migrations apply opensky-auth --remote
@@ -66,7 +67,7 @@ The installed Wrangler command applies every unapplied migration and exposes
 no migration-name, upper-bound, or single-file selector. With production still
 at the previously observed pre-`0115` schema, that command would apply `0115`
 through `0128` in one invocation. It cannot implement the reviewed quiescent
-boundary and must fail closed before any production authorization.
+boundary and has been removed.
 
 The replacement must use explicit reviewed phases while preserving canonical
 `d1_migrations` names:
@@ -100,6 +101,31 @@ pinned, testable without network mutation, and incapable of silently falling
 back to the all-pending command. It must not be executed while the production
 pause is active.
 
+The replacement implements those constraints in
+`utils/run-cloudflare-production-migrations.mjs`:
+
+- plan-only package scripts expose either `0115` alone or exactly `0116`
+  through `0128`, and perform no Cloudflare command;
+- a SHA-256 confirmation binds the exact Git head, pinned account/database,
+  canonical migration names, and file content hashes;
+- apply requires that exact digest, a clean pushed head, and a successful
+  exact-head `Cloudflare release contract` PR run;
+- a fixed read-only D1 query proves the exact prior migration receipts, all
+  reviewed allocation modes disabled, zero in-flight matches, and the expected
+  authoritative-deck schema state before Wrangler is started;
+- a retry may resume only from an exact canonical prefix of the confirmed
+  phase, preserving recoverability after Wrangler has committed earlier
+  migrations and a later migration fails;
+- only the confirmed phase is copied into a temporary stripped Wrangler
+  migration directory, preserving Wrangler's per-migration transaction,
+  backup, rollback, and canonical `d1_migrations` receipt behavior; and
+- the same state is checked after the apply, followed by the complete `0128`
+  schema invariant preflight after the dormant-runtime phase.
+
+The deployment runner no longer accepts a `migrate` operation, and the target
+gate rejects the old script, aliases to it, or direct remote all-pending
+Wrangler commands. No apply command has been run.
+
 Cloudflare migration reference:
 
 - <https://developers.cloudflare.com/d1/reference/migrations/>
@@ -132,7 +158,10 @@ publication.
 5. stop before every production mutation unless the user explicitly authorizes
    the exact reviewed rollout head and phase.
 
-The first step is complete locally: all eight responsibilities are registered
+The first two steps are complete locally: all eight responsibilities are registered
 independently before execution, an injected sibling failure test proves the
 remaining lifetime completes, and the release gate rejects aggregate ownership,
-swallowed failure, inventory drift, or lost direct evidence.
+swallowed failure, inventory drift, or lost direct evidence. The staged runner's
+tests prove exact phase inventory and hashes, strict read-only cutover state,
+exact-head CI identity, temporary-directory isolation and cleanup, ordered
+preflight/apply/postflight boundaries, and retirement of the bulk path.

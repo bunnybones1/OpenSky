@@ -97,7 +97,7 @@
     "check:cloudflare:locales": "node --test ./utils/audit-cloudflare-locales.test.mjs && node ./utils/audit-cloudflare-locales.mjs",
     "check:cloudflare:reward-timing": "node --test ./utils/check-cloudflare-reward-timing.test.mjs && node ./utils/check-cloudflare-reward-timing.mjs",
     "check:cloudflare:ci": "node --test ./utils/audit-cloudflare-ci.test.mjs && node ./utils/audit-cloudflare-ci.mjs",
-    "check:cloudflare:targets": "node --test ./utils/run-cloudflare-production.test.mjs && node ./utils/check-cloudflare-production-targets.mjs",
+    "check:cloudflare:targets": "node --test ./utils/run-cloudflare-production.test.mjs ./utils/run-cloudflare-production-migrations.test.mjs && node ./utils/check-cloudflare-production-targets.mjs",
     "check:cloudflare:typecheck": "pnpm --filter @opensky/cloudflare typecheck && pnpm --filter @opensky/cloudflare-game-server --filter @opensky/cloudflare-match-service --filter @opensky/cloudflare-matchmaker --workspace-concurrency=1 typecheck && pnpm --filter @opensky/game-analytics typecheck:cloudflare",
     "check:cloudflare:browser-code": "pnpm --filter @opensky/webapp type-check && pnpm --dir game exec tsc --noEmit --skipLibCheck && pnpm --filter @opensky/game test",
     "check:cloudflare:main-worker": "pnpm --filter @opensky/cloudflare test",
@@ -127,7 +127,8 @@
     "test:cloudflare": "pnpm --filter @opensky/cloudflare test",
     "typecheck:cloudflare": "pnpm --filter @opensky/cloudflare typecheck",
     "db:migrate:cloudflare:local": "pnpm --dir cloudflare exec wrangler d1 migrations apply opensky-auth --local --config ../wrangler.jsonc",
-    "db:migrate:cloudflare:remote": "pnpm check:cloudflare:targets && node ./utils/run-cloudflare-production.mjs migrate wrangler.jsonc"
+    "db:plan:cloudflare:remote:0115": "pnpm check:cloudflare:targets && node ./utils/run-cloudflare-production-migrations.mjs plan authoritative-decks",
+    "db:plan:cloudflare:remote:0116-0128": "pnpm check:cloudflare:targets && node ./utils/run-cloudflare-production-migrations.mjs plan durable-runtime"
   },
   "devDependencies": {
     "dpdm": "^3.10.0",

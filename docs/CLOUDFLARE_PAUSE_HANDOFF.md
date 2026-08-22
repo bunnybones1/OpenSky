@@ -2818,12 +2818,18 @@ At the pause audit:
   reviewed ported, internalized, superseded, or local-tooling dispositions,
   with the inventory enforced by complete and component release paths;
 - the source registered ranked/PvP bot path was ported and verified locally,
-  but migrations `0116` through `0128`, deployment, and activation remain
+  but migrations `0115` through `0128`, deployment, and activation remain
   paused;
 - every production deploy command now fails closed until the remote D1 proves
   the `0115` through `0128` invariants and exact reviewed reward/push/SkyPass/
   referral-sticker/account-deletion/Conquest-readiness topologies;
-  the migration command remains the only preflight-exempt operation;
+- the all-pending production migration command is retired. Plan-only commands
+  now bind `0115` and `0116`–`0128` to separate content-addressed manifests;
+  apply additionally requires an exact confirmation digest, clean pushed head,
+  successful exact-head PR CI, exact D1 receipts, disabled allocations, zero
+  in-flight matches, and postflight schema evidence. A retry accepts only a
+  canonical applied prefix of the same confirmed phase, so a later migration
+  failure cannot strand already committed earlier migrations;
 - `game-analytics` is the only ported service not yet deployed; its former R2
   account blocker is removed, but provisioning is intentionally paused before
   bucket creation;
@@ -2835,12 +2841,13 @@ matchmaker, non-RPC route, or active source-worker disposition remains. The
 shared durable-effect discovery and undeployed migration/resource rollout audit
 is now recorded in
 [`CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md`](./CLOUDFLARE_UNDEPLOYED_ROLLOUT_AUDIT.md).
-It found two local safeguards to complete before production can be considered:
-independent `waitUntil` ownership for all eight discovery responsibilities and
-a staged replacement for the current all-pending remote migration command. The
-main known remaining work after those safeguards is controlled production
-provisioning, activation, and evidence—not a broad rewrite of the original
-application.
+Its two local safeguards are complete: all eight discovery responsibilities now
+have independent `waitUntil` ownership, and the unsafe all-pending remote
+migration command has a tested staged replacement. Neither migration phase was
+executed. The main known remaining work after those safeguards is complete
+resource inventory/preflight evidence, then separately authorized controlled
+production provisioning, migration, rollout, activation, and evidence—not a
+broad rewrite of the original application.
 
 ## Resume checklist
 
