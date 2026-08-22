@@ -13,6 +13,7 @@ import {
   REVIEWED_ANALYTICS_BUCKET,
   REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE,
   REVIEWED_ANALYTICS_QUEUE,
+  REVIEWED_ACCOUNT_DELETION_WORKFLOW,
   REVIEWED_AUTH_DB_ID,
   REVIEWED_CLIENT_FEEDBACK_BUCKET,
   REVIEWED_CLOUDFLARE_ACCOUNT_ID,
@@ -108,6 +109,11 @@ const configFor = target => ({
             name: REVIEWED_REFERRAL_STICKER_WORKFLOW,
             binding: 'REFERRAL_STICKER_REWARD_WORKFLOW',
             class_name: 'ReferralStickerRewardWorkflow'
+          },
+          {
+            name: REVIEWED_ACCOUNT_DELETION_WORKFLOW,
+            binding: 'ACCOUNT_DELETION_WORKFLOW',
+            class_name: 'AccountDeletionWorkflow'
           }
         ],
         queues: {
@@ -164,6 +170,16 @@ const configFor = target => ({
             }
           ]
         }
+      }
+    : {}),
+  ...(target.supportsClientFeedback
+    ? {
+        r2_buckets: [
+          {
+            binding: 'CLIENT_FEEDBACK',
+            bucket_name: REVIEWED_CLIENT_FEEDBACK_BUCKET
+          }
+        ]
       }
     : {})
 })
@@ -279,6 +295,12 @@ test('pins all reward Workflow, Queue, and dead-letter topologies', () => {
       ...baseline,
       workflows: baseline.workflows.filter(
         workflow => workflow.binding !== 'REFERRAL_STICKER_REWARD_WORKFLOW'
+      )
+    },
+    {
+      ...baseline,
+      workflows: baseline.workflows.filter(
+        workflow => workflow.binding !== 'ACCOUNT_DELETION_WORKFLOW'
       )
     },
     {
@@ -403,7 +425,7 @@ test('requires the optional game-server analytics bindings to move together', ()
   }
 })
 
-test('pins the optional player-feedback bucket when it is enabled', () => {
+test('requires the pinned private player-feedback bucket for account deletion', () => {
   const targetPath = 'wrangler.jsonc'
   const baseline = configFor(REVIEWED_PRODUCTION_TARGETS.get(targetPath))
   assert.deepEqual(
@@ -417,6 +439,12 @@ test('pins the optional player-feedback bucket when it is enabled', () => {
       ]
     }),
     []
+  )
+  assert.ok(
+    productionTargetErrors(targetPath, {
+      ...baseline,
+      r2_buckets: []
+    }).length > 0
   )
   assert.ok(
     productionTargetErrors(targetPath, {
@@ -635,7 +663,10 @@ test('accepts only one successful complete read-only schema row', () => {
     skypass_workflow_contract_guards_present: 5,
     referral_sticker_workflow_tables_present: 4,
     referral_sticker_workflow_guards_present: 14,
-    referral_sticker_workflow_contract_guards_present: 6
+    referral_sticker_workflow_contract_guards_present: 6,
+    account_deletion_workflow_tables_present: 2,
+    account_deletion_workflow_guards_present: 9,
+    account_deletion_workflow_contract_guards_present: 4
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -859,6 +890,26 @@ test('accepts only one successful complete read-only schema row', () => {
       {
         results: [
           { ...complete, referral_sticker_workflow_contract_guards_present: 5 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_deletion_workflow_tables_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, account_deletion_workflow_guards_present: 8 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, account_deletion_workflow_contract_guards_present: 3 }
         ],
         success: true
       }

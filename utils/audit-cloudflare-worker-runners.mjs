@@ -9,8 +9,15 @@ import { pathToFileURL } from 'node:url'
 export const EXPECTED_RUNNERS = {
   AccountDeletionRunner: {
     disposition: 'ported',
-    evidenceFile: 'cloudflare/src/account-deletion.ts',
-    evidence: ['finalizeDue', "status = 'PENDING' AND execute_at <= ?"]
+    evidenceFile: 'cloudflare/src/account-deletion-orchestration.ts',
+    evidence: [
+      'dispatchPendingAccountDeletions',
+      'AccountDeletionWorkflow',
+      'step.sleepUntil(',
+      'deleteAccountPrivateFeedback',
+      'finalizeAcceptedAccountDeletion',
+      'instance.restart()'
+    ]
   },
   BalanceSyncRunner: {
     disposition: 'superseded',

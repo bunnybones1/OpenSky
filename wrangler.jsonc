@@ -25,6 +25,12 @@
       "migrations_dir": "./cloudflare/migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "CLIENT_FEEDBACK",
+      "bucket_name": "cloud-weasel-client-feedback"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

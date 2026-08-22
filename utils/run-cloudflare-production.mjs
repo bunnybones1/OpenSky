@@ -10,6 +10,8 @@ export const REVIEWED_ANALYTICS_QUEUE = 'cloud-weasel-game-analytics'
 export const REVIEWED_ANALYTICS_DEAD_LETTER_QUEUE =
   'cloud-weasel-game-analytics-dead-letter'
 export const REVIEWED_CLIENT_FEEDBACK_BUCKET = 'cloud-weasel-client-feedback'
+export const REVIEWED_ACCOUNT_DELETION_WORKFLOW =
+  'cloud-weasel-account-deletion'
 export const REVIEWED_CONQUEST_GOLD_QUEUE =
   'cloud-weasel-conquest-gold-delivery'
 export const REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE =
@@ -39,7 +41,7 @@ export const REVIEWED_REFERRAL_STICKER_QUEUE =
 export const REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE =
   'cloud-weasel-referral-sticker-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0126_referral_sticker_reward_workflow_handoffs.sql'
+  '0127_account_deletion_workflow_orchestration.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -403,7 +405,49 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       AND name = 'referral_sticker_reward_queue_failures_insert_guard'
       AND instr(sql, "player.status = 'PENDING'") > 0
       AND instr(sql, "delivery.status = 'PENDING'") > 0)
-    AS referral_sticker_workflow_contract_guards_present;`
+    AS referral_sticker_workflow_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'account_deletion_orchestrations',
+      'account_deletion_orchestration_failures'
+    )) AS account_deletion_workflow_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'account_deletion_request_orchestration_insert',
+      'account_deletion_orchestration_insert_guard',
+      'account_deletion_orchestration_update_guard',
+      'account_deletion_request_workflow_completion_guard',
+      'account_deletion_orchestration_completion_guard',
+      'account_deletion_orchestration_no_delete',
+      'account_deletion_orchestration_failure_insert_guard',
+      'account_deletion_orchestration_failure_no_update',
+      'account_deletion_orchestration_failure_no_delete'
+    )) AS account_deletion_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'account_deletion_orchestrations'
+      AND instr(sql, "'account-deletion-' || user_id") > 0
+      AND instr(sql, "'DEAD'") = 0
+      AND instr(sql, 'attempt_count') = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'account_deletion_request_workflow_completion_guard'
+      AND instr(sql, 'r2_cleanup_verified_at IS NOT NULL') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'account_deletion_orchestration_completion_guard'
+      AND instr(sql, 'auth_identities') > 0
+      AND instr(sql, 'wallet_connections') > 0
+      AND instr(sql, 'user_storage') > 0
+      AND instr(sql, 'client_feedback_rate_limits') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'account_deletion_orchestration_failure_insert_guard'
+      AND instr(sql, 'orchestration.completed_at IS NULL') > 0)
+    AS account_deletion_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -537,7 +581,6 @@ const optionalAnalyticsProducerErrors = config => {
 const optionalClientFeedbackErrors = config => {
   const allBuckets = config?.r2_buckets ?? []
   const buckets = r2Bindings(config, 'CLIENT_FEEDBACK')
-  if (!allBuckets.length) return []
   if (
     allBuckets.length !== 1 ||
     buckets.length !== 1 ||
@@ -602,8 +645,11 @@ const rewardOrchestrationErrors = config => {
   const referralStickerConsumer = consumers.find(
     value => value.queue === REVIEWED_REFERRAL_STICKER_QUEUE
   )
+  const accountDeletionWorkflow = workflows.find(
+    value => value.binding === 'ACCOUNT_DELETION_WORKFLOW'
+  )
   if (
-    workflows.length !== 4 ||
+    workflows.length !== 5 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
     producers.length !== 6 ||
@@ -629,10 +675,12 @@ const rewardOrchestrationErrors = config => {
     referralStickerWorkflow?.class_name !== 'ReferralStickerRewardWorkflow' ||
     referralStickerProducer?.queue !== REVIEWED_REFERRAL_STICKER_QUEUE ||
     referralStickerConsumer?.dead_letter_queue !==
-      REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE
+      REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE ||
+    accountDeletionWorkflow?.name !== REVIEWED_ACCOUNT_DELETION_WORKFLOW ||
+    accountDeletionWorkflow?.class_name !== 'AccountDeletionWorkflow'
   ) {
     return [
-      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, external-push, SkyPass, and referral-sticker Workflow/Queue/dead-letter topology'
+      'main Worker must retain the reviewed account-deletion, delayed Gold, Conquest V2, leaderboard, external-push, SkyPass, and referral-sticker Workflow/Queue/dead-letter topology'
     ]
   }
   return []
@@ -809,7 +857,10 @@ export const productionSchemaRow = output => {
     row?.skypass_workflow_contract_guards_present !== 5 ||
     row?.referral_sticker_workflow_tables_present !== 4 ||
     row?.referral_sticker_workflow_guards_present !== 14 ||
-    row?.referral_sticker_workflow_contract_guards_present !== 6
+    row?.referral_sticker_workflow_contract_guards_present !== 6 ||
+    row?.account_deletion_workflow_tables_present !== 2 ||
+    row?.account_deletion_workflow_guards_present !== 9 ||
+    row?.account_deletion_workflow_contract_guards_present !== 4
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`
