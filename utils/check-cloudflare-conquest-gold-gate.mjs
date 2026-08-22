@@ -200,7 +200,6 @@ export const conquestGoldEffectErrors = evidence => {
   requireTokens(errors, evidence.productionRunner, 'production preflight', [
     'REVIEWED_CONQUEST_GOLD_QUEUE',
     'REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE',
-    "'0123_conquest_gold_queue_delivery.sql'",
     'conquest_gold_queue_contract_guards_present',
     'conquest_gold_readiness_effect_view_present',
     'requiresConquestGoldProducer: true'

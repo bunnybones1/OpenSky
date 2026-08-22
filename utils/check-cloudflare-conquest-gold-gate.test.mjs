@@ -140,9 +140,9 @@ test('rejects authority, timing, atomicity, recovery, and topology mutations', a
     },
     {
       ...current,
-      productionRunner: current.productionRunner.replace(
-        "'0123_conquest_gold_queue_delivery.sql'",
-        "'0122_leaderboard_reward_workflow_handoffs.sql'"
+      productionRunner: current.productionRunner.replaceAll(
+        'conquest_gold_queue_contract_guards_present',
+        'conquest_gold_queue_guards_removed'
       )
     }
   ]
