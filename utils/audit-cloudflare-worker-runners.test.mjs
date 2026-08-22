@@ -128,3 +128,21 @@ test('requires SkyPass Workflow discovery and Queue consumption rather than dire
     )
   )
 })
+
+test('requires referral Workflow discovery and Queue consumption rather than direct cron grants', () => {
+  const evidence = completeEvidence()
+  evidence.GrantStickerRewardsRunner =
+    evidence.GrantStickerRewardsRunner.replace(
+      'dispatchDueReferralStickerRewards',
+      'runReferralStickerRewards'
+    ).replace('handleReferralStickerRewardQueue', 'grantFromScheduledHandler')
+  const audit = auditWorkerRunners({
+    source: sourceFor(Object.keys(EXPECTED_RUNNERS)),
+    evidenceSources: evidence
+  })
+  assert.ok(
+    audit.errors.some(error =>
+      error.includes('GrantStickerRewardsRunner is missing ported evidence')
+    )
+  )
+})

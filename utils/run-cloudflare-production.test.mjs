@@ -26,6 +26,9 @@ import {
   REVIEWED_LEADERBOARD_WORKFLOW,
   REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE,
   REVIEWED_PUSH_NOTIFICATION_QUEUE,
+  REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE,
+  REVIEWED_REFERRAL_STICKER_QUEUE,
+  REVIEWED_REFERRAL_STICKER_WORKFLOW,
   REVIEWED_SKYPASS_DEAD_LETTER_QUEUE,
   REVIEWED_SKYPASS_QUEUE,
   REVIEWED_SKYPASS_WORKFLOW,
@@ -100,6 +103,11 @@ const configFor = target => ({
             name: REVIEWED_SKYPASS_WORKFLOW,
             binding: 'SKYPASS_SEASON_CLOSE_WORKFLOW',
             class_name: 'SkypassSeasonCloseWorkflow'
+          },
+          {
+            name: REVIEWED_REFERRAL_STICKER_WORKFLOW,
+            binding: 'REFERRAL_STICKER_REWARD_WORKFLOW',
+            class_name: 'ReferralStickerRewardWorkflow'
           }
         ],
         queues: {
@@ -123,6 +131,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_SKYPASS_QUEUE,
               binding: 'SKYPASS_AUTO_CLAIM_QUEUE'
+            },
+            {
+              queue: REVIEWED_REFERRAL_STICKER_QUEUE,
+              binding: 'REFERRAL_STICKER_REWARD_QUEUE'
             }
           ],
           consumers: [
@@ -145,6 +157,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_SKYPASS_QUEUE,
               dead_letter_queue: REVIEWED_SKYPASS_DEAD_LETTER_QUEUE
+            },
+            {
+              queue: REVIEWED_REFERRAL_STICKER_QUEUE,
+              dead_letter_queue: REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE
             }
           ]
         }
@@ -254,6 +270,23 @@ test('pins all reward Workflow, Queue, and dead-letter topologies', () => {
         ...baseline.queues,
         consumers: baseline.queues.consumers.map(consumer =>
           consumer.queue === REVIEWED_SKYPASS_QUEUE
+            ? { ...consumer, dead_letter_queue: undefined }
+            : consumer
+        )
+      }
+    },
+    {
+      ...baseline,
+      workflows: baseline.workflows.filter(
+        workflow => workflow.binding !== 'REFERRAL_STICKER_REWARD_WORKFLOW'
+      )
+    },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        consumers: baseline.queues.consumers.map(consumer =>
+          consumer.queue === REVIEWED_REFERRAL_STICKER_QUEUE
             ? { ...consumer, dead_letter_queue: undefined }
             : consumer
         )
@@ -500,7 +533,17 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'skypass_auto_claim_delivery_update_guard',
     'skypass_season_close_cycles_transition_guard',
     'policy_content_sha256',
-    'fulfillment_policy_hash'
+    'fulfillment_policy_hash',
+    'referral_sticker_reward_sweeps',
+    'referral_sticker_reward_sweep_players',
+    'referral_sticker_reward_sweep_deliveries',
+    'referral_sticker_reward_queue_failures',
+    'referral_sticker_reward_sweeps_insert_guard',
+    'referral_sticker_reward_sweeps_snapshot_guard',
+    'referral_sticker_reward_sweep_players_update_guard',
+    'referral_sticker_reward_sweep_deliveries_update_guard',
+    'referral_sticker_reward_queue_failures_insert_guard',
+    "origin IN ('SCHEDULE', 'MIGRATION')"
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -589,7 +632,10 @@ test('accepts only one successful complete read-only schema row', () => {
     skypass_workflow_tables_present: 3,
     skypass_autoclaimed_column_present: 1,
     skypass_workflow_guards_present: 14,
-    skypass_workflow_contract_guards_present: 5
+    skypass_workflow_contract_guards_present: 5,
+    referral_sticker_workflow_tables_present: 4,
+    referral_sticker_workflow_guards_present: 14,
+    referral_sticker_workflow_contract_guards_present: 6
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -792,6 +838,28 @@ test('accepts only one successful complete read-only schema row', () => {
     JSON.stringify([
       {
         results: [{ ...complete, skypass_workflow_contract_guards_present: 4 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, referral_sticker_workflow_tables_present: 3 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, referral_sticker_workflow_guards_present: 13 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, referral_sticker_workflow_contract_guards_present: 5 }
+        ],
         success: true
       }
     ]),

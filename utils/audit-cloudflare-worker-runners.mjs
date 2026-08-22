@@ -63,8 +63,15 @@ export const EXPECTED_RUNNERS = {
   },
   GrantStickerRewardsRunner: {
     disposition: 'ported',
-    evidenceFile: 'cloudflare/src/referral-sticker-rewards.ts',
-    evidence: ['referral_sticker_reward_awards', 'player_items']
+    evidenceFile: 'cloudflare/src/referral-sticker-reward-orchestration.ts',
+    evidence: [
+      'dispatchDueReferralStickerRewards',
+      'ReferralStickerRewardWorkflow',
+      'handleReferralStickerRewardQueue',
+      'step.sleepUntil(',
+      'referral_sticker_reward_queue_failures',
+      'instance.restart()'
+    ]
   },
   LazyMigrationRunner: {
     disposition: 'superseded',

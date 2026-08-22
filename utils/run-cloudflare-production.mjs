@@ -32,8 +32,14 @@ export const REVIEWED_SKYPASS_WORKFLOW = 'cloud-weasel-skypass-season-close'
 export const REVIEWED_SKYPASS_QUEUE = 'cloud-weasel-skypass-auto-claim-delivery'
 export const REVIEWED_SKYPASS_DEAD_LETTER_QUEUE =
   'cloud-weasel-skypass-auto-claim-delivery-dlq'
+export const REVIEWED_REFERRAL_STICKER_WORKFLOW =
+  'cloud-weasel-referral-sticker-rewards'
+export const REVIEWED_REFERRAL_STICKER_QUEUE =
+  'cloud-weasel-referral-sticker-reward-delivery'
+export const REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE =
+  'cloud-weasel-referral-sticker-reward-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0125_skypass_season_close_workflow_handoffs.sql'
+  '0126_referral_sticker_reward_workflow_handoffs.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -336,7 +342,68 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       AND name = 'skypass_season_close_cycles_transition_guard'
       AND instr(sql, "delivery.status <> 'APPLIED'") > 0
       AND instr(sql, 'multiplayer_match_experience_players') > 0)
-    AS skypass_workflow_contract_guards_present;`
+    AS skypass_workflow_contract_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'referral_sticker_reward_sweeps',
+      'referral_sticker_reward_sweep_players',
+      'referral_sticker_reward_sweep_deliveries',
+      'referral_sticker_reward_queue_failures'
+    )) AS referral_sticker_workflow_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'referral_sticker_reward_sweeps_insert_guard',
+      'referral_sticker_reward_sweeps_snapshot_guard',
+      'referral_sticker_reward_sweeps_completion_guard',
+      'referral_sticker_reward_sweeps_immutable_guard',
+      'referral_sticker_reward_sweeps_no_delete',
+      'referral_sticker_reward_sweep_players_insert_guard',
+      'referral_sticker_reward_sweep_players_update_guard',
+      'referral_sticker_reward_sweep_players_no_delete',
+      'referral_sticker_reward_sweep_deliveries_insert_guard',
+      'referral_sticker_reward_sweep_deliveries_update_guard',
+      'referral_sticker_reward_sweep_deliveries_no_delete',
+      'referral_sticker_reward_queue_failures_insert_guard',
+      'referral_sticker_reward_queue_failures_no_update',
+      'referral_sticker_reward_queue_failures_no_delete'
+    )) AS referral_sticker_workflow_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'referral_sticker_reward_sweeps'
+      AND instr(sql, "origin IN ('SCHEDULE', 'MIGRATION')") > 0
+      AND instr(sql, "'DEAD'") = 0
+      AND instr(sql, 'attempt') = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'referral_sticker_reward_sweeps_insert_guard'
+      AND instr(sql, 'referral_sticker_schedule_versions') > 0
+      AND instr(sql, "schedule.status = 'ACTIVE'") > 0
+      AND instr(sql, '3600') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'referral_sticker_reward_sweeps_snapshot_guard'
+      AND instr(sql, 'referral_sticker_schedule_entries') > 0
+      AND instr(sql, "users.user_kind = 'PLAYER'") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'referral_sticker_reward_sweep_players_update_guard'
+      AND instr(sql, 'referral_sticker_reward_batch_schedule_receipts') > 0
+      AND instr(sql, "NEW.outcome = 'NO_AWARD'") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'referral_sticker_reward_sweep_deliveries_update_guard'
+      AND instr(sql, "batch_row.status = 'DELIVERED'") > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'referral_sticker_reward_queue_failures_insert_guard'
+      AND instr(sql, "player.status = 'PENDING'") > 0
+      AND instr(sql, "delivery.status = 'PENDING'") > 0)
+    AS referral_sticker_workflow_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -526,13 +593,22 @@ const rewardOrchestrationErrors = config => {
   const skypassConsumer = consumers.find(
     value => value.queue === REVIEWED_SKYPASS_QUEUE
   )
+  const referralStickerWorkflow = workflows.find(
+    value => value.binding === 'REFERRAL_STICKER_REWARD_WORKFLOW'
+  )
+  const referralStickerProducer = producers.find(
+    value => value.binding === 'REFERRAL_STICKER_REWARD_QUEUE'
+  )
+  const referralStickerConsumer = consumers.find(
+    value => value.queue === REVIEWED_REFERRAL_STICKER_QUEUE
+  )
   if (
-    workflows.length !== 3 ||
+    workflows.length !== 4 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
-    producers.length !== 5 ||
+    producers.length !== 6 ||
     producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
-    consumers.length !== 5 ||
+    consumers.length !== 6 ||
     consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE ||
     leaderboardWorkflow?.name !== REVIEWED_LEADERBOARD_WORKFLOW ||
     leaderboardWorkflow?.class_name !== 'LeaderboardRewardWorkflow' ||
@@ -548,10 +624,15 @@ const rewardOrchestrationErrors = config => {
     skypassWorkflow?.name !== REVIEWED_SKYPASS_WORKFLOW ||
     skypassWorkflow?.class_name !== 'SkypassSeasonCloseWorkflow' ||
     skypassProducer?.queue !== REVIEWED_SKYPASS_QUEUE ||
-    skypassConsumer?.dead_letter_queue !== REVIEWED_SKYPASS_DEAD_LETTER_QUEUE
+    skypassConsumer?.dead_letter_queue !== REVIEWED_SKYPASS_DEAD_LETTER_QUEUE ||
+    referralStickerWorkflow?.name !== REVIEWED_REFERRAL_STICKER_WORKFLOW ||
+    referralStickerWorkflow?.class_name !== 'ReferralStickerRewardWorkflow' ||
+    referralStickerProducer?.queue !== REVIEWED_REFERRAL_STICKER_QUEUE ||
+    referralStickerConsumer?.dead_letter_queue !==
+      REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE
   ) {
     return [
-      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, external-push, and SkyPass Workflow/Queue/dead-letter topology'
+      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, external-push, SkyPass, and referral-sticker Workflow/Queue/dead-letter topology'
     ]
   }
   return []
@@ -725,7 +806,10 @@ export const productionSchemaRow = output => {
     row?.skypass_workflow_tables_present !== 3 ||
     row?.skypass_autoclaimed_column_present !== 1 ||
     row?.skypass_workflow_guards_present !== 14 ||
-    row?.skypass_workflow_contract_guards_present !== 5
+    row?.skypass_workflow_contract_guards_present !== 5 ||
+    row?.referral_sticker_workflow_tables_present !== 4 ||
+    row?.referral_sticker_workflow_guards_present !== 14 ||
+    row?.referral_sticker_workflow_contract_guards_present !== 6
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

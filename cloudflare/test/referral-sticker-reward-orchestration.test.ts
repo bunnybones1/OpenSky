@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers'
+import { env, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers'
 import { describe, expect, it, vi } from 'vitest'
 
 import { seasonStart } from '../src/legacy-seasons'
@@ -10,6 +10,7 @@ import {
   handleReferralStickerRewardQueue,
   publishDueReferralStickerDeliveries,
   publishPendingReferralStickerPreparations,
+  runReferralStickerRewardWorkflow,
   snapshotAcceptedReferralStickerRewardSweep,
   type ReferralStickerRewardQueueMessage
 } from '../src/referral-sticker-reward-orchestration'
@@ -374,6 +375,64 @@ describe('referral sticker Workflow orchestration', () => {
          WHERE message_id = 'valid-failure-101'`
       ).first('delivery_attempt')
     ).toBe(101)
+  })
+
+  it('runs the Workflow through durable preparation, sleep, delivery, and completion', async () => {
+    const season = 26
+    const now = atSeason(season)
+    const userId = 'sticker-workflow-player-26'
+    await addPlayer(userId, now, 10)
+    await activateSchedule(season, 2601, now, [
+      { tokenId: 26001, requiredPoints: 10 }
+    ])
+    const accepted = await acceptDueReferralStickerRewardSweep(env.AUTH_DB, now)
+    if (!accepted.sweep) throw new Error('expected accepted referral sweep')
+
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    try {
+      const queue = {
+        send: vi.fn(),
+        sendBatch: vi.fn(async entries => {
+          for (const entry of entries) {
+            await applyReferralStickerRewardQueueMessage(
+              env.AUTH_DB,
+              entry.body,
+              new Date()
+            )
+          }
+        })
+      } as unknown as Queue<ReferralStickerRewardQueueMessage>
+      const step = {
+        do: vi.fn(async (_name, callback) => callback()),
+        sleep: vi.fn(async () => undefined),
+        sleepUntil: vi.fn(async (_name, date: Date) => {
+          vi.setSystemTime(date)
+        })
+      } as unknown as WorkflowStep
+
+      await expect(
+        runReferralStickerRewardWorkflow(
+          { AUTH_DB: env.AUTH_DB, REFERRAL_STICKER_REWARD_QUEUE: queue },
+          {
+            instanceId: accepted.sweep.workflow_instance_id,
+            workflowName: 'cloud-weasel-referral-sticker-rewards',
+            payload: { sweepId: accepted.sweep.id },
+            timestamp: now
+          } satisfies WorkflowEvent<{ sweepId: number }>,
+          step
+        )
+      ).resolves.toEqual({ sweepId: accepted.sweep.id, completed: true })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT completed_at FROM referral_sticker_reward_sweeps WHERE id = ?`
+      )
+        .bind(accepted.sweep.id)
+        .first('completed_at')
+    ).not.toBeNull()
   })
 
   it('restarts terminal Workflows whose D1 sweep is incomplete', async () => {

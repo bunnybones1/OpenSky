@@ -75,7 +75,6 @@ CREATE TABLE referral_sticker_reward_sweeps (
     expected_player_count IS NULL OR expected_player_count >= 0
   ),
   completed_at TEXT,
-  UNIQUE (schedule_version, due_at),
   CHECK (
     (snapshot_at IS NULL AND expected_player_count IS NULL)
     OR (snapshot_at IS NOT NULL AND expected_player_count IS NOT NULL)
@@ -87,6 +86,10 @@ CREATE TABLE referral_sticker_reward_sweeps (
 
 CREATE INDEX referral_sticker_reward_sweeps_pending_idx
   ON referral_sticker_reward_sweeps(completed_at, accepted_at, id);
+
+CREATE UNIQUE INDEX referral_sticker_reward_sweeps_schedule_due_idx
+  ON referral_sticker_reward_sweeps(schedule_version, due_at)
+  WHERE origin = 'SCHEDULE';
 
 CREATE TABLE referral_sticker_reward_sweep_players (
   sweep_id INTEGER NOT NULL,
