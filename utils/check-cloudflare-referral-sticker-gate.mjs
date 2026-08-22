@@ -178,7 +178,6 @@ export const referralStickerGateErrors = (evidence = {}) => {
     'REVIEWED_REFERRAL_STICKER_WORKFLOW',
     'REVIEWED_REFERRAL_STICKER_QUEUE',
     'REVIEWED_REFERRAL_STICKER_DEAD_LETTER_QUEUE',
-    "'0126_referral_sticker_reward_workflow_handoffs.sql'",
     'referral_sticker_workflow_tables_present',
     'referral_sticker_workflow_contract_guards_present'
   ])
