@@ -180,7 +180,8 @@ export const auditServices = ({
     errors.push('game-analytics deploy does not use the reviewed target runner')
   }
   for (const token of [
-    'const plan = productionOperationPlan(operation, targetPath, config)',
+    "commandArguments[0] !== 'deploy'",
+    'const plan = productionOperationPlan(operation, targetPath)',
     'const check = spawnSync(',
     'productionSchemaRow(check.stdout)',
     "['--dir', 'cloudflare', 'exec', 'wrangler', ...operationStep.args]",

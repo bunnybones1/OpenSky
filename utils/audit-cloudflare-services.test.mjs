@@ -23,7 +23,8 @@ const validInput = () => ({
   analyticsPackageSource:
     'node ../utils/run-cloudflare-production.mjs deploy game-analytics/wrangler.jsonc',
   productionRunnerSource: [
-    'const plan = productionOperationPlan(operation, targetPath, config)',
+    "commandArguments[0] !== 'deploy'",
+    'const plan = productionOperationPlan(operation, targetPath)',
     'const check = spawnSync(',
     'productionSchemaRow(check.stdout)',
     "['--dir', 'cloudflare', 'exec', 'wrangler', ...operationStep.args]",
@@ -100,7 +101,7 @@ test('rejects the obsolete account-level R2 blocker as analytics evidence', () =
 test('rejects a target runner without its schema preflight and pinned Wrangler child', () => {
   const input = validInput()
   input.productionRunnerSource = ''
-  assert.equal(auditServices(input).errors.length, 5)
+  assert.equal(auditServices(input).errors.length, 6)
 })
 
 test('rejects a target runner that bypasses the reviewed schema result', () => {
