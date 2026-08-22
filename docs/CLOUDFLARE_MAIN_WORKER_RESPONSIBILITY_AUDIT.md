@@ -5,9 +5,12 @@ Status date: 2026-08-21
 Status: leaderboard implemented locally at `e555f930`; delayed Conquest Gold
 implemented locally at `e4ec21f5`; external push delivery implemented locally
 at `e8f552c4`; SkyPass season close implemented locally at `b114331e` with
-release safeguards at `312de3fb`. This audit and these milestones do not
-authorize provisioning, migration, activation, deployment, a live drill, or
-any production mutation.
+release safeguards at `312de3fb`; referral sticker orchestration implemented
+locally through migration `0126`; and the account-deletion Workflow boundary
+is selected in
+[`CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md`](./CLOUDFLARE_ACCOUNT_DELETION_ORCHESTRATION.md).
+This audit and these milestones do not authorize provisioning, migration,
+activation, deployment, a live drill, or any production mutation.
 
 ## Decision
 
@@ -46,7 +49,7 @@ and recovery needs.
 | `runReferralStickerRewards`             | Carry referral progress, freeze delayed sticker awards, and deliver off-chain inventory            | Workflow per accepted hourly sweep plus Queue per prepared user or due award batch      | Implemented and guarded locally through migration `0126`; undeployed             |
 | `dispatchDueSkypassAutoClaims`          | Close a season and claim every remaining eligible reward for each player                           | Workflow per close cycle plus Queue per player                                          | Completed at `b114331e`; guarded at `312de3fb`                                   |
 | `dispatchDuePushNotifications`          | Send an already-published notification to an external provider without changing the in-app receipt | Queue per notification with provider idempotency and D1 delivery evidence               | Completed at `e8f552c4`                                                          |
-| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request                                                           | Later privacy slice; retain cancellation deadline and auditable partial recovery |
+| `AccountDeletionRepository.finalizeDue` | Execute a delayed account deletion across D1 and private R2 data                                   | Workflow per deletion request; R2 purge before guarded D1 completion                    | Boundary selected; retain immutable deadline and auditable partial recovery      |
 | `WalletLinksRepository.cleanupExpired`  | Remove expired, unused proof challenges                                                            | Request-path bounded cleanup plus occasional maintenance trigger                        | Later low-risk slice; no durable workflow is required for disposable challenges  |
 
 These boundaries are independent. Converting one does not authorize changing
