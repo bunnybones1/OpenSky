@@ -592,8 +592,8 @@ test('requires Workflow, Queue, D1, and recovery evidence for Conquest V2', asyn
     conquestV2CloudflareOrchestrationErrors({
       ...evidence,
       scheduler: scheduler.replace(
-        'export {\n  ConquestV2RewardWorkflow,',
-        'export {'
+        'export {\n  AccountDeletionWorkflow,\n  ConquestV2RewardWorkflow,\n',
+        'export {\n  AccountDeletionWorkflow,\n'
       )
     }).some(error => error.includes('entrypoint'))
   )
