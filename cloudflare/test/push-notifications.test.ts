@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { runPushNotifications } from '../src/push-notifications'
+import {
+  dispatchDuePushNotifications,
+  handlePushNotificationQueue,
+  type PushNotificationQueueMessage
+} from '../src/push-notifications'
 
 const NOW = new Date('2026-08-12T12:00:00.000Z')
 const configured = {
@@ -21,7 +25,11 @@ const insertUser = async (id: string) => {
 const insertNotification = async (
   userId: string,
   type: 'LEADERBOARD_REWARD' | 'CONQUEST_V2_REWARD' | 'ONE_TIME',
-  options: { pushEnabled?: boolean; validFrom?: string; expiresAt?: string } = {}
+  options: {
+    pushEnabled?: boolean
+    validFrom?: string
+    expiresAt?: string
+  } = {}
 ) => {
   const result = await env.AUTH_DB.prepare(
     `INSERT INTO player_notifications
@@ -41,35 +49,116 @@ const insertNotification = async (
   return Number(result.meta.last_row_id)
 }
 
+const fakeQueue = () => {
+  const bodies: PushNotificationQueueMessage[] = []
+  const queue = {
+    send: async (body: PushNotificationQueueMessage) => {
+      bodies.push(body)
+    },
+    sendBatch: async (
+      messages: Iterable<{ body: PushNotificationQueueMessage }>
+    ) => {
+      for (const message of messages) bodies.push(message.body)
+    }
+  } as unknown as Queue<PushNotificationQueueMessage>
+  return { queue, bodies }
+}
+
+const queueMessage = (
+  body: PushNotificationQueueMessage,
+  id: string,
+  attempts = 1
+) => {
+  const outcome: {
+    acked: boolean
+    retried: boolean
+    delaySeconds?: number
+  } = { acked: false, retried: false }
+  const message = {
+    id,
+    timestamp: NOW,
+    body,
+    attempts,
+    ack: () => {
+      outcome.acked = true
+    },
+    retry: (options?: { delaySeconds?: number }) => {
+      outcome.retried = true
+      outcome.delaySeconds = options?.delaySeconds
+    }
+  } as Message<PushNotificationQueueMessage>
+  return { message, outcome }
+}
+
+const messageBatch = (messages: Message<PushNotificationQueueMessage>[]) =>
+  ({
+    messages,
+    queue: 'cloud-weasel-player-push-delivery',
+    metadata: {
+      metrics: { backlogCount: messages.length, backlogBytes: 0 }
+    },
+    ackAll: () => undefined,
+    retryAll: () => undefined
+  }) as MessageBatch<PushNotificationQueueMessage>
+
+const publish = async (
+  userId: string,
+  type: 'LEADERBOARD_REWARD' | 'CONQUEST_V2_REWARD'
+) => {
+  await insertUser(userId)
+  const notificationId = await insertNotification(userId, type)
+  const queue = fakeQueue()
+  await expect(
+    dispatchDuePushNotifications(
+      env.AUTH_DB,
+      { ...configured, PUSH_NOTIFICATION_QUEUE: queue.queue },
+      NOW
+    )
+  ).resolves.toEqual({ status: 'completed', published: 1 })
+  expect(queue.bodies).toEqual([
+    {
+      kind: 'PLAYER_PUSH_NOTIFICATION',
+      version: 1,
+      notificationId
+    }
+  ])
+  return { notificationId, body: queue.bodies[0] }
+}
+
 beforeEach(async () => {
   await env.AUTH_DB.batch([
-    env.AUTH_DB.prepare('DELETE FROM player_notification_push_deliveries'),
+    env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'push-%'`),
     env.AUTH_DB.prepare(
       `DELETE FROM player_notifications WHERE user_id LIKE 'push-%'`
     ),
-    env.AUTH_DB.prepare(`DELETE FROM users WHERE id LIKE 'push-%'`)
+    env.AUTH_DB.prepare('DELETE FROM player_notification_push_deliveries'),
+    env.AUTH_DB.prepare('DELETE FROM player_notification_push_failures')
   ])
 })
 
-describe('optional OneSignal push worker', () => {
-  it('is a read-only no-op when disabled and fails closed on partial config', async () => {
+describe('Queue-backed optional OneSignal projection', () => {
+  it('is mutation-free when disabled and fails closed on partial config', async () => {
     await insertUser('push-disabled')
     await insertNotification('push-disabled', 'LEADERBOARD_REWARD')
-
-    const unavailableFetch = async () => {
-      throw new Error('fetch must not run')
-    }
-    expect(
-      await runPushNotifications(env.AUTH_DB, {}, NOW, unavailableFetch)
-    ).toEqual({ status: 'disabled', sent: 0, failed: 0, dead: 0 })
-    expect(
-      await runPushNotifications(
+    const queue = fakeQueue()
+    await expect(
+      dispatchDuePushNotifications(
         env.AUTH_DB,
-        { ONESIGNAL_APP_ID: configured.ONESIGNAL_APP_ID },
-        NOW,
-        unavailableFetch
+        { PUSH_NOTIFICATION_QUEUE: queue.queue },
+        NOW
       )
-    ).toEqual({ status: 'misconfigured', sent: 0, failed: 0, dead: 0 })
+    ).resolves.toEqual({ status: 'disabled', published: 0 })
+    await expect(
+      dispatchDuePushNotifications(
+        env.AUTH_DB,
+        {
+          ONESIGNAL_APP_ID: configured.ONESIGNAL_APP_ID,
+          PUSH_NOTIFICATION_QUEUE: queue.queue
+        },
+        NOW
+      )
+    ).resolves.toEqual({ status: 'misconfigured', published: 0 })
+    expect(queue.bodies).toEqual([])
     expect(
       await env.AUTH_DB.prepare(
         'SELECT COUNT(*) AS count FROM player_notification_push_deliveries'
@@ -77,11 +166,9 @@ describe('optional OneSignal push worker', () => {
     ).toBe(0)
   })
 
-  it('targets the Google identity alias and records a successful receipt', async () => {
-    const userId = 'push-success'
-    await insertUser(userId)
-    const notificationId = await insertNotification(
-      userId,
+  it('publishes only a narrow D1 responsibility and records provider success', async () => {
+    const { notificationId, body } = await publish(
+      'push-success',
       'LEADERBOARD_REWARD'
     )
     const requests: Request[] = []
@@ -89,36 +176,45 @@ describe('optional OneSignal push worker', () => {
       requests.push(new Request(input, init))
       return Response.json({ id: 'onesignal-message-1' })
     }
-
-    expect(
-      await runPushNotifications(env.AUTH_DB, configured, NOW, fetcher)
-    ).toEqual({ status: 'completed', sent: 1, failed: 0, dead: 0 })
+    const message = queueMessage(body, 'push-success-message')
+    await handlePushNotificationQueue(
+      messageBatch([message.message]),
+      env.AUTH_DB,
+      configured,
+      NOW,
+      fetcher
+    )
+    expect(message.outcome).toEqual({ acked: true, retried: false })
     expect(requests).toHaveLength(1)
     expect(requests[0].url).toBe('https://api.onesignal.com/notifications')
     expect(requests[0].headers.get('Authorization')).toBe(
       'Key onesignal-test-api-key'
     )
-    const body = (await requests[0].json()) as Record<string, unknown>
-    expect(body).toMatchObject({
+    const providerBody = (await requests[0].json()) as Record<string, unknown>
+    expect(providerBody).toMatchObject({
       app_id: configured.ONESIGNAL_APP_ID,
-      include_aliases: { external_id: [userId] },
+      include_aliases: { external_id: ['push-success'] },
       target_channel: 'push',
       headings: { en: 'Cloud Weasel' },
       contents: { en: 'Your leaderboard rewards are waiting!' }
     })
-    expect(body.idempotency_key).toMatch(
+    expect(Object.keys(body).sort()).toEqual([
+      'kind',
+      'notificationId',
+      'version'
+    ])
+    expect(providerBody.idempotency_key).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
     )
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status, attempts, provider_message_id, pushed_at
+        `SELECT status, provider_message_id, pushed_at
          FROM player_notification_push_deliveries WHERE notification_id = ?`
       )
         .bind(notificationId)
         .first()
-    ).toMatchObject({
+    ).toEqual({
       status: 'SENT',
-      attempts: 1,
       provider_message_id: 'onesignal-message-1',
       pushed_at: NOW.toISOString()
     })
@@ -129,18 +225,11 @@ describe('optional OneSignal push worker', () => {
         .bind(notificationId)
         .first('pushed_at')
     ).toBe(NOW.toISOString())
-
-    expect(
-      await runPushNotifications(env.AUTH_DB, configured, NOW, fetcher)
-    ).toEqual({ status: 'completed', sent: 0, failed: 0, dead: 0 })
-    expect(requests).toHaveLength(1)
   })
 
-  it('reuses the same provider idempotency key across retries', async () => {
-    const userId = 'push-retry'
-    await insertUser(userId)
-    const notificationId = await insertNotification(
-      userId,
+  it('recovers an ambiguous provider response with the same idempotency key', async () => {
+    const { notificationId, body } = await publish(
+      'push-ambiguous',
       'CONQUEST_V2_REWARD'
     )
     const keys: string[] = []
@@ -148,91 +237,203 @@ describe('optional OneSignal push worker', () => {
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
       calls += 1
       const request = new Request(input, init)
-      const body = (await request.json()) as { idempotency_key: string }
-      keys.push(body.idempotency_key)
-      return calls === 1
-        ? Response.json({ errors: ['temporary'] }, { status: 503 })
-        : Response.json({})
-    }
-
-    expect(
-      await runPushNotifications(env.AUTH_DB, configured, NOW, fetcher)
-    ).toEqual({ status: 'completed', sent: 0, failed: 1, dead: 0 })
-    expect(
-      await runPushNotifications(
-        env.AUTH_DB,
-        configured,
-        new Date(NOW.getTime() + 60_000),
-        fetcher
+      keys.push(
+        ((await request.json()) as { idempotency_key: string }).idempotency_key
       )
-    ).toEqual({ status: 'completed', sent: 1, failed: 0, dead: 0 })
+      if (calls === 1) throw new Error('provider response was lost')
+      return Response.json({ id: 'same-provider-result' })
+    }
+    const first = queueMessage(body, 'ambiguous-first')
+    await handlePushNotificationQueue(
+      messageBatch([first.message]),
+      env.AUTH_DB,
+      configured,
+      NOW,
+      fetcher
+    )
+    expect(first.outcome).toEqual({
+      acked: false,
+      retried: true,
+      delaySeconds: undefined
+    })
+    const second = queueMessage(body, 'ambiguous-redrive')
+    await handlePushNotificationQueue(
+      messageBatch([second.message]),
+      env.AUTH_DB,
+      configured,
+      new Date(NOW.getTime() + 60_000),
+      fetcher
+    )
+    expect(second.outcome).toEqual({ acked: true, retried: false })
     expect(keys).toHaveLength(2)
     expect(keys[1]).toBe(keys[0])
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status, attempts, provider_message_id
+        `SELECT status, provider_message_id
          FROM player_notification_push_deliveries WHERE notification_id = ?`
       )
         .bind(notificationId)
         .first()
-    ).toEqual({ status: 'SENT', attempts: 2, provider_message_id: null })
+    ).toEqual({ status: 'SENT', provider_message_id: 'same-provider-result' })
   })
 
-  it('dead-letters after five attempts without touching the reward notification', async () => {
-    const userId = 'push-dead'
-    await insertUser(userId)
-    const notificationId = await insertNotification(
-      userId,
+  it('keeps six provider failures pending and later applies the same responsibility', async () => {
+    const { notificationId, body } = await publish(
+      'push-unbounded',
       'LEADERBOARD_REWARD'
     )
-    const fetcher = async () => Response.json({ error: 'nope' }, { status: 500 })
-
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
-      expect(
-        await runPushNotifications(
-          env.AUTH_DB,
-          configured,
-          new Date(NOW.getTime() + attempt * 60_000),
-          fetcher
-        )
-      ).toMatchObject(
-        attempt === 5 ? { dead: 1, failed: 0 } : { dead: 0, failed: 1 }
+    const failureFetch = async () =>
+      Response.json({ errors: ['temporary'] }, { status: 503 })
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
+      const message = queueMessage(body, `failure-${attempt}`, attempt)
+      await handlePushNotificationQueue(
+        messageBatch([message.message]),
+        env.AUTH_DB,
+        configured,
+        new Date(NOW.getTime() + attempt * 1_000),
+        failureFetch
       )
+      expect(message.outcome.retried).toBe(true)
     }
     expect(
       await env.AUTH_DB.prepare(
-        `SELECT status, attempts FROM player_notification_push_deliveries
+        `SELECT status FROM player_notification_push_deliveries
          WHERE notification_id = ?`
       )
         .bind(notificationId)
-        .first()
-    ).toEqual({ status: 'DEAD', attempts: 5 })
+        .first('status')
+    ).toBe('PENDING')
     expect(
       await env.AUTH_DB.prepare(
-        'SELECT pushed_at FROM player_notifications WHERE id = ?'
+        `SELECT COUNT(*) AS count FROM player_notification_push_failures
+         WHERE notification_id = ?`
       )
         .bind(notificationId)
-        .first('pushed_at')
-    ).toBeNull()
+        .first('count')
+    ).toBe(6)
+    const recovered = queueMessage(body, 'failure-recovered', 1)
+    await handlePushNotificationQueue(
+      messageBatch([recovered.message]),
+      env.AUTH_DB,
+      configured,
+      new Date(NOW.getTime() + 7_000),
+      async () => Response.json({ id: 'recovered' })
+    )
+    expect(recovered.outcome.acked).toBe(true)
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_notification_push_deliveries
+         WHERE notification_id = ?`
+      )
+        .bind(notificationId)
+        .first('status')
+    ).toBe('SENT')
   })
 
-  it('ignores other, disabled, future, and expired in-app notifications', async () => {
-    await insertUser('push-filters')
-    await insertNotification('push-filters', 'ONE_TIME')
-    await insertNotification('push-filters', 'LEADERBOARD_REWARD', {
-      pushEnabled: false
-    })
-    await insertNotification('push-filters', 'LEADERBOARD_REWARD', {
-      validFrom: new Date(NOW.getTime() + 60_000).toISOString()
-    })
-    await insertNotification('push-filters', 'LEADERBOARD_REWARD', {
-      expiresAt: new Date(NOW.getTime() - 60_000).toISOString()
-    })
-    const fetcher = async () => {
-      throw new Error('fetch must not run')
+  it('isolates a poison notification from another delivery in the same batch', async () => {
+    const poison = await publish('push-poison', 'LEADERBOARD_REWARD')
+    const healthy = await publish('push-healthy', 'CONQUEST_V2_REWARD')
+    const poisonMessage = queueMessage(poison.body, 'poison')
+    const healthyMessage = queueMessage(healthy.body, 'healthy')
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      const body = (await request.json()) as {
+        include_aliases: { external_id: string[] }
+      }
+      return body.include_aliases.external_id[0] === 'push-poison'
+        ? Response.json({ errors: ['poison'] }, { status: 500 })
+        : Response.json({ id: 'healthy-provider-message' })
     }
+    await handlePushNotificationQueue(
+      messageBatch([poisonMessage.message, healthyMessage.message]),
+      env.AUTH_DB,
+      configured,
+      NOW,
+      fetcher
+    )
+    expect(poisonMessage.outcome.retried).toBe(true)
+    expect(healthyMessage.outcome.acked).toBe(true)
     expect(
-      await runPushNotifications(env.AUTH_DB, configured, NOW, fetcher)
-    ).toEqual({ status: 'completed', sent: 0, failed: 0, dead: 0 })
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_notification_push_deliveries
+         WHERE notification_id = ?`
+      )
+        .bind(poison.notificationId)
+        .first('status')
+    ).toBe('PENDING')
+    expect(
+      await env.AUTH_DB.prepare(
+        `SELECT status FROM player_notification_push_deliveries
+         WHERE notification_id = ?`
+      )
+        .bind(healthy.notificationId)
+        .first('status')
+    ).toBe('SENT')
+  })
+
+  it('redrives stale D1 truth but does not republish a fresh transport observation', async () => {
+    const { notificationId } = await publish(
+      'push-redrive',
+      'LEADERBOARD_REWARD'
+    )
+    const fresh = fakeQueue()
+    await expect(
+      dispatchDuePushNotifications(
+        env.AUTH_DB,
+        { ...configured, PUSH_NOTIFICATION_QUEUE: fresh.queue },
+        new Date(NOW.getTime() + 4 * 60_000)
+      )
+    ).resolves.toEqual({ status: 'completed', published: 0 })
+    const stale = fakeQueue()
+    await expect(
+      dispatchDuePushNotifications(
+        env.AUTH_DB,
+        { ...configured, PUSH_NOTIFICATION_QUEUE: stale.queue },
+        new Date(NOW.getTime() + 5 * 60_000)
+      )
+    ).resolves.toEqual({ status: 'completed', published: 1 })
+    expect(stale.bodies[0].notificationId).toBe(notificationId)
+  })
+
+  it('acknowledges tampered, unsupported, expired, and disabled responsibilities without provider access', async () => {
+    await insertUser('push-ineligible')
+    const unsupported = await insertNotification('push-ineligible', 'ONE_TIME')
+    const expired = await insertNotification(
+      'push-ineligible',
+      'LEADERBOARD_REWARD',
+      { expiresAt: new Date(NOW.getTime() - 1).toISOString() }
+    )
+    const disabled = await insertNotification(
+      'push-ineligible',
+      'CONQUEST_V2_REWARD',
+      { pushEnabled: false }
+    )
+    const messages = [unsupported, expired, disabled, 999_999].map(
+      (id, index) =>
+        queueMessage(
+          { kind: 'PLAYER_PUSH_NOTIFICATION', version: 1, notificationId: id },
+          `ineligible-${index}`
+        )
+    )
+    const tampered = queueMessage(
+      {
+        kind: 'PLAYER_PUSH_NOTIFICATION',
+        version: 1,
+        notificationId: expired,
+        userId: 'attacker'
+      } as unknown as PushNotificationQueueMessage,
+      'tampered'
+    )
+    await handlePushNotificationQueue(
+      messageBatch([...messages.map(value => value.message), tampered.message]),
+      env.AUTH_DB,
+      configured,
+      NOW,
+      async () => {
+        throw new Error('provider must not run')
+      }
+    )
+    for (const message of messages) expect(message.outcome.acked).toBe(true)
+    expect(tampered.outcome.acked).toBe(true)
   })
 })

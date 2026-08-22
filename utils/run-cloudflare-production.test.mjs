@@ -24,6 +24,8 @@ import {
   REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE,
   REVIEWED_LEADERBOARD_QUEUE,
   REVIEWED_LEADERBOARD_WORKFLOW,
+  REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE,
+  REVIEWED_PUSH_NOTIFICATION_QUEUE,
   REVIEWED_PRODUCTION_TARGETS,
   REQUIRED_PRODUCTION_SCHEMA_MIGRATION
 } from './run-cloudflare-production.mjs'
@@ -105,6 +107,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_LEADERBOARD_QUEUE,
               binding: 'LEADERBOARD_REWARD_QUEUE'
+            },
+            {
+              queue: REVIEWED_PUSH_NOTIFICATION_QUEUE,
+              binding: 'PUSH_NOTIFICATION_QUEUE'
             }
           ],
           consumers: [
@@ -119,6 +125,10 @@ const configFor = target => ({
             {
               queue: REVIEWED_LEADERBOARD_QUEUE,
               dead_letter_queue: REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE
+            },
+            {
+              queue: REVIEWED_PUSH_NOTIFICATION_QUEUE,
+              dead_letter_queue: REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE
             }
           ]
         }
@@ -194,6 +204,26 @@ test('pins both reward Workflow, Queue, and dead-letter topologies', () => {
           baseline.queues.consumers[0],
           { ...baseline.queues.consumers[1], dead_letter_queue: undefined }
         ]
+      }
+    },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        producers: baseline.queues.producers.filter(
+          producer => producer.binding !== 'PUSH_NOTIFICATION_QUEUE'
+        )
+      }
+    },
+    {
+      ...baseline,
+      queues: {
+        ...baseline.queues,
+        consumers: baseline.queues.consumers.map(consumer =>
+          consumer.queue === REVIEWED_PUSH_NOTIFICATION_QUEUE
+            ? { ...consumer, dead_letter_queue: undefined }
+            : consumer
+        )
       }
     }
   ]) {
@@ -421,7 +451,13 @@ test('requires the exact reviewed remote schema before every deploy', () => {
     'leaderboard_reward_cycle_orchestration_update_guard',
     'leaderboard_reward_delivery_failures_insert_guard',
     'leaderboard_rank_reset_receipts',
-    "activation.status = 'ACTIVE'"
+    "activation.status = 'ACTIVE'",
+    'player_notification_push_deliveries',
+    'player_notification_push_failures',
+    'player_notification_push_delivery_update_guard',
+    'player_notification_push_failures_insert_guard',
+    "status IN ('PENDING', 'SENT')",
+    'NEW.last_enqueued_at >= OLD.last_enqueued_at'
   ]) {
     assert.ok(PRODUCTION_SCHEMA_QUERY.includes(required))
   }
@@ -503,7 +539,10 @@ test('accepts only one successful complete read-only schema row', () => {
     conquest_gold_queue_tables_present: 1,
     conquest_gold_queue_guards_present: 4,
     conquest_gold_queue_contract_guards_present: 2,
-    conquest_gold_readiness_effect_view_present: 1
+    conquest_gold_readiness_effect_view_present: 1,
+    push_notification_queue_tables_present: 2,
+    push_notification_queue_guards_present: 5,
+    push_notification_queue_contract_guards_present: 3
   }
   assert.deepEqual(
     productionSchemaRow(
@@ -661,6 +700,26 @@ test('accepts only one successful complete read-only schema row', () => {
       {
         results: [
           { ...complete, conquest_gold_readiness_effect_view_present: 0 }
+        ],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, push_notification_queue_tables_present: 1 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [{ ...complete, push_notification_queue_guards_present: 4 }],
+        success: true
+      }
+    ]),
+    JSON.stringify([
+      {
+        results: [
+          { ...complete, push_notification_queue_contract_guards_present: 2 }
         ],
         success: true
       }

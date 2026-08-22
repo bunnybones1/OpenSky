@@ -24,8 +24,12 @@ export const REVIEWED_LEADERBOARD_QUEUE =
   'cloud-weasel-leaderboard-reward-delivery'
 export const REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE =
   'cloud-weasel-leaderboard-reward-delivery-dlq'
+export const REVIEWED_PUSH_NOTIFICATION_QUEUE =
+  'cloud-weasel-player-push-delivery'
+export const REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE =
+  'cloud-weasel-player-push-delivery-dlq'
 export const REQUIRED_PRODUCTION_SCHEMA_MIGRATION =
-  '0123_conquest_gold_queue_delivery.sql'
+  '0124_push_notification_queue_delivery.sql'
 export const PRODUCTION_SCHEMA_QUERY = `SELECT
   (SELECT COUNT(*) FROM d1_migrations
     WHERE name = '${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}')
@@ -235,7 +239,40 @@ export const PRODUCTION_SCHEMA_QUERY = `SELECT
       AND instr(sql, "delivery.application_status = 'APPLIED'") > 0
       AND instr(sql, 'player_conquest_gold_delivery_inventory_grants') > 0
       AND instr(sql, "event.event_type = 'DELAYED_REWARD_MINTED'") > 0)
-    AS conquest_gold_readiness_effect_view_present;`
+    AS conquest_gold_readiness_effect_view_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table' AND name IN (
+      'player_notification_push_deliveries',
+      'player_notification_push_failures'
+    )) AS push_notification_queue_tables_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger' AND name IN (
+      'player_notification_push_delivery_insert_guard',
+      'player_notification_push_delivery_update_guard',
+      'player_notification_push_failures_insert_guard',
+      'player_notification_push_failures_no_update',
+      'player_notification_push_failures_no_delete'
+    )) AS push_notification_queue_guards_present,
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'table'
+      AND name = 'player_notification_push_deliveries'
+      AND instr(sql, "status IN ('PENDING', 'SENT')") > 0
+      AND instr(sql, 'attempts') = 0
+      AND instr(sql, "'DEAD'") = 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'player_notification_push_delivery_update_guard'
+      AND instr(sql, "OLD.status = 'SENT'") > 0
+      AND instr(sql, "NEW.status = 'SENT'") > 0
+      AND instr(sql, 'NEW.last_enqueued_at >= OLD.last_enqueued_at') > 0)
+    +
+  (SELECT COUNT(*) FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name = 'player_notification_push_failures_insert_guard'
+      AND instr(sql, "delivery.status = 'PENDING'") > 0
+      AND instr(sql, 'notification.expires_at >= NEW.failed_at') > 0)
+    AS push_notification_queue_contract_guards_present;`
 
 export const REVIEWED_PRODUCTION_TARGETS = new Map([
   [
@@ -410,13 +447,19 @@ const rewardOrchestrationErrors = config => {
   const goldConsumer = consumers.find(
     value => value.queue === REVIEWED_CONQUEST_GOLD_QUEUE
   )
+  const pushProducer = producers.find(
+    value => value.binding === 'PUSH_NOTIFICATION_QUEUE'
+  )
+  const pushConsumer = consumers.find(
+    value => value.queue === REVIEWED_PUSH_NOTIFICATION_QUEUE
+  )
   if (
     workflows.length !== 2 ||
     workflow?.name !== REVIEWED_CONQUEST_V2_WORKFLOW ||
     workflow?.class_name !== 'ConquestV2RewardWorkflow' ||
-    producers.length !== 3 ||
+    producers.length !== 4 ||
     producer?.queue !== REVIEWED_CONQUEST_V2_QUEUE ||
-    consumers.length !== 3 ||
+    consumers.length !== 4 ||
     consumer?.dead_letter_queue !== REVIEWED_CONQUEST_V2_DEAD_LETTER_QUEUE ||
     leaderboardWorkflow?.name !== REVIEWED_LEADERBOARD_WORKFLOW ||
     leaderboardWorkflow?.class_name !== 'LeaderboardRewardWorkflow' ||
@@ -424,10 +467,14 @@ const rewardOrchestrationErrors = config => {
     leaderboardConsumer?.dead_letter_queue !==
       REVIEWED_LEADERBOARD_DEAD_LETTER_QUEUE ||
     goldProducer?.queue !== REVIEWED_CONQUEST_GOLD_QUEUE ||
-    goldConsumer?.dead_letter_queue !== REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE
+    goldConsumer?.dead_letter_queue !==
+      REVIEWED_CONQUEST_GOLD_DEAD_LETTER_QUEUE ||
+    pushProducer?.queue !== REVIEWED_PUSH_NOTIFICATION_QUEUE ||
+    pushConsumer?.dead_letter_queue !==
+      REVIEWED_PUSH_NOTIFICATION_DEAD_LETTER_QUEUE
   ) {
     return [
-      'main Worker must retain the reviewed delayed Gold Queue plus Conquest V2 and leaderboard Workflow, Queue, and dead-letter topology'
+      'main Worker must retain the reviewed delayed Gold, Conquest V2, leaderboard, and external-push Workflow/Queue/dead-letter topology'
     ]
   }
   return []
@@ -594,7 +641,10 @@ export const productionSchemaRow = output => {
     row?.conquest_gold_queue_tables_present !== 1 ||
     row?.conquest_gold_queue_guards_present !== 4 ||
     row?.conquest_gold_queue_contract_guards_present !== 2 ||
-    row?.conquest_gold_readiness_effect_view_present !== 1
+    row?.conquest_gold_readiness_effect_view_present !== 1 ||
+    row?.push_notification_queue_tables_present !== 2 ||
+    row?.push_notification_queue_guards_present !== 5 ||
+    row?.push_notification_queue_contract_guards_present !== 3
   ) {
     throw new Error(
       `Cloudflare production schema is not ready through ${REQUIRED_PRODUCTION_SCHEMA_MIGRATION}`

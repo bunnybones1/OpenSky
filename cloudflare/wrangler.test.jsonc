@@ -24,6 +24,10 @@
       {
         "binding": "CONQUEST_GOLD_DELIVERY_QUEUE",
         "queue": "cloud-weasel-conquest-gold-delivery-test"
+      },
+      {
+        "binding": "PUSH_NOTIFICATION_QUEUE",
+        "queue": "cloud-weasel-player-push-delivery-test"
       }
     ]
   },

@@ -13,6 +13,10 @@ import {
   snapshotLeaderboardRewardCycle,
   type LeaderboardRewardEntryRow
 } from './leaderboard-reward-worker'
+import {
+  dispatchRewardPushNotification,
+  type PushNotificationPublisherEnv
+} from './push-notifications'
 
 export const LEADERBOARD_REWARD_QUEUE_NAME =
   'cloud-weasel-leaderboard-reward-delivery'
@@ -398,12 +402,29 @@ const recordQueueFailure = async (
 export const handleLeaderboardRewardQueue = async (
   batch: MessageBatch<LeaderboardRewardQueueMessage>,
   database: D1Database,
-  now = new Date()
+  now = new Date(),
+  pushEnv?: PushNotificationPublisherEnv
 ) => {
   await Promise.all(
     batch.messages.map(async message => {
       try {
         await applyLeaderboardRewardQueueMessage(database, message.body, now)
+        if (pushEnv) {
+          try {
+            await dispatchRewardPushNotification(
+              database,
+              pushEnv,
+              {
+                kind: 'LEADERBOARD_REWARD',
+                cycleId: message.body.cycleId,
+                userId: message.body.userId
+              },
+              now
+            )
+          } catch (error) {
+            console.error('leaderboard push publication failed', error)
+          }
+        }
         message.ack()
       } catch (error) {
         if (!validQueueMessage(message.body)) {

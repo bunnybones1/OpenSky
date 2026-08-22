@@ -64,6 +64,10 @@
       {
         "queue": "cloud-weasel-leaderboard-reward-delivery",
         "binding": "LEADERBOARD_REWARD_QUEUE"
+      },
+      {
+        "queue": "cloud-weasel-player-push-delivery",
+        "binding": "PUSH_NOTIFICATION_QUEUE"
       }
     ],
     "consumers": [
@@ -78,6 +82,10 @@
       {
         "queue": "cloud-weasel-leaderboard-reward-delivery",
         "dead_letter_queue": "cloud-weasel-leaderboard-reward-delivery-dlq"
+      },
+      {
+        "queue": "cloud-weasel-player-push-delivery",
+        "dead_letter_queue": "cloud-weasel-player-push-delivery-dlq"
       }
     ]
   },

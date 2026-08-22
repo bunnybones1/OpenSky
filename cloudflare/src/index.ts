@@ -24,7 +24,12 @@ import {
 } from './leaderboard-reward-orchestration'
 import { handleMultiplayerGateway } from './multiplayer-gateway'
 import { handlePlayerRequest } from './player-api'
-import { runPushNotifications } from './push-notifications'
+import {
+  dispatchDuePushNotifications,
+  handlePushNotificationQueue,
+  PUSH_NOTIFICATION_QUEUE_NAME,
+  type PushNotificationQueueMessage
+} from './push-notifications'
 import { runReferralStickerRewards } from './referral-sticker-rewards'
 import { handleReplayRequest } from './replays'
 import { runDueSkypassAutoClaims } from './skypass-auto-claim'
@@ -73,7 +78,7 @@ export default {
         dispatchDueLeaderboardRewards(env),
         runReferralStickerRewards(env.AUTH_DB),
         runDueSkypassAutoClaims(env.AUTH_DB),
-        runPushNotifications(env.AUTH_DB, env),
+        dispatchDuePushNotifications(env.AUTH_DB, env),
         new AccountDeletionRepository(
           env.AUTH_DB,
           env.CLIENT_FEEDBACK
@@ -87,6 +92,7 @@ export default {
       | ConquestGoldDeliveryQueueMessage
       | ConquestV2RewardQueueMessage
       | LeaderboardRewardQueueMessage
+      | PushNotificationQueueMessage
     >,
     env
   ): Promise<void> {
@@ -100,14 +106,26 @@ export default {
     if (batch.queue === CONQUEST_V2_REWARD_QUEUE_NAME) {
       await handleConquestV2RewardQueue(
         batch as MessageBatch<ConquestV2RewardQueueMessage>,
-        env.AUTH_DB
+        env.AUTH_DB,
+        new Date(),
+        env
       )
       return
     }
     if (batch.queue === LEADERBOARD_REWARD_QUEUE_NAME) {
       await handleLeaderboardRewardQueue(
         batch as MessageBatch<LeaderboardRewardQueueMessage>,
-        env.AUTH_DB
+        env.AUTH_DB,
+        new Date(),
+        env
+      )
+      return
+    }
+    if (batch.queue === PUSH_NOTIFICATION_QUEUE_NAME) {
+      await handlePushNotificationQueue(
+        batch as MessageBatch<PushNotificationQueueMessage>,
+        env.AUTH_DB,
+        env
       )
       return
     }
@@ -118,6 +136,7 @@ export default {
   | ConquestGoldDeliveryQueueMessage
   | ConquestV2RewardQueueMessage
   | LeaderboardRewardQueueMessage
+  | PushNotificationQueueMessage
 >
 
 export { ConquestV2RewardWorkflow, LeaderboardRewardWorkflow }

@@ -7,6 +7,7 @@ import type {
   LeaderboardRewardWorkflowParams
 } from './leaderboard-reward-orchestration'
 import type { ConquestGoldDeliveryQueueMessage } from '@opensky/shared/conquest-gold-delivery'
+import type { PushNotificationQueueMessage } from './push-notifications'
 
 export interface Env {
   ASSETS: Fetcher
@@ -50,5 +51,6 @@ export interface Env {
   CONQUEST_V2_REWARD_QUEUE?: Queue<ConquestV2RewardQueueMessage>
   LEADERBOARD_REWARD_WORKFLOW?: Workflow<LeaderboardRewardWorkflowParams>
   LEADERBOARD_REWARD_QUEUE?: Queue<LeaderboardRewardQueueMessage>
+  PUSH_NOTIFICATION_QUEUE?: Queue<PushNotificationQueueMessage>
   WORKER_VERSION: WorkerVersionMetadata
 }

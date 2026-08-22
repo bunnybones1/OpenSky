@@ -14,6 +14,10 @@ import {
   snapshotConquestV2RewardCycle,
   type ConquestV2RewardEntryRow
 } from './conquest-v2-reward-worker'
+import {
+  dispatchRewardPushNotification,
+  type PushNotificationPublisherEnv
+} from './push-notifications'
 
 // sendBatch accepts at most 100 messages. This is a platform boundary, not a
 // copied source-runner batch size or a release-level product invariant.
@@ -377,12 +381,29 @@ const recordQueueFailure = async (
 export const handleConquestV2RewardQueue = async (
   batch: MessageBatch<ConquestV2RewardQueueMessage>,
   database: D1Database,
-  now = new Date()
+  now = new Date(),
+  pushEnv?: PushNotificationPublisherEnv
 ) => {
   await Promise.all(
     batch.messages.map(async message => {
       try {
         await applyConquestV2RewardQueueMessage(database, message.body, now)
+        if (pushEnv) {
+          try {
+            await dispatchRewardPushNotification(
+              database,
+              pushEnv,
+              {
+                kind: 'CONQUEST_V2_REWARD',
+                cycleId: message.body.cycleId,
+                userId: message.body.userId
+              },
+              now
+            )
+          } catch (error) {
+            console.error('Conquest V2 push publication failed', error)
+          }
+        }
         message.ack()
       } catch (error) {
         if (!validQueueMessage(message.body)) {
